@@ -37,6 +37,7 @@
   .big { font-size: clamp(30px, 10vmin, 40px); font-weight: 700; color: #ffd479; margin: 10px 0 2px; }
   .hint { margin-top: 14px; font-size: clamp(11px, 3vmin, 13px); color: #7f8cb5; }
   .o2 { color: #6fe3ff; font-weight: 600; }
+  .frenzy { color: #ff9ae0; font-weight: 600; }
   kbd {
     background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.16);
     border-radius: 5px; padding: 1px 6px; font-size: .85em; font-family: inherit;
@@ -48,13 +49,18 @@
 <div id="hud">
   <div id="card">
     <h1>Kupla<span>pallo</span></h1>
-    <p><span class="o2">Happi kuluu koko ajan.</span> Tähdet täyttävät sitä — piikit puhkaisevat kuplan.</p>
+    <p><span class="o2">Happi kuluu koko ajan kiihtyvää tahtia.</span> Tähdet täyttävät sitä — piikit puhkaisevat kuplan.</p>
+    <p>Kerää tähtiä <span class="frenzy">putkeen</span>, niin piikit muuttuvat hetkeksi kerättäviksi. Yksikin ohi mennyt tähti nollaa putken.</p>
     <p class="hint">Paina ruutua mistä tahansa ja vedä — sauva syntyy sormen alle.<br>Tai <kbd>WASD</kbd>&nbsp;/&nbsp;nuolet &middot; äänet <kbd>M</kbd></p>
   </div>
 </div>
 <script type="module">
-import { createJoystick } from './joystick.js';
-import { createDebugPanel } from './debug.js';
+/* Ohjaussauva ja debug-paneeli ovat portaalin pluginiversioita eivätkä enää
+   pelin omia tiedostoja: sama koodi on nyt jokaisen pelin käytettävissä.
+   Osoite on vN-alias, joten korjaukset tulevat mukaan mutta uusi pääversio ei
+   vaihdu alta. Tarkka versio on plugins.game.bigbools.fi/joystick/1.0.0/. */
+import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
+import { createDebugPanel } from 'https://plugins.game.bigbools.fi/debug-panel/v1/index.js';
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
@@ -170,6 +176,20 @@ import { createDebugPanel } from './debug.js';
       tone(660, 0.10, { type: 'triangle', gain: 0.18, to: 990 });
       tone(990, 0.13, { type: 'triangle', gain: 0.13, to: 1320, delay: 0.06 });
     },
+    /* Frenzy pickups come thick and fast, so each one is shorter and thinner
+       than a normal star — a dozen of these must not turn into a wall of noise.
+       The pitch climbs with the run so a long grab reads as one rising line. */
+    grab(step) {
+      const f = 740 * Math.pow(1.06, Math.min(step, 14));
+      tone(f, 0.07, { type: 'triangle', gain: 0.12, to: f * 1.4 });
+    },
+    frenzy() {
+      tone(300, 0.16, { type: 'sawtooth', gain: 0.14, to: 900 });
+      tone(600, 0.22, { type: 'triangle', gain: 0.14, to: 1500, delay: 0.1 });
+      tone(900, 0.30, { type: 'triangle', gain: 0.10, to: 1800, delay: 0.22 });
+    },
+    frenzyEnd() { tone(700, 0.28, { type: 'triangle', gain: 0.10, to: 240 }); },
+    streakLost() { tone(300, 0.18, { type: 'sine', gain: 0.08, to: 170 }); },
     pop() {
       noise(0.45, 0.35, 2200, 120);
       tone(320, 0.40, { type: 'sawtooth', gain: 0.16, to: 60 });
@@ -200,18 +220,48 @@ import { createDebugPanel } from './debug.js';
 
   const O2_MAX = 100;
   const O2_STAR = 30;       // one star is worth this much air
+  const O2_GRAB = 8;        // a frenzy pickup is worth less, but there are many
 
-  let spikes, stars, bits, t, score, best, shake, spawnSpike, spawnStar,
-      difficulty, oxygen, warnAt;
+  /* Air goes faster the longer you last, and unlike the spike difficulty this
+     never stops climbing — that is what the whole run is paced against. At two
+     minutes it is 12 a second, so one star buys two and a half seconds and you
+     have to be on the next one already. */
+  const o2Drain = () => 6 + t * 0.05;
+
+  /* A run of stars with none missed opens frenzy. The bar rises each time, so
+     the first one is a nudge and the fourth is a goal. */
+  const FRENZY_FIRST = 10;
+  const FRENZY_STEP = 10;
+  const FRENZY_SECONDS = 12;
+
+  let spikes, stars, bits, rings, pops, motes, t, score, best, shake,
+      spawnSpike, spawnStar, difficulty, oxygen, warnAt,
+      streak, frenzyGoal, frenzyLeft, frenzyRun, frenzies;
 
   try { best = +(localStorage.getItem('kuplapallo.best') || 0); } catch (e) { best = 0; }
 
   function reset() {
     player = { x: W / 2, y: H * 0.72, vx: 0, vy: 0, r: 20, trail: [] };
-    spikes = []; stars = []; bits = [];
+    spikes = []; stars = []; bits = []; rings = []; pops = [];
     t = 0; score = 0; shake = 0; difficulty = 0;
     spawnSpike = 0.9; spawnStar = 0.6;
     oxygen = O2_MAX; warnAt = 0;
+    streak = 0; frenzyGoal = FRENZY_FIRST; frenzyLeft = 0; frenzyRun = 0; frenzies = 0;
+    seedMotes();
+  }
+
+  /* Slow drifting specks well behind everything else. They are the only thing
+     that says the bubble is moving through something rather than sitting on a
+     flat backdrop, and they cost nothing. */
+  function seedMotes() {
+    motes = [];
+    for (let i = 0; i < 46; i++) {
+      motes.push({
+        x: rand(0, W), y: rand(0, H),
+        r: rand(0.8, 2.6), a: rand(0.05, 0.22),
+        vx: rand(-9, 9), vy: rand(-22, -6), pulse: rand(0, 6.3),
+      });
+    }
   }
   reset();
 
@@ -220,6 +270,16 @@ import { createDebugPanel } from './debug.js';
       const a = rand(0, Math.PI * 2), s = rand(speed * 0.3, speed);
       bits.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, color, r: rand(1.5, 4) });
     }
+  }
+
+  /** Expanding ring — the part of a pickup you see from the corner of your eye. */
+  function ring(x, y, color, r0, r1, width) {
+    rings.push({ x, y, color, r0, r1, w: width || 5, life: 1 });
+  }
+
+  /** Score that lifts off the pickup, so the number is where the eye already is. */
+  function pop(x, y, text, color) {
+    pops.push({ x, y, text, color, life: 1 });
   }
 
   function addSpike() {
@@ -236,12 +296,43 @@ import { createDebugPanel } from './debug.js';
     const sp = rand(170, 250) + difficulty * 55;
     spikes.push({
       x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-      r: rand(11, 18), spin: rand(-4, 4), rot: rand(0, 6.3)
+      r: rand(11, 18), spin: rand(-4, 4), rot: rand(0, 6.3),
+      // Frenzy draws these as stars instead, and a size decided at spawn keeps
+      // a big one big for its whole flight rather than flickering.
+      grade: rand(1, 2),
     });
   }
 
   function addStar() {
     stars.push({ x: rand(70, W - 70), y: rand(110, H - 90), r: 14, life: 7, pulse: rand(0, 6.3) });
+  }
+
+  function startFrenzy() {
+    frenzies++;
+    frenzyLeft = FRENZY_SECONDS;
+    frenzyRun = 0;
+    frenzyGoal += FRENZY_STEP;
+    shake = Math.max(shake, 14);
+    ring(player.x, player.y, '#ff9ae0', player.r, 420, 16);
+    ring(player.x, player.y, '#ffd479', player.r, 300, 10);
+    pop(player.x, player.y - 46, 'FRENZY', '#ff9ae0');
+    sfx.frenzy();
+  }
+
+  /* A spike that happens to be on top of the bubble when the clock runs out
+     would kill without the player having done anything wrong. Those are
+     collected instead — the frenzy ends on its own terms rather than on a
+     coin flip. */
+  function endFrenzy() {
+    frenzyLeft = 0;
+    for (let i = spikes.length - 1; i >= 0; i--) {
+      const s = spikes[i];
+      if (Math.hypot(s.x - player.x, s.y - player.y) < s.r * s.grade + player.r + 14) {
+        burst(s.x, s.y, '#ffd479', 12, 220);
+        spikes.splice(i, 1);
+      }
+    }
+    sfx.frenzyEnd();
   }
 
   function gameOver(reason) {
@@ -260,6 +351,9 @@ import { createDebugPanel } from './debug.js';
       '<h1>' + (reason === 'spike' ? 'Puhkesi' : 'Happi loppui') + '</h1>' +
       '<div class="big">' + score + '</div>' +
       '<p>' + (record ? 'uusi ennätys!' : 'pistettä &middot; ennätys ' + best) + '</p>' +
+      '<p>' + (frenzies
+        ? 'frenzy ' + frenzies + '&times; &middot; kesti ' + Math.floor(t) + ' s'
+        : 'kesti ' + Math.floor(t) + ' s &middot; putki ' + streak + '/' + frenzyGoal) + '</p>' +
       '<p class="hint">Uudestaan: <kbd>väli</kbd> tai napautus</p>';
   }
 
@@ -313,6 +407,11 @@ import { createDebugPanel } from './debug.js';
   function update(dt) {
     t += dt;
     difficulty = Math.min(t / 45, 1.8);
+    if (frenzyLeft > 0) {
+      frenzyLeft -= dt;
+      if (frenzyLeft <= 0) endFrenzy();
+    }
+    const frenzy = frenzyLeft > 0;
 
     // movement: keys win when held, otherwise the stick steers
     const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
@@ -340,8 +439,8 @@ import { createDebugPanel } from './debug.js';
     player.trail.push({ x: player.x, y: player.y });
     if (player.trail.length > 14) player.trail.shift();
 
-    // oxygen drains faster the longer you last
-    oxygen -= (6.5 + difficulty * 2) * dt;
+    // air keeps going out, and faster every second — frenzy is no rest
+    oxygen -= o2Drain() * dt;
     if (oxygen <= 0) { oxygen = 0; gameOver('oxygen'); return; }
     if (oxygen < 25) {
       warnAt -= dt;
@@ -359,35 +458,77 @@ import { createDebugPanel } from './debug.js';
       s.x += s.vx * dt; s.y += s.vy * dt; s.rot += s.spin * dt;
       const m = 140;
       if (s.x < -m || s.x > W + m || s.y < -m || s.y > H + m) { spikes.splice(i, 1); continue; }
-      if (Math.hypot(s.x - player.x, s.y - player.y) < s.r + player.r - 3) { gameOver('spike'); return; }
+
+      const reach = frenzy ? s.r * s.grade + player.r + 8 : s.r + player.r - 3;
+      if (Math.hypot(s.x - player.x, s.y - player.y) < reach) {
+        if (!frenzy) { gameOver('spike'); return; }
+        // In frenzy the same object is a pickup: points, a little air, and a
+        // ring so a fast run still reads as separate grabs.
+        frenzyRun++;
+        score += 10;
+        oxygen = Math.min(O2_MAX, oxygen + O2_GRAB);
+        shake = Math.max(shake, 4);
+        burst(s.x, s.y, '#ffd479', 14 + Math.round(s.grade * 8), 300);
+        ring(s.x, s.y, '#ffd479', s.r * s.grade, 120 * s.grade, 5);
+        pop(s.x, s.y, '+10', '#ffd479');
+        sfx.grab(frenzyRun);
+        spikes.splice(i, 1);
+      }
     }
 
     for (let i = stars.length - 1; i >= 0; i--) {
       const st = stars[i];
       st.life -= dt; st.pulse += dt * 4;
-      if (st.life <= 0) { stars.splice(i, 1); continue; }
+      if (st.life <= 0) {
+        // A star that times out is the one thing that breaks a run. Nothing
+        // else does — dying ends the game anyway.
+        stars.splice(i, 1);
+        if (streak > 0) { streak = 0; sfx.streakLost(); }
+        continue;
+      }
       if (Math.hypot(st.x - player.x, st.y - player.y) < st.r + player.r + 4) {
         score += 10;
         oxygen = Math.min(O2_MAX, oxygen + O2_STAR);
         shake = Math.max(shake, 5);
-        burst(st.x, st.y, '#ffd479', 18, 260);
+        burst(st.x, st.y, '#ffd479', 22, 300);
+        ring(st.x, st.y, '#ffd479', st.r, 150, 6);
+        ring(st.x, st.y, '#6fe3ff', st.r, 96, 3);
+        pop(st.x, st.y, '+10', '#ffd479');
         sfx.star();
         stars.splice(i, 1);
+        streak++;
+        if (streak >= frenzyGoal) { streak = 0; startFrenzy(); }
       }
     }
 
-    stepBits(dt);
+    stepEffects(dt);
     score += dt * 12;
     if (shake > 0) shake = Math.max(0, shake - dt * 40);
   }
 
-  function stepBits(dt) {
+  function stepEffects(dt) {
     for (let i = bits.length - 1; i >= 0; i--) {
       const b = bits[i];
       b.x += b.vx * dt; b.y += b.vy * dt;
       b.vx *= Math.pow(0.02, dt); b.vy *= Math.pow(0.02, dt);
       b.life -= dt * 1.6;
       if (b.life <= 0) bits.splice(i, 1);
+    }
+    for (let i = rings.length - 1; i >= 0; i--) {
+      rings[i].life -= dt * 2.2;
+      if (rings[i].life <= 0) rings.splice(i, 1);
+    }
+    for (let i = pops.length - 1; i >= 0; i--) {
+      const p = pops[i];
+      p.y -= 46 * dt;
+      p.life -= dt * 1.25;
+      if (p.life <= 0) pops.splice(i, 1);
+    }
+    for (const m of motes) {
+      m.x += m.vx * dt; m.y += m.vy * dt; m.pulse += dt;
+      if (m.y < -10) { m.y = H + 10; m.x = rand(0, W); }
+      if (m.x < -10) m.x = W + 10;
+      if (m.x > W + 10) m.x = -10;
     }
   }
 
@@ -406,6 +547,27 @@ import { createDebugPanel } from './debug.js';
     ctx.fillStyle = '#ff5d7a';
     ctx.shadowColor = '#ff2d55';
     ctx.shadowBlur = 18;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** The same object as a pickup: a star, sized by the grade it got at spawn. */
+  function drawSpikeAsStar(s, fade) {
+    const r = s.r * s.grade * 1.15;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.rot * 0.5);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const rr = i % 2 ? r * 0.45 : r;
+      const a = i / 10 * Math.PI * 2 - Math.PI / 2;
+      ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#ffe6a3';
+    ctx.shadowColor = '#ffb020';
+    ctx.shadowBlur = 26;
     ctx.fill();
     ctx.restore();
   }
@@ -458,6 +620,38 @@ import { createDebugPanel } from './debug.js';
     ctx.fillText('HAPPI', x, y - 8);
   }
 
+  /* Progress toward the next frenzy, and during one the time left. Both live in
+     the same place, because they are the same thing at two stages. */
+  function drawStreak() {
+    const x = 26, y = 122, w = Math.min(230, W - 52), h = 8;
+    if (frenzyLeft > 0) {
+      const f = clamp(frenzyLeft / FRENZY_SECONDS, 0, 1);
+      ctx.fillStyle = 'rgba(255,154,224,.16)';
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.fill();
+      ctx.fillStyle = '#ff9ae0';
+      ctx.shadowColor = '#ff9ae0';
+      ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.roundRect(x, y, Math.max(h, w * f), h, 4); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ff9ae0';
+      ctx.font = '700 13px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('FRENZY ' + frenzyRun, x, y - 6);
+      return;
+    }
+    const f = clamp(streak / frenzyGoal, 0, 1);
+    ctx.fillStyle = 'rgba(255,255,255,.07)';
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.fill();
+    if (f > 0) {
+      ctx.fillStyle = '#ffd479';
+      ctx.beginPath(); ctx.roundRect(x, y, Math.max(h, w * f), h, 4); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(232,236,255,.42)';
+    ctx.font = '600 12px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('PUTKI ' + streak + '/' + frenzyGoal, x, y - 6);
+  }
+
   function drawMute() {
     const b = MUTE_BOX, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
     ctx.save();
@@ -483,16 +677,35 @@ import { createDebugPanel } from './debug.js';
   }
 
   function draw() {
+    const frenzy = frenzyLeft > 0;
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
     if (shake > 0) ctx.translate(rand(-shake, shake), rand(-shake, shake));
 
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#0d1430');
-    g.addColorStop(1, '#05080f');
+    g.addColorStop(0, frenzy ? '#2a0f38' : '#0d1430');
+    g.addColorStop(1, frenzy ? '#10061c' : '#05080f');
     ctx.fillStyle = g;
     ctx.fillRect(-40, -40, W + 80, H + 80);
 
-    ctx.strokeStyle = 'rgba(120,160,255,.07)';
+    /* A slow glow behind everything, breathing with the run. It is what makes
+       the field feel lit rather than painted, and frenzy only has to change its
+       colour for the whole screen to change mood. */
+    const breathe = 0.5 + Math.sin(t * (frenzy ? 3.4 : 0.9)) * 0.5;
+    const glow = ctx.createRadialGradient(W / 2, H * 0.55, 0, W / 2, H * 0.55, H * 0.78);
+    const strength = (frenzy ? 0.20 : 0.085) + breathe * (frenzy ? 0.12 : 0.03);
+    glow.addColorStop(0, (frenzy ? 'rgba(255,140,220,' : 'rgba(90,150,255,') + strength.toFixed(3) + ')');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    for (const m of motes) {
+      ctx.globalAlpha = m.a * (0.6 + Math.sin(m.pulse * 2) * 0.4) * (frenzy ? 1.8 : 1);
+      ctx.fillStyle = frenzy ? '#ffb8ec' : '#9fc4ff';
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.3); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = frenzy ? 'rgba(255,160,230,.10)' : 'rgba(120,160,255,.07)';
     ctx.lineWidth = 1;
     for (let x = 0; x <= W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for (let y = 0; y <= H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
@@ -510,7 +723,23 @@ import { createDebugPanel } from './debug.js';
     }
 
     stars.forEach(drawStar);
-    spikes.forEach(drawSpike);
+    if (frenzy) {
+      // The last second fades them back, so the switch is seen before it bites.
+      const fade = clamp(frenzyLeft / 0.8, 0.25, 1);
+      spikes.forEach(s => drawSpikeAsStar(s, fade));
+    } else {
+      spikes.forEach(drawSpike);
+    }
+
+    for (const r of rings) {
+      const e = 1 - r.life;                       // 0 at birth, 1 when gone
+      const rr = r.r0 + (r.r1 - r.r0) * (1 - Math.pow(1 - e, 3));
+      ctx.globalAlpha = clamp(r.life, 0, 1) * 0.75;
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = r.w * clamp(r.life, 0, 1);
+      ctx.beginPath(); ctx.arc(r.x, r.y, rr, 0, 6.3); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
 
     for (const b of bits) {
       ctx.globalAlpha = clamp(b.life, 0, 1);
@@ -522,8 +751,8 @@ import { createDebugPanel } from './debug.js';
     if (state !== STATE.OVER) {
       for (let i = 0; i < player.trail.length; i++) {
         const p = player.trail[i], a = i / player.trail.length;
-        ctx.globalAlpha = a * 0.32;
-        ctx.fillStyle = '#6fe3ff';
+        ctx.globalAlpha = a * (frenzy ? 0.45 : 0.32);
+        ctx.fillStyle = frenzy ? '#ff9ae0' : '#6fe3ff';
         ctx.beginPath(); ctx.arc(p.x, p.y, player.r * a * 0.85, 0, 6.3); ctx.fill();
       }
       ctx.globalAlpha = 1;
@@ -533,17 +762,29 @@ import { createDebugPanel } from './debug.js';
         player.x, player.y, player.r
       );
       pg.addColorStop(0, '#ffffff');
-      pg.addColorStop(0.35, '#9ff0ff');
-      pg.addColorStop(1, 'rgba(70,190,255,.55)');
+      pg.addColorStop(0.35, frenzy ? '#ffc8f0' : '#9ff0ff');
+      pg.addColorStop(1, frenzy ? 'rgba(255,120,220,.6)' : 'rgba(70,190,255,.55)');
       ctx.fillStyle = pg;
-      ctx.shadowColor = o2Color(clamp(oxygen / O2_MAX, 0, 1));
-      ctx.shadowBlur = 26;
+      ctx.shadowColor = frenzy ? '#ff9ae0' : o2Color(clamp(oxygen / O2_MAX, 0, 1));
+      ctx.shadowBlur = frenzy ? 40 : 26;
       ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, 6.3); ctx.fill();
       ctx.shadowBlur = 0;
       ctx.strokeStyle = 'rgba(255,255,255,.75)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
+
+    for (const p of pops) {
+      ctx.globalAlpha = clamp(p.life, 0, 1);
+      ctx.fillStyle = p.color;
+      ctx.font = '700 ' + (p.text === 'FRENZY' ? 34 : 20) + 'px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 16;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
 
     if (state !== STATE.MENU) {
       ctx.fillStyle = '#e8ecff';
@@ -555,6 +796,7 @@ import { createDebugPanel } from './debug.js';
       ctx.textAlign = 'right';
       ctx.fillText('ennätys ' + Math.floor(best), W - 26, 46);
       drawOxygen();
+      drawStreak();
     }
     stick.draw(ctx);
     drawMute();
@@ -567,7 +809,11 @@ import { createDebugPanel } from './debug.js';
     })
     .readout('nopeus', () => Math.round(Math.hypot(player.vx, player.vy)))
     .readout('happi', () => Math.round(oxygen))
-    .readout('sauva', () => stick.x.toFixed(2) + ' / ' + stick.y.toFixed(2));
+    .readout('kulutus/s', () => o2Drain().toFixed(1))
+    .readout('putki', () => streak + '/' + frenzyGoal)
+    .readout('frenzy', () => frenzyLeft > 0 ? frenzyLeft.toFixed(1) + ' s' : '–')
+    .readout('sauva', () => stick.x.toFixed(2) + ' / ' + stick.y.toFixed(2))
+    .button('frenzy nyt', () => { if (state === STATE.PLAY) startFrenzy(); });
 
   let last = performance.now();
   function loop(now) {
@@ -576,7 +822,7 @@ import { createDebugPanel } from './debug.js';
     resize();                           // cheap no-op unless the frame changed size
     if (state === STATE.PLAY) update(dt);
     else {
-      stepBits(dt);
+      stepEffects(dt);
       if (shake > 0) shake = Math.max(0, shake - dt * 40);
     }
     draw();
