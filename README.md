@@ -28,7 +28,10 @@ removed later.
 
 ## Licence
 
-Every game here is MIT licensed by its own author — see `LICENSE`. Authors keep
+Every game here is MIT licensed by **its own author**, not by the portal — the
+single `LICENSE` file carries the terms, and `games.json` records who wrote
+which game. The portal's terms of use are what grant the licence on
+publication. Authors keep
 the copyright to their work: publishing on the portal grants this licence to
 everyone else, but does not limit what the author may do with the same code
 elsewhere, including selling a closed commercial version of it.
