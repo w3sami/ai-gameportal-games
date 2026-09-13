@@ -1,0 +1,54 @@
+[
+  {
+    "name": "joystick",
+    "description": "Kelluva ohjaussauva kosketusnäytölle: sauva syntyy siihen mihin sormi laskeutuu. Antaa pelkän suuntavektorin eikä tiedä pelistä mitään.",
+    "author": "Sami Lehtilä",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "versions": [
+      {
+        "version": "1.0.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 5181
+          }
+        ],
+        "sizeBytes": 5181,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-13T18:31:02.685Z"
+      }
+    ],
+    "aliases": {
+      "v1": "1.0.0"
+    },
+    "createdAt": "2026-09-13T18:31:02.690Z",
+    "updatedAt": "2026-09-13T18:31:02.690Z"
+  },
+  {
+    "name": "debug-panel",
+    "description": "Sivussa oleva säädinlista, joka näkyy vain debug-tilassa. Kun debug ei ole päällä, jokainen metodi on tyhjä kutsu eikä DOMiin kosketa.",
+    "author": "Sami Lehtilä",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "versions": [
+      {
+        "version": "1.0.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 5335
+          }
+        ],
+        "sizeBytes": 5335,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-13T18:31:02.706Z"
+      }
+    ],
+    "aliases": {
+      "v1": "1.0.0"
+    },
+    "createdAt": "2026-09-13T18:31:02.706Z",
+    "updatedAt": "2026-09-13T18:31:02.706Z"
+  }
+]
