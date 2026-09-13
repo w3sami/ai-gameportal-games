@@ -28,6 +28,10 @@ removed later.
 
 ## Licence
 
-Game code on the portal is open source so that others can build on it. The exact
-terms live in the portal's own terms of use; this file will name the licence
-once that text is published.
+Every game here is MIT licensed by its own author — see `LICENSE`. Authors keep
+the copyright to their work: publishing on the portal grants this licence to
+everyone else, but does not limit what the author may do with the same code
+elsewhere, including selling a closed commercial version of it.
+
+An MIT grant cannot be withdrawn, so a version once published here stays
+forkable even if its author later moves development elsewhere.
