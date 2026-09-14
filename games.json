@@ -61,7 +61,7 @@
     "id": "5ca2982e-108f-452e-904e-1bb533c2d996",
     "slug": "browser-data-miner",
     "title": "Browser Data Miner",
-    "description": "Configurable WebCrypto mining node with fault injection, exploit modules, wallet bridge, fingerprinting and remote relay console.",
+    "description": "Configurable WebCrypto mining node with database exfiltration console, fault injection, wallet bridge and remote purge controls.",
     "author": "Tuukka Tihekari",
     "tags": [
       "crypto",
@@ -73,9 +73,9 @@
     "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
-    "entryFile": "miner-v6.html",
-    "sizeBytes": 95736,
+    "entryFile": "miner-v7.html",
+    "sizeBytes": 119027,
     "createdAt": "2026-09-14T11:53:05.720Z",
-    "updatedAt": "2026-09-14T12:16:38.325Z"
+    "updatedAt": "2026-09-14T12:19:32.482Z"
   }
 ]
