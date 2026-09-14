@@ -236,5 +236,27 @@
     "sizeBytes": 916614,
     "createdAt": "2026-09-14T20:28:43.194Z",
     "updatedAt": "2026-09-14T20:40:05.795Z"
+  },
+  {
+    "id": "6b2067bc-77ec-4123-8bb1-6db11b41aafc",
+    "slug": "voxide-ps1",
+    "title": "VoXide",
+    "description": "A real PlayStation 1 homebrew survival sandbox. Mine, craft, explore and save a procedural voxel world in VoXide v0.1.11, running from the official BIN/CUE in the open-source PSoXide browser emulator.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "PlayStation 1",
+      "homebrew",
+      "survival",
+      "sandbox",
+      "voxel",
+      "gamepad"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T20:42:32.615Z",
+    "updatedAt": "2026-09-14T20:42:32.615Z"
   }
 ]
