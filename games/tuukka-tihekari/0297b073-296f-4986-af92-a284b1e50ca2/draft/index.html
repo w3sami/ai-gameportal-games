@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07100f">
+  <meta name="description" content="Bigbools TV — legally embedded live channels in a retro browser television.">
+  <title>Bigbools TV</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Bigbools TV home">
+        <span class="brand-mark" aria-hidden="true">BB</span>
+        <span><strong>BIGBOOLS TV</strong><small>AUTHORIZED LIVE SIGNALS</small></span>
+      </a>
+      <div class="top-actions">
+        <span id="clock" class="clock">--:--</span>
+        <button id="infoBtn" class="icon-btn" type="button" aria-label="Channel information" title="Channel information">i</button>
+        <button id="guideBtn" class="guide-btn" type="button" aria-expanded="false"><span>GUIDE</span><kbd>Enter</kbd></button>
+      </div>
+    </header>
+
+    <main class="tv-layout">
+      <aside class="channel-rail" aria-label="Channel list">
+        <div class="rail-head">
+          <span>CHANNELS</span>
+          <button id="favoritesFilter" class="filter-btn" type="button" aria-pressed="false">★ FAV</button>
+        </div>
+        <div id="categoryTabs" class="category-tabs" role="tablist" aria-label="Channel categories"></div>
+        <div id="channelList" class="channel-list"></div>
+      </aside>
+
+      <section class="screen-column" aria-label="Television player">
+        <div id="tvScreen" class="tv-screen">
+          <div class="scanlines" aria-hidden="true"></div>
+          <div id="playerMount" class="player-mount"></div>
+          <div id="signalCard" class="signal-card" role="status" aria-live="polite">
+            <span class="signal-icon" aria-hidden="true"></span>
+            <strong id="signalTitle">TUNING SIGNAL</strong>
+            <span id="signalText">Loading channel manifest…</span>
+            <button id="retryBtn" type="button">RECONNECT</button>
+          </div>
+          <div class="osd" aria-live="polite">
+            <div class="osd-number" id="osdNumber">--</div>
+            <div class="osd-copy">
+              <div class="osd-title-row"><strong id="osdName">Bigbools TV</strong><span id="liveBadge" class="live-badge">TUNING</span></div>
+              <span id="osdProgram">Curated official live streams</span>
+            </div>
+          </div>
+          <div id="numberInput" class="number-input" aria-live="assertive"></div>
+        </div>
+
+        <div class="control-deck" aria-label="TV controls">
+          <div class="channel-controls">
+            <button id="prevBtn" type="button" title="Previous channel" aria-label="Previous channel">↶</button>
+            <button id="downBtn" type="button" title="Channel down" aria-label="Channel down">CH−</button>
+            <button id="upBtn" type="button" title="Channel up" aria-label="Channel up">CH+</button>
+          </div>
+          <button id="playBtn" class="primary-control" type="button">▶ PLAY</button>
+          <button id="muteBtn" type="button" aria-pressed="true">MUTED</button>
+          <label class="volume-wrap"><span class="sr-only">Volume</span><input id="volume" type="range" min="0" max="100" value="55"></label>
+          <button id="favoriteBtn" type="button" aria-pressed="false" title="Favorite channel">☆</button>
+          <button id="fullscreenBtn" type="button">FULLSCREEN <kbd>F</kbd></button>
+        </div>
+
+        <div class="now-strip">
+          <span id="nowSource">SOURCE —</span>
+          <span id="nowMeta">—</span>
+          <span id="statusDot" class="status-dot"></span><strong id="statusText">INITIALIZING</strong>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="guide" class="overlay" hidden>
+    <section class="panel guide-panel" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+      <header><div><small>BIGBOOLS TV</small><h2 id="guideTitle">CHANNEL GUIDE</h2></div><button class="close-btn" data-close="guide" type="button" aria-label="Close guide">×</button></header>
+      <div class="guide-time"><span>NOW</span><span>NEXT</span></div>
+      <div id="guideRows" class="guide-rows"></div>
+      <footer>Schedules are shown only when a verified public EPG is available. Press <kbd>Esc</kbd> to close.</footer>
+    </section>
+  </div>
+
+  <div id="infoPanel" class="overlay" hidden>
+    <section class="panel info-panel" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+      <header><div><small>CHANNEL AUDIT</small><h2 id="infoTitle">CHANNEL INFO</h2></div><button class="close-btn" data-close="infoPanel" type="button" aria-label="Close information">×</button></header>
+      <div id="infoContent" class="info-content"></div>
+      <footer>Bigbools TV embeds the source publisher's player. It does not copy, restream, or proxy the signal. <a href="channel-licenses.html" target="_blank" rel="noopener">Full channel audit ↗</a></footer>
+    </section>
+  </div>
+
+  <template id="channelTemplate">
+    <button class="channel-item" type="button">
+      <span class="channel-num"></span><span class="channel-monogram"></span>
+      <span class="channel-copy"><strong></strong><small></small></span><span class="channel-fav" aria-hidden="true"></span>
+    </button>
+  </template>
+
+  <script src="app.js"></script>
+  <script async src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
