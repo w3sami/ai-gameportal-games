@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07070a">
+  <title>Drift Los Angeles — Dreamcast</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="kicker">SEGA DREAMCAST HOMEBREW · FLYCAST WASM</p>
+        <h1>DRIFT <span>LOS ANGELES</span></h1>
+      </div>
+      <div class="status" id="gamepadStatus"><i></i> Ohjain: ei yhdistetty</div>
+    </header>
+
+    <section class="stage" id="stage">
+      <div class="player-shell" id="playerShell">
+        <img class="hero" src="drift-los-angeles.jpg" alt="Drift Los Angeles -pelikuva Los Angelesin keskustasta">
+        <div class="launch-card" id="launchCard">
+          <p class="launch-label">Dreamcast-ohjelma · virallinen ELF-julkaisu</p>
+          <button class="launch" id="launchButton" type="button">Käynnistä peli</button>
+          <p>Noin 15 Mt emulaattori- ja pelidataa ladataan vasta nyt. Ensimmäinen käynnistys voi kestää hetken.</p>
+        </div>
+        <div class="loading" id="loading" hidden>
+          <div class="spinner" aria-hidden="true"></div>
+          <strong>Valmistellaan Dreamcast-emulaattoria…</strong>
+          <span>EmulatorJS näyttää varsinaisen latausprosentin seuraavassa näkymässä.</span>
+        </div>
+        <iframe id="player" title="Drift Los Angeles Dreamcast -emulaattori" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
+      </div>
+
+      <aside class="controls" aria-label="Ohjaimet">
+        <div class="panel-head">
+          <h2>Ohjaimet</h2>
+          <button id="toggleControls" class="icon-button" type="button" aria-expanded="true" aria-controls="controlList">−</button>
+        </div>
+        <div id="controlList">
+          <dl>
+            <div><dt>Ohjaus</dt><dd>← → / analogitikku</dd></div>
+            <div><dt>Kaasu</dt><dd>↑ / R-liipaisin</dd></div>
+            <div><dt>Jarru / peruutus</dt><dd>↓ / L-liipaisin</dd></div>
+            <div><dt>Käsijarru</dt><dd>A</dd></div>
+            <div><dt>Kytkinpotku</dt><dd>X + kaasu</dd></div>
+            <div><dt>Kamera</dt><dd>B</dd></div>
+            <div><dt>Palautus</dt><dd>Y</dd></div>
+            <div><dt>Tauko</dt><dd>Start</dd></div>
+          </dl>
+          <p class="tip">Burnout: pidä L + R. Donitsi: täysi ohjaus + R pienessä nopeudessa.</p>
+          <p class="tip">Näppäimistöasetukset löytyvät emulaattorin hammasrattaasta. Gamepad on suositeltu.</p>
+        </div>
+      </aside>
+    </section>
+
+    <nav class="actions" aria-label="Pelin toiminnot">
+      <button id="fullscreenButton" type="button">Koko näyttö</button>
+      <button id="restartButton" type="button">Käynnistä uudelleen</button>
+      <span>Ääni käynnistyy selaimen vaatiman käyttäjäpainalluksen jälkeen.</span>
+    </nav>
+
+    <details class="details">
+      <summary>Tekniset tiedot, tekijät ja lisenssit</summary>
+      <div class="details-grid">
+        <section>
+          <h2>Toteutus</h2>
+          <p>Tämä on Rich Stokesin alkuperäinen avoimen lähdekoodin Dreamcast-homebrew, ei JavaScript-uudelleentoteutus. Virallinen <code>drift-los-angeles.elf</code> suoritetaan Flycast WASM -ytimellä selaimessa. Peli käyttää KallistiOS 2.3.0:aa, renderöi 640 × 480 -kuvaa eikä vaadi Dreamcast BIOSia.</p>
+          <p>Peli ei käytä VMU-tallennuksia, joten pysyvää palvelintallennusta ei tarvita. Pelin, lähdekoodin, julkaisujen ja tekijän tiedot löytyvät <a href="https://github.com/richstokes/dreamcast-homebrew/tree/main/projects/games/drift-los-angeles" target="_blank" rel="noreferrer">virallisesta projektista</a>.</p>
+        </section>
+        <section>
+          <h2>Tekijät ja lisenssit</h2>
+          <ul>
+            <li>Peli ja alkuperäiset assetit: Rich Stokes / Dreamcast Homebrew, MIT.</li>
+            <li>Flycast WASM -ydin: Flycast-tiimi ja Nick Somers, GPLv2.</li>
+            <li>Selainkäyttöliittymä: EmulatorJS.</li>
+            <li>KallistiOS: KallistiOS Contributors, KOS-lisenssi (uusi BSD).</li>
+            <li>Moottorin joutokäynti: “Eight-cylinder engine idling.wav”, Lumamorph, CC BY 4.0.</li>
+            <li>Moottorin kierrokset: “Hot-Rod-V-8-BigSpchg-RoughIdle-RevUps-IdleDR025-30sec.wav”, Ears68, CC BY 3.0.</li>
+            <li>Renkaat: “Distant car tire screetch”, Sadiquecat, CC0.</li>
+            <li>Musiikki: “Pure Raceway”, MintoDog, CC0.</li>
+          </ul>
+          <p><a href="licenses/index.html">Avaa täydet lisenssi- ja lähdetiedot</a></p>
+        </section>
+      </div>
+    </details>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
