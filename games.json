@@ -83,13 +83,13 @@
   {
     "id": "a73d49c3-c5e5-4d8d-ab43-6a86499409db",
     "slug": "matopeli-next-gen",
-    "title": "Matopeli: Next Gen",
-    "description": "Moderni matopeli, jossa klassinen tila, 60 sekunnin pistejahti ja huoneisiin etenevä loputon tila. Kerää pisteitä, avaa lukitut ovet ja kohtaa uusissa huoneissa esteitä, vihollisia, erikoisruokia ja riskialueita. Kolme viimeisintä peliä tallentuu katsottaviksi uusintoina.",
+    "title": "Matopeli 2.0",
+    "description": "Moderni 2D-matopeli, jossa klassinen tila, 60 sekunnin pistejahti ja huoneisiin etenevä loputon tila. Kerää pisteitä, avaa lukitut ovet ja kohtaa uusissa huoneissa esteitä, vihollisia, erikoisruokia ja riskialueita. Kolme viimeisintä peliä tallentuu katsottaviksi uusintoina.",
     "author": "Tuukka Tihekari",
     "tags": [
       "matopeli",
       "arcade",
-      "retro",
+      "2d",
       "replay",
       "procedural"
     ],
@@ -97,8 +97,8 @@
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 37708,
+    "sizeBytes": 37700,
     "createdAt": "2026-09-14T13:21:19.291Z",
-    "updatedAt": "2026-09-14T13:47:42.208Z"
+    "updatedAt": "2026-09-14T13:48:42.728Z"
   }
 ]
