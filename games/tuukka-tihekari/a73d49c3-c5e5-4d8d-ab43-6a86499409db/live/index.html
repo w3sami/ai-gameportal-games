@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Matopeli: Next Gen</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      --ink: #dfffe4;
+      --muted: #82a98d;
+      --neon: #7cff9a;
+      --gold: #ffe36e;
+      --cyan: #6ff7ff;
+      --danger: #ff6687;
+      --panel: #0b1712e8;
+      --line: #28513a;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      min-height: 100svh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 20% 0%, #163424 0, transparent 34%),
+        radial-gradient(circle at 90% 20%, #12383c 0, transparent 30%),
+        #050b08;
+      overflow-x: hidden;
+    }
+    body.combo { animation: pulse .32s ease-out; }
+    @keyframes pulse { 50% { filter: brightness(1.35) saturate(1.4); } }
+    main { width: min(1180px, 96vw); margin: auto; padding: clamp(18px, 4vw, 42px) 0; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 16px; }
+    h1 { margin: 0; font-size: clamp(30px, 6vw, 66px); line-height: .92; letter-spacing: -.07em; }
+    h1 span { color: var(--neon); text-shadow: 0 0 24px #7cff9a55; }
+    .tagline { color: var(--muted); text-align: right; font-size: 13px; }
+    .setup { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px; }
+    fieldset { margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+    legend { padding: 0 7px; color: var(--muted); font: 700 11px/1 system-ui; letter-spacing: .13em; }
+    .choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+    button { font: inherit; }
+    .choice, .action, .dir {
+      border: 1px solid #315d43;
+      color: #b9d8bf;
+      background: #102119;
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform .12s, background .12s, border-color .12s, color .12s;
+    }
+    .choice { min-height: 48px; padding: 7px; font-size: 12px; font-weight: 800; }
+    .choice small { display: block; color: var(--muted); margin-top: 3px; font-weight: 500; }
+    .choice[aria-pressed="true"] { color: #071009; background: var(--neon); border-color: var(--neon); }
+    .choice[aria-pressed="true"] small { color: #1f4e2b; }
+    .choice:active, .action:active, .dir:active { transform: scale(.96); }
+    .game-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; align-items: start; }
+    .screen {
+      position: relative;
+      border: 1px solid #336247;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #07120c;
+      box-shadow: 0 28px 100px #0009, 0 0 50px #6fff9220;
+    }
+    canvas { display: block; width: 100%; aspect-ratio: 3 / 2; background: #08150e; touch-action: none; }
+    .hud {
+      position: absolute;
+      inset: 0 0 auto;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      pointer-events: none;
+      background: #17372488;
+      backdrop-filter: blur(7px);
+    }
+    .hud div { padding: 9px 12px; background: #07130dcc; }
+    .hud small { display: block; color: var(--muted); font-size: 9px; letter-spacing: .1em; }
+    .hud strong { font: 800 18px/1.2 ui-monospace, monospace; color: var(--neon); }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 70px 20px 20px;
+      text-align: center;
+      background: #041009c7;
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+    }
+    .overlay[hidden] { display: none; }
+    .overlay-card { max-width: 540px; }
+    .overlay h2 { margin: 0 0 10px; font-size: clamp(28px, 5vw, 56px); color: var(--neon); }
+    .overlay p { color: #b6d3bc; line-height: 1.55; }
+    .overlay b { color: white; }
+    aside { display: grid; gap: 10px; }
+    .card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+    .card h2 { margin: 0 0 9px; color: var(--muted); font-size: 10px; letter-spacing: .13em; }
+    .mission { font-weight: 800; line-height: 1.35; }
+    .progress { height: 7px; margin-top: 10px; border-radius: 8px; background: #15271d; overflow: hidden; }
+    .progress i { display: block; width: 0; height: 100%; background: var(--neon); transition: width .2s; }
+    .status-list { display: grid; gap: 7px; color: #a9c8b0; font-size: 12px; }
+    .status-list span { display: flex; justify-content: space-between; gap: 8px; }
+    .status-list b { color: white; }
+    .ability { width: 100%; min-height: 48px; padding: 10px; font-weight: 900; }
+    .ability.ready { color: #071009; background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 25px #6ff7ff44; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .action { min-height: 43px; font-size: 12px; font-weight: 800; }
+    .touch-pad { display: none; grid-template: repeat(3, 50px) / repeat(3, 58px); justify-content: center; margin-top: 3px; }
+    .dir { margin: 3px; font-size: 20px; font-weight: 900; }
+    .up { grid-column: 2; }.left { grid-column: 1; grid-row: 2; }.center { grid-column: 2; grid-row: 2; }.right { grid-column: 3; grid-row: 2; }.down { grid-column: 2; grid-row: 3; }
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; font-size: 11px; color: var(--muted); }
+    .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 2px; background: var(--dot); box-shadow: 0 0 8px var(--dot); }
+    .help { margin: 13px 2px 0; color: #6f9180; font-size: 12px; }
+    @media (max-width: 820px) {
+      header { align-items: start; flex-direction: column; }.tagline { text-align: left; }
+      .setup, .game-wrap { grid-template-columns: 1fr; }
+      aside { grid-template-columns: 1fr 1fr; }
+      .touch-pad { display: grid; }
+    }
+    @media (max-width: 540px) {
+      main { width: 100%; padding: 12px; }
+      .choice-grid { grid-template-columns: 1fr; }
+      aside { grid-template-columns: 1fr; }
+      .hud strong { font-size: 14px; }.hud div { padding: 7px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Matopeli: <span>Next Gen</span></h1>
+    <div class="tagline">Kasva. Ota riski. Riko oma haamusi.</div>
+  </header>
+
+  <section class="setup" aria-label="Peliasetukset">
+    <fieldset>
+      <legend>PELIMUOTO</legend>
+      <div class="choice-grid">
+        <button class="choice" data-mode="classic" aria-pressed="false">KLASSINEN<small>Vain mato ja ruoka</small></button>
+        <button class="choice" data-mode="endless" aria-pressed="true">LOPUTON<small>Laajeneva maailma</small></button>
+        <button class="choice" data-mode="rush" aria-pressed="false">60 SEKUNTIA<small>Pistejahti</small></button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>VAIKEUSTASO</legend>
+      <div class="choice-grid">
+        <button class="choice" data-level="easy" aria-pressed="false">HELPPO</button>
+        <button class="choice" data-level="normal" aria-pressed="true">NORMAALI</button>
+        <button class="choice" data-level="hard" aria-pressed="false">VAIKEA</button>
+      </div>
+    </fieldset>
+  </section>
+
+  <section class="game-wrap">
+    <div class="screen" id="screen">
+      <canvas id="game" width="960" height="640" aria-label="Matopelin pelialue"></canvas>
+      <div class="hud">
+        <div><small>PISTEET</small><strong id="score">0</strong></div>
+        <div><small>ENNÄTYS</small><strong id="best">0</strong></div>
+        <div><small>KOMBO</small><strong id="combo">×1</strong></div>
+        <div><small>AIKA</small><strong id="time">0:00</strong></div>
+      </div>
+      <div class="overlay" id="overlay" role="button" tabindex="0">
+        <div class="overlay-card">
+          <h2 id="overlayTitle">Next Gen</h2>
+          <p id="overlayText"><b>Nuolinäppäimet tai WASD.</b><br>Syö, kasvata komboa ja käy riskialueella moninkertaistamassa pisteet.</p>
+          <p><b>Paina Enter tai kosketa aloittaaksesi</b></p>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <section class="card">
+        <h2>TEHTÄVÄ</h2>
+        <div class="mission" id="mission">Kerää 5 ruokaa</div>
+        <div class="progress"><i id="missionProgress"></i></div>
+      </section>
+      <section class="card">
+        <h2>TILANNE</h2>
+        <div class="status-list">
+          <span>Kultakerroin <b id="goldStatus">—</b></span>
+          <span>Nopeusboost <b id="boostStatus">—</b></span>
+          <span>Riskialue <b id="riskStatus">×3</b></span>
+          <span>Haamu <b id="ghostStatus">EI ENNÄTYSTÄ</b></span>
+        </div>
+      </section>
+      <section class="card">
+        <h2>ERIKOISKYKY</h2>
+        <button class="action ability" id="ability">KILPI 0 %</button>
+      </section>
+      <section class="card">
+        <div class="actions">
+          <button class="action" id="pause">TAUKO</button>
+          <button class="action" id="restart">UUSI PELI</button>
+        </div>
+        <nav class="touch-pad" aria-label="Kosketusohjaimet">
+          <button class="dir up" data-dir="up" aria-label="Ylös">▲</button>
+          <button class="dir left" data-dir="left" aria-label="Vasemmalle">◀</button>
+          <button class="dir center" id="touchAbility" aria-label="Kilpi">◆</button>
+          <button class="dir right" data-dir="right" aria-label="Oikealle">▶</button>
+          <button class="dir down" data-dir="down" aria-label="Alas">▼</button>
+        </nav>
+      </section>
+      <section class="card legend">
+        <span style="--dot:#7cff9a">Ruoka</span><span style="--dot:#ffe36e">Kulta</span>
+        <span style="--dot:#6ff7ff">Salama</span><span style="--dot:#ff8bd8">Sakset</span>
+      </section>
+    </aside>
+  </section>
+  <p class="help">Nuolet / WASD · P = tauko · välilyönti = kilpi · mobiilissa pyyhkäisy · peliohjain tuettu</p>
+</main>
+
+<script>
+  const canvas = document.querySelector('#game');
+  const ctx = canvas.getContext('2d');
+  const ui = Object.fromEntries(['score','best','combo','time','overlay','overlayTitle','overlayText','mission','missionProgress','goldStatus','boostStatus','riskStatus','ghostStatus','ability','screen'].map(id => [id, document.querySelector('#' + id)]));
+  const CELL = 32;
+  const VIEW_COLS = 30;
+  const VIEW_ROWS = 20;
+  const baseDelays = { easy: 175, normal: 135, hard: 98 };
+  const foodStyles = {
+    normal: { color:'#7cff9a', value:1 },
+    gold: { color:'#ffe36e', value:2 },
+    lightning: { color:'#6ff7ff', value:1 },
+    scissors: { color:'#ff8bd8', value:1 },
+  };
+  const missions = [
+    { type:'eat', target:5, label:'Kerää 5 ruokaa' },
+    { type:'risk', target:3, label:'Kerää 3 ruokaa riskialueella' },
+    { type:'combo', target:4, label:'Saavuta neljän kombo' },
+    { type:'survive', target:25, label:'Selviä 25 sekuntia' },
+  ];
+
+  let mode = localStorage.getItem('next-mode') || 'endless';
+  let level = localStorage.getItem('next-level') || 'normal';
+  if (!['classic','endless','rush'].includes(mode)) mode = 'endless';
+  if (!baseDelays[level]) level = 'normal';
+  let snake, previousSnake, direction, queuedDirection, food, obstacles, portals, enemies, risk;
+  let score, eaten, combo, lastEatAt, abilityCharge, shield, goldUntil, boostUntil;
+  let running = false, paused = false, over = false, timer, startedAt, pausedAt, pausedTotal, tickCount, portalCooldown;
+  let camera = {x:0,y:0}, previousCamera = {x:0,y:0}, lastTickAt = 0, tickDelay = 135;
+  let missionIndex = 0, missionValue = 0, missionStartedAt = 0;
+  let runPath = [], ghostPath = [];
+  let touchStart, lastGamepadDirection = '';
+
+  function keyForBest() { return `next-best-${mode}-${level}`; }
+  function keyForGhost() { return `next-ghost-${mode}-${level}`; }
+  function bestScore() { return Number(localStorage.getItem(keyForBest()) || 0); }
+  function same(a,b) { return a.x === b.x && a.y === b.y; }
+  function extraMode() { return mode !== 'classic'; }
+  function inRisk(point) { return extraMode() && point.x >= risk.x && point.x < risk.x+risk.w && point.y >= risk.y && point.y < risk.y+risk.h; }
+  function occupied(point) { return snake.some(p=>same(p,point)) || obstacles.some(p=>same(p,point)) || enemies.some(p=>same(p,point)) || portals.some(p=>same(p,point)); }
+  function randomInt(min,max) { return Math.floor(Math.random()*(max-min+1))+min; }
+
+  function reset() {
+    clearTimeout(timer);
+    const start = mode === 'endless' ? {x:0,y:0} : {x:Math.floor(VIEW_COLS/2),y:Math.floor(VIEW_ROWS/2)};
+    snake = [start, {x:start.x-1,y:start.y}, {x:start.x-2,y:start.y}];
+    previousSnake = snake.map(p=>({...p}));
+    direction = queuedDirection = {x:1,y:0};
+    obstacles = []; portals = []; enemies = [];
+    risk = {x:start.x+5,y:start.y-3,w:7,h:6,dx:1,dy:0};
+    score = eaten = 0; combo = 1; lastEatAt = 0; abilityCharge = 0; shield = false;
+    goldUntil = boostUntil = 0; tickCount = portalCooldown = 0;
+    startedAt = performance.now(); pausedTotal = 0; missionIndex = 0; missionValue = 0; missionStartedAt = startedAt;
+    runPath = []; ghostPath = JSON.parse(localStorage.getItem(keyForGhost()) || '[]');
+    previousCamera = camera = {x:start.x - VIEW_COLS/2, y:start.y - VIEW_ROWS/2};
+    if (extraMode()) createWorldFeatures();
+    placeFood(); updateUi(); draw(1);
+  }
+
+  function createWorldFeatures() {
+    const head = snake[0];
+    portals = [{x:head.x-9,y:head.y-5},{x:head.x+10,y:head.y+5}];
+    for (let i=0;i<8;i++) addObstacle();
+  }
+
+  function boundsAroundHead() {
+    if (mode === 'endless') return {minX:snake[0].x-13,maxX:snake[0].x+13,minY:snake[0].y-8,maxY:snake[0].y+8};
+    return {minX:1,maxX:VIEW_COLS-2,minY:2,maxY:VIEW_ROWS-2};
+  }
+
+  function randomFreePoint() {
+    const b = boundsAroundHead();
+    for (let tries=0;tries<200;tries++) {
+      const point = {x:randomInt(b.minX,b.maxX), y:randomInt(b.minY,b.maxY)};
+      if (!occupied(point) && (!food || !same(food,point))) return point;
+    }
+    return {x:snake[0].x+4,y:snake[0].y+4};
+  }
+
+  function placeFood() {
+    const roll = Math.random();
+    const type = !extraMode() ? 'normal' : roll < .64 ? 'normal' : roll < .79 ? 'gold' : roll < .9 ? 'lightning' : 'scissors';
+    food = {...randomFreePoint(), type};
+  }
+
+  function addObstacle() {
+    const point = randomFreePoint();
+    if (Math.abs(point.x-snake[0].x)+Math.abs(point.y-snake[0].y)>4) obstacles.push(point);
+  }
+
+  function addEnemy() {
+    if (enemies.length >= 3) return;
+    const point = randomFreePoint();
+    enemies.push({...point,dx:Math.random()<.5?1:0,dy:Math.random()<.5?0:1});
+  }
+
+  function currentDelay() {
+    let delay = baseDelays[level];
+    if (performance.now() < boostUntil) delay *= .72;
+    if (inRisk(snake[0])) delay *= .78;
+    return Math.max(60, delay);
+  }
+
+  function startGame(fresh = false) {
+    if (fresh || over || !snake) reset();
+    running = true; paused = false; over = false; ui.overlay.hidden = true;
+    startedAt = performance.now(); pausedTotal = 0; missionStartedAt = startedAt;
+    lastTickAt = performance.now(); scheduleTick(); beep(520,.04);
+  }
+
+  function scheduleTick() {
+    clearTimeout(timer);
+    tickDelay = currentDelay();
+    timer = setTimeout(tick, tickDelay);
+  }
+
+  function setDirection(name) {
+    const directions = {up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    const next = directions[name];
+    if (!next) return;
+    if (!running) startGame(true);
+    if (next.x !== -direction.x || next.y !== -direction.y) queuedDirection = next;
+  }
+
+  function tick() {
+    if (!running || paused) return;
+    lastTickAt = performance.now(); tickCount++;
+    previousSnake = snake.map(p=>({...p})); previousCamera = {...camera};
+    direction = queuedDirection;
+    let head = {x:snake[0].x+direction.x,y:snake[0].y+direction.y};
+    if (portalCooldown) portalCooldown--;
+    if (extraMode() && !portalCooldown) {
+      const portalIndex = portals.findIndex(p=>same(p,head));
+      if (portalIndex >= 0) { head = {...portals[1-portalIndex]}; portalCooldown=3; beep(880,.08); }
+    }
+
+    let collision = '';
+    if (mode !== 'endless' && (head.x<0 || head.y<1 || head.x>=VIEW_COLS || head.y>=VIEW_ROWS)) collision='wall';
+    const selfIndex = snake.findIndex(p=>same(p,head));
+    if (selfIndex >= 0) collision='self';
+    const obstacleIndex = obstacles.findIndex(p=>same(p,head));
+    if (obstacleIndex >= 0) collision='obstacle';
+    const enemyIndex = enemies.findIndex(p=>same(p,head));
+    if (enemyIndex >= 0) collision='enemy';
+
+    if (collision) {
+      if (!shield) return gameOver();
+      shield = false; abilityCharge = 0; screenFx(); beep(260,.12);
+      if (collision === 'wall') {
+        head.x = (head.x+VIEW_COLS)%VIEW_COLS; head.y = head.y<1?VIEW_ROWS-1:head.y>=VIEW_ROWS?1:head.y;
+      } else if (collision === 'self') {
+        snake = snake.slice(0,Math.max(3,selfIndex));
+      } else if (collision === 'obstacle') obstacles.splice(obstacleIndex,1);
+      else if (collision === 'enemy') enemies.splice(enemyIndex,1);
+    }
+
+    snake.unshift(head);
+    const ate = same(head,food);
+    if (ate) consumeFood(); else snake.pop();
+    if (extraMode()) updateWorld();
+    updateMission();
+    if (mode === 'endless') {
+      camera.x += ((head.x - VIEW_COLS/2) - camera.x) * .34;
+      camera.y += ((head.y - VIEW_ROWS/2) - camera.y) * .34;
+    } else camera = {x:0,y:0};
+    runPath.push({...head}); if (runPath.length>6000) runPath.shift();
+    updateUi(); scheduleTick();
+  }
+
+  function consumeFood() {
+    const now = performance.now();
+    combo = now-lastEatAt < 3600 ? Math.min(6,combo+1) : 1; lastEatAt=now; eaten++;
+    const riskMultiplier = inRisk(food) ? 3 : 1;
+    const goldMultiplier = now < goldUntil ? 2 : 1;
+    const difficultyMultiplier = baseDelays.easy/baseDelays[level];
+    score += Math.round(10*foodStyles[food.type].value*combo*riskMultiplier*goldMultiplier*difficultyMultiplier);
+    abilityCharge = Math.min(100,abilityCharge+20);
+    if (food.type==='gold') goldUntil=now+8000;
+    if (food.type==='lightning') boostUntil=now+5500;
+    if (food.type==='scissors' && snake.length>5) snake.splice(Math.max(3,snake.length-3));
+    if (inRisk(food)) missionValue += missions[missionIndex].type==='risk' ? 1 : 0;
+    if (missions[missionIndex].type==='eat') missionValue++;
+    if (missions[missionIndex].type==='combo') missionValue=Math.max(missionValue,combo);
+    if (combo>=3) screenFx();
+    beep(food.type==='gold'?980:food.type==='lightning'?1180:food.type==='scissors'?420:720,.055);
+    if (extraMode() && eaten%4===0) { addObstacle(); addObstacle(); }
+    if (extraMode() && eaten%7===0) addEnemy();
+    placeFood();
+  }
+
+  function updateWorld() {
+    if (tickCount%3===0) {
+      risk.x += risk.dx; risk.y += risk.dy;
+      const b=boundsAroundHead();
+      if (risk.x<b.minX || risk.x+risk.w>b.maxX) risk.dx*=-1;
+      if (risk.y<b.minY || risk.y+risk.h>b.maxY) risk.dy*=-1;
+      if (tickCount%18===0) { const old=risk.dx; risk.dx=-risk.dy||1; risk.dy=old; }
+    }
+    if (tickCount%2===0) enemies.forEach(enemy=>{
+      const dx=Math.sign(snake[0].x-enemy.x),dy=Math.sign(snake[0].y-enemy.y);
+      const horizontal=Math.abs(snake[0].x-enemy.x)>Math.abs(snake[0].y-enemy.y);
+      const next={x:enemy.x+(horizontal?dx:0),y:enemy.y+(horizontal?0:dy)};
+      if (!obstacles.some(p=>same(p,next)) && !portals.some(p=>same(p,next))) { enemy.x=next.x;enemy.y=next.y; }
+    });
+    if (enemies.some(enemy=>same(enemy,snake[0]))) {
+      if (shield) { shield=false;abilityCharge=0;enemies=enemies.filter(enemy=>!same(enemy,snake[0])); }
+      else gameOver();
+    }
+  }
+
+  function updateMission() {
+    const mission=missions[missionIndex];
+    if (mission.type==='survive') missionValue=Math.floor((performance.now()-missionStartedAt)/1000);
+    if (missionValue>=mission.target) {
+      score+=250; abilityCharge=Math.min(100,abilityCharge+40); beep(1320,.16); screenFx();
+      missionIndex=(missionIndex+1)%missions.length; missionValue=0; missionStartedAt=performance.now();
+    }
+  }
+
+  function activateAbility() {
+    if (!running || abilityCharge<100 || shield) return;
+    shield=true; abilityCharge=100; beep(1080,.12); screenFx(); updateUi();
+  }
+
+  function togglePause() {
+    if (!running) return startGame(true);
+    paused=!paused; clearTimeout(timer);
+    if (paused) { pausedAt=performance.now(); ui.overlayTitle.textContent='Tauko';ui.overlayText.innerHTML='Paina <b>P</b> tai kosketa jatkaaksesi.';ui.overlay.hidden=false; }
+    else { pausedTotal+=performance.now()-pausedAt;ui.overlay.hidden=true;lastTickAt=performance.now();scheduleTick(); }
+  }
+
+  function gameOver() {
+    if (over) return;
+    running=false;over=true;clearTimeout(timer);beep(150,.22);
+    const previousBest=bestScore();
+    if (score>previousBest) { localStorage.setItem(keyForBest(),score);localStorage.setItem(keyForGhost(),JSON.stringify(runPath)); }
+    ui.overlayTitle.textContent=mode==='rush'?'Aika loppui':'Peli päättyi';
+    ui.overlayText.innerHTML=`Pisteet <b>${score}</b>${score>previousBest?' · UUSI ENNÄTYS!':''}<br><small>Paina Enter aloittaaksesi uuden kierroksen</small>`;
+    ui.overlay.hidden=false;updateUi();
+  }
+
+  function elapsedSeconds() { return Math.max(0,(performance.now()-startedAt-pausedTotal)/1000); }
+  function updateUi() {
+    ui.score.textContent=score;ui.best.textContent=Math.max(score,bestScore());ui.combo.textContent='×'+combo;
+    const seconds=mode==='rush'?Math.max(0,60-elapsedSeconds()):elapsedSeconds();
+    ui.time.textContent=`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
+    const mission=missions[missionIndex];ui.mission.textContent=extraMode()?mission.label:'Klassinen peli';
+    ui.missionProgress.style.width=extraMode()?Math.min(100,missionValue/mission.target*100)+'%':'0%';
+    const now=performance.now();ui.goldStatus.textContent=now<goldUntil?Math.ceil((goldUntil-now)/1000)+' s':'—';
+    ui.boostStatus.textContent=now<boostUntil?Math.ceil((boostUntil-now)/1000)+' s':'—';
+    ui.riskStatus.textContent=extraMode()?'×3':'POIS';ui.ghostStatus.textContent=ghostPath.length?'AKTIIVINEN':'EI ENNÄTYSTÄ';
+    ui.ability.textContent=shield?'KILPI AKTIIVINEN':`KILPI ${abilityCharge} %`;
+    ui.ability.classList.toggle('ready',abilityCharge>=100&&!shield);
+  }
+
+  function worldToScreen(point,cam=camera) { return {x:(point.x-cam.x)*CELL,y:(point.y-cam.y)*CELL}; }
+  function drawCell(point,color,size=.72,glow=0,cam=camera) {
+    const p=worldToScreen(point,cam), inset=CELL*(1-size)/2;
+    ctx.save();ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=glow;
+    ctx.fillRect(p.x+inset,p.y+inset,CELL*size,CELL*size);ctx.restore();
+  }
+
+  function draw(alpha) {
+    const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);
+    ctx.setTransform(scaleX,0,0,scaleY,0,0);ctx.clearRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    ctx.fillStyle='#07130d';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    const cam={x:previousCamera.x+(camera.x-previousCamera.x)*alpha,y:previousCamera.y+(camera.y-previousCamera.y)*alpha};
+    ctx.strokeStyle='#173423';ctx.lineWidth=1;
+    const offX=((-cam.x*CELL)%CELL+CELL)%CELL,offY=((-cam.y*CELL)%CELL+CELL)%CELL;
+    for(let x=offX;x<VIEW_COLS*CELL;x+=CELL){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,VIEW_ROWS*CELL);ctx.stroke()}
+    for(let y=offY;y<VIEW_ROWS*CELL;y+=CELL){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(VIEW_COLS*CELL,y);ctx.stroke()}
+    if (mode!=='endless') {ctx.strokeStyle='#ff668799';ctx.lineWidth=3;ctx.strokeRect(1, CELL, VIEW_COLS*CELL-2, (VIEW_ROWS-1)*CELL-1)}
+    if (extraMode()) {
+      const rp=worldToScreen(risk,cam);ctx.fillStyle='#ffe36e13';ctx.strokeStyle='#ffe36e77';ctx.lineWidth=2;ctx.fillRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);ctx.strokeRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);
+      obstacles.forEach(p=>drawCell(p,'#4b6654',.82,0,cam));
+      portals.forEach((p,i)=>{const s=worldToScreen(p,cam);ctx.strokeStyle=i?'#ff8bd8':'#6ff7ff';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x+CELL/2,s.y+CELL/2,CELL*.34,0,Math.PI*2);ctx.stroke()});
+      enemies.forEach(p=>drawCell(p,'#ff6687',.68,10,cam));
+    }
+    if (ghostPath.length && tickCount<ghostPath.length) drawCell(ghostPath[tickCount],'#8fbda0',.55,5,cam);
+    drawCell(food,foodStyles[food.type].color,food.type==='normal'?.58:.68,12,cam);
+    snake.forEach((part,index)=>{
+      const old=previousSnake[Math.min(index,previousSnake.length-1)]||part;
+      const smooth={x:old.x+(part.x-old.x)*alpha,y:old.y+(part.y-old.y)*alpha};
+      drawCell(smooth,index===0?(shield?'#6ff7ff':'#baffc8'):'#68e887',index===0?.84:.7,index===0?13:5,cam);
+    });
+    if (shield) {const p=worldToScreen(snake[0],cam);ctx.strokeStyle='#6ff7ff';ctx.lineWidth=3;ctx.beginPath();ctx.arc(p.x+CELL/2,p.y+CELL/2,CELL*.65,0,Math.PI*2);ctx.stroke()}
+  }
+
+  function render(now) {
+    const alpha=running&&!paused?Math.min(1,(now-lastTickAt)/tickDelay):1;draw(alpha);
+    if (running&&!paused) {
+      if (combo>1 && now-lastEatAt>3600) combo=1;
+      if (mode==='rush'&&elapsedSeconds()>=60) gameOver();
+      updateUi();
+    }
+    pollGamepad();requestAnimationFrame(render);
+  }
+
+  function pollGamepad() {
+    const pad=navigator.getGamepads?.()[0];if(!pad)return;
+    let next='';const x=pad.axes[0]||0,y=pad.axes[1]||0;
+    if (pad.buttons[12]?.pressed||y<-.55)next='up';else if(pad.buttons[13]?.pressed||y>.55)next='down';else if(pad.buttons[14]?.pressed||x<-.55)next='left';else if(pad.buttons[15]?.pressed||x>.55)next='right';
+    if(next&&next!==lastGamepadDirection)setDirection(next);lastGamepadDirection=next;
+    if(pad.buttons[0]?.pressed)activateAbility();
+  }
+
+  function screenFx() { document.body.classList.remove('combo');void document.body.offsetWidth;document.body.classList.add('combo');setTimeout(()=>document.body.classList.remove('combo'),340); }
+  function beep(freq,duration) { try {const audio=beep.audio||(beep.audio=new AudioContext());const osc=audio.createOscillator(),gain=audio.createGain();osc.type='square';osc.frequency.value=freq;gain.gain.setValueAtTime(.025,audio.currentTime);gain.gain.exponentialRampToValueAtTime(.0001,audio.currentTime+duration);osc.connect(gain).connect(audio.destination);osc.start();osc.stop(audio.currentTime+duration)}catch{} }
+
+  document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>selectOption('mode',button.dataset.mode)));
+  document.querySelectorAll('[data-level]').forEach(button=>button.addEventListener('click',()=>selectOption('level',button.dataset.level)));
+  function selectOption(type,value) {
+    if(type==='mode'){mode=value;localStorage.setItem('next-mode',mode)}else{level=value;localStorage.setItem('next-level',level)}
+    document.querySelectorAll(`[data-${type}]`).forEach(button=>button.setAttribute('aria-pressed',String(button.dataset[type]===value)));
+    running=false;over=false;reset();showIntro();
+  }
+  function showIntro(){ui.overlayTitle.textContent=mode==='classic'?'Klassinen':mode==='rush'?'60 sekuntia':'Loputon maailma';ui.overlayText.innerHTML=mode==='classic'?'<b>Alkuperäinen matopeli.</b><br>Ei erikoisruokia, esteitä tai riskialueita.':mode==='rush'?'<b>Kerää niin paljon kuin ehdit.</b><br>Riskialue ja kombot ratkaisevat ennätyksen.':'<b>Maailma laajenee madon mukana.</b><br>Portit, viholliset ja riskialue odottavat.';ui.overlay.hidden=false}
+  document.querySelectorAll('[data-dir]').forEach(button=>button.addEventListener('pointerdown',()=>setDirection(button.dataset.dir)));
+  ui.ability.addEventListener('click',activateAbility);document.querySelector('#touchAbility').addEventListener('click',activateAbility);
+  document.querySelector('#pause').addEventListener('click',togglePause);document.querySelector('#restart').addEventListener('click',()=>{reset();startGame()});
+  ui.overlay.addEventListener('click',()=>paused?togglePause():startGame(true));
+  ui.overlay.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();paused?togglePause():startGame(true)}});
+  const keyMap={ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'};
+  addEventListener('keydown',event=>{if(keyMap[event.key]){event.preventDefault();setDirection(keyMap[event.key])}else if(event.key==='p'||event.key==='P'||event.key==='Escape'){event.preventDefault();togglePause()}else if(event.code==='Space'){event.preventDefault();activateAbility()}else if(event.key==='Enter'&&!running)startGame(true)});
+  canvas.addEventListener('pointerdown',event=>touchStart={x:event.clientX,y:event.clientY});
+  canvas.addEventListener('pointerup',event=>{if(!touchStart)return;const dx=event.clientX-touchStart.x,dy=event.clientY-touchStart.y;touchStart=null;if(Math.max(Math.abs(dx),Math.abs(dy))<18)return;setDirection(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'))});
+
+  document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.mode===mode)));
+  document.querySelectorAll('[data-level]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.level===level)));
+  reset();showIntro();requestAnimationFrame(render);
+</script>
+</body>
+</html>

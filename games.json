@@ -94,12 +94,12 @@
       "mobile",
       "gamepad"
     ],
-    "status": "draft",
+    "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 0,
+    "sizeBytes": 29413,
     "createdAt": "2026-09-14T13:21:19.291Z",
-    "updatedAt": "2026-09-14T13:21:19.291Z"
+    "updatedAt": "2026-09-14T13:21:19.952Z"
   }
 ]
