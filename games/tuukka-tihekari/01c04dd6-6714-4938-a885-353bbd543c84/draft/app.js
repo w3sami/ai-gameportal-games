@@ -27,7 +27,7 @@
     reicast_hle_bios: 'enabled',
     reicast_threaded_rendering: 'disabled',
     reicast_synchronous_rendering: 'disabled',
-    reicast_internal_resolution: edgeRuntime ? '1280x960' : '640x480',
+    reicast_internal_resolution: '640x480',
     reicast_enable_dsp: 'disabled',
     reicast_mipmapping: 'disabled',
     reicast_anisotropic_filtering: 'off',
