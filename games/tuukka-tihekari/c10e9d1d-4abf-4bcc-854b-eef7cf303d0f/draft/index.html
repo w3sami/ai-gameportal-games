@@ -140,7 +140,7 @@
     let snake, food, direction, queuedDirection, score, timer, running = false, paused = false;
     let level = localStorage.getItem('mato-level') || 'normal';
     if (!levels[level]) level = 'normal';
-    let best = Number(localStorage.getItem('mato3310-best') || 0);
+    let best = Number(localStorage.getItem('mato-best') || 0);
     bestEl.textContent = best;
 
     function reset() {
@@ -207,7 +207,7 @@
         scoreEl.textContent = score;
         best = Math.max(best, score);
         bestEl.textContent = best;
-        localStorage.setItem('mato3310-best', best);
+        localStorage.setItem('mato-best', best);
         placeFood();
         beep(760, .055);
       } else {
