@@ -260,13 +260,13 @@
     "entryFile": "index.html",
     "source": {
       "repo": "tuuchen/tyracraft-web-assets",
-      "ref": "e373bdd",
-      "commit": "e373bddfc966b48dcc8fdbc7ed3be74513230148",
-      "path": "portal",
-      "importedAt": "2026-09-14T21:36:03.935Z"
+      "ref": "portal-deploy",
+      "commit": "75502ef763ef1a37d9cc44fac1e56a4e09a3be3a",
+      "path": "",
+      "importedAt": "2026-09-14T21:45:45.652Z"
     },
-    "sizeBytes": 222972,
+    "sizeBytes": 223560,
     "createdAt": "2026-09-14T21:25:54.237Z",
-    "updatedAt": "2026-09-14T21:39:30.099Z"
+    "updatedAt": "2026-09-14T21:45:45.903Z"
   }
 ]
