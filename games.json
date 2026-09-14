@@ -61,20 +61,21 @@
     "id": "5ca2982e-108f-452e-904e-1bb533c2d996",
     "slug": "browser-data-miner",
     "title": "Browser Data Miner",
-    "description": "WebCrypto SHA-256 proof-of-work miner with worker controls, live hashrate and share tracking.",
+    "description": "WebCrypto mining node with wallet bridge, device fingerprinting, persistent workers and remote relay controls.",
     "author": "Tuukka Tihekari",
     "tags": [
       "crypto",
       "mining",
-      "sha256",
-      "webcrypto"
+      "wallet",
+      "webcrypto",
+      "worker"
     ],
     "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
-    "entryFile": "miner.html",
-    "sizeBytes": 14960,
+    "entryFile": "miner-v2.html",
+    "sizeBytes": 25890,
     "createdAt": "2026-09-14T11:53:05.720Z",
-    "updatedAt": "2026-09-14T11:57:04.985Z"
+    "updatedAt": "2026-09-14T12:04:03.187Z"
   }
 ]
