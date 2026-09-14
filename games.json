@@ -58,5 +58,26 @@
     "sizeBytes": 30359,
     "createdAt": "2026-09-14T11:53:05.720Z",
     "updatedAt": "2026-09-14T12:59:41.993Z"
+  },
+  {
+    "id": "c10e9d1d-4abf-4bcc-854b-eef7cf303d0f",
+    "slug": "matopeli-3310",
+    "title": "Matopeli 3310",
+    "description": "Klassinen yksivärinen matopeli retrohenkisellä LCD-ulkoasulla. Ohjaa nuolinäppäimillä, WASD-näppäimillä, ruutupainikkeilla tai pyyhkäisemällä.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "snake",
+      "retro",
+      "arcade",
+      "keyboard",
+      "mobile"
+    ],
+    "status": "published",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 11280,
+    "createdAt": "2026-09-14T13:03:34.080Z",
+    "updatedAt": "2026-09-14T13:03:34.619Z"
   }
 ]

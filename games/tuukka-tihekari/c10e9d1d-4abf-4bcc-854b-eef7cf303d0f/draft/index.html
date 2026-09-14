@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Matopeli 3310</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Courier New", ui-monospace, monospace;
+      --shell: #263b48;
+      --shell-light: #3f5e6c;
+      --screen: #9eae79;
+      --pixel: #18271f;
+      --key: #c7d0cf;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: radial-gradient(circle at top, #364b59, #10181d 65%);
+      color: white;
+      overflow-x: hidden;
+    }
+    .phone {
+      width: min(420px, 96vw);
+      border: 3px solid #68808c;
+      border-radius: 46px 46px 72px 72px;
+      padding: 24px 22px 30px;
+      background: linear-gradient(145deg, var(--shell-light), var(--shell) 45%, #17252e);
+      box-shadow: 0 28px 70px #0009, inset 0 2px 2px #ffffff44;
+    }
+    .brand { text-align: center; letter-spacing: .28em; font-weight: 900; font-size: 13px; opacity: .85; }
+    .speaker { width: 82px; height: 7px; margin: 12px auto 18px; border-radius: 9px; background: #101c22; box-shadow: inset 0 2px 3px #000; }
+    .bezel { padding: 18px; border-radius: 22px; background: #151f24; box-shadow: inset 0 0 0 3px #77848b; }
+    .lcd {
+      position: relative;
+      padding: 10px;
+      border-radius: 5px;
+      background: var(--screen);
+      color: var(--pixel);
+      box-shadow: inset 0 0 16px #28352255;
+    }
+    .status { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 13px; font-weight: 900; }
+    canvas { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; border: 3px solid var(--pixel); background: var(--screen); touch-action: none; }
+    .message {
+      position: absolute;
+      inset: 42px 13px 13px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 22px;
+      background: #9eae79e8;
+      font-weight: 900;
+      line-height: 1.55;
+      cursor: pointer;
+    }
+    .message[hidden] { display: none; }
+    .softkeys { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin: 20px 16px 10px; }
+    .softkeys button, .pad button {
+      border: 0;
+      color: #15232b;
+      background: linear-gradient(#e3e8e7, var(--key));
+      box-shadow: 0 5px 0 #758287, 0 8px 14px #0008;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .softkeys button { min-height: 39px; border-radius: 50% 50% 42% 42%; }
+    .pad { width: 196px; height: 156px; margin: 12px auto 0; display: grid; grid-template: repeat(3, 52px) / repeat(3, 62px); justify-content: center; }
+    .pad button { font-size: 23px; border-radius: 16px; margin: 3px; }
+    .pad button:active, .softkeys button:active { translate: 0 4px; box-shadow: 0 1px 0 #758287; }
+    .up { grid-column: 2; }
+    .left { grid-column: 1; grid-row: 2; }
+    .ok { grid-column: 2; grid-row: 2; font-size: 12px !important; border-radius: 50% !important; }
+    .right { grid-column: 3; grid-row: 2; }
+    .down { grid-column: 2; grid-row: 3; }
+    .help { margin: 18px 0 0; text-align: center; color: #c7d8df; font: 13px/1.45 system-ui, sans-serif; }
+    @media (max-height: 720px) {
+      body { align-items: start; }
+      .phone { padding-top: 15px; }
+      .speaker { margin: 7px auto 10px; }
+      .pad { height: 138px; grid-template-rows: repeat(3, 46px); }
+    }
+  </style>
+</head>
+<body>
+  <main class="phone" aria-label="Retro matopeli">
+    <div class="brand">RETRO SNAKE</div>
+    <div class="speaker" aria-hidden="true"></div>
+    <section class="bezel">
+      <div class="lcd">
+        <div class="status"><span>PISTEET <b id="score">0</b></span><span>ENNÄTYS <b id="best">0</b></span></div>
+        <canvas id="game" width="300" height="300" aria-label="Matopelin pelialue"></canvas>
+        <div class="message" id="message" role="button" tabindex="0">MAT0 3310<br><small>Paina OK tai nuolinäppäintä</small></div>
+      </div>
+    </section>
+    <div class="softkeys">
+      <button id="pause" type="button">TAUKO</button>
+      <button id="restart" type="button">UUSI</button>
+    </div>
+    <nav class="pad" aria-label="Ohjaimet">
+      <button class="up" data-dir="up" aria-label="Ylös">▲</button>
+      <button class="left" data-dir="left" aria-label="Vasemmalle">◀</button>
+      <button class="ok" id="start" aria-label="Aloita tai jatka">OK</button>
+      <button class="right" data-dir="right" aria-label="Oikealle">▶</button>
+      <button class="down" data-dir="down" aria-label="Alas">▼</button>
+    </nav>
+    <p class="help">Nuolinäppäimet / WASD · välilyönti pysäyttää · puhelimella pyyhkäise</p>
+  </main>
+  <script>
+    const canvas = document.querySelector('#game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.querySelector('#score');
+    const bestEl = document.querySelector('#best');
+    const message = document.querySelector('#message');
+    const size = 20;
+    const cells = canvas.width / size;
+    const colors = { screen: '#9eae79', pixel: '#18271f', shade: '#637654' };
+    let snake, food, direction, queuedDirection, score, timer, running = false, paused = false;
+    let best = Number(localStorage.getItem('mato3310-best') || 0);
+    bestEl.textContent = best;
+
+    function reset() {
+      clearTimeout(timer);
+      snake = [{x: 7, y: 7}, {x: 6, y: 7}, {x: 5, y: 7}];
+      direction = {x: 1, y: 0};
+      queuedDirection = direction;
+      score = 0;
+      scoreEl.textContent = score;
+      paused = false;
+      placeFood();
+      draw();
+    }
+
+    function placeFood() {
+      do {
+        food = {x: Math.floor(Math.random() * cells), y: Math.floor(Math.random() * cells)};
+      } while (snake.some(part => part.x === food.x && part.y === food.y));
+    }
+
+    function speed() { return Math.max(62, 150 - score * 3); }
+
+    function startGame(fresh = false) {
+      if (fresh || !snake) reset();
+      message.hidden = true;
+      running = true;
+      paused = false;
+      clearTimeout(timer);
+      timer = setTimeout(tick, speed());
+      beep(510, .035);
+    }
+
+    function setDirection(next) {
+      const dirs = {up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0}};
+      const wanted = dirs[next];
+      if (!wanted) return;
+      if (!running) startGame();
+      if (wanted.x !== -direction.x || wanted.y !== -direction.y) queuedDirection = wanted;
+    }
+
+    function tick() {
+      if (!running || paused) return;
+      direction = queuedDirection;
+      const head = {x: snake[0].x + direction.x, y: snake[0].y + direction.y};
+      const hitWall = head.x < 0 || head.y < 0 || head.x >= cells || head.y >= cells;
+      const hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
+      if (hitWall || hitSelf) return gameOver();
+      snake.unshift(head);
+      if (head.x === food.x && head.y === food.y) {
+        score++;
+        scoreEl.textContent = score;
+        best = Math.max(best, score);
+        bestEl.textContent = best;
+        localStorage.setItem('mato3310-best', best);
+        placeFood();
+        beep(760, .055);
+      } else {
+        snake.pop();
+      }
+      draw();
+      timer = setTimeout(tick, speed());
+    }
+
+    function gameOver() {
+      running = false;
+      clearTimeout(timer);
+      draw();
+      message.innerHTML = `PELI PÄÄTTYI<br>PISTEET ${score}<br><small>Paina OK aloittaaksesi uudelleen</small>`;
+      message.hidden = false;
+      beep(180, .16);
+    }
+
+    function togglePause() {
+      if (!running) return startGame();
+      paused = !paused;
+      clearTimeout(timer);
+      message.innerHTML = 'TAUKO<br><small>Paina OK tai välilyöntiä</small>';
+      message.hidden = !paused;
+      if (!paused) timer = setTimeout(tick, speed());
+    }
+
+    function draw() {
+      ctx.fillStyle = colors.screen;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#879765';
+      ctx.lineWidth = 1;
+      for (let n = 0; n <= cells; n++) {
+        ctx.beginPath(); ctx.moveTo(n * size, 0); ctx.lineTo(n * size, canvas.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, n * size); ctx.lineTo(canvas.width, n * size); ctx.stroke();
+      }
+      ctx.fillStyle = colors.pixel;
+      snake.forEach((part, index) => {
+        ctx.fillRect(part.x * size + 2, part.y * size + 2, size - 4, size - 4);
+        if (index === 0) {
+          ctx.fillStyle = colors.screen;
+          const eyeX = part.x * size + (direction.x >= 0 ? 12 : 5);
+          const eyeY = part.y * size + (direction.y >= 0 ? 12 : 5);
+          ctx.fillRect(eyeX, eyeY, 3, 3);
+          ctx.fillStyle = colors.pixel;
+        }
+      });
+      ctx.fillRect(food.x * size + 5, food.y * size + 5, size - 10, size - 10);
+      ctx.strokeStyle = colors.pixel;
+      ctx.strokeRect(food.x * size + 2, food.y * size + 2, size - 4, size - 4);
+    }
+
+    function beep(frequency, duration) {
+      try {
+        const audio = beep.audio || (beep.audio = new AudioContext());
+        const oscillator = audio.createOscillator();
+        const gain = audio.createGain();
+        oscillator.type = 'square';
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(.035, audio.currentTime);
+        gain.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + duration);
+        oscillator.connect(gain).connect(audio.destination);
+        oscillator.start(); oscillator.stop(audio.currentTime + duration);
+      } catch {}
+    }
+
+    const keyMap = {ArrowUp:'up', w:'up', W:'up', ArrowDown:'down', s:'down', S:'down', ArrowLeft:'left', a:'left', A:'left', ArrowRight:'right', d:'right', D:'right'};
+    addEventListener('keydown', event => {
+      if (keyMap[event.key]) { event.preventDefault(); setDirection(keyMap[event.key]); }
+      if (event.code === 'Space') { event.preventDefault(); togglePause(); }
+      if (event.key === 'Enter' && !running) startGame(true);
+    });
+    document.querySelectorAll('[data-dir]').forEach(button => button.addEventListener('pointerdown', () => setDirection(button.dataset.dir)));
+    document.querySelector('#pause').addEventListener('click', togglePause);
+    document.querySelector('#restart').addEventListener('click', () => startGame(true));
+    document.querySelector('#start').addEventListener('click', () => paused ? togglePause() : startGame(!running));
+    message.addEventListener('click', () => paused ? togglePause() : startGame(!running));
+    message.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') startGame(!running); });
+
+    let touchStart;
+    canvas.addEventListener('pointerdown', event => touchStart = {x:event.clientX, y:event.clientY});
+    canvas.addEventListener('pointerup', event => {
+      if (!touchStart) return;
+      const dx = event.clientX - touchStart.x, dy = event.clientY - touchStart.y;
+      touchStart = null;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
+      setDirection(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+    });
+
+    reset();
+  </script>
+</body>
+</html>
