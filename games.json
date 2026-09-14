@@ -169,5 +169,26 @@
     "sizeBytes": 188183,
     "createdAt": "2026-09-14T19:22:53.324Z",
     "updatedAt": "2026-09-14T19:47:07.118Z"
+  },
+  {
+    "id": "db1b1917-0b0b-42ae-aaa0-9e8397991a66",
+    "slug": "voxelibre",
+    "title": "VoxeLibre",
+    "description": "A fully open-source voxel survival sandbox powered by Luanti, running directly in your browser.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "voxel-survival",
+      "sandbox",
+      "browser",
+      "luanti-wasm",
+      "open-source"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T20:03:24.360Z",
+    "updatedAt": "2026-09-14T20:03:24.360Z"
   }
 ]
