@@ -9,8 +9,10 @@
   const gamepadStatus = document.querySelector('#gamepadStatus');
   const toggleControls = document.querySelector('#toggleControls');
   const controlList = document.querySelector('#controlList');
+  const loadingHint = document.querySelector('#loadingHint');
   let started = false;
   let bootGeneration = 0;
+  let bootTimer = 0;
   const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/491c8078539360aca15fd6122273653d770527c0/';
 
   const options = {
@@ -33,6 +35,28 @@
   function setLoading(title, detail) {
     loading.querySelector('strong').textContent = title;
     loading.querySelector('span').textContent = detail;
+  }
+
+  function stopBootTicker() {
+    if (bootTimer) window.clearInterval(bootTimer);
+    bootTimer = 0;
+  }
+
+  function startBootTicker(generation) {
+    stopBootTicker();
+    const startedAt = Date.now();
+    const update = () => {
+      if (generation !== bootGeneration) return stopBootTicker();
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      let stage = 'Ladataan Flycast-emulaattorin ydintä selaimeen.';
+      if (seconds >= 12) stage = 'Puretaan emulaattoriydintä ja valmistellaan Dreamcastia.';
+      if (seconds >= 28) stage = 'Käynnistetään Dreamcastia — musta ruutu tässä vaiheessa on normaali.';
+      if (seconds >= 50) stage = 'Moottori lämpenee yhä. Ensimmäinen käynnistys voi kestää tavallista pidempään.';
+      setLoading(`Valmistellaan peliä · ${seconds} s`, stage);
+      loadingHint.textContent = 'Pidä tämä välilehti auki. Käynnistyspainike ilmestyy automaattisesti, kun peli on valmis.';
+    };
+    update();
+    bootTimer = window.setInterval(update, 1000);
   }
 
   async function fetchElf(generation) {
@@ -83,7 +107,8 @@
     window.__dreamcastUnzipSync = window.fflate.unzipSync;
     patchWebGL();
     shell.classList.add('ejs-mode');
-    setLoading('Ladataan Flycast-ydintä…', 'EmulatorJS näyttää ytimen purku- ja käynnistysvaiheet pelialueella.');
+    loading.hidden = false;
+    startBootTicker(generation);
     window.EJS_player = '#dreamcast-game';
     window.EJS_core = 'flycast';
     // EmulatorJS expects a fetchable URL (and uses its extension for core loading).
@@ -108,12 +133,13 @@
     window.EJS_language = 'fi-FI';
     window.EJS_disableAutoLang = false;
     window.EJS_CacheLimit = 0;
-    window.EJS_ready = () => { loading.hidden = true; };
-    window.EJS_onGameStart = () => { loading.hidden = true; };
+    window.EJS_ready = () => { stopBootTicker(); loading.hidden = true; };
+    window.EJS_onGameStart = () => { stopBootTicker(); loading.hidden = true; };
     const script = document.createElement('script');
     script.src = 'https://cdn.emulatorjs.org/4.2.3/data/loader.js';
     script.crossOrigin = 'anonymous';
     script.onerror = () => {
+      stopBootTicker();
       shell.classList.remove('ejs-mode');
       loading.hidden = false;
       setLoading('Emulaattorin lataus epäonnistui', 'Tarkista verkkoyhteys ja valitse Käynnistä uudelleen.');
@@ -127,10 +153,12 @@
     launchCard.hidden = true;
     loading.hidden = false;
     setLoading('Ladataan peliä · 0 %', '0.0 / 9.8 Mt');
+    loadingHint.textContent = 'Pelitiedosto ladataan turvallisesti suoraan selaimeesi.';
     try {
       const elfBytes = await fetchElf(generation);
       await mountEmulator(elfBytes, generation);
     } catch (error) {
+      stopBootTicker();
       if (generation !== bootGeneration) return;
       loading.hidden = false;
       setLoading('Lataus epäonnistui', error.message || 'Tarkista verkkoyhteys ja yritä uudelleen.');

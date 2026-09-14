@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#07070a">
   <title>Drift Los Angeles — Dreamcast</title>
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
   <main class="app">
@@ -25,10 +25,11 @@
           <button class="launch" id="launchButton" type="button">Käynnistä peli</button>
           <p>Moottori on vielä kylmä — anna sen lämmetä hetki ennen lähtöä.</p>
         </div>
-        <div class="loading" id="loading" hidden>
+        <div class="loading" id="loading" role="status" aria-live="polite" hidden>
           <div class="spinner" aria-hidden="true"></div>
           <strong>Valmistellaan Dreamcast-emulaattoria…</strong>
           <span>EmulatorJS näyttää varsinaisen latausprosentin seuraavassa näkymässä.</span>
+          <small id="loadingHint">Ensimmäinen käynnistys voi kestää noin minuutin.</small>
         </div>
         <div id="dreamcast-game" aria-label="Drift Los Angeles Dreamcast -emulaattori"></div>
       </div>
@@ -87,6 +88,6 @@
     </details>
   </main>
   <script src="vendor/fflate.min.js?v=1"></script>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
