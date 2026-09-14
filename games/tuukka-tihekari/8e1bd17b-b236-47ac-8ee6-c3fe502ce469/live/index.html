@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#16152a">
+  <meta name="description" content="Bigbools Pocket — an original browser handheld for open-licensed GB and GBC games.">
+  <title>Bigbools Pocket</title>
+  <link rel="stylesheet" href="app.css?v=1">
+  <link rel="stylesheet" href="library.css?v=1">
+</head>
+<body>
+  <main class="page">
+    <section class="pocket" id="pocket" aria-label="Bigbools Pocket virtual handheld">
+      <header class="brand-row">
+        <div class="brand"><b>BIGBOOLS</b><span>POCKET</span></div>
+        <div class="power"><i id="power-led"></i><span id="status">LIBRARY</span></div>
+      </header>
+
+      <div class="bezel" id="bezel">
+        <div class="screen" id="screen-wrap">
+          <canvas id="screen" width="160" height="144" tabindex="0" aria-label="Game screen" hidden></canvas>
+
+          <section class="system-view library-view" id="library-view" aria-label="Game library">
+            <div class="screen-head"><b>BIGBOOLS POCKET</b><span>LIBRARY</span></div>
+            <div class="game-list" id="game-list" role="listbox" aria-label="Games"></div>
+            <div class="screen-help"><span>A / ENTER · PLAY</span><span>↑↓ · SELECT</span></div>
+          </section>
+
+          <section class="system-view loading-view" id="loading-view" hidden>
+            <div class="screen-head"><b>LOADING</b><span id="loading-title">GAME</span></div>
+            <div class="loading-art" aria-hidden="true">▰ ▱ ▰ ▱</div>
+            <div class="progress"><i id="progress-bar"></i></div>
+            <p id="loading-label">ROM · 0%</p>
+          </section>
+
+          <section class="system-view menu-view" id="menu-view" hidden>
+            <div class="screen-head"><b>POCKET MENU</b><span id="menu-game"></span></div>
+            <div class="menu-list" id="menu-list" role="menu"></div>
+            <div class="screen-help"><span>A · CHOOSE</span><span>B / ESC · RESUME</span></div>
+          </section>
+
+          <section class="system-view credits-view" id="credits-view" hidden>
+            <div class="screen-head"><b>CREDITS / LICENSES</b><span>OPEN GAMES</span></div>
+            <div id="credits-list" class="credits-list"></div>
+            <div class="screen-help"><span>B / ESC · BACK</span></div>
+          </section>
+
+          <section class="system-view error-view" id="error-view" hidden>
+            <div class="screen-head"><b>START FAILED</b><span>ERROR</span></div>
+            <p id="error-message">The game could not start.</p>
+            <button id="error-back" type="button">BACK TO LIBRARY</button>
+          </section>
+
+          <button class="sound-gate" id="sound-gate" type="button" hidden>
+            <b>PRESS TO PLAY</b><span>Enables sound</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="controls" aria-label="Handheld controls">
+        <div class="dpad" aria-label="Directional pad">
+          <button class="up" data-control="up" aria-label="Up">▲</button>
+          <button class="left" data-control="left" aria-label="Left">◀</button>
+          <i></i>
+          <button class="right" data-control="right" aria-label="Right">▶</button>
+          <button class="down" data-control="down" aria-label="Down">▼</button>
+        </div>
+        <div class="utility">
+          <button data-control="select">OPT</button>
+          <button data-control="start">GO</button>
+        </div>
+        <div class="actions">
+          <button data-control="b" aria-label="B button"><span>B</span></button>
+          <button data-control="a" aria-label="A button"><span>A</span></button>
+        </div>
+      </div>
+
+      <div class="speaker" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+      <footer class="dock">
+        <button id="pocket-menu" type="button">☰ MENU</button>
+        <button id="mute" type="button">◖)) SOUND</button>
+        <button id="shell-fullscreen" type="button">▣ POCKET</button>
+        <button id="screen-fullscreen" type="button">⛶ SCREEN</button>
+      </footer>
+    </section>
+    <p class="footnote">An independent open-source handheld · No affiliation with Nintendo</p>
+  </main>
+  <script src="emulator/binjgb.js?v=1"></script>
+  <script src="app.js?v=2"></script>
+</body>
+</html>
