@@ -1,3 +1,0 @@
-<!doctype html><meta charset="utf-8"><title>CORS test</title><pre id="out">testing</pre><script>
-(async()=>{const urls=['https://github.com/richstokes/dreamcast-homebrew/releases/download/continuous/drift-los-angeles.elf','https://github.com/nasomers/flycast-wasm/releases/download/v1.0/flycast_libretro.wasm'];const out=[];for(const url of urls){try{const r=await fetch(url,{headers:{Range:'bytes=0-31'}});out.push({ok:r.ok,status:r.status,type:r.type,url:r.url,size:(await r.arrayBuffer()).byteLength});}catch(e){out.push({error:String(e)})}}document.querySelector('#out').textContent=JSON.stringify(out,null,2)})()
-</script>
