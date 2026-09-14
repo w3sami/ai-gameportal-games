@@ -56,5 +56,24 @@
     "sizeBytes": 3476,
     "createdAt": "2026-09-14T11:50:46.654Z",
     "updatedAt": "2026-09-14T11:52:34.264Z"
+  },
+  {
+    "id": "5ca2982e-108f-452e-904e-1bb533c2d996",
+    "slug": "browser-data-miner",
+    "title": "Browser Data Miner",
+    "description": "Browser environment inspector with a reusable research profile.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "utility",
+      "form",
+      "data-inspector"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T11:53:05.720Z",
+    "updatedAt": "2026-09-14T11:53:05.720Z"
   }
 ]
