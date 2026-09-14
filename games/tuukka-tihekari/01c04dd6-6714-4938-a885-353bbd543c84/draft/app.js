@@ -79,6 +79,8 @@
 
   async function mountEmulator(elfBytes, generation) {
     if (generation !== bootGeneration) return;
+    if (!window.fflate?.unzipSync) throw new Error('ZIP-purkurin lataus epäonnistui');
+    window.__dreamcastUnzipSync = window.fflate.unzipSync;
     patchWebGL();
     shell.classList.add('ejs-mode');
     setLoading('Ladataan Flycast-ydintä…', 'EmulatorJS näyttää ytimen purku- ja käynnistysvaiheet pelialueella.');
