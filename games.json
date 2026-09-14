@@ -152,21 +152,22 @@
     "id": "903faf3f-758b-4f72-a2ce-3b1298668000",
     "slug": "bigbools-amp",
     "title": "Bigbools Amp",
-    "description": "A compact retro browser music player for a verified open-licensed electronic music collection, with local playback, search, attribution, visualization and a ten-band equalizer.",
+    "description": "A compact retro browser music player featuring open-licensed electronic music from Free Music Archive, with search, attribution, spectrum visualization and a ten-band equalizer.",
     "author": "Tuukka Tihekari",
     "tags": [
       "music-player",
       "electronic",
       "retro",
       "web-audio",
-      "open-music"
+      "open-music",
+      "fma"
     ],
     "status": "draft",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 26415,
+    "sizeBytes": 33925,
     "createdAt": "2026-09-14T19:22:53.324Z",
-    "updatedAt": "2026-09-14T19:24:58.235Z"
+    "updatedAt": "2026-09-14T19:30:20.512Z"
   }
 ]
