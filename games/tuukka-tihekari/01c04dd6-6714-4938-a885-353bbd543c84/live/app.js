@@ -1,0 +1,171 @@
+(() => {
+  'use strict';
+  const shell = document.querySelector('#playerShell');
+  const launchCard = document.querySelector('#launchCard');
+  const loading = document.querySelector('#loading');
+  const launchButton = document.querySelector('#launchButton');
+  const restartButton = document.querySelector('#restartButton');
+  const fullscreenButton = document.querySelector('#fullscreenButton');
+  const gamepadStatus = document.querySelector('#gamepadStatus');
+  const toggleControls = document.querySelector('#toggleControls');
+  const controlList = document.querySelector('#controlList');
+  let started = false;
+  let bootGeneration = 0;
+  const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/491c8078539360aca15fd6122273653d770527c0/';
+
+  const options = {
+    reicast_boot_to_bios: 'disabled',
+    reicast_hle_bios: 'enabled',
+    reicast_threaded_rendering: 'disabled',
+    reicast_synchronous_rendering: 'disabled',
+    reicast_internal_resolution: '640x480',
+    reicast_enable_dsp: 'disabled',
+    reicast_mipmapping: 'disabled',
+    reicast_anisotropic_filtering: 'off',
+    reicast_enable_rttb: 'disabled',
+    reicast_enable_purupuru: 'disabled',
+    reicast_alpha_sorting: 'per-strip (fast, least accurate)',
+    reicast_delay_frame_swapping: 'disabled',
+    reicast_frame_skipping: 'disabled',
+    reicast_framerate: 'normal'
+  };
+
+  function setLoading(title, detail) {
+    loading.querySelector('strong').textContent = title;
+    loading.querySelector('span').textContent = detail;
+  }
+
+  async function fetchElf(generation) {
+    const response = await fetch(`${assetBase}drift-los-angeles.elf`, { cache:'force-cache', mode:'cors' });
+    if (!response.ok) throw new Error(`ELF download failed (${response.status})`);
+    const total = Number(response.headers.get('content-length')) || 10260300;
+    const reader = response.body?.getReader();
+    if (!reader) return new Uint8Array(await response.arrayBuffer());
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (generation !== bootGeneration) throw new Error('Restarted');
+      chunks.push(value);
+      received += value.byteLength;
+      const percent = Math.min(100, Math.round(received / total * 100));
+      setLoading(`Ladataan peliä · ${percent} %`, `${(received / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} Mt`);
+    }
+    const bytes = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    return bytes;
+  }
+
+  function patchWebGL() {
+    if (window.__flycastWebGLPatched) return;
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (...args) {
+      const context = original.apply(this, args);
+      const isGL = (typeof WebGLRenderingContext !== 'undefined' && context instanceof WebGLRenderingContext) ||
+        (typeof WebGL2RenderingContext !== 'undefined' && context instanceof WebGL2RenderingContext);
+      if (isGL && !context.__flycastGetParameterPatched) {
+        const getParameter = context.getParameter.bind(context);
+        context.getParameter = parameter => parameter === 7939
+          ? (context.getSupportedExtensions?.() || []).join(' ')
+          : getParameter(parameter);
+        context.__flycastGetParameterPatched = true;
+      }
+      return context;
+    };
+    window.__flycastWebGLPatched = true;
+  }
+
+  async function mountEmulator(elfBytes, generation) {
+    if (generation !== bootGeneration) return;
+    patchWebGL();
+    shell.classList.add('ejs-mode');
+    setLoading('Ladataan Flycast-ydintä…', 'EmulatorJS näyttää ytimen purku- ja käynnistysvaiheet pelialueella.');
+    window.EJS_player = '#dreamcast-game';
+    window.EJS_core = 'flycast';
+    window.EJS_gameUrl = new File([elfBytes], 'drift-los-angeles.elf', { type:'application/octet-stream' });
+    window.EJS_gameName = 'Drift Los Angeles';
+    window.EJS_gameID = 0x44a4f743;
+    window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
+    window.EJS_paths = {
+      'flycast.json': 'flycast.json?v=1',
+      'flycast-wasm.data': `${assetBase}flycast-wasm.data`,
+      'flycast-legacy-wasm.data': `${assetBase}flycast-wasm.data`
+    };
+    window.EJS_defaultOptions = options;
+    window.EJS_backgroundColor = '#03050a';
+    window.EJS_color = '#ff6b35';
+    window.EJS_volume = 0.7;
+    window.EJS_threads = false;
+    window.EJS_disableCue = true;
+    window.EJS_startOnLoaded = false;
+    window.EJS_startButtonName = 'Käynnistä Drift Los Angeles';
+    window.EJS_language = 'fi-FI';
+    window.EJS_disableAutoLang = false;
+    window.EJS_CacheLimit = 0;
+    window.EJS_ready = () => { loading.hidden = true; };
+    window.EJS_onGameStart = () => { loading.hidden = true; };
+    const script = document.createElement('script');
+    script.src = 'https://cdn.emulatorjs.org/4.2.3/data/loader.js';
+    script.crossOrigin = 'anonymous';
+    script.onerror = () => {
+      shell.classList.remove('ejs-mode');
+      loading.hidden = false;
+      setLoading('Emulaattorin lataus epäonnistui', 'Tarkista verkkoyhteys ja valitse Käynnistä uudelleen.');
+    };
+    document.body.appendChild(script);
+  }
+
+  async function launch() {
+    started = true;
+    const generation = ++bootGeneration;
+    launchCard.hidden = true;
+    loading.hidden = false;
+    setLoading('Ladataan peliä · 0 %', '0.0 / 9.8 Mt');
+    try {
+      const elfBytes = await fetchElf(generation);
+      await mountEmulator(elfBytes, generation);
+    } catch (error) {
+      if (generation !== bootGeneration) return;
+      loading.hidden = false;
+      setLoading('Lataus epäonnistui', error.message || 'Tarkista verkkoyhteys ja yritä uudelleen.');
+    }
+  }
+
+  launchButton.addEventListener('click', launch);
+
+  restartButton.addEventListener('click', () => {
+    if (!started) return launch();
+    window.location.reload();
+  });
+
+  fullscreenButton.addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await shell.requestFullscreen();
+    } catch (_) { /* Browser UI remains available if fullscreen is denied. */ }
+  });
+
+  function updateGamepad() {
+    const connected = Array.from(navigator.getGamepads?.() || []).some(Boolean);
+    gamepadStatus.classList.toggle('online', connected);
+    gamepadStatus.lastChild.textContent = connected ? ' Ohjain: yhdistetty' : ' Ohjain: ei yhdistetty';
+  }
+  window.addEventListener('gamepadconnected', updateGamepad);
+  window.addEventListener('gamepaddisconnected', updateGamepad);
+  updateGamepad();
+
+  toggleControls.addEventListener('click', () => {
+    const expanded = toggleControls.getAttribute('aria-expanded') === 'true';
+    toggleControls.setAttribute('aria-expanded', String(!expanded));
+    toggleControls.textContent = expanded ? '+' : '−';
+    controlList.hidden = expanded;
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(event.key)) return;
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    event.preventDefault();
+  }, { passive:false });
+})();
