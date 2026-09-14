@@ -16,9 +16,11 @@
   let readyTimer = 0;
   let wasmInstantiateQueue = Promise.resolve();
   const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/241d02c756060922d691b8613e3e4ae6bf1524d3/';
-  const edgeRuntime = /Edg\//.test(navigator.userAgent);
+  const embeddedRuntime = Boolean(window.chrome?.webview) || /Electron|Codex|OpenAI/i.test(navigator.userAgent);
+  const edgeRuntime = /Edg\//.test(navigator.userAgent) && !embeddedRuntime;
   const gameFile = edgeRuntime ? 'drift-los-angeles-browser.elf' : 'drift-los-angeles.elf';
   const gameSize = edgeRuntime ? 10262556 : 10260300;
+  document.documentElement.dataset.gameRuntime = edgeRuntime ? 'edge-compat' : 'upstream';
 
   const options = {
     reicast_boot_to_bios: 'disabled',
