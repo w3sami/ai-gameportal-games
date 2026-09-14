@@ -84,7 +84,9 @@
     setLoading('Ladataan Flycast-ydintä…', 'EmulatorJS näyttää ytimen purku- ja käynnistysvaiheet pelialueella.');
     window.EJS_player = '#dreamcast-game';
     window.EJS_core = 'flycast';
-    window.EJS_gameUrl = new File([elfBytes], 'drift-los-angeles.elf', { type:'application/octet-stream' });
+    // EmulatorJS expects a fetchable URL (and uses its extension for core loading).
+    // The preceding streamed request warms the browser cache and provides real progress.
+    window.EJS_gameUrl = `${assetBase}drift-los-angeles.elf`;
     window.EJS_gameName = 'Drift Los Angeles';
     window.EJS_gameID = 0x44a4f743;
     window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
