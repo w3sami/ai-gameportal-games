@@ -8,14 +8,14 @@
     :root {
       color-scheme: dark;
       font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-      --ink: #f3f0e8;
-      --muted: #8993a8;
-      --neon: #4c7dff;
-      --gold: #f5b942;
-      --cyan: #35c6c8;
-      --danger: #e84a7f;
-      --panel: #151c2ff0;
-      --line: #2c3858;
+      --ink: #ece8dd;
+      --muted: #aaa69b;
+      --neon: #b8c46f;
+      --gold: #e6bc55;
+      --cyan: #67a77f;
+      --danger: #d7656c;
+      --panel: #28272cf2;
+      --line: #4a4850;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
@@ -23,8 +23,8 @@
       min-height: 100svh;
       color: var(--ink);
       background:
-        radial-gradient(circle at 18% -12%, #1d315f 0, transparent 38%),
-        linear-gradient(180deg, #0b1020, #080c17);
+        radial-gradient(circle at 18% -12%, #514a5d 0, transparent 38%),
+        linear-gradient(180deg, #1b1a1d, #111114);
       background-attachment: fixed;
       overflow-x: hidden;
     }
@@ -33,7 +33,7 @@
     main { width: min(1180px, 96vw); margin: auto; padding: clamp(18px, 4vw, 42px) 0; position: relative; }
     header { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 16px; }
     h1 { margin: 0; font-size: clamp(30px, 6vw, 66px); line-height: .92; letter-spacing: -.07em; }
-    h1 span { color: #4c7dff; text-shadow: none; }
+    h1 span { color: var(--neon); text-shadow: none; }
     .tagline { color: var(--muted); text-align: right; font-size: 13px; }
     .setup { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px; }
     fieldset { margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
@@ -41,9 +41,9 @@
     .choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
     button { font: inherit; }
     .choice, .action, .dir {
-      border: 1px solid #2c3858;
-      color: #cbd2df;
-      background: #151c2f;
+      border: 1px solid #4a4850;
+      color: #d2cec4;
+      background: #242328;
       border-radius: 8px;
       cursor: pointer;
       touch-action: manipulation;
@@ -51,19 +51,19 @@
     }
     .choice { min-height: 48px; padding: 7px; font-size: 12px; font-weight: 800; }
     .choice small { display: block; color: var(--muted); margin-top: 3px; font-weight: 500; }
-    .choice[aria-pressed="true"] { color: #fff; background: #4c7dff; border-color: #7298ff; }
-    .choice[aria-pressed="true"] small { color: #e5ebff; }
+    .choice[aria-pressed="true"] { color: #171811; background: var(--neon); border-color: #d4df8d; }
+    .choice[aria-pressed="true"] small { color: #40442a; }
     .choice:active, .action:active, .dir:active { transform: scale(.96); }
     .game-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; align-items: start; }
     .screen {
       position: relative;
-      border: 1px solid #2c3858;
+      border: 1px solid #4a4850;
       border-radius: 16px;
       overflow: hidden;
-      background: #0f1527;
-      box-shadow: 0 28px 100px #0009, 0 0 45px #4c7dff20;
+      background: #17171a;
+      box-shadow: 0 28px 100px #0009, 0 0 45px #b8c46f16;
     }
-    canvas { display: block; width: 100%; aspect-ratio: 3 / 2; background: #0b1020; touch-action: none; }
+    canvas { display: block; width: 100%; aspect-ratio: 3 / 2; background: #18191a; touch-action: none; }
     .hud {
       position: absolute;
       inset: 0 0 auto;
@@ -71,10 +71,10 @@
       grid-template-columns: repeat(4, 1fr);
       gap: 1px;
       pointer-events: none;
-      background: #24335488;
+      background: #5b586088;
       backdrop-filter: blur(7px);
     }
-    .hud div { padding: 9px 12px; background: #101729dc; }
+    .hud div { padding: 9px 12px; background: #242329dc; }
     .hud small { display: block; color: var(--muted); font-size: 9px; letter-spacing: .1em; }
     .hud strong { font: 800 18px/1.2 ui-monospace, monospace; color: var(--neon); }
     .overlay {
@@ -84,26 +84,26 @@
       place-items: center;
       padding: 70px 20px 20px;
       text-align: center;
-      background: #0b1020dd;
+      background: #17171ae8;
       backdrop-filter: blur(4px);
       cursor: pointer;
     }
     .overlay[hidden] { display: none; }
     .overlay-card { max-width: 540px; }
     .overlay h2 { margin: 0 0 10px; font-size: clamp(28px, 5vw, 56px); color: var(--neon); }
-    .overlay p { color: #cbd2df; line-height: 1.55; }
+    .overlay p { color: #d2cec4; line-height: 1.55; }
     .overlay b { color: white; }
     aside { display: grid; gap: 10px; }
     .card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
     .card h2 { margin: 0 0 9px; color: var(--muted); font-size: 10px; letter-spacing: .13em; }
     .mission { font-weight: 800; line-height: 1.35; }
-    .progress { height: 7px; margin-top: 10px; border-radius: 8px; background: #242e47; overflow: hidden; }
+    .progress { height: 7px; margin-top: 10px; border-radius: 8px; background: #403e44; overflow: hidden; }
     .progress i { display: block; width: 0; height: 100%; background: var(--neon); transition: width .2s; }
-    .status-list { display: grid; gap: 7px; color: #b6becf; font-size: 12px; }
+    .status-list { display: grid; gap: 7px; color: #cec9be; font-size: 12px; }
     .status-list span { display: flex; justify-content: space-between; gap: 8px; }
     .status-list b { color: white; }
     .ability { width: 100%; min-height: 48px; padding: 10px; font-weight: 900; }
-    .ability.ready { color: #08161c; background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 22px #35c6c84d; }
+    .ability.ready { color: #15160e; background: var(--neon); border-color: var(--neon); box-shadow: 0 0 22px #b8c46f40; }
     .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
     .action { min-height: 43px; font-size: 12px; font-weight: 800; }
     .replays { display: grid; gap: 7px; }
@@ -115,7 +115,7 @@
     .up { grid-column: 2; }.left { grid-column: 1; grid-row: 2; }.center { grid-column: 2; grid-row: 2; }.right { grid-column: 3; grid-row: 2; }.down { grid-column: 2; grid-row: 3; }
     .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; font-size: 11px; color: var(--muted); }
     .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 2px; background: var(--dot); box-shadow: 0 0 8px var(--dot); }
-    .help { margin: 13px 2px 0; color: #8993a8; font-size: 12px; }
+    .help { margin: 13px 2px 0; color: #aaa69b; font-size: 12px; }
     @media (max-width: 820px) {
       header { align-items: start; flex-direction: column; }.tagline { text-align: left; }
       .setup, .game-wrap { grid-template-columns: 1fr; }
@@ -183,7 +183,7 @@
         <h2>TILANNE</h2>
         <div class="status-list">
           <span>Kultakerroin <b id="goldStatus">—</b></span>
-          <span>Nopeusboost <b id="boostStatus">—</b></span>
+          <span>Nopeus <b id="boostStatus">VAKIO</b></span>
           <span>Riskialue <b id="riskStatus">×3</b></span>
           <span>Huone <b id="roomStatus">1</b></span>
         </div>
@@ -210,8 +210,8 @@
         <div class="replays" id="replayList"><span class="empty-replays">Ei tallennettuja pelejä</span></div>
       </section>
       <section class="card legend">
-        <span style="--dot:#ff6b6b">Ruoka</span><span style="--dot:#f5b942">Kulta</span>
-        <span style="--dot:#35c6c8">Salama</span><span style="--dot:#e84a7f">Sakset</span>
+        <span style="--dot:#d7656c">Ruoka</span><span style="--dot:#e6bc55">Kulta</span>
+        <span style="--dot:#67a77f">Energia</span><span style="--dot:#b879a7">Sakset</span>
       </section>
     </aside>
   </section>
@@ -227,10 +227,10 @@
   const VIEW_ROWS = 20;
   const baseDelays = { easy: 175, normal: 135, hard: 98 };
   const foodStyles = {
-    normal: { color:'#ff6b6b', value:1 },
-    gold: { color:'#f5b942', value:2 },
-    lightning: { color:'#35c6c8', value:1 },
-    scissors: { color:'#e84a7f', value:1 },
+    normal: { color:'#d7656c', value:1 },
+    gold: { color:'#e6bc55', value:2 },
+    lightning: { color:'#67a77f', value:1 },
+    scissors: { color:'#b879a7', value:1 },
   };
   const missions = [
     { type:'eat', target:5, label:'Kerää 5 ruokaa' },
@@ -244,7 +244,7 @@
   if (!['classic','endless','rush'].includes(mode)) mode = 'endless';
   if (!baseDelays[level]) level = 'normal';
   let snake, previousSnake, direction, queuedDirection, food, obstacles, portals, enemies, risk, rooms, doors, currentRoomId;
-  let score, eaten, combo, lastEatAt, abilityCharge, shield, goldUntil, boostUntil;
+  let score, eaten, combo, lastEatAt, abilityCharge, shield, goldUntil;
   let running = false, paused = false, over = false, timer, startedAt, pausedAt, pausedTotal, tickCount, portalCooldown;
   let camera = {x:0,y:0}, previousCamera = {x:0,y:0}, lastTickAt = 0, tickDelay = 135;
   let missionIndex = 0, missionValue = 0, missionStartedAt = 0;
@@ -269,7 +269,7 @@
     obstacles = []; portals = []; enemies = []; rooms = []; doors = []; currentRoomId = 1;
     risk = {x:start.x+5,y:start.y-3,w:7,h:6,dx:1,dy:0};
     score = eaten = 0; combo = 1; lastEatAt = 0; abilityCharge = 0; shield = false;
-    goldUntil = boostUntil = 0; tickCount = portalCooldown = 0;
+    goldUntil = 0; tickCount = portalCooldown = 0;
     startedAt = performance.now(); pausedTotal = 0; missionIndex = 0; missionValue = 0; missionStartedAt = startedAt;
     runFrames = [];
     previousCamera = camera = {x:start.x - VIEW_COLS/2, y:start.y - VIEW_ROWS/2};
@@ -378,10 +378,7 @@
   }
 
   function currentDelay() {
-    let delay = baseDelays[level];
-    if (performance.now() < boostUntil) delay *= .72;
-    if (inRisk(snake[0])) delay *= .78;
-    return Math.max(60, delay);
+    return baseDelays[level];
   }
 
   function startGame(fresh = false) {
@@ -473,7 +470,7 @@
     score += Math.round(10*foodStyles[food.type].value*combo*riskMultiplier*goldMultiplier*difficultyMultiplier);
     abilityCharge = Math.min(100,abilityCharge+20);
     if (food.type==='gold') goldUntil=now+8000;
-    if (food.type==='lightning') boostUntil=now+5500;
+    if (food.type==='lightning') abilityCharge=Math.min(100,abilityCharge+40);
     if (food.type==='scissors' && snake.length>5) snake.splice(Math.max(3,snake.length-3));
     if (inRisk(food)) missionValue += missions[missionIndex].type==='risk' ? 1 : 0;
     if (missions[missionIndex].type==='eat') missionValue++;
@@ -579,7 +576,7 @@
     const mission=missions[missionIndex];ui.mission.textContent=extraMode()?mission.label:'Klassinen peli';
     ui.missionProgress.style.width=extraMode()?Math.min(100,missionValue/mission.target*100)+'%':'0%';
     const now=performance.now();ui.goldStatus.textContent=now<goldUntil?Math.ceil((goldUntil-now)/1000)+' s':'—';
-    ui.boostStatus.textContent=now<boostUntil?Math.ceil((boostUntil-now)/1000)+' s':'—';
+    ui.boostStatus.textContent='VAKIO';
     ui.riskStatus.textContent=extraMode()?'×3':'POIS';ui.roomStatus.textContent=mode==='endless'?currentRoomId:'—';
     ui.ability.textContent=shield?'KILPI AKTIIVINEN':`KILPI ${abilityCharge} %`;
     ui.ability.classList.toggle('ready',abilityCharge>=100&&!shield);
@@ -593,51 +590,51 @@
   }
 
   function drawRoomWalls(roomList,doorList,cam) {
-    ctx.strokeStyle='#53617f';ctx.lineWidth=5;
+    ctx.strokeStyle='#74716a';ctx.lineWidth=5;
     roomList.forEach(room=>{const p=worldToScreen(room,cam);ctx.strokeRect(p.x,p.y,room.w*CELL,room.h*CELL)});
     doorList.forEach(door=>{
-      const p=worldToScreen(door,cam);ctx.fillStyle=door.open?'#35c6c8':'#f5b942';ctx.fillRect(p.x+4,p.y+4,CELL-8,CELL-8);
-      if(!door.open){ctx.fillStyle='#0b1020';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText(door.threshold,p.x+CELL/2,p.y+CELL/2+4)}
+      const p=worldToScreen(door,cam);ctx.fillStyle=door.open?'#67a77f':'#e6bc55';ctx.fillRect(p.x+4,p.y+4,CELL-8,CELL-8);
+      if(!door.open){ctx.fillStyle='#1a191b';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText(door.threshold,p.x+CELL/2,p.y+CELL/2+4)}
     });
   }
 
   function draw(alpha) {
     const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);
     ctx.setTransform(scaleX,0,0,scaleY,0,0);ctx.clearRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
-    ctx.fillStyle='#0b1020';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    ctx.fillStyle='#18191a';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
     const cam={x:previousCamera.x+(camera.x-previousCamera.x)*alpha,y:previousCamera.y+(camera.y-previousCamera.y)*alpha};
-    ctx.strokeStyle='#202a43';ctx.lineWidth=1;
+    ctx.strokeStyle='#35343a';ctx.lineWidth=1;
     const offX=((-cam.x*CELL)%CELL+CELL)%CELL,offY=((-cam.y*CELL)%CELL+CELL)%CELL;
     for(let x=offX;x<VIEW_COLS*CELL;x+=CELL){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,VIEW_ROWS*CELL);ctx.stroke()}
     for(let y=offY;y<VIEW_ROWS*CELL;y+=CELL){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(VIEW_COLS*CELL,y);ctx.stroke()}
     if (mode==='endless') drawRoomWalls(rooms,doors,cam);
-    else {ctx.strokeStyle='#4c7dffaa';ctx.lineWidth=3;ctx.strokeRect(1, CELL, VIEW_COLS*CELL-2, (VIEW_ROWS-1)*CELL-1)}
+    else {ctx.strokeStyle='#b8c46faa';ctx.lineWidth=3;ctx.strokeRect(1, CELL, VIEW_COLS*CELL-2, (VIEW_ROWS-1)*CELL-1)}
     if (extraMode()) {
-      const rp=worldToScreen(risk,cam);ctx.fillStyle='#8b6dff16';ctx.strokeStyle='#8b6dff99';ctx.lineWidth=2;ctx.fillRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);ctx.strokeRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);
-      obstacles.forEach(p=>drawCell(p,'#39445d',.82,0,cam));
-      portals.forEach((p,i)=>{const s=worldToScreen(p,cam);ctx.strokeStyle=i?'#8b6dff':'#35c6c8';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x+CELL/2,s.y+CELL/2,CELL*.34,0,Math.PI*2);ctx.stroke()});
-      enemies.forEach(p=>drawCell(p,'#e84a7f',.68,10,cam));
+      const rp=worldToScreen(risk,cam);ctx.fillStyle='#806b8f18';ctx.strokeStyle='#a889b899';ctx.lineWidth=2;ctx.fillRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);ctx.strokeRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);
+      obstacles.forEach(p=>drawCell(p,'#59575d',.82,0,cam));
+      portals.forEach((p,i)=>{const s=worldToScreen(p,cam);ctx.strokeStyle=i?'#9b78a1':'#67a77f';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x+CELL/2,s.y+CELL/2,CELL*.34,0,Math.PI*2);ctx.stroke()});
+      enemies.forEach(p=>drawCell(p,'#d7656c',.68,10,cam));
     }
     drawCell(food,foodStyles[food.type].color,food.type==='normal'?.58:.68,12,cam);
     snake.forEach((part,index)=>{
       const old=previousSnake[Math.min(index,previousSnake.length-1)]||part;
       const smooth={x:old.x+(part.x-old.x)*alpha,y:old.y+(part.y-old.y)*alpha};
-      drawCell(smooth,index===0?(shield?'#35c6c8':'#8eabff'):'#4c7dff',index===0?.84:.7,index===0?13:5,cam);
+      drawCell(smooth,index===0?(shield?'#67a77f':'#e4e9a9'):'#a9b866',index===0?.84:.7,index===0?13:5,cam);
     });
-    if (shield) {const p=worldToScreen(snake[0],cam);ctx.strokeStyle='#35c6c8';ctx.lineWidth=3;ctx.beginPath();ctx.arc(p.x+CELL/2,p.y+CELL/2,CELL*.65,0,Math.PI*2);ctx.stroke()}
+    if (shield) {const p=worldToScreen(snake[0],cam);ctx.strokeStyle='#67a77f';ctx.lineWidth=3;ctx.beginPath();ctx.arc(p.x+CELL/2,p.y+CELL/2,CELL*.65,0,Math.PI*2);ctx.stroke()}
   }
 
   function drawReplay() {
     const frame=replay.frames[replayFrame];if(!frame)return;
     const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);ctx.setTransform(scaleX,0,0,scaleY,0,0);
-    ctx.fillStyle='#0b1020';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    ctx.fillStyle='#18191a';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
     const cam=mode==='endless'?{x:frame.x-VIEW_COLS/2,y:frame.y-VIEW_ROWS/2}:{x:0,y:0};
-    ctx.strokeStyle='#202a43';ctx.lineWidth=1;const offX=((-cam.x*CELL)%CELL+CELL)%CELL,offY=((-cam.y*CELL)%CELL+CELL)%CELL;
+    ctx.strokeStyle='#35343a';ctx.lineWidth=1;const offX=((-cam.x*CELL)%CELL+CELL)%CELL,offY=((-cam.y*CELL)%CELL+CELL)%CELL;
     for(let x=offX;x<VIEW_COLS*CELL;x+=CELL){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,VIEW_ROWS*CELL);ctx.stroke()}
     for(let y=offY;y<VIEW_ROWS*CELL;y+=CELL){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(VIEW_COLS*CELL,y);ctx.stroke()}
-    if(mode==='endless')drawRoomWalls(replay.rooms||[],replay.doors||[],cam);else{ctx.strokeStyle='#4c7dffaa';ctx.lineWidth=3;ctx.strokeRect(1,CELL,VIEW_COLS*CELL-2,(VIEW_ROWS-1)*CELL-1)}
-    const foodFrame={x:frame.food[0],y:frame.food[1],type:frame.food[2]};drawCell(foodFrame,foodStyles[foodFrame.type]?.color||'#ff6b6b',.62,8,cam);
-    for(let i=Math.min(frame.length-1,replayFrame);i>=0;i--){const pathFrame=replay.frames[replayFrame-i];drawCell(pathFrame,i===0?'#8eabff':'#4c7dff',i===0?.84:.7,i===0?10:4,cam)}
+    if(mode==='endless')drawRoomWalls(replay.rooms||[],replay.doors||[],cam);else{ctx.strokeStyle='#b8c46faa';ctx.lineWidth=3;ctx.strokeRect(1,CELL,VIEW_COLS*CELL-2,(VIEW_ROWS-1)*CELL-1)}
+    const foodFrame={x:frame.food[0],y:frame.food[1],type:frame.food[2]};drawCell(foodFrame,foodStyles[foodFrame.type]?.color||'#d7656c',.62,8,cam);
+    for(let i=Math.min(frame.length-1,replayFrame);i>=0;i--){const pathFrame=replay.frames[replayFrame-i];drawCell(pathFrame,i===0?'#e4e9a9':'#a9b866',i===0?.84:.7,i===0?10:4,cam)}
     ui.score.textContent=frame.score;ui.combo.textContent='TOISTO';ui.roomStatus.textContent=mode==='endless'?(frame.room||1):'—';
   }
 
