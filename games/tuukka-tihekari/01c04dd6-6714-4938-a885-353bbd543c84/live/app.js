@@ -1,6 +1,5 @@
 (() => {
   'use strict';
-  if (window.self !== window.top) document.documentElement.classList.add('embedded');
   const shell = document.querySelector('#playerShell');
   const launchCard = document.querySelector('#launchCard');
   const loading = document.querySelector('#loading');
