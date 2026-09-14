@@ -124,9 +124,9 @@
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 457997,
+    "sizeBytes": 458396,
     "createdAt": "2026-09-14T19:22:53.324Z",
-    "updatedAt": "2026-09-14T21:28:10.255Z"
+    "updatedAt": "2026-09-14T21:36:04.203Z"
   },
   {
     "id": "db1b1917-0b0b-42ae-aaa0-9e8397991a66",
@@ -147,7 +147,7 @@
     "entryFile": "index.html",
     "sizeBytes": 117204,
     "createdAt": "2026-09-14T20:03:24.360Z",
-    "updatedAt": "2026-09-14T21:29:56.787Z"
+    "updatedAt": "2026-09-14T21:36:04.415Z"
   },
   {
     "id": "0297b073-296f-4986-af92-a284b1e50ca2",
@@ -260,13 +260,13 @@
     "entryFile": "index.html",
     "source": {
       "repo": "tuuchen/tyracraft-web-assets",
-      "ref": "90b64f5",
-      "commit": "90b64f5cb9fe0fd47c09966a6b4c79e0fc82d550",
+      "ref": "e373bdd",
+      "commit": "e373bddfc966b48dcc8fdbc7ed3be74513230148",
       "path": "portal",
-      "importedAt": "2026-09-14T21:26:45.703Z"
+      "importedAt": "2026-09-14T21:36:03.935Z"
     },
-    "sizeBytes": 222936,
+    "sizeBytes": 222972,
     "createdAt": "2026-09-14T21:25:54.237Z",
-    "updatedAt": "2026-09-14T21:26:45.708Z"
+    "updatedAt": "2026-09-14T21:36:03.952Z"
   }
 ]
