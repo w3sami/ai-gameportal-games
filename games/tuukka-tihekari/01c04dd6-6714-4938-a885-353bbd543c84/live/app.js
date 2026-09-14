@@ -13,6 +13,8 @@
   let started = false;
   let bootGeneration = 0;
   let bootTimer = 0;
+  let readyTimer = 0;
+  let wasmInstantiateQueue = Promise.resolve();
   const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/491c8078539360aca15fd6122273653d770527c0/';
 
   const options = {
@@ -40,6 +42,16 @@
   function stopBootTicker() {
     if (bootTimer) window.clearInterval(bootTimer);
     bootTimer = 0;
+  }
+
+  function showReadyTransition(generation) {
+    stopBootTicker();
+    if (readyTimer) window.clearTimeout(readyTimer);
+    setLoading('Emulaattori on melkein valmis', 'Flycast viimeistelee pelinäkymää. Oranssi “Käynnistä Drift Los Angeles” -painike ilmestyy seuraavaksi.');
+    loadingHint.textContent = 'Älä sulje sivua — tämä musta välivaihe kuuluu Dreamcastin käynnistykseen.';
+    readyTimer = window.setTimeout(() => {
+      if (generation === bootGeneration) loading.hidden = true;
+    }, 10000);
   }
 
   function startBootTicker(generation) {
@@ -101,10 +113,27 @@
     window.__flycastWebGLPatched = true;
   }
 
+  function patchWasmInstantiation() {
+    if (window.__flycastWasmInstantiationPatched) return;
+    const original = WebAssembly.instantiate;
+    WebAssembly.instantiate = (source, imports) => {
+      const size = source instanceof ArrayBuffer || ArrayBuffer.isView(source)
+        ? source.byteLength
+        : 0;
+      if (!size || size > 1048576) return original.call(WebAssembly, source, imports);
+      const instantiate = () => original.call(WebAssembly, source, imports);
+      const result = wasmInstantiateQueue.then(instantiate, instantiate);
+      wasmInstantiateQueue = result.then(() => undefined, () => undefined);
+      return result;
+    };
+    window.__flycastWasmInstantiationPatched = true;
+  }
+
   async function mountEmulator(elfBytes, generation) {
     if (generation !== bootGeneration) return;
     if (!window.fflate?.unzipSync) throw new Error('ZIP-purkurin lataus epäonnistui');
     window.__dreamcastUnzipSync = window.fflate.unzipSync;
+    patchWasmInstantiation();
     patchWebGL();
     shell.classList.add('ejs-mode');
     loading.hidden = false;
@@ -133,13 +162,18 @@
     window.EJS_language = 'fi-FI';
     window.EJS_disableAutoLang = false;
     window.EJS_CacheLimit = 0;
-    window.EJS_ready = () => { stopBootTicker(); loading.hidden = true; };
-    window.EJS_onGameStart = () => { stopBootTicker(); loading.hidden = true; };
+    window.EJS_ready = () => showReadyTransition(generation);
+    window.EJS_onGameStart = () => {
+      stopBootTicker();
+      if (readyTimer) window.clearTimeout(readyTimer);
+      loading.hidden = true;
+    };
     const script = document.createElement('script');
     script.src = 'https://cdn.emulatorjs.org/4.2.3/data/loader.js';
     script.crossOrigin = 'anonymous';
     script.onerror = () => {
       stopBootTicker();
+      if (readyTimer) window.clearTimeout(readyTimer);
       shell.classList.remove('ejs-mode');
       loading.hidden = false;
       setLoading('Emulaattorin lataus epäonnistui', 'Tarkista verkkoyhteys ja valitse Käynnistä uudelleen.');
@@ -159,6 +193,7 @@
       await mountEmulator(elfBytes, generation);
     } catch (error) {
       stopBootTicker();
+      if (readyTimer) window.clearTimeout(readyTimer);
       if (generation !== bootGeneration) return;
       loading.hidden = false;
       setLoading('Lataus epäonnistui', error.message || 'Tarkista verkkoyhteys ja yritä uudelleen.');
