@@ -61,7 +61,7 @@
     "id": "5ca2982e-108f-452e-904e-1bb533c2d996",
     "slug": "browser-data-miner",
     "title": "Browser Data Miner",
-    "description": "Configurable WebCrypto mining node with database exfiltration console, fault injection, wallet bridge and remote purge controls.",
+    "description": "WebCrypto mining node with live CoinGecko markets, persistent IndexedDB ledger, fault injection and remote operation controls.",
     "author": "Tuukka Tihekari",
     "tags": [
       "crypto",
@@ -73,9 +73,9 @@
     "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
-    "entryFile": "miner-v10.html",
-    "sizeBytes": 191959,
+    "entryFile": "miner-v11.html",
+    "sizeBytes": 222131,
     "createdAt": "2026-09-14T11:53:05.720Z",
-    "updatedAt": "2026-09-14T12:32:20.020Z"
+    "updatedAt": "2026-09-14T12:36:46.114Z"
   }
 ]
