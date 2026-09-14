@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $ = (s) => document.querySelector(s);
-  const cfg = { concurrency: 12, force: false, retryDelays: [1000, 2000, 5000, 10000] };
+  const cfg = { concurrency: 12, retryDelays: [1000, 2000, 5000, 10000] };
   const state = { manifest:null, tracks:[], done:0, bytes:0, active:0, retries:0, failed:[], paused:false, started:0, current:-1, filtered:[], shuffle:false, repeat:false, objectUrls:new Map() };
   const els = Object.fromEntries(['installer','player','install-status','track-progress','byte-progress','progress-bar','percent','speed','eta','active-count','retry-count','elapsed','storage','current-file','install-note','pause','resume','retry','audio','seek','volume','mute','prev','play','stop','next','shuffle','repeat','clock','now-index','now-title','now-meta','visualizer','track-list','library-count','search','genre','artist','sort','track-info','credits','credits-list','credits-open','eq-enabled','eq-reset','eq-preset','eq-bands'].map(id=>[id,$('#'+id)]));
   const fmtBytes = (n=0) => { const u=['B','KB','MB','GB','TB']; let i=0; while(n>=1000&&i<u.length-1){n/=1000;i++} return `${n.toFixed(i?2:0)} ${u[i]}` };
@@ -32,13 +32,12 @@
     const p=m.totalBytes?state.bytes/m.totalBytes*100:0; els['progress-bar'].style.width=Math.min(100,p)+'%'; els.percent.textContent=p.toFixed(1)+'%'; els.speed.textContent=fmtBytes(speed)+'/s'; els.eta.textContent='ETA '+(speed?fmtTime(remain/speed):'--:--'); els['active-count'].textContent=state.active; els['retry-count'].textContent=state.retries; els.elapsed.textContent=fmtTime(elapsed);
   }
   async function download(track){
-    if(!cfg.force && await hasTrack(track)){ state.done++; state.bytes+=track.bytes; updateInstall(); return }
-    if(cfg.force)await removeLocal(track.id);
+    if(await hasTrack(track)){ state.done++; state.bytes+=track.bytes; updateInstall(); return }
     for(let attempt=0;attempt<=cfg.retryDelays.length;attempt++){
       while(state.paused)await sleep(250);
       try{
         state.active++; els['current-file'].textContent=`${track.artist} — ${track.title}`; updateInstall();
-        const res=await fetch(track.url,{cache:cfg.force?'reload':'default'}); if(!res.ok)throw Error(`HTTP ${res.status}`);
+        const res=await fetch(track.url); if(!res.ok)throw Error(`HTTP ${res.status}`);
         const blob=await res.blob(); if(blob.size!==track.bytes)throw Error(`size ${blob.size}, expected ${track.bytes}`);
         const hash=await sha256(blob); if(!track.sha256 || hash.toLowerCase()!==track.sha256.toLowerCase())throw Error('SHA-256 mismatch');
         await persistBlob(track,blob).catch(()=>false); state.done++; state.bytes+=blob.size; state.active--; updateInstall(); return;
@@ -47,7 +46,7 @@
   }
   async function install(){
     state.started=Date.now(); const configRes=await fetch('manifest.json',{cache:'no-store'}),c=await configRes.json();
-    const manifestRes=await fetch(c.libraryManifest||'music/library-manifest.json',{cache:'no-store'}),m=state.manifest=await manifestRes.json(); cfg.concurrency=c.downloadConcurrency||12; cfg.force=!!c.forceFullRedownloadOnStart; cfg.retryDelays=c.retryDelaysMs||cfg.retryDelays;
+    const manifestRes=await fetch(c.libraryManifest||'music/library-manifest.json',{cache:'no-store'}),m=state.manifest=await manifestRes.json(); cfg.concurrency=c.downloadConcurrency||12; cfg.retryDelays=c.retryDelaysMs||cfg.retryDelays;
     if(m.deploymentBlocked){ els['install-status'].textContent='STORAGE BLOCKED'; els['current-file'].textContent='No audio payload was substituted.'; note(m.blockedReason,true); els.pause.disabled=true; return }
     if(!m.tracks?.length || m.trackCount!==m.tracks.length || m.totalBytes!==m.tracks.reduce((a,t)=>a+t.bytes,0)){throw Error('Manifest totals are invalid')}
     await openDb(); await inspectStorage(m.totalBytes); const old=await getMeta('manifestVersion'); if(old!==m.version){await setMeta('manifestVersion',m.version)}
@@ -57,7 +56,7 @@
     await setMeta('readyVersion',m.version); unlock();
   }
   els.pause.onclick=()=>{state.paused=true;els.pause.disabled=true;els.resume.disabled=false;els['install-status'].textContent='PAUSED'};
-  els.resume.onclick=()=>{state.paused=false;els.pause.disabled=false;els.resume.disabled=true;els['install-status'].textContent='INSTALLING'};
+  els.resume.onclick=()=>{state.paused=false;els.pause.disabled=false;els.resume.disabled=true;els['install-status'].textContent='PREPARING'};
   els.retry.onclick=async()=>{const failed=state.failed.splice(0);els.retry.disabled=true;await Promise.all(failed.map(x=>download(x.track)));if(!state.failed.length&&state.done===state.manifest.trackCount&&state.bytes===state.manifest.totalBytes)unlock()};
 
   let ctx,source,analyser,filters=[];
@@ -74,5 +73,5 @@
   [els.search,els.genre,els.artist,els.sort].forEach(e=>e.oninput=render);document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x===b));$('#info-tab').hidden=b.dataset.tab!=='info';$('#eq-tab').hidden=b.dataset.tab!=='eq'});els['eq-enabled'].onchange=()=>filters.forEach(f=>f.gain.value=els['eq-enabled'].checked?+(localStorage.getItem('eq-'+f.frequency.value)||0):0);els['eq-reset'].onclick=()=>document.querySelectorAll('.eq-band input').forEach(i=>{i.value=0;i.dispatchEvent(new Event('input'))});els['eq-preset'].onchange=()=>{const presets={Flat:[0,0,0,0,0,0,0,0,0,0],'Bass lift':[8,6,3,1,0,0,0,0,0,0],Smile:[6,4,1,-2,-3,-1,1,3,5,6],Club:[4,3,1,2,4,3,1,0,1,2]},v=presets[els['eq-preset'].value];document.querySelectorAll('.eq-band input').forEach((i,n)=>{i.value=v[n];i.dispatchEvent(new Event('input'))})};
   function showCredits(){els['credits-list'].innerHTML=state.tracks.map(t=>`<article class="credit"><strong>${escapeHtml(t.artist)} — ${escapeHtml(t.title)}</strong><p>${escapeHtml(t.attribution)}</p><a target="_blank" rel="noopener" href="${t.licenseUrl}">${escapeHtml(t.license)}</a> · <a target="_blank" rel="noopener" href="${t.sourceUrl}">Source</a></article>`).join('')};els['credits-open'].onclick=()=>els.credits.showModal();
   addEventListener('keydown',e=>{if(/INPUT|SELECT/.test(e.target.tagName))return;if(e.code==='Space'){e.preventDefault();els.play.click()}if(e.code==='ArrowRight')move(1);if(e.code==='ArrowLeft')move(-1);if(e.key.toLowerCase()==='m')els.mute.click()});
-  setInterval(()=>state.started&&updateInstall(),1000);install().catch(e=>{els['install-status'].textContent='FAILED';note(String(e),true);els['current-file'].textContent='Installation halted; the player remains locked.'});
+  setInterval(()=>state.started&&updateInstall(),1000);install().catch(e=>{els['install-status'].textContent='FAILED';note(String(e),true);els['current-file'].textContent='Library preparation halted.'});
 })();

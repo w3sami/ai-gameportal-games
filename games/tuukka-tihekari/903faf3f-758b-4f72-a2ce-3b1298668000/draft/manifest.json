@@ -3,6 +3,5 @@
   "version": "1.0.0",
   "libraryManifest": "music/library-manifest.json",
   "downloadConcurrency": 12,
-  "forceFullRedownloadOnStart": false,
   "retryDelaysMs": [1000, 2000, 5000, 10000]
 }

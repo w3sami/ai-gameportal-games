@@ -1,0 +1,8 @@
+{
+  "version": "blocked-pending-object-storage",
+  "totalBytes": 0,
+  "trackCount": 0,
+  "tracks": [],
+  "deploymentBlocked": true,
+  "blockedReason": "The open-music catalog is not configured yet. Prepare the verified catalog with tools/acquire-library.mjs and set its public manifest address in manifest.json."
+}
