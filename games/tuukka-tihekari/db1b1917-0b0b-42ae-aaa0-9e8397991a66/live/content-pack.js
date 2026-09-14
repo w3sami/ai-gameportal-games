@@ -143,7 +143,8 @@
 		FS.mkdirTree(TARGET_ROOT);
 		var next = 0;
 		var completed = 0;
-		var workerCount = Math.min(12, navigator.hardwareConcurrency || 4);
+		// Limit simultaneous inflation buffers to avoid Chromium renderer OOMs.
+		var workerCount = Math.min(2, navigator.hardwareConcurrency || 2);
 
 		async function worker() {
 			while (next < archive.entries.length) {

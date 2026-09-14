@@ -282,8 +282,8 @@
 	ui.language.value = valueFromQuery("language", safeStorageGet("luanti.language"));
 	if (["60", "100", "160"].indexOf(query.get("view")) !== -1)
 		ui.quality.value = query.get("view");
-	else if (["60", "100", "160"].indexOf(safeStorageGet("luanti.viewDistance")) !== -1)
-		ui.quality.value = safeStorageGet("luanti.viewDistance");
+	else
+		ui.quality.value = "60";
 
 	function validatedSession() {
 		var remote = activeMode === "remote";
