@@ -84,22 +84,21 @@
     "id": "a73d49c3-c5e5-4d8d-ab43-6a86499409db",
     "slug": "matopeli-next-gen",
     "title": "Matopeli: Next Gen",
-    "description": "Retro-sunset-henkinen moderni matopeli kolmella pelimuodolla: kombot, erikoisruoat, liikkuva riskialue, portit, esteet, viholliset, kilpi ja oman ennätyksen haamu.",
+    "description": "Moderni matopeli, jossa klassinen tila, 60 sekunnin pistejahti ja huoneisiin etenevä loputon tila. Kerää pisteitä, avaa lukitut ovet ja kohtaa uusissa huoneissa esteitä, vihollisia, erikoisruokia ja riskialueita. Kolme viimeisintä peliä tallentuu katsottaviksi uusintoina.",
     "author": "Tuukka Tihekari",
     "tags": [
-      "snake",
+      "matopeli",
       "arcade",
-      "neon",
-      "roguelite",
-      "mobile",
-      "gamepad"
+      "retro",
+      "replay",
+      "procedural"
     ],
     "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 29337,
+    "sizeBytes": 37833,
     "createdAt": "2026-09-14T13:21:19.291Z",
-    "updatedAt": "2026-09-14T13:29:20.316Z"
+    "updatedAt": "2026-09-14T13:36:47.632Z"
   }
 ]

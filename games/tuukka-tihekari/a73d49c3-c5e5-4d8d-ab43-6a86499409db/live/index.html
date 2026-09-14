@@ -106,6 +106,10 @@
     .ability.ready { color: #08161c; background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 22px #35c6c84d; }
     .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
     .action { min-height: 43px; font-size: 12px; font-weight: 800; }
+    .replays { display: grid; gap: 7px; }
+    .replay-button { width: 100%; min-height: 38px; padding: 7px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; }
+    .replay-button small { color: var(--muted); }
+    .empty-replays { color: var(--muted); font-size: 12px; }
     .touch-pad { display: none; grid-template: repeat(3, 50px) / repeat(3, 58px); justify-content: center; margin-top: 3px; }
     .dir { margin: 3px; font-size: 20px; font-weight: 900; }
     .up { grid-column: 2; }.left { grid-column: 1; grid-row: 2; }.center { grid-column: 2; grid-row: 2; }.right { grid-column: 3; grid-row: 2; }.down { grid-column: 2; grid-row: 3; }
@@ -137,7 +141,7 @@
       <legend>PELIMUOTO</legend>
       <div class="choice-grid">
         <button class="choice" data-mode="classic" aria-pressed="false">KLASSINEN<small>Vain mato ja ruoka</small></button>
-        <button class="choice" data-mode="endless" aria-pressed="true">LOPUTON<small>Laajeneva maailma</small></button>
+        <button class="choice" data-mode="endless" aria-pressed="true">LOPUTON<small>Huoneet ja lukitut ovet</small></button>
         <button class="choice" data-mode="rush" aria-pressed="false">60 SEKUNTIA<small>Pistejahti</small></button>
       </div>
     </fieldset>
@@ -181,7 +185,7 @@
           <span>Kultakerroin <b id="goldStatus">—</b></span>
           <span>Nopeusboost <b id="boostStatus">—</b></span>
           <span>Riskialue <b id="riskStatus">×3</b></span>
-          <span>Haamu <b id="ghostStatus">EI ENNÄTYSTÄ</b></span>
+          <span>Huone <b id="roomStatus">1</b></span>
         </div>
       </section>
       <section class="card">
@@ -201,6 +205,10 @@
           <button class="dir down" data-dir="down" aria-label="Alas">▼</button>
         </nav>
       </section>
+      <section class="card">
+        <h2>3 EDELLISTÄ PELIÄ</h2>
+        <div class="replays" id="replayList"><span class="empty-replays">Ei tallennettuja pelejä</span></div>
+      </section>
       <section class="card legend">
         <span style="--dot:#ff6b6b">Ruoka</span><span style="--dot:#f5b942">Kulta</span>
         <span style="--dot:#35c6c8">Salama</span><span style="--dot:#e84a7f">Sakset</span>
@@ -213,7 +221,7 @@
 <script>
   const canvas = document.querySelector('#game');
   const ctx = canvas.getContext('2d');
-  const ui = Object.fromEntries(['score','best','combo','time','overlay','overlayTitle','overlayText','mission','missionProgress','goldStatus','boostStatus','riskStatus','ghostStatus','ability','screen'].map(id => [id, document.querySelector('#' + id)]));
+  const ui = Object.fromEntries(['score','best','combo','time','overlay','overlayTitle','overlayText','mission','missionProgress','goldStatus','boostStatus','riskStatus','roomStatus','replayList','ability','screen'].map(id => [id, document.querySelector('#' + id)]));
   const CELL = 32;
   const VIEW_COLS = 30;
   const VIEW_ROWS = 20;
@@ -235,16 +243,16 @@
   let level = localStorage.getItem('next-level') || 'normal';
   if (!['classic','endless','rush'].includes(mode)) mode = 'endless';
   if (!baseDelays[level]) level = 'normal';
-  let snake, previousSnake, direction, queuedDirection, food, obstacles, portals, enemies, risk;
+  let snake, previousSnake, direction, queuedDirection, food, obstacles, portals, enemies, risk, rooms, doors, currentRoomId;
   let score, eaten, combo, lastEatAt, abilityCharge, shield, goldUntil, boostUntil;
   let running = false, paused = false, over = false, timer, startedAt, pausedAt, pausedTotal, tickCount, portalCooldown;
   let camera = {x:0,y:0}, previousCamera = {x:0,y:0}, lastTickAt = 0, tickDelay = 135;
   let missionIndex = 0, missionValue = 0, missionStartedAt = 0;
-  let runPath = [], ghostPath = [];
+  let runFrames = [], replay = null, replayFrame = 0, replayTimer;
   let touchStart, lastGamepadDirection = '';
 
   function keyForBest() { return `next-best-${mode}-${level}`; }
-  function keyForGhost() { return `next-ghost-${mode}-${level}`; }
+  function keyForReplays() { return `next-replays-${mode}-${level}`; }
   function bestScore() { return Number(localStorage.getItem(keyForBest()) || 0); }
   function same(a,b) { return a.x === b.x && a.y === b.y; }
   function extraMode() { return mode !== 'classic'; }
@@ -253,20 +261,21 @@
   function randomInt(min,max) { return Math.floor(Math.random()*(max-min+1))+min; }
 
   function reset() {
-    clearTimeout(timer);
+    clearTimeout(timer); stopReplay();
     const start = mode === 'endless' ? {x:0,y:0} : {x:Math.floor(VIEW_COLS/2),y:Math.floor(VIEW_ROWS/2)};
     snake = [start, {x:start.x-1,y:start.y}, {x:start.x-2,y:start.y}];
     previousSnake = snake.map(p=>({...p}));
     direction = queuedDirection = {x:1,y:0};
-    obstacles = []; portals = []; enemies = [];
+    obstacles = []; portals = []; enemies = []; rooms = []; doors = []; currentRoomId = 1;
     risk = {x:start.x+5,y:start.y-3,w:7,h:6,dx:1,dy:0};
     score = eaten = 0; combo = 1; lastEatAt = 0; abilityCharge = 0; shield = false;
     goldUntil = boostUntil = 0; tickCount = portalCooldown = 0;
     startedAt = performance.now(); pausedTotal = 0; missionIndex = 0; missionValue = 0; missionStartedAt = startedAt;
-    runPath = []; ghostPath = JSON.parse(localStorage.getItem(keyForGhost()) || '[]');
+    runFrames = [];
     previousCamera = camera = {x:start.x - VIEW_COLS/2, y:start.y - VIEW_ROWS/2};
-    if (extraMode()) createWorldFeatures();
-    placeFood(); updateUi(); draw(1);
+    if (mode === 'endless') createRoomWorld();
+    else if (extraMode()) createWorldFeatures();
+    placeFood(); renderReplayButtons(); updateUi(); draw(1);
   }
 
   function createWorldFeatures() {
@@ -275,8 +284,70 @@
     for (let i=0;i<8;i++) addObstacle();
   }
 
+  function createRoomWorld() {
+    const first = {id:1,x:-12,y:-8,w:24,h:16};
+    rooms.push(first); currentRoomId = first.id;
+    planDoor(first, 300, 'right');
+    for (let i=0;i<7;i++) addObstacle();
+    portals = [{x:first.x+4,y:first.y+4},{x:first.x+first.w-5,y:first.y+first.h-4}];
+  }
+
+  function rectanglesOverlap(a,b) {
+    return a.x < b.x+b.w-1 && a.x+a.w-1 > b.x && a.y < b.y+b.h-1 && a.y+a.h-1 > b.y;
+  }
+
+  function planDoor(room, threshold, preferredDirection) {
+    const choices = [preferredDirection,'right','down','left','up'].filter(Boolean).filter((value,index,array)=>array.indexOf(value)===index);
+    for (const dir of choices) {
+      const w=randomInt(20,27),h=randomInt(14,19);
+      let next,point;
+      if (dir==='right') {
+        next={x:room.x+room.w-1,y:room.y+Math.floor((room.h-h)/2),w,h};
+        point={x:room.x+room.w-1,y:Math.max(room.y,next.y)+Math.floor((Math.min(room.y+room.h,next.y+h)-Math.max(room.y,next.y))/2)};
+      }
+      if (dir==='left') {
+        next={x:room.x-w+1,y:room.y+Math.floor((room.h-h)/2),w,h};
+        point={x:room.x,y:Math.max(room.y,next.y)+Math.floor((Math.min(room.y+room.h,next.y+h)-Math.max(room.y,next.y))/2)};
+      }
+      if (dir==='down') {
+        next={x:room.x+Math.floor((room.w-w)/2),y:room.y+room.h-1,w,h};
+        point={x:Math.max(room.x,next.x)+Math.floor((Math.min(room.x+room.w,next.x+w)-Math.max(room.x,next.x))/2),y:room.y+room.h-1};
+      }
+      if (dir==='up') {
+        next={x:room.x+Math.floor((room.w-w)/2),y:room.y-h+1,w,h};
+        point={x:Math.max(room.x,next.x)+Math.floor((Math.min(room.x+room.w,next.x+w)-Math.max(room.x,next.x))/2),y:room.y};
+      }
+      if (!next || rooms.some(existing=>existing.id!==room.id&&rectanglesOverlap(next,existing))) continue;
+      next.id=room.id+1;
+      doors.push({...point,dir,from:room.id,to:next.id,threshold,open:false,announced:false,generated:false,next});
+      return;
+    }
+  }
+
+  function roomFor(point) {
+    return rooms.find(room=>point.x>room.x&&point.x<room.x+room.w-1&&point.y>room.y&&point.y<room.y+room.h-1);
+  }
+
+  function currentRoom() { return rooms.find(room=>room.id===currentRoomId)||rooms[0]; }
+  function roomPassable(point) { return Boolean(roomFor(point)||doors.some(door=>door.open&&same(door,point))); }
+
+  function unlockDoors() {
+    doors.forEach(door=>{
+      if (!door.open&&score>=door.threshold) {door.open=true;if(!door.announced){door.announced=true;screenFx();beep(1040,.14)}}
+    });
+  }
+
+  function generateRoom(door) {
+    if (door.generated) return;
+    door.generated=true;rooms.push(door.next);currentRoomId=door.next.id;
+    risk={x:door.next.x+4,y:door.next.y+3,w:7,h:6,dx:1,dy:0};
+    portals=[{x:door.next.x+4,y:door.next.y+4},{x:door.next.x+door.next.w-5,y:door.next.y+door.next.h-4}];
+    for(let i=0;i<6+door.next.id;i++)addObstacle();
+    planDoor(door.next,door.threshold+350+door.next.id*75);
+  }
+
   function boundsAroundHead() {
-    if (mode === 'endless') return {minX:snake[0].x-13,maxX:snake[0].x+13,minY:snake[0].y-8,maxY:snake[0].y+8};
+    if (mode === 'endless') {const room=currentRoom();return {minX:room.x+1,maxX:room.x+room.w-2,minY:room.y+1,maxY:room.y+room.h-2};}
     return {minX:1,maxX:VIEW_COLS-2,minY:2,maxY:VIEW_ROWS-2};
   }
 
@@ -314,6 +385,7 @@
   }
 
   function startGame(fresh = false) {
+    stopReplay();
     if (fresh || over || !snake) reset();
     running = true; paused = false; over = false; ui.overlay.hidden = true;
     startedAt = performance.now(); pausedTotal = 0; missionStartedAt = startedAt;
@@ -340,6 +412,11 @@
     previousSnake = snake.map(p=>({...p})); previousCamera = {...camera};
     direction = queuedDirection;
     let head = {x:snake[0].x+direction.x,y:snake[0].y+direction.y};
+    if (mode==='endless') {
+      unlockDoors();
+      const crossedDoor=doors.find(door=>door.open&&same(door,head));
+      if (crossedDoor&&!crossedDoor.generated) generateRoom(crossedDoor);
+    }
     if (portalCooldown) portalCooldown--;
     if (extraMode() && !portalCooldown) {
       const portalIndex = portals.findIndex(p=>same(p,head));
@@ -347,7 +424,7 @@
     }
 
     let collision = '';
-    if (mode !== 'endless' && (head.x<0 || head.y<1 || head.x>=VIEW_COLS || head.y>=VIEW_ROWS)) collision='wall';
+    if (mode === 'endless' ? !roomPassable(head) : (head.x<0 || head.y<1 || head.x>=VIEW_COLS || head.y>=VIEW_ROWS)) collision='wall';
     const selfIndex = snake.findIndex(p=>same(p,head));
     if (selfIndex >= 0) collision='self';
     const obstacleIndex = obstacles.findIndex(p=>same(p,head));
@@ -359,7 +436,14 @@
       if (!shield) return gameOver();
       shield = false; abilityCharge = 0; screenFx(); beep(260,.12);
       if (collision === 'wall') {
-        head.x = (head.x+VIEW_COLS)%VIEW_COLS; head.y = head.y<1?VIEW_ROWS-1:head.y>=VIEW_ROWS?1:head.y;
+        if (mode==='endless') {
+          const turns=[{x:-direction.y,y:direction.x},{x:direction.y,y:-direction.x}];
+          const safe=turns.map(turn=>({point:{x:snake[0].x+turn.x,y:snake[0].y+turn.y},turn})).find(candidate=>roomPassable(candidate.point)&&!occupied(candidate.point));
+          if (!safe) return gameOver();
+          head=safe.point;direction=queuedDirection=safe.turn;
+        } else {
+          head.x = (head.x+VIEW_COLS)%VIEW_COLS; head.y = head.y<1?VIEW_ROWS-1:head.y>=VIEW_ROWS?1:head.y;
+        }
       } else if (collision === 'self') {
         snake = snake.slice(0,Math.max(3,selfIndex));
       } else if (collision === 'obstacle') obstacles.splice(obstacleIndex,1);
@@ -367,6 +451,7 @@
     }
 
     snake.unshift(head);
+    const enteredRoom=roomFor(head);if(enteredRoom)currentRoomId=enteredRoom.id;
     const ate = same(head,food);
     if (ate) consumeFood(); else snake.pop();
     if (extraMode()) updateWorld();
@@ -375,7 +460,7 @@
       camera.x += ((head.x - VIEW_COLS/2) - camera.x) * .34;
       camera.y += ((head.y - VIEW_ROWS/2) - camera.y) * .34;
     } else camera = {x:0,y:0};
-    runPath.push({...head}); if (runPath.length>6000) runPath.shift();
+    runFrames.push({x:head.x,y:head.y,length:snake.length,food:[food.x,food.y,food.type],score,room:currentRoomId}); if (runFrames.length>5000) runFrames.shift();
     updateUi(); scheduleTick();
   }
 
@@ -397,6 +482,7 @@
     beep(food.type==='gold'?980:food.type==='lightning'?1180:food.type==='scissors'?420:720,.055);
     if (extraMode() && eaten%4===0) { addObstacle(); addObstacle(); }
     if (extraMode() && eaten%7===0) addEnemy();
+    if (mode==='endless') unlockDoors();
     placeFood();
   }
 
@@ -412,7 +498,7 @@
       const dx=Math.sign(snake[0].x-enemy.x),dy=Math.sign(snake[0].y-enemy.y);
       const horizontal=Math.abs(snake[0].x-enemy.x)>Math.abs(snake[0].y-enemy.y);
       const next={x:enemy.x+(horizontal?dx:0),y:enemy.y+(horizontal?0:dy)};
-      if (!obstacles.some(p=>same(p,next)) && !portals.some(p=>same(p,next))) { enemy.x=next.x;enemy.y=next.y; }
+      if ((mode!=='endless'||roomPassable(next))&&!obstacles.some(p=>same(p,next))&&!portals.some(p=>same(p,next))) { enemy.x=next.x;enemy.y=next.y; }
     });
     if (enemies.some(enemy=>same(enemy,snake[0]))) {
       if (shield) { shield=false;abilityCharge=0;enemies=enemies.filter(enemy=>!same(enemy,snake[0])); }
@@ -425,6 +511,7 @@
     if (mission.type==='survive') missionValue=Math.floor((performance.now()-missionStartedAt)/1000);
     if (missionValue>=mission.target) {
       score+=250; abilityCharge=Math.min(100,abilityCharge+40); beep(1320,.16); screenFx();
+      if (mode==='endless') unlockDoors();
       missionIndex=(missionIndex+1)%missions.length; missionValue=0; missionStartedAt=performance.now();
     }
   }
@@ -441,11 +528,44 @@
     else { pausedTotal+=performance.now()-pausedAt;ui.overlay.hidden=true;lastTickAt=performance.now();scheduleTick(); }
   }
 
+  function loadReplays() {
+    try { return JSON.parse(localStorage.getItem(keyForReplays())||'[]'); } catch { return []; }
+  }
+
+  function saveReplay() {
+    if (!runFrames.length) return;
+    const list=loadReplays();
+    list.unshift({score,duration:Math.floor(elapsedSeconds()),frames:runFrames,rooms:rooms.map(room=>({...room})),doors:doors.map(({x,y,open,threshold})=>({x,y,open,threshold}))});
+    try { localStorage.setItem(keyForReplays(),JSON.stringify(list.slice(0,3))); } catch { localStorage.removeItem(keyForReplays()); }
+    renderReplayButtons();
+  }
+
+  function renderReplayButtons() {
+    const list=loadReplays();ui.replayList.replaceChildren();
+    if (!list.length) {const empty=document.createElement('span');empty.className='empty-replays';empty.textContent='Ei tallennettuja pelejä';ui.replayList.append(empty);return;}
+    list.slice(0,3).forEach((item,index)=>{const button=document.createElement('button'),label=document.createElement('span'),details=document.createElement('small');button.className='action replay-button';button.type='button';label.textContent=`TOISTO ${index+1}`;details.textContent=`${Number(item.score)||0} p · ${Math.floor((Number(item.duration)||0)/60)}:${String((Number(item.duration)||0)%60).padStart(2,'0')}`;button.append(label,details);button.addEventListener('click',()=>playReplay(index));ui.replayList.append(button)});
+  }
+
+  function playReplay(index) {
+    const item=loadReplays()[index];if(!item?.frames?.length)return;
+    clearTimeout(timer);stopReplay();running=false;paused=false;over=false;replay=item;replayFrame=0;ui.overlay.hidden=true;stepReplay();
+  }
+
+  function stepReplay() {
+    if (!replay) return;
+    replayFrame++;
+    if (replayFrame>=replay.frames.length) {replayFrame=replay.frames.length-1;ui.overlayTitle.textContent='Toisto päättyi';ui.overlayText.innerHTML=`Pisteet <b>${replay.score}</b><br><small>Paina Enter aloittaaksesi uuden pelin</small>`;ui.overlay.hidden=false;return;}
+    replayTimer=setTimeout(stepReplay,70);
+  }
+
+  function stopReplay() { clearTimeout(replayTimer);replay=null;replayFrame=0; }
+
   function gameOver() {
     if (over) return;
     running=false;over=true;clearTimeout(timer);beep(150,.22);
     const previousBest=bestScore();
-    if (score>previousBest) { localStorage.setItem(keyForBest(),score);localStorage.setItem(keyForGhost(),JSON.stringify(runPath)); }
+    if (score>previousBest) localStorage.setItem(keyForBest(),score);
+    saveReplay();
     ui.overlayTitle.textContent=mode==='rush'?'Aika loppui':'Peli päättyi';
     ui.overlayText.innerHTML=`Pisteet <b>${score}</b>${score>previousBest?' · UUSI ENNÄTYS!':''}<br><small>Paina Enter aloittaaksesi uuden kierroksen</small>`;
     ui.overlay.hidden=false;updateUi();
@@ -460,7 +580,7 @@
     ui.missionProgress.style.width=extraMode()?Math.min(100,missionValue/mission.target*100)+'%':'0%';
     const now=performance.now();ui.goldStatus.textContent=now<goldUntil?Math.ceil((goldUntil-now)/1000)+' s':'—';
     ui.boostStatus.textContent=now<boostUntil?Math.ceil((boostUntil-now)/1000)+' s':'—';
-    ui.riskStatus.textContent=extraMode()?'×3':'POIS';ui.ghostStatus.textContent=ghostPath.length?'AKTIIVINEN':'EI ENNÄTYSTÄ';
+    ui.riskStatus.textContent=extraMode()?'×3':'POIS';ui.roomStatus.textContent=mode==='endless'?currentRoomId:'—';
     ui.ability.textContent=shield?'KILPI AKTIIVINEN':`KILPI ${abilityCharge} %`;
     ui.ability.classList.toggle('ready',abilityCharge>=100&&!shield);
   }
@@ -472,6 +592,15 @@
     ctx.fillRect(p.x+inset,p.y+inset,CELL*size,CELL*size);ctx.restore();
   }
 
+  function drawRoomWalls(roomList,doorList,cam) {
+    ctx.strokeStyle='#53617f';ctx.lineWidth=5;
+    roomList.forEach(room=>{const p=worldToScreen(room,cam);ctx.strokeRect(p.x,p.y,room.w*CELL,room.h*CELL)});
+    doorList.forEach(door=>{
+      const p=worldToScreen(door,cam);ctx.fillStyle=door.open?'#35c6c8':'#f5b942';ctx.fillRect(p.x+4,p.y+4,CELL-8,CELL-8);
+      if(!door.open){ctx.fillStyle='#0b1020';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText(door.threshold,p.x+CELL/2,p.y+CELL/2+4)}
+    });
+  }
+
   function draw(alpha) {
     const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);
     ctx.setTransform(scaleX,0,0,scaleY,0,0);ctx.clearRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
@@ -481,14 +610,14 @@
     const offX=((-cam.x*CELL)%CELL+CELL)%CELL,offY=((-cam.y*CELL)%CELL+CELL)%CELL;
     for(let x=offX;x<VIEW_COLS*CELL;x+=CELL){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,VIEW_ROWS*CELL);ctx.stroke()}
     for(let y=offY;y<VIEW_ROWS*CELL;y+=CELL){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(VIEW_COLS*CELL,y);ctx.stroke()}
-    if (mode!=='endless') {ctx.strokeStyle='#4c7dffaa';ctx.lineWidth=3;ctx.strokeRect(1, CELL, VIEW_COLS*CELL-2, (VIEW_ROWS-1)*CELL-1)}
+    if (mode==='endless') drawRoomWalls(rooms,doors,cam);
+    else {ctx.strokeStyle='#4c7dffaa';ctx.lineWidth=3;ctx.strokeRect(1, CELL, VIEW_COLS*CELL-2, (VIEW_ROWS-1)*CELL-1)}
     if (extraMode()) {
       const rp=worldToScreen(risk,cam);ctx.fillStyle='#8b6dff16';ctx.strokeStyle='#8b6dff99';ctx.lineWidth=2;ctx.fillRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);ctx.strokeRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);
       obstacles.forEach(p=>drawCell(p,'#39445d',.82,0,cam));
       portals.forEach((p,i)=>{const s=worldToScreen(p,cam);ctx.strokeStyle=i?'#8b6dff':'#35c6c8';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x+CELL/2,s.y+CELL/2,CELL*.34,0,Math.PI*2);ctx.stroke()});
       enemies.forEach(p=>drawCell(p,'#e84a7f',.68,10,cam));
     }
-    if (ghostPath.length && tickCount<ghostPath.length) drawCell(ghostPath[tickCount],'#7180a3',.55,5,cam);
     drawCell(food,foodStyles[food.type].color,food.type==='normal'?.58:.68,12,cam);
     snake.forEach((part,index)=>{
       const old=previousSnake[Math.min(index,previousSnake.length-1)]||part;
@@ -498,8 +627,22 @@
     if (shield) {const p=worldToScreen(snake[0],cam);ctx.strokeStyle='#35c6c8';ctx.lineWidth=3;ctx.beginPath();ctx.arc(p.x+CELL/2,p.y+CELL/2,CELL*.65,0,Math.PI*2);ctx.stroke()}
   }
 
+  function drawReplay() {
+    const frame=replay.frames[replayFrame];if(!frame)return;
+    const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);ctx.setTransform(scaleX,0,0,scaleY,0,0);
+    ctx.fillStyle='#0b1020';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    const cam=mode==='endless'?{x:frame.x-VIEW_COLS/2,y:frame.y-VIEW_ROWS/2}:{x:0,y:0};
+    ctx.strokeStyle='#202a43';ctx.lineWidth=1;const offX=((-cam.x*CELL)%CELL+CELL)%CELL,offY=((-cam.y*CELL)%CELL+CELL)%CELL;
+    for(let x=offX;x<VIEW_COLS*CELL;x+=CELL){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,VIEW_ROWS*CELL);ctx.stroke()}
+    for(let y=offY;y<VIEW_ROWS*CELL;y+=CELL){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(VIEW_COLS*CELL,y);ctx.stroke()}
+    if(mode==='endless')drawRoomWalls(replay.rooms||[],replay.doors||[],cam);else{ctx.strokeStyle='#4c7dffaa';ctx.lineWidth=3;ctx.strokeRect(1,CELL,VIEW_COLS*CELL-2,(VIEW_ROWS-1)*CELL-1)}
+    const foodFrame={x:frame.food[0],y:frame.food[1],type:frame.food[2]};drawCell(foodFrame,foodStyles[foodFrame.type]?.color||'#ff6b6b',.62,8,cam);
+    for(let i=Math.min(frame.length-1,replayFrame);i>=0;i--){const pathFrame=replay.frames[replayFrame-i];drawCell(pathFrame,i===0?'#8eabff':'#4c7dff',i===0?.84:.7,i===0?10:4,cam)}
+    ui.score.textContent=frame.score;ui.combo.textContent='TOISTO';ui.roomStatus.textContent=mode==='endless'?(frame.room||1):'—';
+  }
+
   function render(now) {
-    const alpha=running&&!paused?Math.min(1,(now-lastTickAt)/tickDelay):1;draw(alpha);
+    const alpha=running&&!paused?Math.min(1,(now-lastTickAt)/tickDelay):1;if(replay)drawReplay();else draw(alpha);
     if (running&&!paused) {
       if (combo>1 && now-lastEatAt>3600) combo=1;
       if (mode==='rush'&&elapsedSeconds()>=60) gameOver();
@@ -526,7 +669,7 @@
     document.querySelectorAll(`[data-${type}]`).forEach(button=>button.setAttribute('aria-pressed',String(button.dataset[type]===value)));
     running=false;over=false;reset();showIntro();
   }
-  function showIntro(){ui.overlayTitle.textContent=mode==='classic'?'Klassinen':mode==='rush'?'60 sekuntia':'Loputon maailma';ui.overlayText.innerHTML=mode==='classic'?'<b>Alkuperäinen matopeli.</b><br>Ei erikoisruokia, esteitä tai riskialueita.':mode==='rush'?'<b>Kerää niin paljon kuin ehdit.</b><br>Riskialue ja kombot ratkaisevat ennätyksen.':'<b>Maailma laajenee madon mukana.</b><br>Portit, viholliset ja riskialue odottavat.';ui.overlay.hidden=false}
+  function showIntro(){ui.overlayTitle.textContent=mode==='classic'?'Klassinen':mode==='rush'?'60 sekuntia':'Loputon maailma';ui.overlayText.innerHTML=mode==='classic'?'<b>Alkuperäinen matopeli.</b><br>Ei erikoisruokia, esteitä tai riskialueita.':mode==='rush'?'<b>Kerää niin paljon kuin ehdit.</b><br>Riskialue ja kombot ratkaisevat ennätyksen.':'<b>Avaa ovet pisteillä ja etene uusiin huoneisiin.</b><br>Seinät, viholliset ja riskialue pitävät reitin vaarallisena.';ui.overlay.hidden=false}
   document.querySelectorAll('[data-dir]').forEach(button=>button.addEventListener('pointerdown',()=>setDirection(button.dataset.dir)));
   ui.ability.addEventListener('click',activateAbility);document.querySelector('#touchAbility').addEventListener('click',activateAbility);
   document.querySelector('#pause').addEventListener('click',togglePause);document.querySelector('#restart').addEventListener('click',()=>{reset();startGame()});
