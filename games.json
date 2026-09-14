@@ -79,5 +79,27 @@
     "sizeBytes": 12890,
     "createdAt": "2026-09-14T13:03:34.080Z",
     "updatedAt": "2026-09-14T13:15:06.492Z"
+  },
+  {
+    "id": "a73d49c3-c5e5-4d8d-ab43-6a86499409db",
+    "slug": "matopeli-next-gen",
+    "title": "Matopeli: Next Gen",
+    "description": "Moderni matopeli kolmella pelimuodolla: kombot, erikoisruoat, liikkuva riskialue, portit, esteet, viholliset, kilpi ja oman ennätyksen haamu.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "snake",
+      "arcade",
+      "neon",
+      "roguelite",
+      "mobile",
+      "gamepad"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T13:21:19.291Z",
+    "updatedAt": "2026-09-14T13:21:19.291Z"
   }
 ]
