@@ -211,7 +211,7 @@
       </section>
       <section class="card legend">
         <span style="--dot:#d7656c">Ruoka</span><span style="--dot:#e6bc55">Kulta</span>
-        <span style="--dot:#67a77f">Energia</span><span style="--dot:#b879a7">Sakset</span>
+        <span style="--dot:#67a77f">Salama</span><span style="--dot:#b879a7">Sakset</span>
       </section>
     </aside>
   </section>
@@ -244,7 +244,7 @@
   if (!['classic','endless','rush'].includes(mode)) mode = 'endless';
   if (!baseDelays[level]) level = 'normal';
   let snake, previousSnake, direction, queuedDirection, food, obstacles, portals, enemies, risk, rooms, doors, currentRoomId;
-  let score, eaten, combo, lastEatAt, abilityCharge, shield, goldUntil;
+  let score, eaten, combo, lastEatAt, abilityCharge, shield, goldUntil, boostUntil;
   let running = false, paused = false, over = false, timer, startedAt, pausedAt, pausedTotal, tickCount, portalCooldown;
   let camera = {x:0,y:0}, previousCamera = {x:0,y:0}, lastTickAt = 0, tickDelay = 135;
   let missionIndex = 0, missionValue = 0, missionStartedAt = 0;
@@ -269,7 +269,7 @@
     obstacles = []; portals = []; enemies = []; rooms = []; doors = []; currentRoomId = 1;
     risk = {x:start.x+5,y:start.y-3,w:7,h:6,dx:1,dy:0};
     score = eaten = 0; combo = 1; lastEatAt = 0; abilityCharge = 0; shield = false;
-    goldUntil = 0; tickCount = portalCooldown = 0;
+    goldUntil = boostUntil = 0; tickCount = portalCooldown = 0;
     startedAt = performance.now(); pausedTotal = 0; missionIndex = 0; missionValue = 0; missionStartedAt = startedAt;
     runFrames = [];
     previousCamera = camera = {x:start.x - VIEW_COLS/2, y:start.y - VIEW_ROWS/2};
@@ -378,7 +378,10 @@
   }
 
   function currentDelay() {
-    return inRisk(snake[0]) ? baseDelays[level] * .78 : baseDelays[level];
+    let delay = baseDelays[level];
+    if (performance.now() < boostUntil) delay *= .72;
+    if (inRisk(snake[0])) delay *= .78;
+    return delay;
   }
 
   function startGame(fresh = false) {
@@ -470,7 +473,7 @@
     score += Math.round(10*foodStyles[food.type].value*combo*riskMultiplier*goldMultiplier*difficultyMultiplier);
     abilityCharge = Math.min(100,abilityCharge+20);
     if (food.type==='gold') goldUntil=now+8000;
-    if (food.type==='lightning') abilityCharge=Math.min(100,abilityCharge+40);
+    if (food.type==='lightning') boostUntil=now+5500;
     if (food.type==='scissors' && snake.length>5) snake.splice(Math.max(3,snake.length-3));
     if (inRisk(food)) missionValue += missions[missionIndex].type==='risk' ? 1 : 0;
     if (missions[missionIndex].type==='eat') missionValue++;
@@ -576,7 +579,8 @@
     const mission=missions[missionIndex];ui.mission.textContent=extraMode()?mission.label:'Klassinen peli';
     ui.missionProgress.style.width=extraMode()?Math.min(100,missionValue/mission.target*100)+'%':'0%';
     const now=performance.now();ui.goldStatus.textContent=now<goldUntil?Math.ceil((goldUntil-now)/1000)+' s':'—';
-    ui.boostStatus.textContent=inRisk(snake[0])?'+28 %':'NORMAALI';
+    const speedIncrease=Math.round((baseDelays[level]/currentDelay()-1)*100);
+    ui.boostStatus.textContent=speedIncrease?`+${speedIncrease} %`:'NORMAALI';
     ui.riskStatus.textContent=extraMode()?'×3':'POIS';ui.roomStatus.textContent=mode==='endless'?currentRoomId:'—';
     ui.ability.textContent=shield?'KILPI AKTIIVINEN':`KILPI ${abilityCharge} %`;
     ui.ability.classList.toggle('ready',abilityCharge>=100&&!shield);
