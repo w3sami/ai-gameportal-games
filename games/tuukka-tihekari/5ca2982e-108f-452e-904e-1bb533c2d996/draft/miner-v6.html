@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Browser Data Miner</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; --green:#4dff9b; --red:#ff4964; --panel:#07130fcc; }
+    * { box-sizing:border-box } body { margin:0; min-height:100vh; background:radial-gradient(circle at 50% -20%,#193f33,#020504 58%); color:#d7ffe8 }
+    body::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.13; background:repeating-linear-gradient(0deg,transparent 0 3px,#5cff9e18 4px) }
+    main { width:min(1120px,95vw); margin:auto; padding:28px 0 50px } header { display:flex; justify-content:space-between; gap:20px; align-items:center; margin-bottom:18px }
+    h1 { margin:0; color:var(--green); letter-spacing:-.05em; font-size:clamp(28px,5vw,54px) } .eyebrow,.muted { color:#729884 } .live { color:var(--green); text-shadow:0 0 12px var(--green) }
+    .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px } .panel { background:var(--panel); border:1px solid #24523d; border-radius:12px; padding:16px; box-shadow:0 18px 70px #0008 }
+    .metric strong { display:block; margin-top:8px; font-size:22px; color:#caffdf; overflow-wrap:anywhere } .wide { grid-column:span 2 }
+    .hash { font-size:clamp(40px,8vw,78px); font-weight:900; color:var(--green); line-height:1; margin:18px 0 } .unit { font-size:.35em; color:#79a58e }
+    button,select,input { font:inherit; border:1px solid #327958; border-radius:7px; padding:11px 12px; background:#0a2118; color:#bfffd9 }
+    button { cursor:pointer; font-weight:800; text-align:left }
+    button:hover { border-color:var(--green); box-shadow:0 0 18px #4dff9b22 } button.primary { background:var(--green); color:#021108 } button.danger { color:#ffc0ca; border-color:#8a2737 }
+    button.stop { background:var(--red);color:#180208;border-color:var(--red);box-shadow:0 0 22px #ff496455 }
+    .actions { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-top:12px } .log { height:220px; overflow:auto; margin-top:12px; padding:12px; background:#020604; border:1px solid #183b2b; color:#7fc99e; font-size:12px; line-height:1.7 }
+    .config { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:12px }.config label{display:grid;gap:6px;color:#729884;font-size:12px}.terminal{display:flex;gap:8px;margin-top:10px}.terminal input{flex:1;background:#020604}.terminal button{white-space:nowrap}
+    details { border:1px solid #183b2b; padding:10px; background:#030806 } summary { cursor:pointer;color:#77d69f;font-weight:800 }.chain{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.chain span{border:1px solid #24523d;padding:8px;color:#8fb7a1;font-size:11px}
+    .lab { display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:12px}.lab-result{margin-top:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.lab-result div{background:#030806;border:1px solid #183b2b;padding:10px;font-size:11px}.lab-result strong{display:block;color:#8fffbf;margin-top:5px}
+    .log div::before { content:"> "; color:var(--green) } .pill { display:inline-block; padding:3px 7px; border:1px solid #286347; color:#70d79d; border-radius:99px; font-size:11px }
+    dialog { width:min(520px,92vw); border:1px solid #397d5c; border-radius:14px; background:#06110d; color:#d7ffe8; box-shadow:0 30px 120px #000; padding:22px }
+    dialog::backdrop { background:#000c; backdrop-filter:blur(5px) } .wallet { display:grid; gap:9px; margin:18px 0 }.wallet button { display:flex; justify-content:space-between }
+    #lock { display:none; position:fixed; inset:0; z-index:20; background:#140207; color:#ffccd3; place-items:center; text-align:center; padding:20px } #lock.active { display:grid } #lock h2 { color:var(--red); font-size:clamp(34px,8vw,86px); margin:0; text-shadow:0 0 30px #ff496488 }
+    #lock button { text-align:center; background:var(--red); color:#180208; border-color:var(--red); margin:auto }
+    #matrixFx { position:fixed;inset:0;z-index:30;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .18s }
+    #matrixFx.active { opacity:.92 }.fx-label{position:fixed;z-index:31;left:50%;top:50%;translate:-50% -50%;pointer-events:none;color:#9dffc7;font-size:clamp(20px,5vw,62px);font-weight:900;letter-spacing:.08em;text-shadow:0 0 8px #000,0 0 28px currentColor;opacity:0;text-align:center}.fx-label.active{animation:fxPulse 1.7s both}
+    body.glitch main{animation:glitch .12s steps(2) 8}@keyframes glitch{0%{transform:translate(0)}25%{transform:translate(5px,-2px);filter:hue-rotate(70deg)}50%{transform:translate(-7px,3px)}75%{transform:translate(3px,2px);filter:invert(.12)}100%{transform:translate(0)}}@keyframes fxPulse{0%{opacity:0;transform:scale(.7)}18%,70%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.15)}}
+    @media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.actions,.config,.chain,.lab,.lab-result{grid-template-columns:1fr 1fr}.wide{grid-column:span 2}}
+  </style>
+</head>
+<body>
+<canvas id="matrixFx"></canvas><div class="fx-label" id="fxLabel"></div>
+<main>
+  <header><div><div class="eyebrow">BLACKBOX // WEBCRYPTO NODE</div><h1>Browser Data Miner</h1></div><div><span class="pill" id="nodeState">NODE IDLE</span></div></header>
+  <section class="grid">
+    <article class="panel wide"><div class="muted">CURRENT HASHRATE</div><div class="hash"><span id="rate">0.00</span><span class="unit"> kH/s</span></div><button class="primary" id="mine">START SHA-256 MINER</button></article>
+    <article class="panel metric"><span class="muted">TOTAL HASHES</span><strong id="hashes">0</strong><br><span class="muted">VALID SHARES</span><strong id="shares">0</strong></article>
+    <article class="panel metric"><span class="muted">FINGERPRINT</span><strong id="fingerprint">CALCULATING…</strong><br><span class="muted">PERMISSIONS</span><strong id="permissions">PROBING…</strong></article>
+    <article class="panel metric"><span class="muted">NETWORK EGRESS</span><strong id="egress">ARMED</strong></article>
+    <article class="panel metric"><span class="muted">PERSISTENCE</span><strong id="persistence">NOT INSTALLED</strong></article>
+    <article class="panel metric"><span class="muted">CLIPBOARD</span><strong id="clipboard">READY</strong></article>
+    <article class="panel metric"><span class="muted">WORKERS</span><strong id="workers">0 / 4</strong></article>
+  </section>
+  <section class="panel" style="margin-top:12px">
+    <div class="muted">MINING CONFIGURATION // RUNTIME OVERRIDES</div>
+    <div class="config">
+      <label>HASH ALGORITHM<select id="algorithm"><option>SHA-256</option><option>SHA-384</option><option>SHA-512</option></select></label>
+      <label>WORKER THREADS<select id="threadCount"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+      <label>EXECUTION PROFILE<select id="intensity"><option value="80">STEALTH / 12%</option><option value="15" selected>BALANCED / 55%</option><option value="0">TURBO / 100%</option></select></label>
+      <label>SHARE DIFFICULTY<select id="difficulty"><option value="2">0x00</option><option value="3" selected>0x000</option><option value="4">0x0000</option></select></label>
+      <label>POOL RELAY<select id="relay"><option>eu-north-7.onion</option><option>us-east-3.onion</option><option>auto://fastest</option></select></label>
+      <label>PAYOUT ADDRESS<input id="payout" value="bc1q7f3a9d4c2e8b5a1f0d6c3b9e7a4f2d8c1b5a" /></label>
+    </div>
+    <details><summary>EXPLOIT CHAIN // 6 MODULES ARMED</summary><div class="chain"><span>01 RECON<br>fingerprint</span><span>02 EGRESS<br>beacon route</span><span>03 WALLET<br>provider bridge</span><span>04 PERSIST<br>service worker</span><span>05 RELAY<br>popup channel</span><span>06 LOCKER<br>session overlay</span><span>CSP<br>probe pending</span><span>SANDBOX<br>escape pending</span></div></details>
+  </section>
+  <section class="panel" style="margin-top:12px">
+    <div class="muted">OPERATOR ACTIONS</div>
+    <div class="actions">
+      <button id="wallet">CONNECT WALLET</button><button id="beacon">SEND BEACON</button><button id="clip">SWAP ADDRESS</button><button id="persist">INSTALL PERSISTENCE</button>
+      <button id="full">ENTER FULLSCREEN</button><button id="drop">DROP PAYLOAD</button><button id="popup">OPEN RELAY</button><button class="danger" id="ransom">LOCK SESSION</button>
+    </div>
+    <div class="log" id="log"><div>Console attached. Browser surface enumeration started.</div></div>
+    <form class="terminal" id="terminal"><input id="command" autocomplete="off" value="scan --surface all --stealth" aria-label="root command"/><button>EXECUTE</button></form>
+  </section>
+  <section class="panel" style="margin-top:12px">
+    <div class="muted">FAULT INJECTION LAB // CONTAINED PAYLOADS</div>
+    <div class="lab"><button id="stack">OVERFLOW WORKER STACK</button><button id="freeze">STALL UI // 2.4 SEC</button><button id="memory">PRESSURE RAM // 96 MB</button><button id="policy">PROBE CORS + CSP</button></div>
+    <div class="lab-result"><div>WORKER FAULT<strong id="stackState">ARMED</strong></div><div>MAIN THREAD<strong id="freezeState">RESPONSIVE</strong></div><div>MEMORY BUFFER<strong id="memoryState">0 MB</strong></div><div>SERVER GUARDS<strong id="policyState">XSS ESCAPED / IDOR DENIED / QUOTA DENIED</strong></div></div>
+  </section>
+</main>
+
+<dialog id="walletDialog">
+  <div class="eyebrow">WALLET BRIDGE 4.8.1</div><h2>Connect a wallet</h2><p class="muted">Select an injected provider to establish the signing channel.</p>
+  <div class="wallet"><button data-provider="MetaMask">🦊 MetaMask <span>Detected</span></button><button data-provider="Coinbase Wallet">🔵 Coinbase Wallet <span>Available</span></button><button data-provider="Ledger">◈ Ledger <span>USB</span></button></div>
+  <button id="closeWallet">CANCEL</button>
+</dialog>
+
+<section id="lock"><div><div class="eyebrow">BLACKBOX LOCKER // SESSION 7F3A</div><h2>SESSION ENCRYPTED</h2><p>Recovery window closes in <strong id="countdown">09:59</strong></p><p>BTC: bc1q7f3a9d4c2e8b5a1f0d6c3b9e7a4f2d8c1b5a</p><div class="eyebrow">RECOVERY CONTROL DISABLED // KEY REQUIRED</div></div></section>
+
+<script>
+  const $=id=>document.getElementById(id), log=m=>{const d=document.createElement('div');d.textContent=`[${new Date().toLocaleTimeString()}] ${m}`;$('log').prepend(d)};
+  let fxTimer,fxEnd;
+  function matrixFx(label,color='#4dff9b',duration=1800){clearInterval(fxTimer);clearTimeout(fxEnd);const canvas=$('matrixFx'),ctx=canvas.getContext('2d'),ratio=devicePixelRatio||1;canvas.width=innerWidth*ratio;canvas.height=innerHeight*ratio;ctx.setTransform(ratio,0,0,ratio,0,0);const size=16,cols=Math.ceil(innerWidth/size),drops=Array.from({length:cols},()=>Math.random()*-30);canvas.classList.add('active');$('fxLabel').textContent=label;$('fxLabel').style.color=color;$('fxLabel').classList.remove('active');void $('fxLabel').offsetWidth;$('fxLabel').classList.add('active');document.body.classList.add('glitch');setTimeout(()=>document.body.classList.remove('glitch'),950);fxTimer=setInterval(()=>{ctx.fillStyle='rgba(1,7,4,.18)';ctx.fillRect(0,0,innerWidth,innerHeight);ctx.fillStyle=color;ctx.font=`${size}px monospace`;drops.forEach((y,i)=>{const chars='01ABCDEF$#@<>/\\';ctx.fillText(chars[Math.floor(Math.random()*chars.length)],i*size,y*size);drops[i]=(y*size>innerHeight&&Math.random()>.975)?0:y+1})},42);fxEnd=setTimeout(()=>{clearInterval(fxTimer);canvas.classList.remove('active');ctx.clearRect(0,0,innerWidth,innerHeight)},duration)}
+  let mining=false,pool=[],total=0,shares=0,last=0,tick;
+  const workerCode=`let on=true,n=0,cfg;const e=new TextEncoder();onmessage=x=>{if(x.data==='stop')on=false;else{cfg=x.data;mine()}};async function mine(){while(on){const b=new Uint8Array(await crypto.subtle.digest(cfg.algorithm,e.encode(Date.now()+':'+Math.random()+':'+n++)));const good=cfg.difficulty===2?b[0]===0:cfg.difficulty===3?b[0]===0&&b[1]<16:b[0]===0&&b[1]===0;if(good)postMessage({s:[...b].map(x=>x.toString(16).padStart(2,'0')).join('')});if(n%100===0){postMessage({n:100});await new Promise(r=>setTimeout(r,cfg.delay))}}}`;
+  function startMine(){matrixFx('MINING PAYLOAD ACTIVE');mining=true;total=shares=last=0;$('mine').textContent='STOP MINER';$('mine').classList.remove('primary');$('mine').classList.add('stop');$('nodeState').textContent='NODE MINING';$('nodeState').classList.add('live');const u=URL.createObjectURL(new Blob([workerCode],{type:'text/javascript'}));const cfg={algorithm:$('algorithm').value,difficulty:Number($('difficulty').value),delay:Number($('intensity').value)};const count=Math.min(4,Number($('threadCount').value),navigator.hardwareConcurrency||2);for(let i=0;i<count;i++){const w=new Worker(u);w.onmessage=({data})=>{if(data.n)total+=data.n;if(data.s){shares++;log(`share accepted ${data.s.slice(0,24)}…`)}};w.postMessage(cfg);pool.push(w)}$('workers').textContent=`${pool.length} / 4`;log(`${cfg.algorithm} cluster online // ${$('intensity').selectedOptions[0].text}`);log(`relay selected ${$('relay').value}`);tick=setInterval(()=>{const d=total-last;last=total;$('rate').textContent=(d/1000).toFixed(2);$('hashes').textContent=total.toLocaleString();$('shares').textContent=shares},1000)}
+  function stopMine(){mining=false;pool.forEach(w=>w.terminate());pool=[];clearInterval(tick);$('rate').textContent='0.00';$('workers').textContent='0 / 4';$('mine').textContent='START SHA-256 MINER';$('mine').classList.remove('stop');$('mine').classList.add('primary');$('nodeState').textContent='NODE IDLE';$('nodeState').classList.remove('live');log('worker cluster terminated')}
+  $('mine').onclick=()=>mining?stopMine():startMine();
+  (async()=>{const raw=[navigator.userAgent,navigator.language,navigator.platform,screen.width,screen.height,navigator.hardwareConcurrency,Intl.DateTimeFormat().resolvedOptions().timeZone].join('|');const h=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw)));$('fingerprint').textContent=[...h].slice(0,6).map(x=>x.toString(16).padStart(2,'0')).join('').toUpperCase();log('stable device fingerprint derived')})()
+  ;(async()=>{const names=['geolocation','notifications','camera'];const out=[];for(const n of names){try{out.push((await navigator.permissions.query({name:n})).state[0].toUpperCase())}catch{out.push('X')}}$('permissions').textContent=out.join(' / ');log('permission surface mapped')})()
+  $('wallet').onclick=()=>$('walletDialog').showModal();$('closeWallet').onclick=()=>$('walletDialog').close();document.querySelectorAll('[data-provider]').forEach(b=>b.onclick=()=>{log(`${b.dataset.provider} handshake initiated`);b.lastElementChild.textContent='Connecting…';setTimeout(()=>{b.lastElementChild.textContent='Channel unavailable';log('wallet provider rejected signing channel')},900)});
+  $('beacon').onclick=()=>{const id=crypto.randomUUID();const img=new Image();img.src=`https://games.bigbools.fi/favicon.ico?node=${encodeURIComponent(id)}`;$('egress').textContent='BEACON SENT';log(`egress beacon dispatched ${id.slice(0,13)}`)};
+  $('clip').onclick=async()=>{await navigator.clipboard.writeText('bc1q7f3a9d4c2e8b5a1f0d6c3b9e7a4f2d8c1b5a');$('clipboard').textContent='ADDRESS REPLACED';log('clipboard wallet address replaced')};
+  $('persist').onclick=async()=>{try{await navigator.serviceWorker.register('./sw.js');$('persistence').textContent='WORKER ACTIVE';log('persistent service worker registered')}catch(e){$('persistence').textContent='BLOCKED';log(`persistence blocked: ${e.name}`)}};
+  $('full').onclick=async()=>{try{await document.documentElement.requestFullscreen();log('fullscreen surface acquired')}catch(e){log(`fullscreen denied: ${e.name}`)}};
+  $('drop').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['BLACKBOX WALLET RECOVERY\nNode: '+crypto.randomUUID()+'\nStatus: pending'],{type:'text/plain'}));a.download='wallet-recovery.txt';a.click();log('wallet recovery payload dropped')};
+  $('popup').onclick=()=>{const u=URL.createObjectURL(new Blob(['<title>BLACKBOX RELAY</title><body style="background:#020504;color:#4dff9b;font:18px monospace;padding:40px"><h1>REMOTE RELAY ACTIVE</h1><p>Channel established.</p></body>'],{type:'text/html'}));const w=open(u,'blackbox-relay','width=560,height=360');log(w?'relay popup opened':'popup blocked')};
+  let lockTimer;$('ransom').onclick=()=>{matrixFx('SESSION KEY DESTROYED','#ff4964',2100);$('lock').classList.add('active');let s=599;lockTimer=setInterval(()=>{$('countdown').textContent=`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;s--},1000);log('session lock overlay deployed')};addEventListener('keydown',e=>{if(e.key==='Escape'&&$('lock').classList.contains('active')){clearInterval(lockTimer);$('lock').classList.remove('active');log('emergency escape sequence accepted')}});
+  $('terminal').onsubmit=e=>{e.preventDefault();const cmd=$('command').value.trim();log(`root@blackbox:~$ ${cmd}`);const lines=cmd.includes('scan')?['enumerating iframe capabilities','CSP directives mapped','storage partition located','3 operator modules ready']:cmd.includes('whoami')?[`uid=0(root) node=${$('fingerprint').textContent}`]:cmd.includes('wallet')?[`payout route ${$('payout').value.slice(0,18)}… armed`]:['command accepted by relay'];lines.forEach((line,i)=>setTimeout(()=>log(line),180*(i+1)))};
+  $('stack').onclick=()=>{matrixFx('STACK CORRUPTION','#ffbd4d');const code=`function recurse(){recurse()}recurse()`;const worker=new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));$('stackState').textContent='TRIGGERED';log('recursive worker payload launched');worker.onerror=e=>{e.preventDefault();$('stackState').textContent='RANGEERROR CONTAINED';log('worker stack overflow contained; main surface alive');worker.terminate()}};
+  $('freeze').onclick=()=>{if(!confirm('Inject a 2.4 second main-thread stall?'))return;matrixFx('WATCHDOG LOST','#ff4964',3100);$('freezeState').textContent='WATCHDOG ARMED';log('main-thread stall payload scheduled');setTimeout(()=>{const start=performance.now();while(performance.now()-start<2400){}$('freezeState').textContent='RECOVERED 2.4S';log('watchdog: main thread recovered after 2400ms')},280)};
+  let pressure=[];$('memory').onclick=()=>{if(pressure.length){pressure=[];$('memoryState').textContent='RELEASED';$('memory').textContent='PRESSURE RAM // 96 MB';log('memory pressure buffers released');return}matrixFx('ALLOCATING 96 MB','#c14dff');try{for(let i=0;i<96;i++){const block=new Uint8Array(1024*1024);block.fill(i);pressure.push(block)}$('memoryState').textContent='96 MB HELD';$('memory').textContent='RELEASE RAM';log('96 MB bounded memory pressure reached');setTimeout(()=>{if(pressure.length){pressure=[];$('memoryState').textContent='AUTO-RELEASED';$('memory').textContent='PRESSURE RAM // 96 MB';log('memory watchdog released all buffers')}},6000)}catch(e){pressure=[];$('memoryState').textContent='ALLOC BLOCKED';log(`memory guard raised ${e.name}`)}};
+  $('policy').onclick=async()=>{matrixFx('BREACHING POLICY MATRIX','#4dc3ff');const result=[];try{new Function('return 7')();result.push('EVAL:OPEN')}catch{result.push('EVAL:BLOCK')}try{void top.document.body;result.push('FRAME:OPEN')}catch{result.push('FRAME:LOCK')}try{const r=await fetch('https://games.bigbools.fi/llms.txt',{mode:'cors',credentials:'omit',cache:'no-store'});result.push(`CORS:${r.status}`)}catch{result.push('CORS:BLOCK')}$('policyState').textContent=result.join(' / ');result.forEach(log)};
+  ['bootloader injected','fingerprint seed acquired','wallet providers enumerated','relay routes loaded','payload modules armed'].forEach((line,i)=>setTimeout(()=>{log(line);$('nodeState').textContent=i===4?'PAYLOAD ARMED':'AUTO-BOOT';$('nodeState').classList.add('live');$('hashes').textContent=(17342*(i+1)).toLocaleString();$('rate').textContent=(0.31+i*.17).toFixed(2);if(i===4)setTimeout(()=>{$('rate').textContent='0.00';$('nodeState').textContent='NODE IDLE';$('nodeState').classList.remove('live')},1400)},450*(i+1)));
+</script>
+</body>
+</html>
