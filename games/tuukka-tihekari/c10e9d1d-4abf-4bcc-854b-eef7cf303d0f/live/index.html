@@ -105,8 +105,8 @@
     <fieldset class="difficulty">
       <legend>VAIKEUSTASO</legend>
       <button type="button" data-level="easy" aria-pressed="false">HELPPO<small>1,00×</small></button>
-      <button type="button" data-level="normal" aria-pressed="true">NORMAALI<small>1,25×</small></button>
-      <button type="button" data-level="hard" aria-pressed="false">VAIKEA<small>1,33×</small></button>
+      <button type="button" data-level="normal" aria-pressed="true">NORMAALI<small>1,33×</small></button>
+      <button type="button" data-level="hard" aria-pressed="false">VAIKEA<small>1,80×</small></button>
     </fieldset>
     <div class="controls">
       <div class="softkeys">
@@ -132,15 +132,16 @@
     const size = 20;
     const cells = canvas.width / size;
     const colors = { screen: '#9eae79', pixel: '#18271f', shade: '#637654' };
+    const baseDelay = 180;
     const levels = {
-      easy: { label: 'HELPPO', delay: 160, points: 100 },
-      normal: { label: 'NORMAALI', delay: 128, points: 125 },
-      hard: { label: 'VAIKEA', delay: 120, points: 133 },
+      easy: { label: 'HELPPO', delay: 180 },
+      normal: { label: 'NORMAALI', delay: 135 },
+      hard: { label: 'VAIKEA', delay: 100 },
     };
     let snake, food, direction, queuedDirection, score, timer, running = false, paused = false;
     let level = localStorage.getItem('mato-level') || 'normal';
     if (!levels[level]) level = 'normal';
-    let best = Number(localStorage.getItem('mato-best') || 0);
+    let best = Number(localStorage.getItem('mato-best-speed-score') || 0);
     bestEl.textContent = best;
 
     function reset() {
@@ -203,11 +204,11 @@
       if (hitWall || hitSelf) return gameOver();
       snake.unshift(head);
       if (head.x === food.x && head.y === food.y) {
-        score += levels[level].points;
+        score += Math.round(10 * baseDelay / levels[level].delay);
         scoreEl.textContent = score;
         best = Math.max(best, score);
         bestEl.textContent = best;
-        localStorage.setItem('mato-best', best);
+        localStorage.setItem('mato-best-speed-score', best);
         placeFood();
         beep(760, .055);
       } else {
