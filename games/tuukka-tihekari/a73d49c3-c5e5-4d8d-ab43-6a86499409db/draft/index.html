@@ -327,7 +327,14 @@
   }
 
   function currentRoom() { return rooms.find(room=>room.id===currentRoomId)||rooms[0]; }
-  function roomPassable(point) { return Boolean(roomFor(point)||doors.some(door=>door.open&&same(door,point))); }
+  function verticalDoor(door,roomList=rooms) {
+    if(door.dir)return door.dir==='left'||door.dir==='right';
+    return roomList.some(room=>door.x===room.x||door.x===room.x+room.w-1);
+  }
+  function doorCells(door) {
+    return [-1,0,1].map(offset=>verticalDoor(door)?{x:door.x,y:door.y+offset}:{x:door.x+offset,y:door.y});
+  }
+  function roomPassable(point) { return Boolean(roomFor(point)||doors.some(door=>door.open&&doorCells(door).some(cell=>same(cell,point)))); }
 
   function unlockDoors() {
     doors.forEach(door=>{
@@ -412,7 +419,7 @@
     let head = {x:snake[0].x+direction.x,y:snake[0].y+direction.y};
     if (mode==='endless') {
       unlockDoors();
-      const crossedDoor=doors.find(door=>door.open&&same(door,head));
+      const crossedDoor=doors.find(door=>door.open&&doorCells(door).some(cell=>same(cell,head)));
       if (crossedDoor&&!crossedDoor.generated) generateRoom(crossedDoor);
     }
     if (portalCooldown) portalCooldown--;
@@ -533,7 +540,7 @@
   function saveReplay() {
     if (!runFrames.length) return;
     const list=loadReplays();
-    list.unshift({score,duration:Math.floor(elapsedSeconds()),frames:runFrames,rooms:rooms.map(room=>({...room})),doors:doors.map(({x,y,open,threshold})=>({x,y,open,threshold}))});
+    list.unshift({score,duration:Math.floor(elapsedSeconds()),frames:runFrames,rooms:rooms.map(room=>({...room})),doors:doors.map(({x,y,dir,open,threshold})=>({x,y,dir,open,threshold}))});
     try { localStorage.setItem(keyForReplays(),JSON.stringify(list.slice(0,3))); } catch { localStorage.removeItem(keyForReplays()); }
     renderReplayButtons();
   }
@@ -593,10 +600,23 @@
 
   function drawRoomWalls(roomList,doorList,cam) {
     ctx.strokeStyle='#8b8d91';ctx.lineWidth=5;
-    roomList.forEach(room=>{const p=worldToScreen(room,cam);ctx.strokeRect(p.x,p.y,room.w*CELL,room.h*CELL)});
+    roomList.forEach(room=>{const p=worldToScreen(room,cam);ctx.strokeRect(p.x,p.y,(room.w-1)*CELL,(room.h-1)*CELL)});
     doorList.forEach(door=>{
-      const p=worldToScreen(door,cam);ctx.fillStyle=door.open?'#55a174':'#e5b94f';ctx.fillRect(p.x+4,p.y+4,CELL-8,CELL-8);
-      if(!door.open){ctx.fillStyle='#111214';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText(door.threshold,p.x+CELL/2,p.y+CELL/2+4)}
+      const p=worldToScreen(door,cam),vertical=verticalDoor(door,roomList);
+      ctx.fillStyle='#111214';
+      if(vertical)ctx.fillRect(p.x-5,p.y-CELL+2,10,CELL*3-4);
+      else ctx.fillRect(p.x-CELL+2,p.y-5,CELL*3-4,10);
+      if(door.open){
+        ctx.fillStyle='#55a17422';ctx.strokeStyle='#55a17488';ctx.lineWidth=2;
+        if(vertical){ctx.fillRect(p.x-CELL/2,p.y-CELL,CELL,CELL*3);ctx.strokeRect(p.x-CELL/2,p.y-CELL,CELL,CELL*3)}
+        else{ctx.fillRect(p.x-CELL,p.y-CELL/2,CELL*3,CELL);ctx.strokeRect(p.x-CELL,p.y-CELL/2,CELL*3,CELL)}
+      }else{
+        ctx.fillStyle='#e5b94f';
+        if(vertical)ctx.fillRect(p.x-4,p.y-CELL,8,CELL*3);
+        else ctx.fillRect(p.x-CELL,p.y-4,CELL*3,8);
+        ctx.fillStyle='#e5b94f';ctx.font='bold 11px ui-monospace, monospace';ctx.textAlign='left';
+        ctx.fillText(door.threshold,p.x+10,p.y+4);
+      }
     });
   }
 
