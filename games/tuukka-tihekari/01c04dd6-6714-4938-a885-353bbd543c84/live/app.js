@@ -11,6 +11,8 @@
   const controlList = document.querySelector('#controlList');
   const loadingHint = document.querySelector('#loadingHint');
   const driveWarmup = document.querySelector('#driveWarmup');
+  const warmupBar = document.querySelector('#warmupBar');
+  const warmupCountdown = document.querySelector('#warmupCountdown');
   let started = false;
   let bootGeneration = 0;
   let bootTimer = 0;
@@ -19,6 +21,7 @@
   let gameStartedAt = 0;
   let warmupShown = false;
   let warmupTimer = 0;
+  let warmupTicker = 0;
   let launchPadDown = false;
   const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/241d02c756060922d691b8613e3e4ae6bf1524d3/';
   const embeddedRuntime = Boolean(window.chrome?.webview) || /Electron|Codex|OpenAI/i.test(navigator.userAgent);
@@ -59,7 +62,25 @@
     warmupShown = true;
     driveWarmup.hidden = false;
     if (warmupTimer) window.clearTimeout(warmupTimer);
-    warmupTimer = window.setTimeout(() => { driveWarmup.hidden = true; }, 28000);
+    if (warmupTicker) window.clearInterval(warmupTicker);
+    const duration = 32000;
+    const startedAt = Date.now();
+    const update = () => {
+      const elapsed = Math.min(duration, Date.now() - startedAt);
+      const remaining = Math.max(0, Math.ceil((duration - elapsed) / 1000));
+      warmupBar.style.width = `${Math.round(elapsed / duration * 100)}%`;
+      warmupCountdown.textContent = remaining
+        ? `Valmistellaan ajoa · noin ${remaining} s`
+        : 'Ajo on valmis';
+    };
+    update();
+    warmupTicker = window.setInterval(update, 1000);
+    warmupTimer = window.setTimeout(() => {
+      window.clearInterval(warmupTicker);
+      warmupTicker = 0;
+      update();
+      driveWarmup.hidden = true;
+    }, duration);
   }
 
   function showReadyTransition(generation) {
@@ -248,7 +269,7 @@
 
   function watchLaunchButton() {
     const down = Array.from(navigator.getGamepads?.() || []).some(pad =>
-      Boolean(pad?.buttons?.[0]?.pressed || pad?.buttons?.[9]?.pressed));
+      Boolean(pad?.buttons?.some(button => button.pressed)));
     if (down && !launchPadDown) showDriveWarmup();
     launchPadDown = down;
     window.requestAnimationFrame(watchLaunchButton);
@@ -263,9 +284,9 @@
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key.toLowerCase() === 'x') showDriveWarmup();
+    if (['enter','x','z','a'].includes(event.key.toLowerCase())) showDriveWarmup();
     if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(event.key)) return;
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
     event.preventDefault();
-  }, { passive:false });
+  }, { passive:false, capture:true });
 })();
