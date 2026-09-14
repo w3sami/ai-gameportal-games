@@ -84,7 +84,7 @@
     "id": "a73d49c3-c5e5-4d8d-ab43-6a86499409db",
     "slug": "matopeli-next-gen",
     "title": "Matopeli: Next Gen",
-    "description": "Moderni matopeli kolmella pelimuodolla: kombot, erikoisruoat, liikkuva riskialue, portit, esteet, viholliset, kilpi ja oman ennätyksen haamu.",
+    "description": "Retro-sunset-henkinen moderni matopeli kolmella pelimuodolla: kombot, erikoisruoat, liikkuva riskialue, portit, esteet, viholliset, kilpi ja oman ennätyksen haamu.",
     "author": "Tuukka Tihekari",
     "tags": [
       "snake",
@@ -98,8 +98,8 @@
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 29413,
+    "sizeBytes": 29520,
     "createdAt": "2026-09-14T13:21:19.291Z",
-    "updatedAt": "2026-09-14T13:21:19.952Z"
+    "updatedAt": "2026-09-14T13:26:55.693Z"
   }
 ]
