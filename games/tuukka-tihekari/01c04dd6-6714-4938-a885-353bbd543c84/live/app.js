@@ -22,7 +22,10 @@
     reicast_hle_bios: 'enabled',
     reicast_threaded_rendering: 'disabled',
     reicast_synchronous_rendering: 'disabled',
-    reicast_internal_resolution: '640x480',
+    // The city scene is considerably heavier than the title screen.  Flycast's
+    // WebGL renderer is most reliable across Chromium/Edge at native Dreamcast
+    // scale; CSS still expands the canvas to the available player area.
+    reicast_internal_resolution: '320x240',
     reicast_enable_dsp: 'disabled',
     reicast_mipmapping: 'disabled',
     reicast_anisotropic_filtering: 'off',
@@ -30,7 +33,7 @@
     reicast_enable_purupuru: 'disabled',
     reicast_alpha_sorting: 'per-strip (fast, least accurate)',
     reicast_delay_frame_swapping: 'disabled',
-    reicast_frame_skipping: 'disabled',
+    reicast_frame_skipping: '1',
     reicast_framerate: 'normal'
   };
 
