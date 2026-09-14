@@ -123,5 +123,29 @@
     "sizeBytes": 522383,
     "createdAt": "2026-09-14T18:47:51.371Z",
     "updatedAt": "2026-09-14T18:51:10.090Z"
+  },
+  {
+    "id": "01c04dd6-6714-4938-a885-353bbd543c84",
+    "slug": "drift-los-angeles",
+    "title": "Drift Los Angeles",
+    "description": "A complete open-source Dreamcast homebrew drift racer by Rich Stokes, running as the original SH-4 ELF through Flycast WASM. Explore four Los Angeles-inspired districts, chain high-angle drifts, dodge traffic and chase score multipliers.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "dreamcast",
+      "racing",
+      "drifting",
+      "open-world",
+      "homebrew",
+      "retro",
+      "emulation",
+      "open-source"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T19:07:50.470Z",
+    "updatedAt": "2026-09-14T19:07:50.470Z"
   }
 ]
