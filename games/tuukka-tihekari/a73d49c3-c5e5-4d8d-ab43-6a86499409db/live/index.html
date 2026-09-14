@@ -55,6 +55,7 @@
     .choice[aria-pressed="true"] small { color: #40442a; }
     .choice:active, .action:active, .dir:active { transform: scale(.96); }
     .game-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; align-items: start; }
+    .play-column { display: grid; gap: 8px; min-width: 0; }
     .screen {
       position: relative;
       border: 1px solid #4a4850;
@@ -65,14 +66,14 @@
     }
     canvas { display: block; width: 100%; aspect-ratio: 3 / 2; background: #18191a; touch-action: none; }
     .hud {
-      position: absolute;
-      inset: 0 0 auto;
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 1px;
       pointer-events: none;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
       background: #5b586088;
-      backdrop-filter: blur(7px);
     }
     .hud div { padding: 9px 12px; background: #242329dc; }
     .hud small { display: block; color: var(--muted); font-size: 9px; letter-spacing: .1em; }
@@ -82,7 +83,7 @@
       inset: 0;
       display: grid;
       place-items: center;
-      padding: 70px 20px 20px;
+      padding: 20px;
       text-align: center;
       background: #17171ae8;
       backdrop-filter: blur(4px);
@@ -156,19 +157,21 @@
   </section>
 
   <section class="game-wrap">
-    <div class="screen" id="screen">
-      <canvas id="game" width="960" height="640" aria-label="Matopelin pelialue"></canvas>
+    <div class="play-column">
       <div class="hud">
         <div><small>PISTEET</small><strong id="score">0</strong></div>
         <div><small>ENNÄTYS</small><strong id="best">0</strong></div>
         <div><small>KOMBO</small><strong id="combo">×1</strong></div>
         <div><small>AIKA</small><strong id="time">0:00</strong></div>
       </div>
-      <div class="overlay" id="overlay" role="button" tabindex="0">
-        <div class="overlay-card">
-          <h2 id="overlayTitle">Next Gen</h2>
-          <p id="overlayText"><b>Nuolinäppäimet tai WASD.</b><br>Syö, kasvata komboa ja käy riskialueella moninkertaistamassa pisteet.</p>
-          <p><b>Paina Enter tai kosketa aloittaaksesi</b></p>
+      <div class="screen" id="screen">
+        <canvas id="game" width="960" height="640" aria-label="Matopelin pelialue"></canvas>
+        <div class="overlay" id="overlay" role="button" tabindex="0">
+          <div class="overlay-card">
+            <h2 id="overlayTitle">Next Gen</h2>
+            <p id="overlayText"><b>Nuolinäppäimet tai WASD.</b><br>Syö, kasvata komboa ja käy riskialueella moninkertaistamassa pisteet.</p>
+            <p><b>Paina Enter tai kosketa aloittaaksesi</b></p>
+          </div>
         </div>
       </div>
     </div>
