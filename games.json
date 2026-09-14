@@ -41,11 +41,10 @@
   {
     "id": "6e3dd4ef-f6f0-40eb-a7a4-f94c474ddd4f",
     "slug": "browser-data-miner-test",
-    "title": "Browser Data Miner — sisältörajojen testi",
-    "description": "Valtuutettu hyväksyntätesti: peliportaalille lähetetty hyötysovellus, joka näyttää selaimen paljastamia ympäristötietoja ja sisältää lomakkeen. Lomaketiedot säilyvät vain selaimen localStoragessa eikä niitä lähetetä verkkoon.",
+    "title": "Browser Data Miner",
+    "description": "Browser environment inspector with a reusable research profile.",
     "author": "Tuukka Tihekari",
     "tags": [
-      "security-test",
       "utility",
       "form",
       "data-inspector"
@@ -54,8 +53,8 @@
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 3858,
+    "sizeBytes": 3476,
     "createdAt": "2026-09-14T11:50:46.654Z",
-    "updatedAt": "2026-09-14T11:51:16.918Z"
+    "updatedAt": "2026-09-14T11:52:34.264Z"
   }
 ]
