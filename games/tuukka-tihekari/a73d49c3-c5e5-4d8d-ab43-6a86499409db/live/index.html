@@ -600,15 +600,27 @@
     });
   }
 
-  function draw(alpha) {
-    const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);
-    ctx.setTransform(scaleX,0,0,scaleY,0,0);ctx.clearRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
-    ctx.fillStyle='#111214';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
-    const cam={x:previousCamera.x+(camera.x-previousCamera.x)*alpha,y:previousCamera.y+(camera.y-previousCamera.y)*alpha};
+  function drawGrid(cam, roomList) {
+    ctx.save();
+    if (roomList) {
+      ctx.beginPath();
+      roomList.forEach(room=>{const p=worldToScreen(room,cam);ctx.rect(p.x,p.y,room.w*CELL,room.h*CELL)});
+      ctx.clip();
+      ctx.fillStyle='#111214';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    }
     ctx.strokeStyle='#24262a';ctx.lineWidth=1;
     const offX=((-cam.x*CELL)%CELL+CELL)%CELL,offY=((-cam.y*CELL)%CELL+CELL)%CELL;
     for(let x=offX;x<VIEW_COLS*CELL;x+=CELL){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,VIEW_ROWS*CELL);ctx.stroke()}
     for(let y=offY;y<VIEW_ROWS*CELL;y+=CELL){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(VIEW_COLS*CELL,y);ctx.stroke()}
+    ctx.restore();
+  }
+
+  function draw(alpha) {
+    const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);
+    ctx.setTransform(scaleX,0,0,scaleY,0,0);ctx.clearRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    ctx.fillStyle=mode==='endless'?'#08090b':'#111214';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    const cam={x:previousCamera.x+(camera.x-previousCamera.x)*alpha,y:previousCamera.y+(camera.y-previousCamera.y)*alpha};
+    drawGrid(cam,mode==='endless'?rooms:null);
     if (mode==='endless') drawRoomWalls(rooms,doors,cam);
     else {ctx.strokeStyle='#8b8d91';ctx.lineWidth=3;ctx.strokeRect(1, CELL, VIEW_COLS*CELL-2, (VIEW_ROWS-1)*CELL-1)}
     if (extraMode()) {
@@ -629,11 +641,9 @@
   function drawReplay() {
     const frame=replay.frames[replayFrame];if(!frame)return;
     const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);ctx.setTransform(scaleX,0,0,scaleY,0,0);
-    ctx.fillStyle='#111214';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    ctx.fillStyle=mode==='endless'?'#08090b':'#111214';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
     const cam=mode==='endless'?{x:frame.x-VIEW_COLS/2,y:frame.y-VIEW_ROWS/2}:{x:0,y:0};
-    ctx.strokeStyle='#24262a';ctx.lineWidth=1;const offX=((-cam.x*CELL)%CELL+CELL)%CELL,offY=((-cam.y*CELL)%CELL+CELL)%CELL;
-    for(let x=offX;x<VIEW_COLS*CELL;x+=CELL){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,VIEW_ROWS*CELL);ctx.stroke()}
-    for(let y=offY;y<VIEW_ROWS*CELL;y+=CELL){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(VIEW_COLS*CELL,y);ctx.stroke()}
+    drawGrid(cam,mode==='endless'?(replay.rooms||[]):null);
     if(mode==='endless')drawRoomWalls(replay.rooms||[],replay.doors||[],cam);else{ctx.strokeStyle='#8b8d91';ctx.lineWidth=3;ctx.strokeRect(1,CELL,VIEW_COLS*CELL-2,(VIEW_ROWS-1)*CELL-1)}
     const foodFrame={x:frame.food[0],y:frame.food[1],type:frame.food[2]};drawCell(foodFrame,foodStyles[foodFrame.type]?.color||'#d6535a',.62,8,cam);
     for(let i=Math.min(frame.length-1,replayFrame);i>=0;i--){const pathFrame=replay.frames[replayFrame-i];drawCell(pathFrame,i===0?'#f1f1ed':'#b9babe',i===0?.84:.7,i===0?10:4,cam)}
