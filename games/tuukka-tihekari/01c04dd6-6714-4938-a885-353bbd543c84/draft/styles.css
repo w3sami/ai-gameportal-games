@@ -34,16 +34,6 @@ h1 span { color:var(--red); }
 .player-shell.ejs-mode .loading[hidden] { display:none; }
 .player-shell.ejs-mode .loading strong { font-size:clamp(18px,2.4vw,28px); }
 .player-shell.ejs-mode .loading span { max-width:520px; color:#eee8e1; }
-.drive-warmup { position:absolute; z-index:7; inset:0; display:grid; place-items:center; padding:20px; background:#02040a9c; backdrop-filter:blur(2px); pointer-events:none; }
-.drive-warmup[hidden] { display:none; }
-.drive-warmup-card { display:flex; flex-direction:column; align-items:center; gap:9px; width:min(520px,100%); padding:24px; border:1px solid #ffffff2b; border-radius:12px; background:#090a10ed; box-shadow:0 20px 70px #000d; text-align:center; }
-.drive-warmup strong { color:#fff; font-size:clamp(18px,2.4vw,27px); }
-.drive-warmup span { max-width:460px; color:#d5d0ca; font-size:13px; line-height:1.45; }
-.drive-warmup small { color:#f2a66f; font-size:12px; font-variant-numeric:tabular-nums; }
-.mini-spinner { width:34px; height:34px; border:3px solid #ffffff24; border-top-color:var(--orange); border-radius:50%; animation:spin .75s linear infinite; }
-.warmup-track { overflow:hidden; width:100%; height:6px; margin-top:4px; border-radius:99px; background:#ffffff1a; }
-.warmup-track i { display:block; width:38%; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--red),var(--orange)); animation:warmup-slide 1.35s ease-in-out infinite; }
-@keyframes warmup-slide { from { transform:translateX(-110%); } to { transform:translateX(290%); } }
 .controls { border:1px solid var(--line); border-radius:14px; padding:18px; background:#111116d9; align-self:start; }
 .panel-head { display:flex; align-items:center; justify-content:space-between; }
 h2 { margin:0 0 12px; font-size:16px; }

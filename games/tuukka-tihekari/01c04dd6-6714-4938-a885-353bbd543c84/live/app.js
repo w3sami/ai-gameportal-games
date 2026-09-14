@@ -10,19 +10,11 @@
   const toggleControls = document.querySelector('#toggleControls');
   const controlList = document.querySelector('#controlList');
   const loadingHint = document.querySelector('#loadingHint');
-  const driveWarmup = document.querySelector('#driveWarmup');
-  const warmupPhase = document.querySelector('#warmupPhase');
-  const warmupCountdown = document.querySelector('#warmupCountdown');
   let started = false;
   let bootGeneration = 0;
   let bootTimer = 0;
   let readyTimer = 0;
   let wasmInstantiateQueue = Promise.resolve();
-  let gameStartedAt = 0;
-  let warmupShown = false;
-  let warmupTicker = 0;
-  let launchPadDown = false;
-  let warmupReference = null;
   const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/241d02c756060922d691b8613e3e4ae6bf1524d3/';
   const embeddedRuntime = Boolean(window.chrome?.webview) || /Electron|Codex|OpenAI/i.test(navigator.userAgent);
   const edgeRuntime = /Edg\//.test(navigator.userAgent) && !embeddedRuntime;
@@ -55,67 +47,6 @@
   function stopBootTicker() {
     if (bootTimer) window.clearInterval(bootTimer);
     bootTimer = 0;
-  }
-
-  function sampleGameFrame() {
-    const source = shell.querySelector('#dreamcast-game canvas');
-    if (!source?.width || !source?.height) return null;
-    try {
-      const probe = sampleGameFrame.probe || (sampleGameFrame.probe = document.createElement('canvas'));
-      probe.width = 32;
-      probe.height = 24;
-      const context = probe.getContext('2d', { willReadFrequently:true });
-      context.drawImage(source, 0, 0, probe.width, probe.height);
-      return context.getImageData(0, 0, probe.width, probe.height).data;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function gameFrameIsReady(frame) {
-    if (!frame || !warmupReference || frame.length !== warmupReference.length) return false;
-    let litPixels = 0;
-    let difference = 0;
-    for (let i = 0; i < frame.length; i += 4) {
-      const luminance = frame[i] * .2126 + frame[i + 1] * .7152 + frame[i + 2] * .0722;
-      if (luminance > 34) litPixels += 1;
-      difference += Math.abs(frame[i] - warmupReference[i]);
-      difference += Math.abs(frame[i + 1] - warmupReference[i + 1]);
-      difference += Math.abs(frame[i + 2] - warmupReference[i + 2]);
-    }
-    const pixels = frame.length / 4;
-    return litPixels / pixels > .16 && difference / (pixels * 3) > 18;
-  }
-
-  function hideDriveWarmup() {
-    if (warmupTicker) window.clearInterval(warmupTicker);
-    warmupTicker = 0;
-    driveWarmup.hidden = true;
-  }
-
-  function showDriveWarmup() {
-    if (!gameStartedAt || warmupShown || Date.now() - gameStartedAt < 8000) return;
-    warmupShown = true;
-    driveWarmup.hidden = false;
-    if (warmupTicker) window.clearInterval(warmupTicker);
-    const startedAt = Date.now();
-    warmupReference = sampleGameFrame();
-    const update = () => {
-      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-      warmupCountdown.textContent = `Kulunut aika · ${elapsed} s`;
-      if (elapsed < 15) {
-        warmupPhase.textContent = 'Flycast siirtyy nimiruudusta peliin. Musta kuva on tässä vaiheessa normaali.';
-      } else if (elapsed < 45) {
-        warmupPhase.textContent = 'Flycast kääntää Dreamcastin SH-4-koodia selaimessa. Pidä välilehti näkyvissä.';
-      } else if (elapsed < 90) {
-        warmupPhase.textContent = 'Ensimmäisen ajon valmistelu jatkuu. Hitaalla koneella tämä voi kestää yli minuutin.';
-      } else {
-        warmupPhase.textContent = 'Käynnistys kestää testattua pidempään. Jos peli ei pian avaudu, valitse Käynnistä uudelleen.';
-      }
-      if (elapsed >= 18 && gameFrameIsReady(sampleGameFrame())) hideDriveWarmup();
-    };
-    update();
-    warmupTicker = window.setInterval(update, 1000);
   }
 
   function showReadyTransition(generation) {
@@ -243,9 +174,6 @@
       stopBootTicker();
       if (readyTimer) window.clearTimeout(readyTimer);
       loading.hidden = true;
-      hideDriveWarmup();
-      gameStartedAt = Date.now();
-      warmupShown = false;
     };
     const script = document.createElement('script');
     script.src = 'https://cdn.emulatorjs.org/4.2.3/data/loader.js';
@@ -302,15 +230,6 @@
   window.addEventListener('gamepaddisconnected', updateGamepad);
   updateGamepad();
 
-  function watchLaunchButton() {
-    const down = Array.from(navigator.getGamepads?.() || []).some(pad =>
-      Boolean(pad?.buttons?.some(button => button.pressed)));
-    if (down && !launchPadDown) showDriveWarmup();
-    launchPadDown = down;
-    window.requestAnimationFrame(watchLaunchButton);
-  }
-  watchLaunchButton();
-
   toggleControls.addEventListener('click', () => {
     const expanded = toggleControls.getAttribute('aria-expanded') === 'true';
     toggleControls.setAttribute('aria-expanded', String(!expanded));
@@ -319,9 +238,8 @@
   });
 
   document.addEventListener('keydown', (event) => {
-    if (['enter','x','z','a'].includes(event.key.toLowerCase())) showDriveWarmup();
     if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(event.key)) return;
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
     event.preventDefault();
-  }, { passive:false, capture:true });
+  }, { passive:false });
 })();
