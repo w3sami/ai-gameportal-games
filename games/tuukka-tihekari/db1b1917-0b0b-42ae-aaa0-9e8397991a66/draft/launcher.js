@@ -185,7 +185,7 @@
 		ui.playLabel.textContent = activeMode === "remote" ? "Join server" : "Start world";
 		reportStatus("Ready to launch", 100, "engine");
 		if (query.get("autostart") === "1")
-			ui.form.requestSubmit();
+			launch();
 	};
 
 	window.addEventListener("luanti:persistence", function(event) {
@@ -359,8 +359,9 @@
 		} catch (_) {}
 	}
 
-	ui.form.addEventListener("submit", function(event) {
-		event.preventDefault();
+	function launch(event) {
+		if (event)
+			event.preventDefault();
 		if (started)
 			return;
 		unlockAudio();
@@ -387,7 +388,10 @@
 			ui.gameShell.hidden = true;
 			showError(String(error.message || error));
 		}
-	});
+	}
+
+	ui.form.addEventListener("submit", launch);
+	ui.play.addEventListener("click", launch);
 
 	function renderServers(payload) {
 		var servers = payload && Array.isArray(payload.list) ? payload.list : [];
