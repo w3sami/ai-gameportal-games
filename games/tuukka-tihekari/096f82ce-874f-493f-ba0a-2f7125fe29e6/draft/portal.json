@@ -1,0 +1,14 @@
+{
+  "title": "Tobu Tobu Girl Deluxe",
+  "slug": "tobu-tobu-girl-deluxe",
+  "genre": "Arcade / Platformer",
+  "description": "A fast-paced Game Boy Color arcade platformer by Tangram Games, running directly in your browser through Game Boy emulation.",
+  "entryFile": "index.html",
+  "controls": {
+    "move": "Arrow Keys",
+    "a": "Z",
+    "b": "X",
+    "start": "Enter",
+    "select": "Shift"
+  }
+}

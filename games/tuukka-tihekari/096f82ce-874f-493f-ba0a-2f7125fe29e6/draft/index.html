@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#121028" />
+    <meta name="description" content="Tobu Tobu Girl Deluxe by Tangram Games, running in a browser with the open-source binjgb emulator." />
+    <title>Tobu Tobu Girl Deluxe</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121028'/%3E%3Cpath d='M7 20c4-1 5-9 9-9s5 8 9 9c-4 0-5 5-9 5s-5-5-9-5Z' fill='%23f8c84a'/%3E%3Ccircle cx='13' cy='17' r='1.5' fill='%23121028'/%3E%3Ccircle cx='19' cy='17' r='1.5' fill='%23121028'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">↟</span>
+          <div>
+            <h1>Tobu Tobu Girl <span>Deluxe</span></h1>
+            <p>Original Game Boy Color edition</p>
+          </div>
+        </div>
+        <div class="status" aria-live="polite">
+          <span class="status-light" id="status-light"></span>
+          <span id="status-text">Loading game…</span>
+        </div>
+      </header>
+
+      <section class="play-layout" aria-label="Game player">
+        <div class="console">
+          <div class="console-topline">
+            <span>DOT MATRIX WITH STEREO SOUND</span>
+            <span class="power"><i id="power-light"></i> POWER</span>
+          </div>
+
+          <div class="screen-bezel" id="screen-bezel">
+            <div class="screen-wrap" id="screen-wrap">
+              <canvas id="screen" width="160" height="144" aria-label="Tobu Tobu Girl Deluxe game screen" tabindex="0"></canvas>
+              <button class="play-overlay" id="play-overlay" type="button">
+                <span class="play-icon" aria-hidden="true">▶</span>
+                <strong>Click to Play</strong>
+                <small>Starts the game and enables sound</small>
+              </button>
+              <div class="loading-panel" id="loading-panel">
+                <span class="pixel-loader" aria-hidden="true"></span>
+                <span>Loading Tobu Tobu Girl Deluxe…</span>
+              </div>
+              <div class="error-panel" id="error-panel" hidden>
+                <strong>Game could not start</strong>
+                <span id="error-message">Try reloading this page.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="touch-controls" id="touch-controls" aria-label="Touch controls">
+            <div class="dpad" aria-label="Directional pad">
+              <button data-button="up" class="up" aria-label="Up">▲</button>
+              <button data-button="left" class="left" aria-label="Left">◀</button>
+              <span class="dpad-center" aria-hidden="true"></span>
+              <button data-button="right" class="right" aria-label="Right">▶</button>
+              <button data-button="down" class="down" aria-label="Down">▼</button>
+            </div>
+            <div class="touch-menu">
+              <button data-button="select" aria-label="Select">SELECT</button>
+              <button data-button="start" aria-label="Start">START</button>
+            </div>
+            <div class="face-buttons">
+              <button data-button="b" aria-label="B button">B</button>
+              <button data-button="a" aria-label="A button">A</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="control-panel">
+          <div class="toolbar" aria-label="Player controls">
+            <button id="pause-button" type="button" disabled aria-label="Pause game"><span aria-hidden="true">Ⅱ</span><em>Pause</em></button>
+            <button id="restart-button" type="button" disabled aria-label="Restart game"><span aria-hidden="true">↻</span><em>Restart</em></button>
+            <button id="mute-button" type="button" disabled aria-label="Mute sound"><span id="mute-icon" aria-hidden="true">◖))</span><em id="mute-label">Mute</em></button>
+            <button id="fullscreen-button" type="button" aria-label="Enter fullscreen"><span aria-hidden="true">⛶</span><em>Fullscreen</em></button>
+          </div>
+
+          <label class="volume-row" for="volume">
+            <span>Volume</span>
+            <input id="volume" type="range" min="0" max="100" value="60" disabled />
+            <output id="volume-output" for="volume">60%</output>
+          </label>
+
+          <div class="controller-status" id="controller-status">
+            <span aria-hidden="true">⌁</span>
+            <div><strong>Gamepad</strong><small id="gamepad-label">Connect a controller</small></div>
+          </div>
+
+          <details class="controls-card" open>
+            <summary>Keyboard controls</summary>
+            <dl>
+              <div><dt><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd>Move</dd></div>
+              <div><dt><kbd>Z</kbd></dt><dd>A button</dd></div>
+              <div><dt><kbd>X</kbd></dt><dd>B button</dd></div>
+              <div><dt><kbd>Enter</kbd></dt><dd>Start</dd></div>
+              <div><dt><kbd>Shift</kbd></dt><dd>Select</dd></div>
+            </dl>
+          </details>
+
+          <details class="credits-card">
+            <summary>Credits &amp; licenses</summary>
+            <div class="credits-content">
+              <p><strong>Tobu Tobu Girl Deluxe</strong><br />Created by Tangram Games<br />Sound and music by potato-tan</p>
+              <p>Original source code: MIT License<br />Game assets: CC BY 4.0</p>
+              <p>Browser emulation by <strong>binjgb v0.1.11</strong>, created by Ben Smith and licensed under MIT.</p>
+              <nav aria-label="Project links">
+                <a href="https://github.com/SimonLarsen/tobutobugirl-dx" target="_blank" rel="noopener">Game source</a>
+                <a href="https://tangramgames.itch.io/tobu-tobu-girl-deluxe" target="_blank" rel="noopener">Official game page</a>
+                <a href="https://github.com/binji/binjgb" target="_blank" rel="noopener">Emulator source</a>
+                <a href="licenses/index.html" target="_blank">Licenses &amp; attribution</a>
+              </nav>
+            </div>
+          </details>
+        </aside>
+      </section>
+
+      <footer>
+        <span>Sharp pixels · Original ROM · Local saves</span>
+        <span>Fan-hosted open-source edition — not affiliated with Nintendo</span>
+      </footer>
+    </main>
+
+    <script src="rom/tobudx-rom.js"></script>
+    <script src="emulator/binjgb.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
