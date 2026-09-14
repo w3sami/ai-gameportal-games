@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#07070a">
   <title>Drift Los Angeles — Dreamcast</title>
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <main class="app">
@@ -14,7 +14,11 @@
         <p class="kicker">SEGA DREAMCAST HOMEBREW · FLYCAST WASM</p>
         <h1>DRIFT <span>LOS ANGELES</span></h1>
       </div>
-      <div class="status" id="gamepadStatus"><i></i> Ohjain: ei yhdistetty</div>
+      <div class="top-actions">
+        <div class="status" id="gamepadStatus"><i></i> Ohjain: ei yhdistetty</div>
+        <a class="open-window" href="./index.html" target="_blank" rel="noopener">Avaa isossa ikkunassa ↗</a>
+        <button class="header-button" id="fullscreenButton" type="button">Koko näyttö</button>
+      </div>
     </header>
 
     <section class="stage" id="stage">
@@ -58,7 +62,6 @@
     </section>
 
     <nav class="actions" aria-label="Pelin toiminnot">
-      <button id="fullscreenButton" type="button">Koko näyttö</button>
       <button id="restartButton" type="button">Käynnistä uudelleen</button>
       <span>Ääni käynnistyy selaimen vaatiman käyttäjäpainalluksen jälkeen.</span>
     </nav>
@@ -89,6 +92,6 @@
     </details>
   </main>
   <script src="vendor/fflate.min.js?v=1"></script>
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>
