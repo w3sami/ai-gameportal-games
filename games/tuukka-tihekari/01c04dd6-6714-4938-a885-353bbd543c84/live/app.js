@@ -15,7 +15,7 @@
   let bootTimer = 0;
   let readyTimer = 0;
   let wasmInstantiateQueue = Promise.resolve();
-  const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/491c8078539360aca15fd6122273653d770527c0/';
+  const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/36cf900324aaf295854f01ba234afe4563470f09/';
 
   const options = {
     reicast_boot_to_bios: 'disabled',
@@ -71,10 +71,10 @@
     bootTimer = window.setInterval(update, 1000);
   }
 
-  async function fetchElf(generation) {
-    const response = await fetch(`${assetBase}drift-los-angeles.elf`, { cache:'force-cache', mode:'cors' });
-    if (!response.ok) throw new Error(`ELF download failed (${response.status})`);
-    const total = Number(response.headers.get('content-length')) || 10260300;
+  async function fetchGame(generation) {
+    const response = await fetch(`${assetBase}drift-los-angeles.cdi`, { cache:'force-cache', mode:'cors' });
+    if (!response.ok) throw new Error(`CDI download failed (${response.status})`);
+    const total = Number(response.headers.get('content-length')) || 10258345;
     const reader = response.body?.getReader();
     if (!reader) return new Uint8Array(await response.arrayBuffer());
     const chunks = [];
@@ -129,7 +129,7 @@
     window.__flycastWasmInstantiationPatched = true;
   }
 
-  async function mountEmulator(elfBytes, generation) {
+  async function mountEmulator(gameBytes, generation) {
     if (generation !== bootGeneration) return;
     if (!window.fflate?.unzipSync) throw new Error('ZIP-purkurin lataus epäonnistui');
     window.__dreamcastUnzipSync = window.fflate.unzipSync;
@@ -142,7 +142,7 @@
     window.EJS_core = 'flycast';
     // EmulatorJS expects a fetchable URL (and uses its extension for core loading).
     // The preceding streamed request warms the browser cache and provides real progress.
-    window.EJS_gameUrl = `${assetBase}drift-los-angeles.elf`;
+    window.EJS_gameUrl = `${assetBase}drift-los-angeles.cdi`;
     window.EJS_gameName = 'Drift Los Angeles';
     window.EJS_gameID = 0x44a4f743;
     window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
@@ -189,8 +189,8 @@
     setLoading('Ladataan peliä · 0 %', '0.0 / 9.8 Mt');
     loadingHint.textContent = 'Pelitiedosto ladataan turvallisesti suoraan selaimeesi.';
     try {
-      const elfBytes = await fetchElf(generation);
-      await mountEmulator(elfBytes, generation);
+      const gameBytes = await fetchGame(generation);
+      await mountEmulator(gameBytes, generation);
     } catch (error) {
       stopBootTicker();
       if (readyTimer) window.clearTimeout(readyTimer);
