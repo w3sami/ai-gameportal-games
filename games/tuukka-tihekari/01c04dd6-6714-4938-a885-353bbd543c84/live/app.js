@@ -27,7 +27,7 @@
     reicast_hle_bios: 'enabled',
     reicast_threaded_rendering: 'disabled',
     reicast_synchronous_rendering: 'disabled',
-    reicast_internal_resolution: '640x480',
+    reicast_internal_resolution: edgeRuntime ? '1280x960' : '640x480',
     reicast_enable_dsp: 'disabled',
     reicast_mipmapping: 'disabled',
     reicast_anisotropic_filtering: 'off',
@@ -151,7 +151,7 @@
     window.EJS_gameName = 'Drift Los Angeles';
     // Version this key when compatibility-critical core defaults change so an
     // old, non-working resolution cannot override the launcher configuration.
-    window.EJS_gameID = edgeRuntime ? 0x44a4f745 : 0x44a4f746;
+    window.EJS_gameID = edgeRuntime ? 0x44a4f747 : 0x44a4f746;
     window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
     window.EJS_paths = {
       'flycast.json': 'flycast.json?v=1',
