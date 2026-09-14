@@ -46,7 +46,7 @@ dd { margin:0; text-align:right; font-weight:750; font-size:12px; }
 .details-grid { display:grid; grid-template-columns:1fr 1fr; gap:32px; padding-top:20px; line-height:1.55; font-size:13px; }
 .details li { margin-bottom:5px; }
 code { background:#ffffff0c; padding:2px 4px; border-radius:3px; }
-@media (max-width:900px) {
+@media (max-width:700px) {
   body { padding:10px; }
   .topbar { align-items:flex-start; }
   .stage { grid-template-columns:1fr; }
