@@ -183,7 +183,7 @@
         <h2>TILANNE</h2>
         <div class="status-list">
           <span>Kultakerroin <b id="goldStatus">—</b></span>
-          <span>Nopeus <b id="boostStatus">VAKIO</b></span>
+          <span>Nopeus <b id="boostStatus">NORMAALI</b></span>
           <span>Riskialue <b id="riskStatus">×3</b></span>
           <span>Huone <b id="roomStatus">1</b></span>
         </div>
@@ -378,7 +378,7 @@
   }
 
   function currentDelay() {
-    return baseDelays[level];
+    return inRisk(snake[0]) ? baseDelays[level] * .78 : baseDelays[level];
   }
 
   function startGame(fresh = false) {
@@ -576,7 +576,7 @@
     const mission=missions[missionIndex];ui.mission.textContent=extraMode()?mission.label:'Klassinen peli';
     ui.missionProgress.style.width=extraMode()?Math.min(100,missionValue/mission.target*100)+'%':'0%';
     const now=performance.now();ui.goldStatus.textContent=now<goldUntil?Math.ceil((goldUntil-now)/1000)+' s':'—';
-    ui.boostStatus.textContent='VAKIO';
+    ui.boostStatus.textContent=inRisk(snake[0])?'+28 %':'NORMAALI';
     ui.riskStatus.textContent=extraMode()?'×3':'POIS';ui.roomStatus.textContent=mode==='endless'?currentRoomId:'—';
     ui.ability.textContent=shield?'KILPI AKTIIVINEN':`KILPI ${abilityCharge} %`;
     ui.ability.classList.toggle('ready',abilityCharge>=100&&!shield);
