@@ -298,7 +298,9 @@
   function planDoor(room, threshold, preferredDirection) {
     const choices = [preferredDirection,'right','down','left','up'].filter(Boolean).filter((value,index,array)=>array.indexOf(value)===index);
     for (const dir of choices) {
-      const w=randomInt(20,27),h=randomInt(14,19);
+      const lengthGrowth=Math.floor(Math.max(0,snake.length-3)/5);
+      const w=room.w+2+Math.min(4,lengthGrowth);
+      const h=room.h+1+Math.min(3,Math.floor(lengthGrowth/2));
       let next,point;
       if (dir==='right') {
         next={x:room.x+room.w-1,y:room.y+Math.floor((room.h-h)/2),w,h};
@@ -350,6 +352,7 @@
     portals=[{x:door.next.x+4,y:door.next.y+4},{x:door.next.x+door.next.w-5,y:door.next.y+door.next.h-4}];
     for(let i=0;i<6+door.next.id;i++)addObstacle();
     planDoor(door.next,door.threshold+350+door.next.id*75);
+    placeFood();
   }
 
   function boundsAroundHead() {
@@ -457,7 +460,12 @@
     }
 
     snake.unshift(head);
-    const enteredRoom=roomFor(head);if(enteredRoom)currentRoomId=enteredRoom.id;
+    const enteredRoom=roomFor(head);
+    if(enteredRoom&&enteredRoom.id!==currentRoomId){
+      currentRoomId=enteredRoom.id;
+      const foodRoom=roomFor(food);
+      if(!foodRoom||foodRoom.id!==currentRoomId)placeFood();
+    }
     const ate = same(head,food);
     if (ate) consumeFood(); else snake.pop();
     if (extraMode()) updateWorld();
