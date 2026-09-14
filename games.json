@@ -258,8 +258,15 @@
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 0,
+    "source": {
+      "repo": "tuuchen/tyracraft-web-assets",
+      "ref": "a85a025",
+      "commit": "a85a025a147827ce0e3b4fd656c22b901ba161e6",
+      "path": "portal",
+      "importedAt": "2026-09-14T21:26:05.501Z"
+    },
+    "sizeBytes": 222936,
     "createdAt": "2026-09-14T21:25:54.237Z",
-    "updatedAt": "2026-09-14T21:25:54.237Z"
+    "updatedAt": "2026-09-14T21:26:05.501Z"
   }
 ]
