@@ -191,7 +191,7 @@
       const dirs = {up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0}};
       const wanted = dirs[next];
       if (!wanted) return;
-      if (!running) startGame();
+      if (!running) startGame(true);
       if (wanted.x !== -direction.x || wanted.y !== -direction.y) queuedDirection = wanted;
     }
 
