@@ -251,13 +251,13 @@
       "voxel",
       "gamepad"
     ],
-    "status": "draft",
+    "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 0,
+    "sizeBytes": 4947,
     "createdAt": "2026-09-14T20:42:32.615Z",
-    "updatedAt": "2026-09-14T20:42:32.615Z"
+    "updatedAt": "2026-09-14T20:42:45.506Z"
   },
   {
     "id": "cd9eddde-8e26-4936-b82d-41cad4f3818e",
@@ -273,12 +273,12 @@
       "combat",
       "gamepad"
     ],
-    "status": "draft",
+    "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 0,
+    "sizeBytes": 5256,
     "createdAt": "2026-09-14T20:42:32.841Z",
-    "updatedAt": "2026-09-14T20:42:32.841Z"
+    "updatedAt": "2026-09-14T20:42:45.825Z"
   }
 ]

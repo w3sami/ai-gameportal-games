@@ -1,0 +1,2 @@
+const frame=document.querySelector('iframe'),panel=document.querySelector('#panel'),help=document.querySelector('#help');function toggle(open){panel.hidden=!open;help.setAttribute('aria-expanded',String(open))}help.onclick=()=>toggle(panel.hidden);document.querySelector('.close').onclick=()=>toggle(false);document.querySelector('#reload').onclick=()=>{frame.src=frame.src};document.querySelector('#fullscreen').onclick=()=>document.querySelector('#stage').requestFullscreen?.();addEventListener('pagehide',()=>{frame.src='about:blank'},{once:true});
+
