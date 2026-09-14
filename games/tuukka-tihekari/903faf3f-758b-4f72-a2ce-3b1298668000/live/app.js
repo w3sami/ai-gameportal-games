@@ -288,6 +288,12 @@
       state.loadingPage = false;
     }
   }
+  async function loadCatalogInBackground() {
+    while (state.catalog && state.page < state.catalog.pageCount) {
+      await loadNextPage();
+      await sleep(30);
+    }
+  }
   els.pause.onclick = () => {
     state.paused = true;
     els.pause.disabled = true;
@@ -383,6 +389,7 @@
     render();
     showCredits();
     select(0, false);
+    loadCatalogInBackground();
   }
   const genresOf = (t) =>
     String(t.genre || "")
