@@ -238,5 +238,28 @@
     "sizeBytes": 5256,
     "createdAt": "2026-09-14T20:42:32.841Z",
     "updatedAt": "2026-09-14T20:42:45.825Z"
+  },
+  {
+    "id": "4e1e2a50-b6e0-493d-8380-2328c75d1001",
+    "slug": "tyracraft",
+    "title": "TyraCraft",
+    "description": "An open-source voxel sandbox built natively for PlayStation 2, running through PS2 emulation directly in your browser.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "PlayStation 2",
+      "homebrew",
+      "sandbox",
+      "voxel",
+      "emulation",
+      "open-source",
+      "gamepad"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T21:25:54.237Z",
+    "updatedAt": "2026-09-14T21:25:54.237Z"
   }
 ]
