@@ -100,8 +100,10 @@
     .status-list b { color: white; }
     .ability { width: 100%; min-height: 48px; padding: 10px; font-weight: 900; }
     .ability.ready { color: #101114; background: #eeeeec; border-color: #eeeeec; }
+    .abilities { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
     .action { min-height: 43px; font-size: 12px; font-weight: 800; }
+    .action:disabled { opacity: .38; cursor: default; }
     .replays { display: grid; gap: 7px; }
     .replay-button { width: 100%; min-height: 38px; padding: 7px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; }
     .replay-button small { color: var(--muted); }
@@ -184,11 +186,15 @@
           <span>Nopeus <b id="boostStatus">NORMAALI</b></span>
           <span>Riskialue <b id="riskStatus">×3</b></span>
           <span>Huone <b id="roomStatus">1</b></span>
+          <span>Laukaukset <b id="ammoStatus">3</b></span>
         </div>
       </section>
       <section class="card">
         <h2>ERIKOISKYKY</h2>
-        <button class="action ability" id="ability">KILPI 0 %</button>
+        <div class="abilities">
+          <button class="action ability" id="ability">KILPI 0 %</button>
+          <button class="action ability" id="shoot">AMMU [X] · 3</button>
+        </div>
       </section>
       <section class="card">
         <div class="actions">
@@ -214,13 +220,13 @@
       </section>
     </aside>
   </section>
-  <p class="help">Nuolet / WASD · P = tauko · välilyönti = kilpi · mobiilissa pyyhkäisy · peliohjain tuettu</p>
+  <p class="help">Nuolet / WASD · P = tauko · välilyönti = kilpi · X / Shift = ammu · mobiilissa pyyhkäisy · peliohjain tuettu</p>
 </main>
 
 <script>
   const canvas = document.querySelector('#game');
   const ctx = canvas.getContext('2d');
-  const ui = Object.fromEntries(['score','best','combo','time','overlay','overlayTitle','overlayText','mission','missionProgress','goldStatus','boostStatus','riskStatus','roomStatus','replayList','ability','screen'].map(id => [id, document.querySelector('#' + id)]));
+  const ui = Object.fromEntries(['score','best','combo','time','overlay','overlayTitle','overlayText','mission','missionProgress','goldStatus','boostStatus','riskStatus','roomStatus','ammoStatus','replayList','ability','shoot','screen'].map(id => [id, document.querySelector('#' + id)]));
   const CELL = 32;
   const VIEW_COLS = 30;
   const VIEW_ROWS = 20;
@@ -243,12 +249,12 @@
   if (!['classic','endless','rush'].includes(mode)) mode = 'endless';
   if (!baseDelays[level]) level = 'normal';
   let snake, previousSnake, direction, queuedDirection, food, obstacles, portals, enemies, risk, rooms, doors, currentRoomId;
-  let score, eaten, combo, lastEatAt, abilityCharge, shield, goldUntil, boostUntil;
+  let score, eaten, combo, lastEatAt, abilityCharge, shield, ammo, shotFx, goldUntil, boostUntil;
   let running = false, paused = false, over = false, timer, startedAt, pausedAt, pausedTotal, tickCount, portalCooldown;
   let camera = {x:0,y:0}, previousCamera = {x:0,y:0}, lastTickAt = 0, tickDelay = 135;
   let missionIndex = 0, missionValue = 0, missionStartedAt = 0;
   let runFrames = [], replay = null, replayFrame = 0, replayTimer;
-  let touchStart, lastGamepadDirection = '';
+  let touchStart, lastGamepadDirection = '', lastGamepadShoot = false;
 
   function keyForBest() { return `next-best-${mode}-${level}`; }
   function keyForReplays() { return `next-replays-${mode}-${level}`; }
@@ -267,7 +273,7 @@
     direction = queuedDirection = {x:1,y:0};
     obstacles = []; portals = []; enemies = []; rooms = []; doors = []; currentRoomId = 1;
     risk = {x:start.x+5,y:start.y-3,w:7,h:6,dx:1,dy:0};
-    score = eaten = 0; combo = 1; lastEatAt = 0; abilityCharge = 0; shield = false;
+    score = eaten = 0; combo = 1; lastEatAt = 0; abilityCharge = 0; shield = false; ammo = 3; shotFx = null;
     goldUntil = boostUntil = 0; tickCount = portalCooldown = 0;
     startedAt = performance.now(); pausedTotal = 0; missionIndex = 0; missionValue = 0; missionStartedAt = startedAt;
     runFrames = [];
@@ -487,7 +493,7 @@
     score += Math.round(10*foodStyles[food.type].value*combo*riskMultiplier*goldMultiplier*difficultyMultiplier);
     abilityCharge = Math.min(100,abilityCharge+20);
     if (food.type==='gold') goldUntil=now+8000;
-    if (food.type==='lightning') boostUntil=now+5500;
+    if (food.type==='lightning') {boostUntil=now+5500;ammo=Math.min(3,ammo+1)}
     if (food.type==='scissors' && snake.length>5) snake.splice(Math.max(3,snake.length-3));
     if (inRisk(food)) missionValue += missions[missionIndex].type==='risk' ? 1 : 0;
     if (missions[missionIndex].type==='eat') missionValue++;
@@ -533,6 +539,23 @@
   function activateAbility() {
     if (!running || abilityCharge<100 || shield) return;
     shield=true; abilityCharge=100; beep(1080,.12); screenFx(); updateUi();
+  }
+
+  function shoot() {
+    if (!running||paused||ammo<=0) return;
+    ammo--;
+    const from={...snake[0]},to={...from};
+    for(let step=0;step<14;step++){
+      const next={x:to.x+direction.x,y:to.y+direction.y};
+      const inside=mode==='endless'?roomPassable(next):next.x>=0&&next.y>=1&&next.x<VIEW_COLS&&next.y<VIEW_ROWS;
+      if(!inside)break;
+      to.x=next.x;to.y=next.y;
+      const enemyIndex=enemies.findIndex(enemy=>same(enemy,to));
+      if(enemyIndex>=0){enemies.splice(enemyIndex,1);beep(180,.1);break}
+      const obstacleIndex=obstacles.findIndex(obstacle=>same(obstacle,to));
+      if(obstacleIndex>=0){obstacles.splice(obstacleIndex,1);beep(260,.08);break}
+    }
+    shotFx={from,to,until:performance.now()+140};beep(760,.045);updateUi();
   }
 
   function togglePause() {
@@ -596,8 +619,11 @@
     const speedIncrease=Math.round((baseDelays[level]/currentDelay()-1)*100);
     ui.boostStatus.textContent=speedIncrease?`+${speedIncrease} %`:'NORMAALI';
     ui.riskStatus.textContent=extraMode()?'×3':'POIS';ui.roomStatus.textContent=mode==='endless'?currentRoomId:'—';
+    ui.ammoStatus.textContent=ammo;
     ui.ability.textContent=shield?'KILPI AKTIIVINEN':`KILPI ${abilityCharge} %`;
     ui.ability.classList.toggle('ready',abilityCharge>=100&&!shield);
+    ui.shoot.textContent=`AMMU [X] · ${ammo}`;
+    ui.shoot.disabled=ammo<=0;
   }
 
   function worldToScreen(point,cam=camera) { return {x:(point.x-cam.x)*CELL,y:(point.y-cam.y)*CELL}; }
@@ -611,6 +637,13 @@
     const p=worldToScreen(point,cam),pad=CELL*.25;
     ctx.save();ctx.strokeStyle='#8b72c6';ctx.lineWidth=5;ctx.lineCap='square';
     ctx.beginPath();ctx.moveTo(p.x+pad,p.y+pad);ctx.lineTo(p.x+CELL-pad,p.y+CELL-pad);ctx.moveTo(p.x+CELL-pad,p.y+pad);ctx.lineTo(p.x+pad,p.y+CELL-pad);ctx.stroke();ctx.restore();
+  }
+
+  function drawShot(cam=camera) {
+    if(!shotFx||performance.now()>shotFx.until)return;
+    const from=worldToScreen(shotFx.from,cam),to=worldToScreen(shotFx.to,cam);
+    ctx.save();ctx.strokeStyle='#eeeeec';ctx.lineWidth=4;ctx.lineCap='square';ctx.beginPath();
+    ctx.moveTo(from.x+CELL/2,from.y+CELL/2);ctx.lineTo(to.x+CELL/2,to.y+CELL/2);ctx.stroke();ctx.restore();
   }
 
   function drawRoomWalls(roomList,doorList,cam) {
@@ -665,6 +698,7 @@
       portals.forEach((p,i)=>{const s=worldToScreen(p,cam);ctx.strokeStyle=i?'#596caf':'#55a174';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x+CELL/2,s.y+CELL/2,CELL*.34,0,Math.PI*2);ctx.stroke()});
       enemies.forEach(p=>drawEnemy(p,cam));
     }
+    drawShot(cam);
     drawCell(food,foodStyles[food.type].color,food.type==='normal'?.58:.68,12,cam);
     snake.forEach((part,index)=>{
       const old=previousSnake[Math.min(index,previousSnake.length-1)]||part;
@@ -703,6 +737,7 @@
     if (pad.buttons[12]?.pressed||y<-.55)next='up';else if(pad.buttons[13]?.pressed||y>.55)next='down';else if(pad.buttons[14]?.pressed||x<-.55)next='left';else if(pad.buttons[15]?.pressed||x>.55)next='right';
     if(next&&next!==lastGamepadDirection)setDirection(next);lastGamepadDirection=next;
     if(pad.buttons[0]?.pressed)activateAbility();
+    const shootPressed=Boolean(pad.buttons[1]?.pressed);if(shootPressed&&!lastGamepadShoot)shoot();lastGamepadShoot=shootPressed;
   }
 
   function screenFx() { document.body.classList.remove('combo');void document.body.offsetWidth;document.body.classList.add('combo');setTimeout(()=>document.body.classList.remove('combo'),340); }
@@ -717,12 +752,12 @@
   }
   function showIntro(){ui.overlayTitle.textContent=mode==='classic'?'Klassinen':mode==='rush'?'60 sekuntia':'Loputon maailma';ui.overlayText.innerHTML=mode==='classic'?'<b>Alkuperäinen matopeli.</b><br>Ei erikoisruokia, esteitä tai riskialueita.':mode==='rush'?'<b>Kerää niin paljon kuin ehdit.</b><br>Riskialue ja kombot ratkaisevat ennätyksen.':'<b>Avaa ovet pisteillä ja etene uusiin huoneisiin.</b><br>Seinät, viholliset ja riskialue pitävät reitin vaarallisena.';ui.overlay.hidden=false}
   document.querySelectorAll('[data-dir]').forEach(button=>button.addEventListener('pointerdown',()=>setDirection(button.dataset.dir)));
-  ui.ability.addEventListener('click',activateAbility);document.querySelector('#touchAbility').addEventListener('click',activateAbility);
+  ui.ability.addEventListener('click',activateAbility);ui.shoot.addEventListener('click',shoot);document.querySelector('#touchAbility').addEventListener('click',activateAbility);
   document.querySelector('#pause').addEventListener('click',togglePause);document.querySelector('#restart').addEventListener('click',()=>{reset();startGame()});
   ui.overlay.addEventListener('click',()=>paused?togglePause():startGame(true));
   ui.overlay.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();paused?togglePause():startGame(true)}});
   const keyMap={ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'};
-  addEventListener('keydown',event=>{if(keyMap[event.key]){event.preventDefault();setDirection(keyMap[event.key])}else if(event.key==='p'||event.key==='P'||event.key==='Escape'){event.preventDefault();togglePause()}else if(event.code==='Space'){event.preventDefault();activateAbility()}else if(event.key==='Enter'&&!running)startGame(true)});
+  addEventListener('keydown',event=>{if(keyMap[event.key]){event.preventDefault();setDirection(keyMap[event.key])}else if(event.key==='p'||event.key==='P'||event.key==='Escape'){event.preventDefault();togglePause()}else if(event.code==='Space'){event.preventDefault();activateAbility()}else if(event.key==='x'||event.key==='X'||event.key==='Shift'){event.preventDefault();shoot()}else if(event.key==='Enter'&&!running)startGame(true)});
   canvas.addEventListener('pointerdown',event=>touchStart={x:event.clientX,y:event.clientY});
   canvas.addEventListener('pointerup',event=>{if(!touchStart)return;const dx=event.clientX-touchStart.x,dy=event.clientY-touchStart.y;touchStart=null;if(Math.max(Math.abs(dx),Math.abs(dy))<18)return;setDirection(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'))});
 
