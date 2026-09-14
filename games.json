@@ -51,13 +51,13 @@
       "webcrypto",
       "worker"
     ],
-    "status": "published",
+    "status": "draft",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
     "sizeBytes": 30359,
     "createdAt": "2026-09-14T11:53:05.720Z",
-    "updatedAt": "2026-09-14T12:59:41.993Z"
+    "updatedAt": "2026-09-14T14:01:03.100Z"
   },
   {
     "id": "c10e9d1d-4abf-4bcc-854b-eef7cf303d0f",
@@ -93,12 +93,12 @@
       "replay",
       "procedural"
     ],
-    "status": "published",
+    "status": "draft",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
     "sizeBytes": 41567,
     "createdAt": "2026-09-14T13:21:19.291Z",
-    "updatedAt": "2026-09-14T14:00:27.650Z"
+    "updatedAt": "2026-09-14T14:01:03.360Z"
   }
 ]
