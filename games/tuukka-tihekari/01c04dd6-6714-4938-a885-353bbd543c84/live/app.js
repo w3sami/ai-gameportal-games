@@ -16,6 +16,9 @@
   let readyTimer = 0;
   let wasmInstantiateQueue = Promise.resolve();
   const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/241d02c756060922d691b8613e3e4ae6bf1524d3/';
+  const edgeRuntime = /Edg\//.test(navigator.userAgent);
+  const gameFile = edgeRuntime ? 'drift-los-angeles-browser.elf' : 'drift-los-angeles.elf';
+  const gameSize = edgeRuntime ? 10262556 : 10260300;
 
   const options = {
     reicast_boot_to_bios: 'disabled',
@@ -72,9 +75,9 @@
   }
 
   async function fetchElf(generation) {
-    const response = await fetch(`${assetBase}drift-los-angeles-browser.elf`, { cache:'force-cache', mode:'cors' });
+    const response = await fetch(`${assetBase}${gameFile}`, { cache:'force-cache', mode:'cors' });
     if (!response.ok) throw new Error(`ELF download failed (${response.status})`);
-    const total = Number(response.headers.get('content-length')) || 10262556;
+    const total = Number(response.headers.get('content-length')) || gameSize;
     const reader = response.body?.getReader();
     if (!reader) return new Uint8Array(await response.arrayBuffer());
     const chunks = [];
@@ -142,11 +145,11 @@
     window.EJS_core = 'flycast';
     // EmulatorJS expects a fetchable URL (and uses its extension for core loading).
     // The preceding streamed request warms the browser cache and provides real progress.
-    window.EJS_gameUrl = `${assetBase}drift-los-angeles-browser.elf`;
+    window.EJS_gameUrl = `${assetBase}${gameFile}`;
     window.EJS_gameName = 'Drift Los Angeles';
     // Version this key when compatibility-critical core defaults change so an
     // old, non-working resolution cannot override the launcher configuration.
-    window.EJS_gameID = 0x44a4f744;
+    window.EJS_gameID = edgeRuntime ? 0x44a4f745 : 0x44a4f746;
     window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
     window.EJS_paths = {
       'flycast.json': 'flycast.json?v=1',
