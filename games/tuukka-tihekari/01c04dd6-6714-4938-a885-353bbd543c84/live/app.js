@@ -144,7 +144,9 @@
     // The preceding streamed request warms the browser cache and provides real progress.
     window.EJS_gameUrl = `${assetBase}drift-los-angeles-browser.elf`;
     window.EJS_gameName = 'Drift Los Angeles';
-    window.EJS_gameID = 0x44a4f743;
+    // Version this key when compatibility-critical core defaults change so an
+    // old, non-working resolution cannot override the launcher configuration.
+    window.EJS_gameID = 0x44a4f744;
     window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
     window.EJS_paths = {
       'flycast.json': 'flycast.json?v=1',
