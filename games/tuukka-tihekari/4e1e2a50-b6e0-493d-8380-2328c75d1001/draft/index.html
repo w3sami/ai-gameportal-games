@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101713">
+  <title>TyraCraft — PlayStation 2 Homebrew</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="shell">
+    <header>
+      <div>
+        <span class="eyebrow">PLAYSTATION 2 HOMEBREW</span>
+        <h1>TyraCraft</h1>
+        <p>An open-source voxel sandbox running as a real PS2 executable through Play! in your browser.</p>
+      </div>
+      <div class="actions">
+        <button id="fullscreen" type="button">Fullscreen</button>
+        <button id="export" type="button">Export saves</button>
+        <label class="button">Import saves<input id="import" type="file" accept="application/json,.json"></label>
+      </div>
+    </header>
+
+    <section id="stage" aria-label="PlayStation 2 game output">
+      <canvas id="outputCanvas" width="640" height="480" tabindex="0"></canvas>
+      <div id="gate">
+        <div class="panel">
+          <strong>TyraCraft Portal Edition</strong>
+          <p id="status">Ready. The 106 MiB PS2 disc is loaded only after you start.</p>
+          <progress id="progress" max="1" value="0"></progress>
+          <button id="start" class="primary" type="button">Click to Play</button>
+          <small>No Sony BIOS is included. First load can take a few minutes.</small>
+        </div>
+      </div>
+      <output id="saveStatus" aria-live="polite">Local saves ready</output>
+    </section>
+
+    <details>
+      <summary>Controls</summary>
+      <div class="controls">
+        <p><b>Move</b> WASD / left stick · <b>Camera</b> mouse / right stick · <b>Jump</b> Z / Cross</p>
+        <p><b>Inventory</b> S / Triangle · <b>Break</b> 2 / L2 · <b>Place</b> 9 / R2 · <b>Hotbar</b> 1/8 / L1/R1</p>
+        <p><b>Pause</b> Enter / Start · <b>Select</b> Backspace or Shift · <b>D-pad</b> arrow keys</p>
+      </div>
+    </details>
+    <p class="footnote">Experimental Play!.js emulation. Worlds stay in this browser's IndexedDB unless exported.</p>
+  </main>
+  <script type="module" src="loader.js"></script>
+</body>
+</html>
