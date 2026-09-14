@@ -11,6 +11,7 @@
   const controlList = document.querySelector('#controlList');
   let started = false;
   let bootGeneration = 0;
+  const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/491c8078539360aca15fd6122273653d770527c0/';
 
   const options = {
     reicast_boot_to_bios: 'disabled',
@@ -35,7 +36,7 @@
   }
 
   async function fetchElf(generation) {
-    const response = await fetch('drift-los-angeles.wasm?v=1', { cache:'force-cache' });
+    const response = await fetch(`${assetBase}drift-los-angeles.elf`, { cache:'force-cache', mode:'cors' });
     if (!response.ok) throw new Error(`ELF download failed (${response.status})`);
     const total = Number(response.headers.get('content-length')) || 10260300;
     const reader = response.body?.getReader();
@@ -89,8 +90,8 @@
     window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
     window.EJS_paths = {
       'flycast.json': 'flycast.json?v=1',
-      'flycast-wasm.data': 'flycast-core.js?v=1',
-      'flycast-legacy-wasm.data': 'flycast-core.js?v=1'
+      'flycast-wasm.data': `${assetBase}flycast-wasm.data`,
+      'flycast-legacy-wasm.data': `${assetBase}flycast-wasm.data`
     };
     window.EJS_defaultOptions = options;
     window.EJS_backgroundColor = '#03050a';
