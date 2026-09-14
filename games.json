@@ -213,5 +213,28 @@
     "sizeBytes": 46321,
     "createdAt": "2026-09-14T20:26:18.874Z",
     "updatedAt": "2026-09-14T20:27:33.775Z"
+  },
+  {
+    "id": "8e1bd17b-b236-47ac-8ee6-c3fe502ce469",
+    "slug": "bigbools-pocket",
+    "title": "Bigbools Pocket",
+    "description": "A browser-based retro handheld packed with open-licensed Game Boy and Game Boy Color games.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "game-boy",
+      "game-boy-color",
+      "retro",
+      "handheld",
+      "collection",
+      "open-source",
+      "emulation"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T20:28:43.194Z",
+    "updatedAt": "2026-09-14T20:28:43.194Z"
   }
 ]
