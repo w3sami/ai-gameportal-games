@@ -39,27 +39,6 @@
     "updatedAt": "2026-09-13T20:30:29.922Z"
   },
   {
-    "id": "5ca2982e-108f-452e-904e-1bb533c2d996",
-    "slug": "browser-data-miner",
-    "title": "Browser Data Miner",
-    "description": "WebCrypto mining node with live CoinGecko markets, persistent IndexedDB ledger, fault injection and remote operation controls.",
-    "author": "Tuukka Tihekari",
-    "tags": [
-      "crypto",
-      "mining",
-      "wallet",
-      "webcrypto",
-      "worker"
-    ],
-    "status": "draft",
-    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
-    "ownerFolder": "tuukka-tihekari",
-    "entryFile": "index.html",
-    "sizeBytes": 30359,
-    "createdAt": "2026-09-14T11:53:05.720Z",
-    "updatedAt": "2026-09-14T14:01:03.100Z"
-  },
-  {
     "id": "c10e9d1d-4abf-4bcc-854b-eef7cf303d0f",
     "slug": "matopeli-3310",
     "title": "Matopeli",
