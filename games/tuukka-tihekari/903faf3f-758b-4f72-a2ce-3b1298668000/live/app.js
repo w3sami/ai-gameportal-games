@@ -255,9 +255,25 @@
       }),
       catalog = (state.catalog = await indexRes.json());
     if (!catalog.pageCount) throw Error("Music catalog is unavailable");
-    await loadNextPage();
+    await loadEntireCatalog();
     if (!state.tracks.length) throw Error("Music catalog is empty");
     unlock();
+  }
+  async function loadEntireCatalog() {
+    const pages = Array.from(
+      { length: state.catalog.pageCount },
+      (_, index) => index + 1,
+    );
+    const results = await Promise.all(
+      pages.map(async (page) => {
+        const url = state.catalog.pagePattern.replace("{page}", page);
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw Error(`Catalog page ${page}: HTTP ${response.status}`);
+        return (await response.json()).tracks || [];
+      }),
+    );
+    state.tracks = results.flat();
+    state.page = state.catalog.pageCount;
   }
   async function loadNextPage() {
     if (
@@ -286,12 +302,6 @@
       }
     } finally {
       state.loadingPage = false;
-    }
-  }
-  async function loadCatalogInBackground() {
-    while (state.catalog && state.page < state.catalog.pageCount) {
-      await loadNextPage();
-      await sleep(30);
     }
   }
   els.pause.onclick = () => {
@@ -389,7 +399,6 @@
     render();
     showCredits();
     select(0, false);
-    loadCatalogInBackground();
   }
   const genresOf = (t) =>
     String(t.genre || "")
