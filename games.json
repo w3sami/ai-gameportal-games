@@ -81,27 +81,6 @@
     "updatedAt": "2026-09-14T13:15:06.492Z"
   },
   {
-    "id": "a73d49c3-c5e5-4d8d-ab43-6a86499409db",
-    "slug": "matopeli-next-gen",
-    "title": "Matopeli 2.0",
-    "description": "Moderni 2D-matopeli, jossa klassinen tila, 60 sekunnin pistejahti ja huoneisiin etenevä loputon tila. Kerää pisteitä, avaa lukitut ovet ja etene madon mukana kasvaviin huoneisiin. Väistä tai ammu vihollisia rajatuilla pulssilaukauksilla; salamaruoka palauttaa ammuksen. Kolme viimeisintä peliä tallentuu katsottaviksi uusintoina.",
-    "author": "Tuukka Tihekari",
-    "tags": [
-      "matopeli",
-      "arcade",
-      "2d",
-      "replay",
-      "procedural"
-    ],
-    "status": "draft",
-    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
-    "ownerFolder": "tuukka-tihekari",
-    "entryFile": "index.html",
-    "sizeBytes": 41567,
-    "createdAt": "2026-09-14T13:21:19.291Z",
-    "updatedAt": "2026-09-14T14:01:03.360Z"
-  },
-  {
     "id": "096f82ce-874f-493f-ba0a-2f7125fe29e6",
     "slug": "tobu-tobu-girl-deluxe",
     "title": "Tobu Tobu Girl Deluxe",
