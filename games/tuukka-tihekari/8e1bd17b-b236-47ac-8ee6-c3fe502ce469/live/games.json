@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "games": [
+    {
+      "id": "tobu-tobu-girl-deluxe",
+      "title": "Tobu Tobu Girl Deluxe",
+      "system": "gbc",
+      "rom": "rom/tobudx-rom.js",
+      "romGlobal": "POCKET_ROM_TOBUDX",
+      "license": "MIT / CC BY 4.0",
+      "source": "https://github.com/SimonLarsen/tobutobugirl-dx",
+      "commit": "4985d4d282aa43229f250ffa3b0d86998ebd55d3",
+      "saveKey": "tobu-tobu-girl-deluxe",
+      "creator": "Tangram Games · music and sound by potato-tan",
+      "description": "Fast, vertical arcade platforming.",
+      "year": 2017,
+      "size": 262144,
+      "checksum": "sha256:0a0e8018dbbc8d7f8cd99f05e7cdc7b4cc9e358ecfe9377ebfb2291a84c6e310"
+    },
+    {
+      "id": "geometrix",
+      "title": "Geometrix",
+      "system": "gbc",
+      "rom": "rom/geometrix-rom.js",
+      "romGlobal": "POCKET_ROM_GEOMETRIX",
+      "license": "GPL-3.0-or-later / BSD-2-Clause component",
+      "source": "https://github.com/AntonioND/geometrix",
+      "commit": "8f5467ec225e21d67b2e6621eabede70dc6cc8fa",
+      "saveKey": "geometrix",
+      "creator": "Antonio Niño Díaz (AntonioND / SkyLyrac)",
+      "description": "Build chains of matching geometric forms.",
+      "year": 2018,
+      "size": 32768,
+      "checksum": "sha256:56efdf82118e5faf22511c18dd1fc2ab8bc0c5e44cd634b8e06050ff08124586"
+    },
+    {
+      "id": "2048-gb",
+      "title": "2048 GB",
+      "system": "gb",
+      "rom": "rom/2048-rom.js",
+      "romGlobal": "POCKET_ROM_2048",
+      "license": "MIT",
+      "source": "https://github.com/wyattferguson/2048-gb",
+      "commit": "167788105db659f2049dd2d537ee12f63d87b1e7",
+      "saveKey": "2048-gb",
+      "creator": "Wyatt Ferguson",
+      "description": "The classic sliding-number puzzle on GB.",
+      "year": 2025,
+      "size": 32768,
+      "checksum": "sha256:46f9ab6a5e9acb81c76e9c2c6526db1ed4e03b4fb6f36c23fb786e31f9659fc5"
+    }
+  ]
+}
