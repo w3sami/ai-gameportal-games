@@ -23,7 +23,7 @@
 			<form id="luanti-launch-form" novalidate>
 				<div id="luanti-local-panel" role="tabpanel" aria-labelledby="luanti-local-tab"><label for="luanti-game">Game</label><select id="luanti-game" name="game"><option value="voxelibre" selected>VoxeLibre</option></select><p class="field-note">Your world is saved automatically in this browser.</p></div>
 				<div id="luanti-remote-panel" role="tabpanel" hidden aria-labelledby="luanti-remote-tab"><div class="field-grid address-grid"><div><label for="luanti-address">Server address</label><input id="luanti-address" name="address"></div><div><label for="luanti-port">Port</label><input id="luanti-port" name="port" value="30000"></div></div><button id="luanti-server-list-button" type="button" class="text-button">Browse public servers</button><div id="luanti-server-list" class="server-list" hidden></div></div>
-				<div class="field-grid"><div><label for="luanti-player-name">Player name</label><input id="luanti-player-name" name="name" maxlength="19" autocomplete="nickname" placeholder="Player" pattern="[A-Za-z0-9_-]+"></div><div><label for="luanti-quality">View distance</label><select id="luanti-quality" name="quality"><option value="60">Low memory · 60</option><option value="100" selected>Balanced · 100</option><option value="160">Far · 160</option></select></div></div>
+				<div class="field-grid"><div><label for="luanti-player-name">Player name</label><input id="luanti-player-name" name="name" maxlength="19" autocomplete="nickname" placeholder="Player" pattern="[A-Za-z0-9_-]+"></div><div><label for="luanti-quality">View distance</label><select id="luanti-quality" name="quality"><option value="60" selected>Low memory · 60</option><option value="100">Balanced · 100</option><option value="160">Far · 160</option></select></div></div>
 				<details class="advanced"><summary>Controls &amp; language</summary><p class="field-note">WASD move · Space jump · Shift sneak · I inventory · left click mine · right click place/use · Esc menu</p><label for="luanti-language">Engine language</label><select id="luanti-language" name="language"><option value="">System default</option><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option><option value="fr">Français</option><option value="ja">日本語</option><option value="pt">Português</option></select><div hidden><select id="luanti-proxy-region"></select><div id="luanti-custom-proxy-row"><input id="luanti-proxy-url"></div><div id="luanti-network-status"></div><div id="luanti-network-error"></div></div></details>
 				<div id="luanti-launch-error" class="form-error" role="alert" hidden></div>
 				<button id="luanti-play-button" class="play-button" type="submit" disabled><span id="luanti-play-label">Loading VoxeLibre…</span><span aria-hidden="true">→</span></button>
@@ -42,8 +42,8 @@
 	</section>
 	<script src="launcher-config.js"></script>
 	<script>
-		var ASSET_BASE="https://cdn.jsdelivr.net/gh/tuuchen/voxelibre-web-assets@4d3d82a/";
-		window.VOXELIBRE_CONTENT_URL="https://raw.githubusercontent.com/tuuchen/voxelibre-web-assets/4d3d82a/voxelibre-content.zip";
+		var ASSET_BASE="https://cdn.jsdelivr.net/gh/tuuchen/voxelibre-web-assets@b09dd9d/";
+		window.VOXELIBRE_CONTENT_URL="https://raw.githubusercontent.com/tuuchen/voxelibre-web-assets/b09dd9d/voxelibre-content.zip";
 		var Module={
 			canvas:document.getElementById("canvas"),
 			noInitialRun:true,
@@ -53,8 +53,8 @@
 			}
 		};
 	</script>
-	<script src="content-pack.js"></script>
-	<script src="launcher.js?rev=diag2"></script>
-	<script src="https://cdn.jsdelivr.net/gh/tuuchen/voxelibre-web-assets@4d3d82a/luanti.js"></script>
+	<script src="content-pack.js?rev=mem1"></script>
+	<script src="launcher.js?rev=mem1"></script>
+	<script src="https://cdn.jsdelivr.net/gh/tuuchen/voxelibre-web-assets@b09dd9d/luanti.js"></script>
 </body>
 </html>
