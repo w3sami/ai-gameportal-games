@@ -147,5 +147,27 @@
     "sizeBytes": 293320,
     "createdAt": "2026-09-14T19:07:50.470Z",
     "updatedAt": "2026-09-14T19:21:23.041Z"
+  },
+  {
+    "id": "903faf3f-758b-4f72-a2ce-3b1298668000",
+    "slug": "bigbools-amp",
+    "title": "Bigbools Amp",
+    "description": "A retro browser music player and hosting stress-test launcher. The small player shell is staged; its verified open-music catalog remains locked until owner-controlled object storage is connected.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "music-player",
+      "hosting-stress-test",
+      "electronic",
+      "retro",
+      "web-audio",
+      "open-music"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 26868,
+    "createdAt": "2026-09-14T19:22:53.324Z",
+    "updatedAt": "2026-09-14T19:22:53.633Z"
   }
 ]

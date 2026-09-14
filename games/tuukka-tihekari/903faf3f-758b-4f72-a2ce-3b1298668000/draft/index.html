@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#12170f">
+  <title>Bigbools Amp</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main class="shell">
+    <section id="installer" class="panel installer" aria-labelledby="install-title">
+      <div class="brand"><span class="brand-mark">BB</span><div><p class="eyebrow">BIGBOOLS AUDIO SYSTEM</p><h1 id="install-title">AMP</h1></div><span id="install-status" class="status">CHECKING</span></div>
+      <div class="display install-copy">
+        <p class="kicker">INSTALLING OPEN MUSIC LIBRARY</p>
+        <div class="metric"><strong id="track-progress">0 / 0 tracks</strong><span id="byte-progress">0 B / 0 B</span></div>
+        <div class="progress"><i id="progress-bar"></i></div>
+        <div class="metric mono"><span id="percent">0.0%</span><span id="speed">0 B/s</span><span id="eta">ETA --:--</span></div>
+      </div>
+      <div class="install-grid">
+        <div><span>ACTIVE</span><strong id="active-count">0</strong></div><div><span>RETRIES</span><strong id="retry-count">0</strong></div><div><span>ELAPSED</span><strong id="elapsed">00:00</strong></div><div><span>STORAGE</span><strong id="storage">CHECKING</strong></div>
+      </div>
+      <p id="current-file" class="current-file">Loading manifest…</p>
+      <div id="install-note" class="notice" hidden></div>
+      <div class="actions"><button id="pause">Pause download</button><button id="resume" disabled>Resume download</button><button id="retry" disabled>Retry failed</button></div>
+      <p class="fineprint">The player unlocks only after every expected byte has arrived and every persistent copy has passed integrity checks. There is no streaming bypass.</p>
+    </section>
+
+    <section id="player" class="player" hidden aria-label="Bigbools Amp player">
+      <div class="panel deck">
+        <div class="brand"><span class="brand-mark">BB</span><div><p class="eyebrow">BIGBOOLS AUDIO SYSTEM</p><h1>AMP</h1></div><span class="status ready">LIBRARY READY</span></div>
+        <div class="display now-playing"><div><span id="now-index">001</span><p id="now-title">Select a track</p><small id="now-meta">—</small></div><time id="clock">00:00 / 00:00</time></div>
+        <canvas id="visualizer" width="720" height="112" aria-label="Audio visualization"></canvas>
+        <input id="seek" class="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
+        <div class="transport"><button id="prev" aria-label="Previous">◀◀</button><button id="play" class="primary" aria-label="Play">▶</button><button id="stop" aria-label="Stop">■</button><button id="next" aria-label="Next">▶▶</button><button id="shuffle" aria-pressed="false">SHUF</button><button id="repeat" aria-pressed="false">REP</button><label>VOL <input id="volume" type="range" min="0" max="1" step=".01" value=".85"></label><button id="mute">MUTE</button></div>
+      </div>
+
+      <div class="workbench">
+        <section class="panel library-panel">
+          <header><div><p class="eyebrow">LOCAL LIBRARY</p><h2 id="library-count">0 tracks</h2></div><button id="credits-open">Open music credits</button></header>
+          <div class="filters"><input id="search" type="search" placeholder="Search artist, title, album…"><select id="genre"><option value="">All genres</option></select><select id="artist"><option value="">All artists</option></select><select id="sort"><option value="artist">Artist</option><option value="title">Title</option><option value="duration">Duration</option><option value="size">File size</option></select></div>
+          <div class="track-head"><span>#</span><span>Artist / title</span><span>Genre</span><span>Time</span><span>Size</span></div>
+          <div id="track-list" class="track-list" tabindex="0"></div>
+        </section>
+
+        <aside class="panel side-panel">
+          <div class="tabs"><button data-tab="info" class="active">INFO</button><button data-tab="eq">10-BAND EQ</button></div>
+          <div id="info-tab" class="tab"><p class="eyebrow">TRACK DATA</p><dl id="track-info"><dt>Artist</dt><dd>—</dd><dt>Title</dt><dd>—</dd><dt>License</dt><dd>—</dd><dt>Source</dt><dd>—</dd></dl></div>
+          <div id="eq-tab" class="tab" hidden><div class="eq-actions"><label><input id="eq-enabled" type="checkbox" checked> Enabled</label><button id="eq-reset">Reset</button><select id="eq-preset"><option>Flat</option><option>Bass lift</option><option>Smile</option><option>Club</option></select></div><div id="eq-bands" class="eq-bands"></div></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="credits"><form method="dialog"><header><div><p class="eyebrow">ATTRIBUTION REGISTER</p><h2>Open Music Credits</h2></div><button aria-label="Close">✕</button></header></form><div id="credits-list"></div></dialog>
+  <audio id="audio" crossorigin="anonymous"></audio>
+  <script src="app.js"></script>
+</body>
+</html>

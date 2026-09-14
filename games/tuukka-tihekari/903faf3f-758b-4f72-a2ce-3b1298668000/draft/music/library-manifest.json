@@ -1,0 +1,8 @@
+{
+  "version": "blocked-pending-object-storage",
+  "totalBytes": 0,
+  "trackCount": 0,
+  "tracks": [],
+  "deploymentBlocked": true,
+  "blockedReason": "The publishing account currently reports a hard per-game allowance of 2,097,152 bytes and exposes no separate asset or object-storage upload tool. The 10–15 GB open-music payload has therefore not been fabricated, reduced, or silently replaced. Provision storage and regenerate this manifest with tools/acquire-library.mjs."
+}
