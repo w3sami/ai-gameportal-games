@@ -10,11 +10,16 @@
   const toggleControls = document.querySelector('#toggleControls');
   const controlList = document.querySelector('#controlList');
   const loadingHint = document.querySelector('#loadingHint');
+  const driveWarmup = document.querySelector('#driveWarmup');
   let started = false;
   let bootGeneration = 0;
   let bootTimer = 0;
   let readyTimer = 0;
   let wasmInstantiateQueue = Promise.resolve();
+  let gameStartedAt = 0;
+  let warmupShown = false;
+  let warmupTimer = 0;
+  let launchPadDown = false;
   const assetBase = 'https://raw.githubusercontent.com/tuuchen/drift-los-angeles-web-assets/241d02c756060922d691b8613e3e4ae6bf1524d3/';
   const embeddedRuntime = Boolean(window.chrome?.webview) || /Electron|Codex|OpenAI/i.test(navigator.userAgent);
   const edgeRuntime = /Edg\//.test(navigator.userAgent) && !embeddedRuntime;
@@ -47,6 +52,14 @@
   function stopBootTicker() {
     if (bootTimer) window.clearInterval(bootTimer);
     bootTimer = 0;
+  }
+
+  function showDriveWarmup() {
+    if (!gameStartedAt || warmupShown || Date.now() - gameStartedAt < 8000) return;
+    warmupShown = true;
+    driveWarmup.hidden = false;
+    if (warmupTimer) window.clearTimeout(warmupTimer);
+    warmupTimer = window.setTimeout(() => { driveWarmup.hidden = true; }, 28000);
   }
 
   function showReadyTransition(generation) {
@@ -174,6 +187,9 @@
       stopBootTicker();
       if (readyTimer) window.clearTimeout(readyTimer);
       loading.hidden = true;
+      driveWarmup.hidden = true;
+      gameStartedAt = Date.now();
+      warmupShown = false;
     };
     const script = document.createElement('script');
     script.src = 'https://cdn.emulatorjs.org/4.2.3/data/loader.js';
@@ -230,6 +246,15 @@
   window.addEventListener('gamepaddisconnected', updateGamepad);
   updateGamepad();
 
+  function watchLaunchButton() {
+    const down = Array.from(navigator.getGamepads?.() || []).some(pad =>
+      Boolean(pad?.buttons?.[0]?.pressed || pad?.buttons?.[9]?.pressed));
+    if (down && !launchPadDown) showDriveWarmup();
+    launchPadDown = down;
+    window.requestAnimationFrame(watchLaunchButton);
+  }
+  watchLaunchButton();
+
   toggleControls.addEventListener('click', () => {
     const expanded = toggleControls.getAttribute('aria-expanded') === 'true';
     toggleControls.setAttribute('aria-expanded', String(!expanded));
@@ -238,6 +263,7 @@
   });
 
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key.toLowerCase() === 'x') showDriveWarmup();
     if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(event.key)) return;
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
     event.preventDefault();

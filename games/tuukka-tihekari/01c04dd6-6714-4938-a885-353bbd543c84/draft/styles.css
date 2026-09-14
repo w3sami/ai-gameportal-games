@@ -34,6 +34,12 @@ h1 span { color:var(--red); }
 .player-shell.ejs-mode .loading[hidden] { display:none; }
 .player-shell.ejs-mode .loading strong { font-size:clamp(18px,2.4vw,28px); }
 .player-shell.ejs-mode .loading span { max-width:520px; color:#eee8e1; }
+.drive-warmup { position:absolute; z-index:7; top:18px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:12px; width:min(570px,calc(100% - 32px)); padding:13px 16px; border:1px solid #ffffff26; border-radius:9px; background:#090a10e8; box-shadow:0 12px 42px #000b; pointer-events:none; }
+.drive-warmup[hidden] { display:none; }
+.drive-warmup div:last-child { display:flex; flex-direction:column; gap:3px; }
+.drive-warmup strong { color:#fff; font-size:14px; }
+.drive-warmup span { color:#d5d0ca; font-size:12px; line-height:1.35; }
+.mini-spinner { flex:0 0 auto; width:25px; height:25px; border:3px solid #ffffff24; border-top-color:var(--orange); border-radius:50%; animation:spin .75s linear infinite; }
 .controls { border:1px solid var(--line); border-radius:14px; padding:18px; background:#111116d9; align-self:start; }
 .panel-head { display:flex; align-items:center; justify-content:space-between; }
 h2 { margin:0 0 12px; font-size:16px; }
