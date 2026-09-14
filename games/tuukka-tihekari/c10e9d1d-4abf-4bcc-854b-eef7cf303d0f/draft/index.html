@@ -25,19 +25,19 @@
     }
     .game-shell { width: min(560px, 100%); }
     h1 { margin: 0 0 14px; color: #c4d39b; font-size: clamp(28px, 8vw, 48px); letter-spacing: -.06em; }
-    .bezel { padding: clamp(10px, 3vw, 18px); background: #202a24; }
+    .bezel { padding: 0; background: transparent; }
     .lcd {
       position: relative;
       padding: 10px;
       background: var(--screen);
       color: var(--pixel);
-      box-shadow: inset 0 0 16px #28352255;
+      box-shadow: none;
     }
     .status { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 13px; font-weight: 900; }
-    canvas { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; border: 3px solid var(--pixel); background: var(--screen); touch-action: none; }
+    canvas { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; border: 0; background: var(--screen); touch-action: none; }
     .message {
       position: absolute;
-      inset: 42px 13px 13px;
+      inset: 34px 0 0;
       display: grid;
       place-items: center;
       text-align: center;
@@ -135,7 +135,7 @@
       } while (snake.some(part => part.x === food.x && part.y === food.y));
     }
 
-    function speed() { return Math.max(62, 150 - score * 3); }
+    function speed() { return 135; }
 
     function startGame(fresh = false) {
       if (fresh || !snake) reset();
