@@ -210,6 +210,7 @@
       <section class="card legend">
         <span style="--dot:#d6535a">Ruoka</span><span style="--dot:#e5b94f">Kulta</span>
         <span style="--dot:#55a174">Salama</span><span style="--dot:#b86498">Sakset</span>
+        <span style="--dot:#8b72c6">Vihollinen</span>
       </section>
     </aside>
   </section>
@@ -499,7 +500,7 @@
       if (risk.y<b.minY || risk.y+risk.h>b.maxY) risk.dy*=-1;
       if (tickCount%18===0) { const old=risk.dx; risk.dx=-risk.dy||1; risk.dy=old; }
     }
-    if (tickCount%2===0) enemies.forEach(enemy=>{
+    if (tickCount%4===0) enemies.forEach(enemy=>{
       const dx=Math.sign(snake[0].x-enemy.x),dy=Math.sign(snake[0].y-enemy.y);
       const horizontal=Math.abs(snake[0].x-enemy.x)>Math.abs(snake[0].y-enemy.y);
       const next={x:enemy.x+(horizontal?dx:0),y:enemy.y+(horizontal?0:dy)};
@@ -598,6 +599,12 @@
     ctx.fillRect(p.x+inset,p.y+inset,CELL*size,CELL*size);ctx.restore();
   }
 
+  function drawEnemy(point,cam=camera) {
+    const p=worldToScreen(point,cam),pad=CELL*.25;
+    ctx.save();ctx.strokeStyle='#8b72c6';ctx.lineWidth=5;ctx.lineCap='square';
+    ctx.beginPath();ctx.moveTo(p.x+pad,p.y+pad);ctx.lineTo(p.x+CELL-pad,p.y+CELL-pad);ctx.moveTo(p.x+CELL-pad,p.y+pad);ctx.lineTo(p.x+pad,p.y+CELL-pad);ctx.stroke();ctx.restore();
+  }
+
   function drawRoomWalls(roomList,doorList,cam) {
     ctx.strokeStyle='#8b8d91';ctx.lineWidth=5;
     roomList.forEach(room=>{const p=worldToScreen(room,cam);ctx.strokeRect(p.x,p.y,(room.w-1)*CELL,(room.h-1)*CELL)});
@@ -638,16 +645,17 @@
   function draw(alpha) {
     const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);
     ctx.setTransform(scaleX,0,0,scaleY,0,0);ctx.clearRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
-    ctx.fillStyle=mode==='endless'?'#08090b':'#111214';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    ctx.fillStyle='#08090b';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
     const cam={x:previousCamera.x+(camera.x-previousCamera.x)*alpha,y:previousCamera.y+(camera.y-previousCamera.y)*alpha};
-    drawGrid(cam,mode==='endless'?rooms:null);
+    const visibleRooms=mode==='endless'?rooms:[{x:0,y:1,w:VIEW_COLS,h:VIEW_ROWS}];
+    drawGrid(cam,visibleRooms);
     if (mode==='endless') drawRoomWalls(rooms,doors,cam);
     else {ctx.strokeStyle='#8b8d91';ctx.lineWidth=3;ctx.strokeRect(1, CELL, VIEW_COLS*CELL-2, (VIEW_ROWS-1)*CELL-1)}
     if (extraMode()) {
       const rp=worldToScreen(risk,cam);ctx.fillStyle='#d6535a12';ctx.strokeStyle='#d6535a88';ctx.lineWidth=2;ctx.fillRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);ctx.strokeRect(rp.x,rp.y,risk.w*CELL,risk.h*CELL);
       obstacles.forEach(p=>drawCell(p,'#55575c',.82,0,cam));
       portals.forEach((p,i)=>{const s=worldToScreen(p,cam);ctx.strokeStyle=i?'#596caf':'#55a174';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x+CELL/2,s.y+CELL/2,CELL*.34,0,Math.PI*2);ctx.stroke()});
-      enemies.forEach(p=>drawCell(p,'#d6535a',.68,10,cam));
+      enemies.forEach(p=>drawEnemy(p,cam));
     }
     drawCell(food,foodStyles[food.type].color,food.type==='normal'?.58:.68,12,cam);
     snake.forEach((part,index)=>{
@@ -661,9 +669,10 @@
   function drawReplay() {
     const frame=replay.frames[replayFrame];if(!frame)return;
     const scaleX=canvas.width/(VIEW_COLS*CELL),scaleY=canvas.height/(VIEW_ROWS*CELL);ctx.setTransform(scaleX,0,0,scaleY,0,0);
-    ctx.fillStyle=mode==='endless'?'#08090b':'#111214';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
+    ctx.fillStyle='#08090b';ctx.fillRect(0,0,VIEW_COLS*CELL,VIEW_ROWS*CELL);
     const cam=mode==='endless'?{x:frame.x-VIEW_COLS/2,y:frame.y-VIEW_ROWS/2}:{x:0,y:0};
-    drawGrid(cam,mode==='endless'?(replay.rooms||[]):null);
+    const visibleRooms=mode==='endless'?(replay.rooms||[]):[{x:0,y:1,w:VIEW_COLS,h:VIEW_ROWS}];
+    drawGrid(cam,visibleRooms);
     if(mode==='endless')drawRoomWalls(replay.rooms||[],replay.doors||[],cam);else{ctx.strokeStyle='#8b8d91';ctx.lineWidth=3;ctx.strokeRect(1,CELL,VIEW_COLS*CELL-2,(VIEW_ROWS-1)*CELL-1)}
     const foodFrame={x:frame.food[0],y:frame.food[1],type:frame.food[2]};drawCell(foodFrame,foodStyles[foodFrame.type]?.color||'#d6535a',.62,8,cam);
     for(let i=Math.min(frame.length-1,replayFrame);i>=0;i--){const pathFrame=replay.frames[replayFrame-i];drawCell(pathFrame,i===0?'#f1f1ed':'#b9babe',i===0?.84:.7,i===0?10:4,cam)}
