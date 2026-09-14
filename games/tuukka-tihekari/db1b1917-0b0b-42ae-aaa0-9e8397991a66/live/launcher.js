@@ -382,6 +382,7 @@
 			reportStatus("Starting Luanti…", 4, "engine");
 			Module["callMain"](argumentsForSession(session));
 		} catch (error) {
+			console.error("Luanti launch failed", error);
 			started = false;
 			ui.play.disabled = !runtimeReady;
 			ui.launcher.hidden = false;
