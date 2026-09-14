@@ -100,5 +100,28 @@
     "sizeBytes": 41567,
     "createdAt": "2026-09-14T13:21:19.291Z",
     "updatedAt": "2026-09-14T14:01:03.360Z"
+  },
+  {
+    "id": "096f82ce-874f-493f-ba0a-2f7125fe29e6",
+    "slug": "tobu-tobu-girl-deluxe",
+    "title": "Tobu Tobu Girl Deluxe",
+    "description": "A fast-paced Game Boy Color arcade platformer by Tangram Games, running directly in your browser through Game Boy emulation. This open-source browser deployment contains the official ROM and uses the MIT-licensed binjgb emulator.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "arcade",
+      "platformer",
+      "game-boy",
+      "game-boy-color",
+      "retro",
+      "open-source",
+      "emulation"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T18:47:51.371Z",
+    "updatedAt": "2026-09-14T18:47:51.371Z"
   }
 ]
