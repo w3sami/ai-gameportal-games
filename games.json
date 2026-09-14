@@ -258,5 +258,27 @@
     "sizeBytes": 0,
     "createdAt": "2026-09-14T20:42:32.615Z",
     "updatedAt": "2026-09-14T20:42:32.615Z"
+  },
+  {
+    "id": "cd9eddde-8e26-4936-b82d-41cad4f3818e",
+    "slug": "cortex-ignition-ps1",
+    "title": "Cortex Ignition",
+    "description": "A real PlayStation 1 homebrew 3D action tech demo. Fight with light and heavy attacks, dodge, lock on and swap combat stances, with original CD audio in the open-source PSoXide browser emulator.",
+    "author": "Tuukka Tihekari",
+    "tags": [
+      "PlayStation 1",
+      "homebrew",
+      "action",
+      "3D",
+      "combat",
+      "gamepad"
+    ],
+    "status": "draft",
+    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
+    "ownerFolder": "tuukka-tihekari",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-14T20:42:32.841Z",
+    "updatedAt": "2026-09-14T20:42:32.841Z"
   }
 ]
