@@ -48,6 +48,19 @@
       cursor: pointer;
     }
     .message[hidden] { display: none; }
+    .difficulty { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 14px; padding: 0; border: 0; }
+    .difficulty legend { grid-column: 1 / -1; width: 100%; margin-bottom: 3px; color: #a9b7ae; font: 11px system-ui, sans-serif; letter-spacing: .12em; }
+    .difficulty button {
+      min-height: 44px;
+      border: 1px solid #667251;
+      border-radius: 4px;
+      background: #202a24;
+      color: #bac69a;
+      font: 700 12px/1.2 "Courier New", monospace;
+      cursor: pointer;
+    }
+    .difficulty button[aria-pressed="true"] { background: var(--key); color: var(--pixel); box-shadow: inset 0 -3px #667251; }
+    .difficulty small { display: block; margin-top: 3px; font-size: 10px; }
     .controls { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: clamp(18px, 6vw, 46px); margin-top: 18px; }
     .softkeys { display: grid; gap: 12px; }
     .softkeys button, .pad button {
@@ -89,6 +102,12 @@
         <div class="message" id="message" role="button" tabindex="0">MAT0<br><small>Paina OK tai nuolinäppäintä</small></div>
       </div>
     </section>
+    <fieldset class="difficulty">
+      <legend>VAIKEUSTASO</legend>
+      <button type="button" data-level="easy" aria-pressed="false">HELPPO<small>1,00×</small></button>
+      <button type="button" data-level="normal" aria-pressed="true">NORMAALI<small>1,25×</small></button>
+      <button type="button" data-level="hard" aria-pressed="false">VAIKEA<small>1,33×</small></button>
+    </fieldset>
     <div class="controls">
       <div class="softkeys">
         <button id="pause" type="button">TAUKO</button>
@@ -113,7 +132,14 @@
     const size = 20;
     const cells = canvas.width / size;
     const colors = { screen: '#9eae79', pixel: '#18271f', shade: '#637654' };
+    const levels = {
+      easy: { label: 'HELPPO', delay: 160, points: 100 },
+      normal: { label: 'NORMAALI', delay: 128, points: 125 },
+      hard: { label: 'VAIKEA', delay: 120, points: 133 },
+    };
     let snake, food, direction, queuedDirection, score, timer, running = false, paused = false;
+    let level = localStorage.getItem('mato-level') || 'normal';
+    if (!levels[level]) level = 'normal';
     let best = Number(localStorage.getItem('mato3310-best') || 0);
     bestEl.textContent = best;
 
@@ -135,7 +161,20 @@
       } while (snake.some(part => part.x === food.x && part.y === food.y));
     }
 
-    function speed() { return 135; }
+    function speed() { return levels[level].delay; }
+
+    function selectDifficulty(nextLevel) {
+      if (!levels[nextLevel] || nextLevel === level) return;
+      level = nextLevel;
+      localStorage.setItem('mato-level', level);
+      document.querySelectorAll('[data-level]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.level === level));
+      });
+      running = false;
+      reset();
+      message.innerHTML = `${levels[level].label}<br><small>Paina OK tai nuolinäppäintä</small>`;
+      message.hidden = false;
+    }
 
     function startGame(fresh = false) {
       if (fresh || !snake) reset();
@@ -164,7 +203,7 @@
       if (hitWall || hitSelf) return gameOver();
       snake.unshift(head);
       if (head.x === food.x && head.y === food.y) {
-        score++;
+        score += levels[level].points;
         scoreEl.textContent = score;
         best = Math.max(best, score);
         bestEl.textContent = best;
@@ -242,6 +281,10 @@
       if (event.key === 'Enter' && !running) startGame(true);
     });
     document.querySelectorAll('[data-dir]').forEach(button => button.addEventListener('pointerdown', () => setDirection(button.dataset.dir)));
+    document.querySelectorAll('[data-level]').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.level === level));
+      button.addEventListener('click', () => selectDifficulty(button.dataset.level));
+    });
     document.querySelector('#pause').addEventListener('click', togglePause);
     document.querySelector('#restart').addEventListener('click', () => startGame(true));
     document.querySelector('#start').addEventListener('click', () => paused ? togglePause() : startGame(!running));
