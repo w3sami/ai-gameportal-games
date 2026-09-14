@@ -8,9 +8,11 @@
     :root {
       color-scheme: dark;
       font-family: "Courier New", ui-monospace, monospace;
+      --shell: #263b48;
+      --shell-light: #3f5e6c;
       --screen: #9eae79;
       --pixel: #18271f;
-      --key: #bac69a;
+      --key: #c7d0cf;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
@@ -18,26 +20,35 @@
       min-height: 100svh;
       display: grid;
       place-items: center;
-      padding: clamp(12px, 3vw, 28px);
-      background: #111815;
+      padding: 18px;
+      background: radial-gradient(circle at top, #364b59, #10181d 65%);
       color: white;
       overflow-x: hidden;
     }
-    .game-shell { width: min(560px, 100%); }
-    h1 { margin: 0 0 14px; color: #c4d39b; font-size: clamp(28px, 8vw, 48px); letter-spacing: -.06em; }
-    .bezel { padding: 0; background: transparent; }
+    .phone {
+      width: min(420px, 96vw);
+      border: 3px solid #68808c;
+      border-radius: 46px 46px 72px 72px;
+      padding: 24px 22px 30px;
+      background: linear-gradient(145deg, var(--shell-light), var(--shell) 45%, #17252e);
+      box-shadow: 0 28px 70px #0009, inset 0 2px 2px #ffffff44;
+    }
+    .brand { text-align: center; letter-spacing: .28em; font-weight: 900; font-size: 13px; opacity: .85; }
+    .speaker { width: 82px; height: 7px; margin: 12px auto 18px; border-radius: 9px; background: #101c22; box-shadow: inset 0 2px 3px #000; }
+    .bezel { padding: 18px; border-radius: 22px; background: #151f24; box-shadow: inset 0 0 0 3px #77848b; }
     .lcd {
       position: relative;
       padding: 10px;
+      border-radius: 5px;
       background: var(--screen);
       color: var(--pixel);
-      box-shadow: none;
+      box-shadow: inset 0 0 16px #28352255;
     }
     .status { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 13px; font-weight: 900; }
-    canvas { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; border: 0; background: var(--screen); touch-action: none; }
+    canvas { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; border: 3px solid var(--pixel); background: var(--screen); touch-action: none; }
     .message {
       position: absolute;
-      inset: 34px 0 0;
+      inset: 42px 13px 13px;
       display: grid;
       place-items: center;
       text-align: center;
@@ -48,40 +59,39 @@
       cursor: pointer;
     }
     .message[hidden] { display: none; }
-    .controls { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: clamp(18px, 6vw, 46px); margin-top: 18px; }
-    .softkeys { display: grid; gap: 12px; }
+    .softkeys { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin: 20px 16px 10px; }
     .softkeys button, .pad button {
       border: 0;
-      color: var(--pixel);
-      background: var(--key);
-      box-shadow: 0 4px 0 #667251;
+      color: #15232b;
+      background: linear-gradient(#e3e8e7, var(--key));
+      box-shadow: 0 5px 0 #758287, 0 8px 14px #0008;
       font: inherit;
       font-weight: 900;
       cursor: pointer;
       touch-action: manipulation;
     }
-    .softkeys button { min-width: 120px; min-height: 46px; border-radius: 4px; }
-    .pad { width: 184px; height: 150px; display: grid; grid-template: repeat(3, 50px) / repeat(3, 58px); justify-content: center; }
-    .pad button { font-size: 22px; border-radius: 4px; margin: 3px; }
-    .pad button:active, .softkeys button:active { translate: 0 3px; box-shadow: 0 1px 0 #667251; }
+    .softkeys button { min-height: 39px; border-radius: 50% 50% 42% 42%; }
+    .pad { width: 196px; height: 156px; margin: 12px auto 0; display: grid; grid-template: repeat(3, 52px) / repeat(3, 62px); justify-content: center; }
+    .pad button { font-size: 23px; border-radius: 16px; margin: 3px; }
+    .pad button:active, .softkeys button:active { translate: 0 4px; box-shadow: 0 1px 0 #758287; }
     .up { grid-column: 2; }
     .left { grid-column: 1; grid-row: 2; }
-    .ok { grid-column: 2; grid-row: 2; font-size: 12px !important; }
+    .ok { grid-column: 2; grid-row: 2; font-size: 12px !important; border-radius: 50% !important; }
     .right { grid-column: 3; grid-row: 2; }
     .down { grid-column: 2; grid-row: 3; }
-    .help { margin: 16px 0 0; color: #a9b7ae; font: 13px/1.45 system-ui, sans-serif; }
-    @media (max-width: 470px) {
-      .controls { grid-template-columns: 1fr; }
-      .softkeys { grid-template-columns: 1fr 1fr; order: 2; }
-      .softkeys button { min-width: 0; }
-      .pad { margin: auto; }
-      .help { text-align: center; }
+    .help { margin: 18px 0 0; text-align: center; color: #c7d8df; font: 13px/1.45 system-ui, sans-serif; }
+    @media (max-height: 720px) {
+      body { align-items: start; }
+      .phone { padding-top: 15px; }
+      .speaker { margin: 7px auto 10px; }
+      .pad { height: 138px; grid-template-rows: repeat(3, 46px); }
     }
   </style>
 </head>
 <body>
-  <main class="game-shell" aria-label="Matopeli">
-    <h1>Matopeli</h1>
+  <main class="phone" aria-label="Retro matopeli">
+    <div class="brand">RETRO SNAKE</div>
+    <div class="speaker" aria-hidden="true"></div>
     <section class="bezel">
       <div class="lcd">
         <div class="status"><span>PISTEET <b id="score">0</b></span><span>ENNÄTYS <b id="best">0</b></span></div>
@@ -89,19 +99,17 @@
         <div class="message" id="message" role="button" tabindex="0">MAT0<br><small>Paina OK tai nuolinäppäintä</small></div>
       </div>
     </section>
-    <div class="controls">
-      <div class="softkeys">
-        <button id="pause" type="button">TAUKO</button>
-        <button id="restart" type="button">UUSI PELI</button>
-      </div>
-      <nav class="pad" aria-label="Ohjaimet">
-        <button class="up" data-dir="up" aria-label="Ylös">▲</button>
-        <button class="left" data-dir="left" aria-label="Vasemmalle">◀</button>
-        <button class="ok" id="start" aria-label="Aloita tai jatka">OK</button>
-        <button class="right" data-dir="right" aria-label="Oikealle">▶</button>
-        <button class="down" data-dir="down" aria-label="Alas">▼</button>
-      </nav>
+    <div class="softkeys">
+      <button id="pause" type="button">TAUKO</button>
+      <button id="restart" type="button">UUSI</button>
     </div>
+    <nav class="pad" aria-label="Ohjaimet">
+      <button class="up" data-dir="up" aria-label="Ylös">▲</button>
+      <button class="left" data-dir="left" aria-label="Vasemmalle">◀</button>
+      <button class="ok" id="start" aria-label="Aloita tai jatka">OK</button>
+      <button class="right" data-dir="right" aria-label="Oikealle">▶</button>
+      <button class="down" data-dir="down" aria-label="Alas">▼</button>
+    </nav>
     <p class="help">Nuolinäppäimet / WASD · välilyönti pysäyttää · puhelimella pyyhkäise</p>
   </main>
   <script>
