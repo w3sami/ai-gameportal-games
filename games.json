@@ -109,24 +109,24 @@
   {
     "id": "903faf3f-758b-4f72-a2ce-3b1298668000",
     "slug": "bigbools-amp",
-    "title": "Bigbools Amp",
-    "description": "A compact retro browser music player featuring open-licensed electronic music from Free Music Archive, with search, attribution, spectrum visualization and a ten-band equalizer.",
+    "title": "Bigbools Player",
+    "description": "A browser radio and music player with live stations, Audius and Creative Commons Internet Archive netlabels. Short tracks under one minute are filtered out.",
     "author": "Tuukka Tihekari",
     "tags": [
       "music-player",
-      "electronic",
-      "retro",
-      "web-audio",
-      "open-music",
-      "fma"
+      "internet-radio",
+      "audius",
+      "internet-archive",
+      "streaming",
+      "web-audio"
     ],
     "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "sizeBytes": 457548,
+    "sizeBytes": 148482,
     "createdAt": "2026-09-14T19:22:53.324Z",
-    "updatedAt": "2026-09-14T21:39:42.078Z"
+    "updatedAt": "2026-09-15T12:27:19.647Z"
   },
   {
     "id": "0297b073-296f-4986-af92-a284b1e50ca2",

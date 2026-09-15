@@ -1,0 +1,7 @@
+{
+  "name": "Bigbools Player",
+  "version": "1.2.0",
+  "catalogApi": "catalog.json",
+  "minimumTrackDurationSeconds": 60,
+  "audioStorage": "remote-stream-only"
+}
