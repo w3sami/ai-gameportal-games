@@ -1,7 +1,0 @@
-{
-  "name": "Bigbools Amp",
-  "version": "1.0.0",
-  "catalogIndex": "music/catalog-index.json",
-  "downloadConcurrency": 12,
-  "retryDelaysMs": [1000, 2000, 5000, 10000]
-}
