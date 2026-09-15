@@ -1,47 +1,23 @@
 (() => {
   "use strict";
   const $ = (s) => document.querySelector(s);
-  const cfg = { concurrency: 12, retryDelays: [1000, 2000, 5000, 10000] };
   const state = {
-    manifest: null,
     tracks: [],
-    done: 0,
-    bytes: 0,
-    active: 0,
-    retries: 0,
-    failed: [],
-    paused: false,
-    started: 0,
     current: -1,
     filtered: [],
     shuffle: false,
     repeat: false,
-    objectUrls: new Map(),
     catalog: null,
-    page: 0,
-    loadingPage: false,
   };
   const els = Object.fromEntries(
     [
       "installer",
       "player",
       "install-status",
-      "track-progress",
-      "byte-progress",
-      "progress-bar",
-      "percent",
-      "speed",
-      "eta",
-      "active-count",
-      "retry-count",
-      "elapsed",
-      "storage",
       "current-file",
       "install-note",
-      "pause",
-      "resume",
-      "retry",
       "audio",
+      "radio-audio",
       "seek",
       "volume",
       "mute",
@@ -66,6 +42,7 @@
       "credits",
       "credits-list",
       "credits-open",
+      "credits-close",
       "eq-enabled",
       "eq-reset",
       "eq-preset",
@@ -82,258 +59,51 @@
     return `${n.toFixed(i ? 2 : 0)} ${u[i]}`;
   };
   const fmtTime = (n = 0) => {
-    if (!isFinite(n)) return "--:--";
+    if (!isFinite(n)) {
+      return "--:--";
+    }
     n = Math.max(0, Math.floor(n));
     return `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
   };
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  let db;
-  const openDb = () =>
-    new Promise((resolve, reject) => {
-      const r = indexedDB.open("bigbools-amp", 2);
-      r.onupgradeneeded = () => {
-        const d = r.result;
-        if (!d.objectStoreNames.contains("meta")) d.createObjectStore("meta");
-        if (!d.objectStoreNames.contains("tracks"))
-          d.createObjectStore("tracks");
-      };
-      r.onsuccess = () => resolve((db = r.result));
-      r.onerror = () => reject(r.error);
-    });
-  const idb = (store, mode, fn) =>
-    new Promise((resolve, reject) => {
-      const tx = db.transaction(store, mode),
-        os = tx.objectStore(store);
-      let result;
-      try {
-        result = fn(os);
-      } catch (e) {
-        reject(e);
-      }
-      tx.oncomplete = () => resolve(result?.result);
-      tx.onerror = () => reject(tx.error);
-    });
-  const getMeta = (k) => idb("meta", "readonly", (s) => s.get(k));
-  const setMeta = (k, v) => idb("meta", "readwrite", (s) => s.put(v, k));
-  const hasTrack = async (t) => {
-    const m = await idb("tracks", "readonly", (s) => s.get(t.id));
-    return m && m.bytes === t.bytes && m.sha256 === t.sha256;
-  };
-  const putTrackMeta = (t) =>
-    idb("tracks", "readwrite", (s) =>
-      s.put({ bytes: t.bytes, sha256: t.sha256 }, t.id),
-    );
-
-  async function opfsRoot() {
-    return navigator.storage?.getDirectory
-      ? navigator.storage.getDirectory()
-      : null;
-  }
-  async function removeLocal(id) {
-    try {
-      const root = await opfsRoot();
-      if (root) await root.removeEntry(id);
-    } catch {}
-  }
-  async function persistBlob(track, blob) {
-    const root = await opfsRoot();
-    if (!root) return false;
-    const h = await root.getFileHandle(track.id, { create: true });
-    const w = await h.createWritable();
-    await w.write(blob);
-    await w.close();
-    await putTrackMeta(track);
-    return true;
-  }
-  async function localUrl(track) {
-    if (state.objectUrls.has(track.id)) return state.objectUrls.get(track.id);
-    try {
-      const root = await opfsRoot(),
-        h = await root.getFileHandle(track.id),
-        f = await h.getFile();
-      if (f.size !== track.bytes) return null;
-      const u = URL.createObjectURL(f);
-      state.objectUrls.set(track.id, u);
-      return u;
-    } catch {
-      return null;
-    }
-  }
-  async function sha256(blob) {
-    const b = await blob.arrayBuffer(),
-      hash = await crypto.subtle.digest("SHA-256", b);
-    return [...new Uint8Array(hash)]
-      .map((x) => x.toString(16).padStart(2, "0"))
-      .join("");
-  }
-
-  async function inspectStorage(total) {
-    try {
-      const e = await navigator.storage.estimate();
-      const free = (e.quota || 0) - (e.usage || 0);
-      els.storage.textContent = fmtBytes(free) + " FREE";
-      if (navigator.storage.persist) await navigator.storage.persist();
-      if (free < total) {
-        note(
-          `Browser storage reports ${fmtBytes(free)} free for a ${fmtBytes(total)} library. The full network transfer will still be attempted, but some files may remain session-only.`,
-          false,
-        );
-      }
-    } catch {
-      els.storage.textContent = "UNKNOWN";
-    }
-  }
   function note(msg, error = true) {
     els["install-note"].hidden = false;
     els["install-note"].classList.toggle("error", error);
     els["install-note"].textContent = msg;
   }
-  function updateInstall() {
-    const m = state.manifest || { trackCount: 0, totalBytes: 0 },
-      elapsed = (Date.now() - state.started) / 1000,
-      speed = elapsed ? state.bytes / elapsed : 0,
-      remain = Math.max(0, m.totalBytes - state.bytes);
-    els["track-progress"].textContent =
-      `${state.done} / ${m.trackCount} tracks`;
-    els["byte-progress"].textContent =
-      `${fmtBytes(state.bytes)} / ${fmtBytes(m.totalBytes)}`;
-    const p = m.totalBytes ? (state.bytes / m.totalBytes) * 100 : 0;
-    els["progress-bar"].style.width = Math.min(100, p) + "%";
-    els.percent.textContent = p.toFixed(1) + "%";
-    els.speed.textContent = fmtBytes(speed) + "/s";
-    els.eta.textContent = "ETA " + (speed ? fmtTime(remain / speed) : "--:--");
-    els["active-count"].textContent = state.active;
-    els["retry-count"].textContent = state.retries;
-    els.elapsed.textContent = fmtTime(elapsed);
-  }
-  async function download(track) {
-    if (await hasTrack(track)) {
-      state.done++;
-      state.bytes += track.bytes;
-      updateInstall();
-      return;
-    }
-    for (let attempt = 0; attempt <= cfg.retryDelays.length; attempt++) {
-      while (state.paused) await sleep(250);
-      try {
-        state.active++;
-        els["current-file"].textContent = `${track.artist} — ${track.title}`;
-        updateInstall();
-        const res = await fetch(track.url);
-        if (!res.ok) throw Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        if (blob.size !== track.bytes)
-          throw Error(`size ${blob.size}, expected ${track.bytes}`);
-        const hash = await sha256(blob);
-        if (!track.sha256 || hash.toLowerCase() !== track.sha256.toLowerCase())
-          throw Error("SHA-256 mismatch");
-        await persistBlob(track, blob).catch(() => false);
-        state.done++;
-        state.bytes += blob.size;
-        state.active--;
-        updateInstall();
-        return;
-      } catch (err) {
-        state.active = Math.max(0, state.active - 1);
-        if (attempt === cfg.retryDelays.length) {
-          state.failed.push({ track, error: String(err) });
-          updateInstall();
-          return;
-        }
-        state.retries++;
-        updateInstall();
-        await sleep(cfg.retryDelays[attempt]);
-      }
-    }
-  }
   async function install() {
-    const configRes = await fetch("manifest.json", { cache: "no-store" }),
-      c = await configRes.json();
-    const indexRes = await fetch(c.catalogIndex || "music/catalog-index.json", {
-        cache: "no-store",
-      }),
-      catalog = (state.catalog = await indexRes.json());
-    if (!catalog.pageCount) throw Error("Music catalog is unavailable");
-    await loadEntireCatalog();
-    if (!state.tracks.length) throw Error("Music catalog is empty");
+    const configResponse = await fetch("manifest.json", { cache: "no-store" });
+    const config = await configResponse.json();
+    const catalogResponse = await fetch(config.catalogApi || "/api/audio/catalog", {
+      cache: "no-store",
+    });
+    if (!catalogResponse.ok) {
+      throw Error(`Music catalog: HTTP ${catalogResponse.status}`);
+    }
+    const catalog = await catalogResponse.json();
+    const minimumDuration = Math.max(60, Number(catalog.minDurationSeconds || 60));
+    state.tracks = (catalog.tracks || []).filter(
+      (track) => track.live || Number(track.durationSeconds || 0) >= minimumDuration,
+    );
+    state.catalog = {
+      pageCount: 1,
+      totalTracks: state.tracks.length,
+      genres: [...new Set(state.tracks.flatMap(genresOf))],
+      defaultGenre: "",
+      errors: catalog.errors || [],
+    };
+    if (!state.tracks.length) {
+      throw Error("Music catalog is empty");
+    }
     unlock();
   }
-  async function loadEntireCatalog() {
-    const pages = Array.from(
-      { length: state.catalog.pageCount },
-      (_, index) => index + 1,
-    );
-    const results = await Promise.all(
-      pages.map(async (page) => {
-        const url = state.catalog.pagePattern.replace("{page}", page);
-        const response = await fetch(url, { cache: "no-store" });
-        if (!response.ok) throw Error(`Catalog page ${page}: HTTP ${response.status}`);
-        return (await response.json()).tracks || [];
-      }),
-    );
-    state.tracks = results.flat();
-    state.page = state.catalog.pageCount;
-  }
-  async function loadNextPage() {
-    if (
-      state.loadingPage ||
-      !state.catalog ||
-      state.page >= state.catalog.pageCount
-    )
-      return;
-    state.loadingPage = true;
-    try {
-      while (state.page < state.catalog.pageCount) {
-        const page = state.page + 1,
-          url = state.catalog.pagePattern.replace("{page}", page),
-          data = await (await fetch(url, { cache: "no-store" })).json(),
-          added = data.tracks || [];
-        state.page = page;
-        if (added.length) {
-          state.tracks.push(...added);
-          break;
-        }
-      }
-      if (!els.player.hidden) {
-        populateFilters();
-        render();
-        showCredits();
-      }
-    } finally {
-      state.loadingPage = false;
-    }
-  }
-  els.pause.onclick = () => {
-    state.paused = true;
-    els.pause.disabled = true;
-    els.resume.disabled = false;
-    els["install-status"].textContent = "PAUSED";
-  };
-  els.resume.onclick = () => {
-    state.paused = false;
-    els.pause.disabled = false;
-    els.resume.disabled = true;
-    els["install-status"].textContent = "PREPARING";
-  };
-  els.retry.onclick = async () => {
-    const failed = state.failed.splice(0);
-    els.retry.disabled = true;
-    await Promise.all(failed.map((x) => download(x.track)));
-    if (
-      !state.failed.length &&
-      state.done === state.manifest.trackCount &&
-      state.bytes === state.manifest.totalBytes
-    )
-      unlock();
-  };
-
   let ctx,
     source,
     analyser,
     filters = [];
   function initAudio() {
-    if (ctx) return;
+    if (ctx) {
+      return;
+    }
     ctx = new AudioContext();
     source = ctx.createMediaElementSource(els.audio);
     analyser = ctx.createAnalyser();
@@ -342,8 +112,7 @@
     const freqs = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
     filters = freqs.map((f, i) => {
       const q = ctx.createBiquadFilter();
-      q.type =
-        i === 0 ? "lowshelf" : i === freqs.length - 1 ? "highshelf" : "peaking";
+      q.type = i === 0 ? "lowshelf" : i === freqs.length - 1 ? "highshelf" : "peaking";
       q.frequency.value = f;
       q.Q.value = 1;
       q.gain.value = +(localStorage.getItem("eq-" + f) || 0);
@@ -370,7 +139,9 @@
     });
   }
   function draw() {
-    if (!analyser) return;
+    if (!analyser) {
+      return;
+    }
     requestAnimationFrame(draw);
     const c = els.visualizer,
       g = c.getContext("2d"),
@@ -390,12 +161,6 @@
     els.player.hidden = false;
     state.filtered = [...state.tracks];
     populateFilters();
-    if (
-      [...els.genre.options].some(
-        (o) => o.value === (state.catalog.defaultGenre || "Electronic"),
-      )
-    )
-      els.genre.value = state.catalog.defaultGenre || "Electronic";
     render();
     showCredits();
     select(0, false);
@@ -429,10 +194,7 @@
     state.filtered = state.tracks
       .filter(
         (t) =>
-          (!q ||
-            `${t.artist} ${t.title} ${t.album || ""}`
-              .toLowerCase()
-              .includes(q)) &&
+          (!q || `${t.artist} ${t.title} ${t.album || ""}`.toLowerCase().includes(q)) &&
           (!g || genresOf(t).includes(g)) &&
           (!a || t.artist === a),
       )
@@ -443,18 +205,18 @@
             ? x.bytes - y.bytes
             : String(x[sort] || "").localeCompare(String(y[sort] || "")),
       );
-    els["library-count"].textContent =
-      `${state.filtered.length} loaded${state.page < state.catalog.pageCount ? " · scroll for more" : ""}`;
+    els["library-count"].textContent = `${state.filtered.length} streams`;
     els["track-list"].innerHTML = "";
     const frag = document.createDocumentFragment();
     state.filtered.forEach((t, i) => {
       const d = document.createElement("div");
-      d.className =
-        "track" + (state.tracks[state.current]?.id === t.id ? " selected" : "");
-      d.innerHTML = `<span>${String(i + 1).padStart(3, "0")}</span><span class="title">${escapeHtml(t.title)}<small>${escapeHtml(t.artist)}</small></span><span>${escapeHtml(t.genre || "—")}</span><span>${fmtTime(t.durationSeconds)}</span><span>${fmtBytes(t.bytes)}</span>`;
+      d.className = "track" + (state.tracks[state.current]?.id === t.id ? " selected" : "");
+      d.innerHTML = `<span>${String(i + 1).padStart(3, "0")}</span><span class="title">${escapeHtml(t.title)}<small>${escapeHtml(t.artist)} · ${escapeHtml(t.provider || "Remote")}</small></span><span>${escapeHtml(t.genre || "—")}</span><span>${t.live ? "LIVE" : fmtTime(t.durationSeconds)}</span><span>${t.live ? `${Math.round((t.bitrate || 0) / 1000)}k` : t.bytes ? fmtBytes(t.bytes) : "STREAM"}</span>`;
       d.ondblclick = () => select(state.tracks.indexOf(t), true);
-      d.onclick = () =>
-        select(state.tracks.indexOf(t), !els.audio.paused && !els.audio.ended);
+      d.onclick = () => {
+        const player = activeAudio();
+        select(state.tracks.indexOf(t), !player.paused && !player.ended);
+      };
       frag.append(d);
     });
     els["track-list"].append(frag);
@@ -472,44 +234,62 @@
         })[c],
     );
   async function select(i, autoplay = true) {
-    if (i < 0 || i >= state.tracks.length) return;
+    if (i < 0 || i >= state.tracks.length) {
+      return;
+    }
     state.current = i;
     const t = state.tracks[i];
     els["now-index"].textContent = String(i + 1).padStart(3, "0");
     els["now-title"].textContent = `${t.artist} — ${t.title}`;
     els["now-meta"].textContent =
-      `${t.album || "—"} · ${t.genre || "Electronic"} · ${Math.round((t.bitrate || 0) / 1000)} kbps`;
+      `${t.album || "—"} · ${t.genre || "Music"} · ${t.live ? "LIVE" : fmtTime(t.durationSeconds)} · ${t.provider || "Remote"}`;
     els["track-info"].innerHTML =
-      `<dt>Artist</dt><dd>${escapeHtml(t.artist)}</dd><dt>Title</dt><dd>${escapeHtml(t.title)}</dd><dt>License</dt><dd><a target="_blank" rel="noopener" href="${t.licenseUrl}">${escapeHtml(t.license)}</a></dd><dt>Source</dt><dd><a target="_blank" rel="noopener" href="${t.sourceUrl}">Original release</a></dd>`;
+      `<dt>Artist / station</dt><dd>${escapeHtml(t.artist)}</dd><dt>Title</dt><dd>${escapeHtml(t.title)}</dd><dt>Provider</dt><dd>${escapeHtml(t.provider || "Remote")}</dd><dt>License</dt><dd><a target="_blank" rel="noopener" href="${t.licenseUrl}">${escapeHtml(t.license)}</a></dd><dt>Source</dt><dd><a target="_blank" rel="noopener" href="${t.sourceUrl}">Original source</a></dd>`;
     render();
-    els.audio.src = t.url;
+    const player = t.live ? els["radio-audio"] : els.audio;
+    const otherPlayer = t.live ? els.audio : els["radio-audio"];
+    otherPlayer.pause();
+    player.src = t.url;
     if (autoplay) {
-      initAudio();
-      await ctx.resume();
-      await els.audio.play();
+      if (!t.live) {
+        initAudio();
+        await ctx.resume();
+      }
+      await player.play();
     }
   }
+  const activeAudio = () => (state.tracks[state.current]?.live ? els["radio-audio"] : els.audio);
   const move = (dir) => {
-    if (!state.tracks.length) return;
+    if (!state.tracks.length) {
+      return;
+    }
     let i = state.shuffle
       ? Math.floor(Math.random() * state.tracks.length)
       : (state.current + dir + state.tracks.length) % state.tracks.length;
     select(i, true);
   };
   const syncPlayState = () => {
-    const playing = !els.audio.paused && !els.audio.ended;
+    const player = activeAudio();
+    const playing = !player.paused && !player.ended;
     els.play.classList.toggle("primary", playing);
     els.play.setAttribute("aria-pressed", String(playing));
   };
   els.play.onclick = async () => {
-    initAudio();
-    await ctx.resume();
-    if (els.audio.paused) await els.audio.play();
-    else els.audio.pause();
+    const player = activeAudio();
+    if (!state.tracks[state.current]?.live) {
+      initAudio();
+      await ctx.resume();
+    }
+    if (player.paused) {
+      await player.play();
+    } else {
+      player.pause();
+    }
   };
   els.stop.onclick = () => {
-    els.audio.pause();
-    els.audio.currentTime = 0;
+    const player = activeAudio();
+    player.pause();
+    player.currentTime = 0;
   };
   els.prev.onclick = () => move(-1);
   els.next.onclick = () => move(1);
@@ -521,29 +301,43 @@
     state.repeat = !state.repeat;
     els.repeat.setAttribute("aria-pressed", state.repeat);
   };
-  els.audio.onplay = syncPlayState;
-  els.audio.onpause = syncPlayState;
-  els.audio.onended = () => {
+  const onEnded = () => {
     syncPlayState();
-    state.repeat ? ((els.audio.currentTime = 0), els.audio.play()) : move(1);
+    const player = activeAudio();
+    state.repeat ? ((player.currentTime = 0), player.play()) : move(1);
   };
-  els.audio.onerror = syncPlayState;
-  els.audio.ontimeupdate = () => {
-    els.clock.textContent = `${fmtTime(els.audio.currentTime)} / ${fmtTime(els.audio.duration)}`;
-    els.seek.value = els.audio.duration
-      ? (els.audio.currentTime / els.audio.duration) * 1000
-      : 0;
+  const onTimeUpdate = () => {
+    const player = activeAudio();
+    els.clock.textContent = state.tracks[state.current]?.live
+      ? "LIVE"
+      : `${fmtTime(player.currentTime)} / ${fmtTime(player.duration)}`;
+    els.seek.value = player.duration ? (player.currentTime / player.duration) * 1000 : 0;
   };
+  [els.audio, els["radio-audio"]].forEach((player) => {
+    player.onplay = syncPlayState;
+    player.onpause = syncPlayState;
+    player.onended = onEnded;
+    player.onerror = syncPlayState;
+    player.ontimeupdate = onTimeUpdate;
+  });
   els.seek.oninput = () => {
-    if (els.audio.duration)
-      els.audio.currentTime = (els.seek.value / 1000) * els.audio.duration;
+    const player = activeAudio();
+    if (player.duration) {
+      player.currentTime = (els.seek.value / 1000) * player.duration;
+    }
   };
-  els.volume.oninput = () => (els.audio.volume = els.volume.value);
+  els.volume.oninput = () => {
+    els.audio.volume = els.volume.value;
+    els["radio-audio"].volume = els.volume.value;
+  };
   els.audio.volume = els.volume.value;
-  els.mute.onclick = () => (els.audio.muted = !els.audio.muted);
-  [els.search, els.genre, els.artist, els.sort].forEach(
-    (e) => (e.oninput = render),
-  );
+  els["radio-audio"].volume = els.volume.value;
+  els.mute.onclick = () => {
+    const muted = !activeAudio().muted;
+    els.audio.muted = muted;
+    els["radio-audio"].muted = muted;
+  };
+  [els.search, els.genre, els.artist, els.sort].forEach((e) => (e.oninput = render));
   document.querySelectorAll(".tabs button").forEach(
     (b) =>
       (b.onclick = () => {
@@ -579,34 +373,42 @@
       i.dispatchEvent(new Event("input"));
     });
   };
-  els["track-list"].addEventListener("scroll", () => {
-    if (
-      els["track-list"].scrollTop + els["track-list"].clientHeight >
-      els["track-list"].scrollHeight - 180
-    )
-      loadNextPage();
-  });
   function showCredits() {
     els["credits-list"].innerHTML = state.tracks
       .map(
         (t) =>
-          `<article class="credit"><strong>${escapeHtml(t.artist)} — ${escapeHtml(t.title)}</strong><p>${escapeHtml(t.attribution)}</p><a target="_blank" rel="noopener" href="${t.licenseUrl}">${escapeHtml(t.license)}</a> · <a target="_blank" rel="noopener" href="${t.sourceUrl}">Source</a></article>`,
+          `<article class="credit"><strong>${escapeHtml(t.artist)} — ${escapeHtml(t.title)}</strong><p>${escapeHtml(t.attribution)}</p><p>${escapeHtml(t.provider || "Remote stream")}${t.live ? " · LIVE" : ` · ${fmtTime(t.durationSeconds)}`}</p><a target="_blank" rel="noopener" href="${t.licenseUrl}">${escapeHtml(t.license)}</a> · <a target="_blank" rel="noopener" href="${t.sourceUrl}">Source</a></article>`,
       )
       .join("");
   }
   els["credits-open"].onclick = () => els.credits.showModal();
+  els["credits-close"].onclick = () => els.credits.close();
+  els.credits.addEventListener("click", (event) => {
+    if (event.target === els.credits) {
+      els.credits.close();
+    }
+  });
   addEventListener("keydown", (e) => {
-    if (/INPUT|SELECT/.test(e.target.tagName)) return;
+    if (/INPUT|SELECT/.test(e.target.tagName)) {
+      return;
+    }
     if (e.code === "Space") {
       e.preventDefault();
       els.play.click();
     }
-    if (e.code === "ArrowRight") move(1);
-    if (e.code === "ArrowLeft") move(-1);
-    if (e.key.toLowerCase() === "m") els.mute.click();
+    if (e.code === "ArrowRight") {
+      move(1);
+    }
+    if (e.code === "ArrowLeft") {
+      move(-1);
+    }
+    if (e.key.toLowerCase() === "m") {
+      els.mute.click();
+    }
   });
-  setInterval(() => state.started && updateInstall(), 1000);
   install().catch((e) => {
+    els.installer.hidden = false;
+    els.player.hidden = true;
     els["install-status"].textContent = "FAILED";
     note(String(e), true);
     els["current-file"].textContent = "Library preparation halted.";
