@@ -39,6 +39,48 @@
     reicast_framerate: 'normal'
   };
 
+  // Flycast exposes the Dreamcast face buttons through libretro's RetroPad
+  // names, whose A/B and X/Y positions are rotated relative to the labels on
+  // a standard browser gamepad. Keep the keyboard bindings familiar, but map
+  // the physical controller labels to the Dreamcast buttons the game shows.
+  const dreamcastControls = {
+    0: {
+      0: { value: 'x', value2: 'BUTTON_1' },
+      1: { value: 's', value2: 'BUTTON_3' },
+      2: { value: 'v', value2: 'SELECT' },
+      3: { value: 'enter', value2: 'START' },
+      4: { value: 'up arrow', value2: 'DPAD_UP' },
+      5: { value: 'down arrow', value2: 'DPAD_DOWN' },
+      6: { value: 'left arrow', value2: 'DPAD_LEFT' },
+      7: { value: 'right arrow', value2: 'DPAD_RIGHT' },
+      8: { value: 'z', value2: 'BUTTON_2' },
+      9: { value: 'a', value2: 'BUTTON_4' },
+      10: { value: 'q', value2: 'LEFT_TOP_SHOULDER' },
+      11: { value: 'e', value2: 'RIGHT_TOP_SHOULDER' },
+      12: { value: 'tab', value2: 'LEFT_BOTTOM_SHOULDER' },
+      13: { value: 'r', value2: 'RIGHT_BOTTOM_SHOULDER' },
+      14: { value: '', value2: 'LEFT_STICK' },
+      15: { value: '', value2: 'RIGHT_STICK' },
+      16: { value: 'h', value2: 'LEFT_STICK_X:+1' },
+      17: { value: 'f', value2: 'LEFT_STICK_X:-1' },
+      18: { value: 'g', value2: 'LEFT_STICK_Y:+1' },
+      19: { value: 't', value2: 'LEFT_STICK_Y:-1' },
+      20: { value: 'l', value2: 'RIGHT_STICK_X:+1' },
+      21: { value: 'j', value2: 'RIGHT_STICK_X:-1' },
+      22: { value: 'k', value2: 'RIGHT_STICK_Y:+1' },
+      23: { value: 'i', value2: 'RIGHT_STICK_Y:-1' },
+      24: { value: '1' },
+      25: { value: '2' },
+      26: { value: '3' },
+      27: {},
+      28: {},
+      29: {}
+    },
+    1: {},
+    2: {},
+    3: {}
+  };
+
   function setLoading(title, detail) {
     loading.querySelector('strong').textContent = title;
     loading.querySelector('span').textContent = detail;
@@ -149,9 +191,10 @@
     // The preceding streamed request warms the browser cache and provides real progress.
     window.EJS_gameUrl = `${assetBase}${gameFile}`;
     window.EJS_gameName = 'Drift Los Angeles';
-    // Version this key when compatibility-critical core defaults change so an
-    // old, non-working resolution cannot override the launcher configuration.
-    window.EJS_gameID = edgeRuntime ? 0x44a4f747 : 0x44a4f746;
+    // Use a new settings key after correcting Flycast's face-button layout so
+    // a previously saved, incompatible mapping cannot override this one.
+    window.EJS_gameID = edgeRuntime ? 0x44a4f749 : 0x44a4f748;
+    window.EJS_defaultControls = dreamcastControls;
     window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
     window.EJS_paths = {
       'flycast.json': 'flycast.json?v=1',
