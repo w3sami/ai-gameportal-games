@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VoxeLibre</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #0b1020;
+      color: #e7eefb;
+      font: 14px system-ui, sans-serif;
+    }
+    .shell {
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    header {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      background: #121a2d;
+      border-bottom: 1px solid #263454;
+    }
+    header strong { letter-spacing: .04em; }
+    header span { color: #9fb0cf; }
+    header a {
+      margin-left: auto;
+      color: #9fd4ff;
+      text-decoration: none;
+    }
+    header a:hover { text-decoration: underline; }
+    main { position: relative; min-height: 0; }
+    iframe {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #000;
+    }
+    #status {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      color: #aebdda;
+      background: #000;
+    }
+    #status.ready { display: none; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <strong>VoxeLibre</strong>
+      <a href="https://games.tuuchen.com/play/voxelibre/index.html" target="_blank" rel="noopener">Avaa peli uuteen välilehteen</a>
+    </header>
+    <main>
+      <div id="status" role="status">Ladataan peliä…</div>
+      <iframe
+        id="game"
+        title="VoxeLibre"
+        src="https://games.tuuchen.com/play/voxelibre/index.html"
+        allow="autoplay; fullscreen; gamepad; cross-origin-isolated"
+        allowfullscreen
+        referrerpolicy="no-referrer"></iframe>
+    </main>
+  </div>
+  <script>
+    const frame = document.getElementById('game');
+    const status = document.getElementById('status');
+    frame.addEventListener('load', () => status.classList.add('ready'));
+    frame.addEventListener('error', () => {
+      status.classList.remove('ready');
+      status.textContent = 'Peli ei latautunut. Kokeile “Avaa suoraan” -linkkiä.';
+    });
+  </script>
+</body>
+</html>
