@@ -223,25 +223,5 @@
     "sizeBytes": 223560,
     "createdAt": "2026-09-14T21:25:54.237Z",
     "updatedAt": "2026-09-14T21:45:45.903Z"
-  },
-  {
-    "id": "bb5ed31b-18bf-4641-8871-6534e7c25dc9",
-    "slug": "voxelibre",
-    "title": "VoxeLibre",
-    "description": "VoxeLibre-selainpeli.",
-    "author": "Tuukka Tihekari",
-    "tags": [
-      "voxel",
-      "sandbox",
-      "luanti",
-      "gamepad"
-    ],
-    "status": "published",
-    "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
-    "ownerFolder": "tuukka-tihekari",
-    "entryFile": "index.html",
-    "sizeBytes": 2332,
-    "createdAt": "2026-09-17T22:25:45.028Z",
-    "updatedAt": "2026-09-17T22:25:45.181Z"
   }
 ]
