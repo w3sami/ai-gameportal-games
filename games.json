@@ -228,7 +228,7 @@
     "id": "fba528c3-f6cf-45a4-bace-87e2cc6db650",
     "slug": "thruster",
     "title": "Thruster",
-    "description": "A cave-flying time attack. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Analog stick that steers relative to the rocket's heading, keyboard support, ghost replay of your best run on every level, and everything (levels, art, sound) generated in code.",
+    "description": "A cave-flying time attack. Thrust and steer a rocket through caverns, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Analog stick that steers relative to the rocket's heading, keyboard support, ghost replay of your best run on every level, and everything (levels, art, sound) generated in code.",
     "author": "Carl Vuorinen",
     "tags": [
       "arcade",
@@ -243,7 +243,7 @@
     "entryFile": "index.html",
     "sizeBytes": 64236,
     "createdAt": "2026-09-18T05:19:46.032Z",
-    "updatedAt": "2026-09-18T18:40:34.514Z"
+    "updatedAt": "2026-09-18T18:42:34.014Z"
   },
   {
     "id": "cb902f16-8749-47d0-bd6f-399f06bcf15d",
