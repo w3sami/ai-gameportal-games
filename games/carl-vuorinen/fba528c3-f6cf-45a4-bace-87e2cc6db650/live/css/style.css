@@ -14,15 +14,19 @@ button{font:inherit;color:inherit;cursor:pointer}
 #pauseBtn i{display:block;width:14px;height:16px;border-left:4px solid var(--ink);border-right:4px solid var(--ink)}
 body.play #pauseBtn{display:flex}
 #ctl{position:fixed;inset:0;z-index:1;touch-action:none}
-.stick,.thr{position:absolute;left:0;top:0;border-radius:50%;pointer-events:none;will-change:transform;transition:transform .18s ease,opacity .18s}
+.stick,.thr,.pad{position:absolute;left:0;top:0;border-radius:50%;pointer-events:none;will-change:transform;transition:transform .18s ease,opacity .18s}
 .stick{border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.18)}
 .dead{position:absolute;left:50%;top:50%;border-radius:50%;border:1px dashed rgba(255,255,255,.25);transform:translate(-50%,-50%)}
 .hdg{position:absolute;left:50%;top:50%;width:0;height:0;will-change:transform}
 .hdg::before{content:"";position:absolute;left:-3px;top:0;width:6px;height:12px;border-radius:3px;background:var(--accent)}
-.knob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(230,226,218,.6);will-change:transform;transition:transform .18s ease}
-.thr{width:110px;height:110px;margin:-55px 0 0 -55px;border:1px solid rgba(227,162,60,.55);background:rgba(227,162,60,.18);color:var(--ink);font-size:28px;display:flex;align-items:center;justify-content:center}
+.knob{position:absolute;left:50%;top:50%;border-radius:50%;background:rgba(230,226,218,.6);will-change:transform;transition:transform .18s ease}
+.pad{border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;line-height:1;transition:background .08s}
+.pad.on{background:rgba(230,226,218,.32)}
+.thr{border:1px solid rgba(227,162,60,.55);background:rgba(227,162,60,.18);color:var(--ink);display:flex;align-items:center;justify-content:center}
 .thr.on{background:rgba(227,162,60,.5)}
 .live,.live .knob{transition:none}
+#ctl.btns .stick{display:none}
+#ctl:not(.btns) .pad{display:none}
 body:not(.play) #ctl{display:none}
 #modal{position:fixed;inset:0;z-index:5;display:none;align-items:center;justify-content:center;background:rgba(6,7,10,.55);backdrop-filter:blur(3px);padding:16px}
 #modal.open{display:flex}
