@@ -6,10 +6,11 @@ const HULL = [[0,-14],[-9,10],[9,10],[0,11]];                 // nose, fins, tai
 
 // ---- Storage ----
 const SKEY = 'thruster-v1';
-const SDEF = { radius:64, dead:0.2, expo:1.3, relative:1, sound:1 };
+const SDEF = { radius:64, dead:0.2, expo:1.3, buttons:0, sound:1 };
 let store = { bests:{}, level:0, unlocked:0, settings:{...SDEF} };
 try { const s = localStorage.getItem(SKEY); if (s){ const o = JSON.parse(s); store = Object.assign(store, o); store.settings = Object.assign({...SDEF}, o.settings||{}); } } catch (e) {}
 const S = store.settings;
+delete S.relative;                                            // retired: steering is always relative to the rocket
 function save(){ try { localStorage.setItem(SKEY, JSON.stringify(store)); } catch (e) {} }
 let li = 0;
 
@@ -40,6 +41,24 @@ function resize(){
   buildLayers(); placeControls();
 }
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 120); });
+
+// ---- Full screen ----
+const fsAvail = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const fsOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+function toggleFS(){
+  const d = document, e = d.documentElement;
+  try {
+    const r = fsOn() ? (d.exitFullscreen || d.webkitExitFullscreen).call(d)
+                     : (e.requestFullscreen || e.webkitRequestFullscreen).call(e);
+    if (r && r.catch) r.catch(() => {});
+  } catch (err) {}
+}
+function onFsChange(){
+  resize();
+  if (mode === 'menu') showMenu(); else if (mode === 'paused') showPause();
+}
+document.addEventListener('fullscreenchange', onFsChange);
+document.addEventListener('webkitfullscreenchange', onFsChange);
 
 // ---- Audio: everything synthesised, no files ----
 const Snd = (() => {
@@ -259,7 +278,7 @@ function render(dt){
 
   Snd.thrust(mode === 'play' && ship.state === 'flying' && ship.flame);
   timerEl.textContent = fmt(ticks);
-  hdgEl.style.transform = `rotate(${ship.a}rad) translateY(${-S.radius+4}px)`; hdgEl.style.opacity = S.relative ? 1 : 0;
+  if (!S.buttons) hdgEl.style.transform = `rotate(${ship.a}rad) translateY(${-S.radius+4}px)`;
 }
 
 // ---- HUD ----
@@ -281,16 +300,17 @@ function tiles(){
 function settingsRow(){
   return `<div class="settings"><div class="row">
     <button class="tog${S.sound?' on':''}" data-set="sound">Sound ${S.sound?'on':'off'}</button>
-    <button class="tog${S.relative?' on':''}" data-set="relative">Stick: ${S.relative?'relative to rocket':'screen left/right'}</button>
-    <button class="tog" data-set="radius">Stick size: ${S.radius<=52?'small':S.radius<=76?'medium':'large'}</button>
+    <button class="tog on" data-set="buttons">Controls: ${S.buttons?'buttons':'joystick'}</button>
+    <button class="tog" data-set="radius">Controls size: ${S.radius<=52?'small':S.radius<=76?'medium':'large'}</button>
+    ${fsAvail ? `<button class="tog${fsOn()?' on':''}" data-fs="1">Full screen ${fsOn()?'on':'off'}</button>` : ''}
   </div></div>`;
 }
 function showMenu(){
   mode = 'menu';
   openModal(`<h1>THRUST<span>ER</span></h1><div class="tag">Fly the cave. Reach the green pad. Beat the clock.</div>
     <div class="cols">
-      <div><b>Touch</b><br>Left half: drag to steer<br>Right half: hold to thrust<br>Touching a pad lands you</div>
-      <div><b>Keyboard</b><br><kbd>◀</kbd> <kbd>▶</kbd> or <kbd>A</kbd> <kbd>D</kbd> steer<br><kbd>Space</kbd> <kbd>▲</kbd> <kbd>W</kbd> thrust<br><kbd>R</kbd> restart, <kbd>Esc</kbd> pause</div>
+      <div><b>Touch</b><br>${S.buttons ? '◀ ▶ buttons to steer' : 'Left half: drag to steer'}<br>Right half: hold to thrust<br>Touching a pad lands you</div>
+      <div><b>Keyboard</b><br><kbd>◀</kbd> <kbd>▶</kbd> or <kbd>A</kbd> <kbd>D</kbd> steer<br><kbd>Space</kbd> <kbd>▲</kbd> <kbd>W</kbd> thrust<br><kbd>R</kbd> restart, <kbd>Esc</kbd> pause, <kbd>F</kbd> full screen</div>
     </div>
     <h2>Level</h2>${tiles()}
     <div class="row"><button class="btn pri" data-act="start">Fly level ${li+1}</button></div>${settingsRow()}`);
@@ -315,9 +335,11 @@ function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'
 box.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return; Snd.init(); Snd.click();
   if (t.dataset.l !== undefined){ loadLevel(+t.dataset.l); showMenu(); return; }
+  if (t.dataset.fs){ toggleFS(); return; }                      // the label is refreshed by onFsChange
   if (t.dataset.set){
     const k = t.dataset.set;
     if (k === 'radius') S.radius = S.radius <= 52 ? 64 : S.radius <= 76 ? 88 : 52; else S[k] = S[k] ? 0 : 1;
+    if (k === 'buttons') clearTouch();
     save(); placeControls(); Snd.thrust(false);
     if (mode === 'menu') showMenu(); else showPause(); return;
   }
@@ -330,42 +352,85 @@ box.addEventListener('click', e => {
   }
 });
 $('pauseBtn').addEventListener('click', () => { if (mode === 'play') showPause(); });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (mode === 'play' && ship.state === 'flying') showPause(); });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; clearTouch(); if (mode === 'play' && ship.state === 'flying') showPause(); });
 
 // ---- Input ----
 const stick = {active:false, id:null, ox:0, oy:0, dx:0, dy:0}, thrTouch = {active:false, id:null};
+const btn = {l:false, r:false}, arrows = new Map();            // pointerId -> 'l' | 'r'
 function readInput(){
-  const kb = (keys.right?1:0) - (keys.left?1:0);
+  const kb = ((keys.right||btn.r)?1:0) - ((keys.left||btn.l)?1:0);
   let steer = kb;
-  if (stick.active){
+  if (!S.buttons && stick.active){
     const R = S.radius, d = Math.min(1, Math.hypot(stick.dx, stick.dy)/R);
     if (d >= S.dead){
       const m = Math.pow((d-S.dead)/(1-S.dead), S.expo);
-      const proj = S.relative ? (stick.dx*Math.cos(ship.a) + stick.dy*Math.sin(ship.a)) : stick.dx;   // relative: project onto the rocket's right-hand side
+      const proj = stick.dx*Math.cos(ship.a) + stick.dy*Math.sin(ship.a);   // project onto the rocket's right-hand side
       steer = Math.max(-1, Math.min(1, proj/(d*R)))*m;
     } else steer = 0;
   }
   steer = Math.round(steer*15)/15;                                   // quantise so the recorded input replays exactly
   return {thrust:(keys.thrust||thrTouch.active) ? 1 : 0, steer};
 }
-const stickEl = $('stick'), knobEl = $('knob'), thrEl = $('thr'), ctl = $('ctl'), hdgEl = $('hdg');
-const home = () => { const cy = vh-40-Math.max(S.radius,55), cx = Math.min(vw*0.25, 150); return {sx:cx, sy:cy, tx:vw-cx, ty:cy}; };
+const stickEl = $('stick'), knobEl = $('knob'), thrEl = $('thr'), ctl = $('ctl'), hdgEl = $('hdg'), padL = $('padL'), padR = $('padR');
+let G = null;
+function geom(){
+  const sc = S.radius/64, R = S.radius;
+  const T = Math.min(110*sc, vw*0.32, vh*0.3);
+  const gap = 12*sc;
+  const A = Math.min(78*sc, (vw*0.46-gap)/2, vh*0.24);
+  const cy = vh - 40 - Math.max(R, T/2, A/2);
+  let cx = Math.max(Math.min(vw*0.25, 150), (S.buttons ? A+gap/2 : R) + 12, T/2 + 10);
+  cx = Math.min(cx, vw*0.42);
+  return {R, T, A, gap, cx, cy, tx:vw-cx, ty:cy, lx:cx-(A+gap)/2, rx:cx+(A+gap)/2};
+}
 function placeControls(){
-  const R = S.radius; stickEl.style.width = stickEl.style.height = 2*R+'px'; stickEl.style.margin = `-${R}px 0 0 -${R}px`;
-  $('dead').style.width = $('dead').style.height = 2*R*S.dead+'px';
-  const h = home();
-  if (!stick.active){ stickEl.style.transform = `translate(${h.sx}px,${h.sy}px)`; knobEl.style.transform = 'translate(0,0)'; }
-  if (!thrTouch.active) thrEl.style.transform = `translate(${h.tx}px,${h.ty}px)`;
+  const g = G = geom();
+  ctl.classList.toggle('btns', !!S.buttons);
+  stickEl.style.width = stickEl.style.height = 2*g.R+'px'; stickEl.style.margin = `-${g.R}px 0 0 -${g.R}px`;
+  $('dead').style.width = $('dead').style.height = 2*g.R*S.dead+'px';
+  const kn = Math.round(52*g.R/64);
+  knobEl.style.width = knobEl.style.height = kn+'px'; knobEl.style.margin = `${-kn/2}px 0 0 ${-kn/2}px`;
+  thrEl.style.width = thrEl.style.height = g.T+'px'; thrEl.style.margin = `${-g.T/2}px 0 0 ${-g.T/2}px`; thrEl.style.fontSize = Math.round(g.T*0.25)+'px';
+  for (const [el, x] of [[padL, g.lx], [padR, g.rx]]){
+    el.style.width = el.style.height = g.A+'px'; el.style.margin = `${-g.A/2}px 0 0 ${-g.A/2}px`; el.style.fontSize = Math.round(g.A*0.32)+'px';
+    el.style.transform = `translate(${x}px,${g.cy}px)`;
+  }
+  if (!stick.active){ stickEl.style.transform = `translate(${g.cx}px,${g.cy}px)`; knobEl.style.transform = 'translate(0,0)'; }
+  if (!thrTouch.active) thrEl.style.transform = `translate(${g.tx}px,${g.ty}px)`;
 }
 function stickMove(x,y){
   let dx = x-stick.ox, dy = y-stick.oy; const d = Math.hypot(dx,dy), R = S.radius;
   if (d > R){ dx *= R/d; dy *= R/d; }
   knobEl.style.transform = `translate(${dx}px,${dy}px)`; stick.dx = dx; stick.dy = dy;
 }
+// Contiguous thumb zones: each arrow owns half the pair's width and everything below it to the screen edge.
+function hitArrow(x,y){
+  const g = G; if (!g) return null;
+  const w = (g.A+g.gap)/2, h = g.A/2 + g.gap;
+  if (y < g.cy-h) return null;
+  if (x >= g.lx-w && x < g.lx+w) return 'l';
+  if (x >= g.rx-w && x <= g.rx+w) return 'r';
+  return null;
+}
+function syncBtn(){
+  btn.l = btn.r = false;
+  for (const v of arrows.values()) btn[v] = true;
+  padL.classList.toggle('on', btn.l); padR.classList.toggle('on', btn.r);
+}
+function clearTouch(){
+  arrows.clear(); syncBtn();
+  stick.active = false; stick.dx = stick.dy = 0; stickEl.classList.remove('live');
+  thrTouch.active = false; thrEl.classList.remove('live','on');
+  placeControls();
+}
 ctl.addEventListener('pointerdown', e => {
   if (mode !== 'play') return; e.preventDefault(); ctl.setPointerCapture(e.pointerId);
+  if (S.buttons){
+    const h = hitArrow(e.clientX, e.clientY);
+    if (h){ arrows.set(e.pointerId, h); syncBtn(); return; }
+  }
   if (e.clientX < vw/2){
-    if (stick.active) return;
+    if (S.buttons || stick.active) return;
     stick.active = true; stick.id = e.pointerId; stick.ox = e.clientX; stick.oy = e.clientY; stick.dx = stick.dy = 0;
     stickEl.classList.add('live'); stickEl.style.transform = `translate(${e.clientX}px,${e.clientY}px)`; knobEl.style.transform = 'translate(0,0)';
   } else {
@@ -374,8 +439,12 @@ ctl.addEventListener('pointerdown', e => {
     thrEl.classList.add('live','on'); thrEl.style.transform = `translate(${e.clientX}px,${e.clientY}px)`;
   }
 });
-ctl.addEventListener('pointermove', e => { if (stick.active && e.pointerId === stick.id) stickMove(e.clientX, e.clientY); });
+ctl.addEventListener('pointermove', e => {
+  if (arrows.has(e.pointerId)){ const h = hitArrow(e.clientX, e.clientY); if (h) arrows.set(e.pointerId, h); else arrows.delete(e.pointerId); syncBtn(); return; }
+  if (stick.active && e.pointerId === stick.id) stickMove(e.clientX, e.clientY);
+});
 const release = e => {
+  if (arrows.delete(e.pointerId)) syncBtn();
   if (stick.active && e.pointerId === stick.id){ stick.active = false; stick.dx = stick.dy = 0; stickEl.classList.remove('live'); placeControls(); }
   if (thrTouch.active && e.pointerId === thrTouch.id){ thrTouch.active = false; thrEl.classList.remove('live','on'); placeControls(); }
 };
@@ -390,9 +459,11 @@ addEventListener('keydown', e => {
     if (e.repeat) return;
     if (e.key === 'Escape' || e.key.toLowerCase() === 'p') showPause();
     else if (e.key.toLowerCase() === 'r') reset();
+    else if (e.key.toLowerCase() === 'f') toggleFS();
     return;
   }
   if (e.repeat) return;
+  if (e.key.toLowerCase() === 'f'){ toggleFS(); return; }
   if (mode === 'paused' && e.key === 'Escape'){ Snd.init(); play(); }
   else if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); Snd.init();
     if (mode === 'menu'){ reset(); play(); }
