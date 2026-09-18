@@ -244,22 +244,5 @@
     "sizeBytes": 47947,
     "createdAt": "2026-09-18T05:19:46.032Z",
     "updatedAt": "2026-09-18T08:54:29.284Z"
-  },
-  {
-    "id": "4ceea13b-b021-48d1-b8d1-a6535680daf2",
-    "slug": "tulostaulun-tarkistus",
-    "title": "Tulostaulun tarkistus",
-    "description": "Väliaikainen tarkistus sille, että tulostaulu toimii tuotannossa. Poistetaan heti.",
-    "author": "Sami Lehtilä",
-    "tags": [
-      "testi"
-    ],
-    "status": "draft",
-    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
-    "ownerFolder": "sami-lehtila",
-    "entryFile": "index.html",
-    "sizeBytes": 1321,
-    "createdAt": "2026-09-18T12:06:05.081Z",
-    "updatedAt": "2026-09-18T12:06:13.695Z"
   }
 ]

@@ -1,29 +1,5 @@
 {
   "nextId": 2,
-  "boards": [
-    {
-      "gameId": "4ceea13b-b021-48d1-b8d1-a6535680daf2",
-      "board": "tarkistus",
-      "title": "",
-      "css": "",
-      "sort": "desc",
-      "maxRows": 100,
-      "createdAt": "2026-09-18T12:06:21.883Z",
-      "updatedAt": "2026-09-18T12:06:21.883Z"
-    }
-  ],
-  "entries": [
-    {
-      "id": 1,
-      "gameId": "4ceea13b-b021-48d1-b8d1-a6535680daf2",
-      "board": "tarkistus",
-      "score": 728,
-      "name": "Tarkistus",
-      "data": {
-        "taso": 3
-      },
-      "createdAt": "2026-09-18T12:06:21.883Z",
-      "ipHash": "937462ca59edfdac0c647ddbd509285909849a8b97111228f1da0426dba2a4d5"
-    }
-  ]
+  "boards": [],
+  "entries": []
 }
