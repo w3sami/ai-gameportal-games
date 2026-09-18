@@ -244,5 +244,20 @@
     "sizeBytes": 47947,
     "createdAt": "2026-09-18T05:19:46.032Z",
     "updatedAt": "2026-09-18T08:54:29.284Z"
+  },
+  {
+    "id": "98104e4a-db3f-4210-8c17-914995256848",
+    "slug": "mysql-tarkistus",
+    "title": "MySQL-tarkistus",
+    "description": "Väliaikainen tarkistus MariaDB-taustalle. Poistetaan heti.",
+    "author": "Sami Lehtilä",
+    "tags": [],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-18T12:31:12.662Z",
+    "updatedAt": "2026-09-18T12:31:12.662Z"
   }
 ]
