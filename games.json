@@ -249,7 +249,7 @@
     "id": "cb902f16-8749-47d0-bd6f-399f06bcf15d",
     "slug": "thruster-2",
     "title": "Thruster Time Attack",
-    "description": "A cave-flying time attack with shared leaderboards. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Every level has its own board: land, put your name up once, and the ten fastest pilots are there in the menu and on the finish screen. Analog stick that steers relative to the rocket's heading, keyboard support, ghost replay of your best run, and everything (levels, art, sound) generated in code. A fork of Thruster by Carl Vuorinen, with the portal's leaderboard plugin added.",
+    "description": "A cave-flying time attack with shared leaderboards and ghosts. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Every level has its own board: land, put your name up once, and the fastest pilots are there in the menu and on the finish screen. Every posted time carries the run that flew it, so any row can be watched from the outside or raced as a ghost beside you. Analog stick that steers relative to the rocket's heading, keyboard support, and everything (levels, art, sound) generated in code. A fork of Thruster by Carl Vuorinen, with the portal's leaderboard plugin added.",
     "author": "Sami Lehtilä",
     "tags": [
       "arcade",
@@ -270,6 +270,6 @@
     },
     "sizeBytes": 65915,
     "createdAt": "2026-09-18T13:05:01.785Z",
-    "updatedAt": "2026-09-18T13:43:27.807Z"
+    "updatedAt": "2026-09-18T13:46:40.086Z"
   }
 ]
