@@ -372,8 +372,8 @@ function readInput(){
   return {thrust:(keys.thrust||thrTouch.active) ? 1 : 0, steer};
 }
 const stickEl = $('stick'), knobEl = $('knob'), thrEl = $('thr'), ctl = $('ctl'), hdgEl = $('hdg'), padL = $('padL'), padR = $('padR');
-let G = null;
-function geom(){
+let CG = null;                                                  // control-layout geometry (G is the level geometry)
+function ctlGeom(){
   const sc = S.radius/64, R = S.radius;
   const T = Math.min(110*sc, vw*0.32, vh*0.3);
   const gap = 12*sc;
@@ -384,7 +384,7 @@ function geom(){
   return {R, T, A, gap, cx, cy, tx:vw-cx, ty:cy, lx:cx-(A+gap)/2, rx:cx+(A+gap)/2};
 }
 function placeControls(){
-  const g = G = geom();
+  const g = CG = ctlGeom();
   ctl.classList.toggle('btns', !!S.buttons);
   stickEl.style.width = stickEl.style.height = 2*g.R+'px'; stickEl.style.margin = `-${g.R}px 0 0 -${g.R}px`;
   $('dead').style.width = $('dead').style.height = 2*g.R*S.dead+'px';
@@ -405,7 +405,7 @@ function stickMove(x,y){
 }
 // Contiguous thumb zones: each arrow owns half the pair's width and everything below it to the screen edge.
 function hitArrow(x,y){
-  const g = G; if (!g) return null;
+  const g = CG; if (!g) return null;
   const w = (g.A+g.gap)/2, h = g.A/2 + g.gap;
   if (y < g.cy-h) return null;
   if (x >= g.lx-w && x < g.lx+w) return 'l';
