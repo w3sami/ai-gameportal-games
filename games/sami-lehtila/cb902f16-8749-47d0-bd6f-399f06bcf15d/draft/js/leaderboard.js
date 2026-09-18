@@ -98,22 +98,29 @@ function controls(lv, pending, status, ctl, body, sub, title){
   if (!pending && !name){ ctl.replaceChildren(el('span', null, 'Land on the green pad to put a time up here.')); return; }
   form();
 
+  // Not a <form>: a game is served sandboxed without allow-forms, so a submit
+  // event never fires. The button and the Enter key do the work instead.
   function form(){
-    const f = el('form', 'lb-form');
+    const wrap = el('div', 'lb-form');
     const input = el('input');
-    input.maxLength = 24; input.required = true; input.placeholder = 'Your name'; input.value = getName();
-    input.autocomplete = 'nickname'; input.spellcheck = false;
+    input.name = 'pilot'; input.maxLength = 24; input.placeholder = 'Your name';
+    input.value = getName(); input.autocomplete = 'off'; input.spellcheck = false;
     const go = el('button', 'btn sm', pending ? 'Post my time' : 'Save');
-    f.append(input, go);
-    f.addEventListener('submit', async e => {
-      e.preventDefault();
+    go.type = 'button';
+
+    async function commit(){
       const who = setName(input.value);
       if (!who){ input.focus(); return; }
+      go.disabled = true;
       ctl.replaceChildren(el('span', null, `Posting as ${who}`));
       if (pending){ await send(lv, pending, status); await draw(lv, body, sub, title); }
       again(0);
-    });
-    ctl.replaceChildren(f);
+    }
+    go.addEventListener('click', commit);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); commit(); } });
+
+    wrap.append(input, go);
+    ctl.replaceChildren(wrap);
     input.focus();
   }
 }
