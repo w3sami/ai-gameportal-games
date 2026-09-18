@@ -244,5 +244,31 @@
     "sizeBytes": 47947,
     "createdAt": "2026-09-18T05:19:46.032Z",
     "updatedAt": "2026-09-18T08:54:29.284Z"
+  },
+  {
+    "id": "cb902f16-8749-47d0-bd6f-399f06bcf15d",
+    "slug": "thruster-2",
+    "title": "Thruster",
+    "description": "A cave-flying time attack. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Analog stick that steers relative to the rocket's heading, keyboard support, ghost replay of your best run on every level, and everything (levels, art, sound) generated in code.",
+    "author": "Sami Lehtilä",
+    "tags": [
+      "arcade",
+      "physics",
+      "time-attack",
+      "cave-flyer",
+      "mobile"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "forkedFrom": {
+      "gameId": "fba528c3-f6cf-45a4-bace-87e2cc6db650",
+      "title": "Thruster",
+      "author": "Carl Vuorinen"
+    },
+    "sizeBytes": 47947,
+    "createdAt": "2026-09-18T13:05:01.785Z",
+    "updatedAt": "2026-09-18T13:05:01.822Z"
   }
 ]
