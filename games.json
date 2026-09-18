@@ -259,7 +259,7 @@
       "mobile",
       "tulostaulu"
     ],
-    "status": "draft",
+    "status": "published",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
@@ -270,6 +270,6 @@
     },
     "sizeBytes": 65915,
     "createdAt": "2026-09-18T13:05:01.785Z",
-    "updatedAt": "2026-09-18T13:46:40.086Z"
+    "updatedAt": "2026-09-18T13:51:30.476Z"
   }
 ]
