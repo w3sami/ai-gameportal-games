@@ -66,6 +66,17 @@ function renderLayer(q, st, padX, padY){
   if (st.pads){ drawPad(x,L.pads.start,PAL.start,st.padK); drawPad(x,L.pads.target,PAL.target,st.padK); }
   return c;
 }
+// Falling stalactites are drawn live rather than baked into the layers, so each gets a small sprite in the level's rock style.
+function renderSpikeSprite(pts, seed){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for (const p of pts){ x0=Math.min(x0,p[0]); y0=Math.min(y0,p[1]); x1=Math.max(x1,p[0]); y1=Math.max(y1,p[1]); }
+  const pad = 6, c = mkCanvas(Math.ceil(x1-x0)+2*pad, Math.ceil(y1-y0)+2*pad), x = c.getContext('2d'), r = rng(seed*17+3);
+  x.translate(pad-x0, pad-y0);
+  poly(x,pts); x.fillStyle = STYLE.main.rock; x.fill();
+  x.save(); poly(x,pts); x.clip(); facets(x, r, x0, y0, x1-x0, y1-y0, 7, 18, 70, 0.09); x.restore();
+  x.globalCompositeOperation = 'source-atop'; x.strokeStyle = 'rgba(0,0,0,.16)'; x.lineJoin = 'miter'; x.lineWidth = 8; poly(x,pts); x.stroke();
+  return {c, ox:x0-pad, oy:y0-pad};
+}
 const STYLE = {
   main:  { rock:'#8f959d', amp:0.07, edge:10, pads:true, captureMask:true },
   depth: [0.98,0.96,0.94,0.92,0.90,0.88].map((f,i) => ({ f, rock:['#7d838b','#727880','#666c74','#5a6068','#4f555d','#454a52'][i], amp:0.06, edge:5, edgeAlpha:0.1, pads:true, padK:0.86-i*0.1 })),
