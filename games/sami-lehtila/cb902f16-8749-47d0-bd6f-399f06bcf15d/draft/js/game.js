@@ -97,7 +97,8 @@ const Snd = (() => {
 
 // ---- Game state ----
 let ship, ghost = null, best = null, particles = [], ticks = 0, gTick = 0, running = false, inputs = [], deadT = 0, shake = 0, doneT = 0;
-let mode = 'menu';                                           // menu | play | paused | complete
+let mode = 'menu';                                           // menu | play | paused | complete | watch | watched
+let rival = null, watched = null, ghostRun = null, watchT = 0;  // someone else's run, loaded from the board
 const cam = {x:0,y:0};
 const keys = {thrust:false,left:false,right:false};
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -106,13 +107,15 @@ const fmt = t => { const s = t/120, m = Math.floor(s/60); return `${m}:${(s-m*60
 
 function spawn(){ const p = L.pads.start; return {x:p.x+p.w/2, y:p.y-11, vx:0, vy:0, a:0, state:'idle', flame:0}; }
 function reset(){
-  ship = spawn(); best = store.bests[li] || null; ghost = best ? spawn() : null;
-  ticks = 0; gTick = 0; running = false; inputs = []; particles.length = 0; deadT = 0; doneT = 0; setMsg('','');
+  ship = spawn(); best = store.bests[li] || null;
+  ghostRun = rival || best; ghost = ghostRun ? spawn() : null;      // a rival from the board flies in place of your own best
+  ticks = 0; gTick = 0; running = false; inputs = []; particles.length = 0; deadT = 0; doneT = 0; watchT = 0; setMsg('','');
   cam.x = ship.x - vw/(2*Z); cam.y = ship.y - vh/(2*Z);
   hud();
 }
 function loadLevel(i){
   li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; save();
+  rival = watched = null;                                            // a ghost belongs to the level it was flown on
   setGeom(); buildMain(); resize(); reset();
 }
 
@@ -149,27 +152,42 @@ const encode = i => i.thrust | (Math.round(i.steer*15)+15) << 1;
 const decode = c => ({thrust:c&1, steer:((c>>1)-15)/15});
 
 function tick(){
-  const inp = readInput();
-  if (ship.state === 'dead'){ deadT -= DT; if (deadT <= 0) reset(); }
-  else if (ship.state === 'finished'){ doneT -= DT; if (doneT <= 0 && mode === 'play') showComplete(); }
-  else {
-    if (!running && ship.state === 'idle' && inp.thrust) running = true;
-    if (running){
-      ticks++; inputs.push(encode(inp));
-      const hit = stepShip(ship, inp);
-      if (hit){
-        if (hit.type === 'land'){
-          if (hit.sp > 120) puff(hit.px, hit.py, hit.sp); Snd.land(hit.sp); settle(ship, hit.z);
-          if (hit.key === 'target'){ ship.state = 'finished'; doneT = 1.3; celebrate(hit.px, hit.py); shake = 0.5; finish(); }
-        } else { ship.state = 'dead'; deadT = 1.4; explode(hit.px, hit.py); shake = 1; Snd.explode(); setMsg('Crashed', ''); }
+  if (mode === 'play'){
+    const inp = readInput();
+    if (ship.state === 'dead'){ deadT -= DT; if (deadT <= 0) reset(); }
+    else if (ship.state === 'finished'){ doneT -= DT; if (doneT <= 0) showComplete(); }
+    else {
+      if (!running && ship.state === 'idle' && inp.thrust) running = true;
+      if (running){
+        ticks++; inputs.push(encode(inp));
+        const hit = stepShip(ship, inp);
+        if (hit){
+          if (hit.type === 'land'){
+            if (hit.sp > 120) puff(hit.px, hit.py, hit.sp); Snd.land(hit.sp); settle(ship, hit.z);
+            if (hit.key === 'target'){ ship.state = 'finished'; doneT = 1.3; celebrate(hit.px, hit.py); shake = 0.5; finish(); }
+          } else { ship.state = 'dead'; deadT = 1.4; explode(hit.px, hit.py); shake = 1; Snd.explode(); setMsg('Crashed', ''); }
+        }
+        if (ship.state === 'flying' && ship.flame) emitThrust(ship);
       }
-      if (ship.state === 'flying' && ship.flame) emitThrust(ship);
     }
   }
-  if (ghost && running && ghost.state !== 'dead'){
-    const code = best.inputs[gTick++];
-    if (code !== undefined){ const gh = stepShip(ghost, decode(code)); if (gh){ if (gh.type === 'land') settle(ghost, gh.z); else ghost.state = 'dead'; } }
+  // The ghost flies on the player's clock while racing, and on its own while watched.
+  if (ghost && (running || mode === 'watch') && ghost.state !== 'dead' && ghost.state !== 'finished'){
+    if (ghostRun.pts) playPath(ghost, ghostRun, gTick++);         // a run from the board: a path, drawn between its samples
+    else {
+      const code = ghostRun.inputs[gTick++];
+      if (code === undefined) ghost.state = 'finished';
+      else {
+        const gh = stepShip(ghost, decode(code));
+        if (gh){
+          if (gh.type === 'land'){ settle(ghost, gh.z); if (gh.key === 'target') ghost.state = 'finished'; }
+          else ghost.state = 'dead';
+        }
+      }
+    }
+    if (mode === 'watch' && !watchT && (ghost.state === 'dead' || ghost.state === 'finished')) watchT = 1.2;
   }
+  if (watchT > 0){ watchT -= DT; if (watchT <= 0){ watchT = 0; showWatched(); } }
   updateParticles();
 }
 let lastResult = null;
@@ -211,9 +229,9 @@ function updateParticles(){
 }
 
 // ---- Rendering ----
-function drawShip(s, isGhost){
+function drawShip(s, isGhost, alpha){
   ctx.save(); ctx.translate(s.x,s.y); ctx.rotate(s.a);
-  if (isGhost) ctx.globalAlpha = 0.45;
+  if (isGhost) ctx.globalAlpha = alpha || 0.45;
   if (s.flame){
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     const len = (isGhost?10:16)+Math.random()*12;
@@ -242,14 +260,14 @@ function drawParticles(){
 let last = performance.now(), acc = 0;
 function frame(now){
   let dt = (now-last)/1000; last = now; if (dt > 0.1) dt = 0.1;
-  if (mode === 'play'){ acc += dt; while (acc >= DT){ tick(); acc -= DT; } } else acc = 0;
+  if (mode === 'play' || mode === 'watch'){ acc += dt; while (acc >= DT){ tick(); acc -= DT; } } else acc = 0;
   render(dt);
   requestAnimationFrame(frame);
 }
 function render(dt){
-  const k = 1-Math.exp(-5*dt);
-  cam.x += (ship.x + ship.vx*0.3 - vw/(2*Z) - cam.x)*k;
-  cam.y += (ship.y + ship.vy*0.3 - vh/(2*Z) - cam.y)*k;
+  const k = 1-Math.exp(-5*dt), eye = (mode === 'watch' && ghost) ? ghost : ship;
+  cam.x += (eye.x + eye.vx*0.3 - vw/(2*Z) - cam.x)*k;
+  cam.y += (eye.y + eye.vy*0.3 - vh/(2*Z) - cam.y)*k;
   cam.x = Math.max(0, Math.min(L.w - vw/Z, cam.x)); cam.y = Math.max(0, Math.min(L.h - vh/Z, cam.y));
   shake *= Math.exp(-4*dt);
   const sx = reduced ? 0 : (Math.random()-.5)*shake*14, sy = reduced ? 0 : (Math.random()-.5)*shake*14;
@@ -270,14 +288,14 @@ function render(dt){
 
   ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
   drawParticles();
-  if (ghost) drawShip(ghost, true);
+  if (ghost) drawShip(ghost, true, mode === 'watch' ? 0.8 : 0.45);   // the watched run is the thing on screen, not a hint
   if (ship.state !== 'dead') drawShip(ship, false);
   ctx.restore();
   const mf = 1.3; ctx.fillStyle = 'rgba(217,211,199,.16)';
   for (const m of motes){ if (mode === 'play'){ m.y -= m.v*dt; if (m.y < 0) m.y += L.h; } const mx = (m.x-cam.x)*Z*mf + vw/2*(1-mf) + sx*mf, my = (m.y-cam.y)*Z*mf + vh/2*(1-mf) + sy*mf; if (mx>-4 && mx<vw+4 && my>-4 && my<vh+4) ctx.fillRect(mx, my, m.s, m.s); }
 
-  Snd.thrust(mode === 'play' && ship.state === 'flying' && ship.flame);
-  timerEl.textContent = fmt(ticks);
+  Snd.thrust((mode === 'play' && ship.state === 'flying' && ship.flame) || (mode === 'watch' && ghost && ghost.flame));
+  timerEl.textContent = fmt(mode === 'watch' ? gTick : ticks);
   if (!S.buttons) hdgEl.style.transform = `rotate(${ship.a}rad) translateY(${-S.radius+4}px)`;
 }
 
@@ -286,12 +304,15 @@ const timerEl = $('timer'), lvlEl = $('lvl'), bestEl = $('bestline'), msgMain = 
 function setMsg(a,b){ msgMain.textContent = a; msgSub.textContent = b; }
 function hud(){
   lvlEl.textContent = `${li+1}. ${L.name}`;
-  bestEl.textContent = best ? `Best ${fmt(best.ticks)}, ghost flying` : '';
+  bestEl.textContent = mode === 'watch' && watched ? `Watching ${watched.name}, ${fmt(watched.ticks)}`
+    : rival ? `Racing ${rival.name}, ${fmt(rival.ticks)}`
+    : best ? `Best ${fmt(best.ticks)}, ghost flying` : '';
 }
 
 // ---- Menus ----
 const modal = $('modal'), box = $('box');
-function openModal(html){ box.innerHTML = html; modal.classList.add('open'); document.body.classList.remove('play');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+function openModal(html){ box.innerHTML = html; modal.classList.add('open'); document.body.classList.remove('play','watch');
   if (window.LB) window.LB.mount(box); }                      // the boards fill themselves in; before the module lands there simply is none
 function closeModal(){ modal.classList.remove('open'); }
 function tiles(){
@@ -340,7 +361,13 @@ function showComplete(){
     <div class="row">${lastLevel ? `<button class="btn pri" data-act="menu">Levels</button>` : `<button class="btn pri" data-act="next">Next level</button>`}<button class="btn" data-act="restart">Fly again</button>${lastLevel ? '' : `<button class="btn" data-act="menu">Levels</button>`}</div>
     ${lbBlock(store.bests[li].ticks)}`);
 }
-function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); Snd.init(); Snd.resume(); placeControls(); }
+function showWatched(){
+  mode = 'watched';
+  openModal(`<h2>${esc(watched.name)}'s run</h2><div class="big">${fmt(watched.ticks)}</div>
+    <div class="sub">${li+1}. ${L.name}</div>
+    <div class="row"><button class="btn pri" data-act="race">Race this ghost</button><button class="btn" data-act="rewatch">Watch again</button><button class="btn" data-act="menu">Levels</button></div>`);
+}
+function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); document.body.classList.remove('watch'); Snd.init(); Snd.resume(); placeControls(); }
 box.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return; Snd.init(); Snd.click();
   if (t.dataset.l !== undefined){ loadLevel(+t.dataset.l); showMenu(); return; }
@@ -357,10 +384,12 @@ box.addEventListener('click', e => {
     case 'resume': play(); break;
     case 'restart': reset(); play(); break;
     case 'next': loadLevel(li+1); play(); break;
-    case 'menu': reset(); showMenu(); break;
+    case 'race': if (watched){ rival = watched; reset(); play(); } break;
+    case 'rewatch': if (watched){ mode = 'watch'; reset(); closeModal(); document.body.classList.add('play','watch'); hud(); } break;
+    case 'menu': rival = watched = null; reset(); showMenu(); break;
   }
 });
-$('pauseBtn').addEventListener('click', () => { if (mode === 'play') showPause(); });
+$('pauseBtn').addEventListener('click', () => { if (mode === 'play') showPause(); else if (mode === 'watch') showWatched(); });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; clearTouch(); if (mode === 'play' && ship.state === 'flying') showPause(); });
 
 // ---- Input ----
@@ -463,6 +492,7 @@ ctl.addEventListener('contextmenu', e => e.preventDefault());
 const KEYMAP = {ArrowUp:'thrust',w:'thrust',W:'thrust',' ':'thrust',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'};
 addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;          // the name field on a board owns every key while it has focus
+  if (mode === 'watch'){ if (e.key === 'Escape') showWatched(); return; }
   const k = KEYMAP[e.key];
   if (mode === 'play'){
     if (k){ e.preventDefault(); keys[k] = true; return; }
@@ -479,10 +509,101 @@ addEventListener('keydown', e => {
     if (mode === 'menu'){ reset(); play(); }
     else if (mode === 'paused') play();
     else if (mode === 'complete'){ if (li < LEVELS.length-1){ loadLevel(li+1); play(); } else { reset(); showMenu(); } }
+    else if (mode === 'watched' && watched){ rival = watched; reset(); play(); }
   }
   else if (mode === 'complete' && e.key.toLowerCase() === 'r'){ reset(); play(); }
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false; });
+
+// ---- Ghost replays ----
+// A run that travels to another player is stored as a path — ten positions a
+// second, drawn smoothly between them — not as the inputs that flew it. Inputs
+// are smaller, but they only replay true in the browser that recorded them:
+// Math.sin and a canvas fill are not promised to agree between engines, and a
+// ghost that drifts by a hair ends up in a wall. A path flies what was flown,
+// on any machine. Sampling the inputs instead would not do: at 100 ms the
+// steering is a different run, and it would fly somewhere else entirely.
+const A64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const IX = {}; for (let i=0;i<64;i++) IX[A64[i]] = i;
+const CAP = 1800;                                             // chars: a board entry carries 2 kB, and the time shares it
+const w12 = v => A64[(v>>6)&63] + A64[v&63];
+const w18 = v => A64[(v>>12)&63] + A64[(v>>6)&63] + A64[v&63];
+
+// Flies a stored run again, off screen, to read its path out of the physics.
+function pathOf(run, iv){
+  const s = spawn(), pts = [], take = () => pts.push({x:s.x, y:s.y, a:s.a, f:s.flame});
+  take();
+  for (let t = 0; t < run.inputs.length; t++){
+    const hit = stepShip(s, decode(run.inputs[t]));
+    if (hit){ if (hit.type !== 'land') break; settle(s, hit.z); if (hit.key === 'target'){ take(); return pts; } }
+    if ((t+1) % iv === 0) take();
+  }
+  take();
+  return pts;
+}
+// Position to two units, heading to six bits, thrust to one bit per sample.
+function packReplay(run){
+  for (const iv of [12, 24, 48]){                             // 100 ms, then coarser rather than nothing
+    const pts = pathOf(run, iv);
+    let out = 'p' + A64[iv] + w18(run.inputs.length), px = 0, py = 0, bits = '';
+    for (let i = 0; i < pts.length; i++){
+      const p = pts[i], qx = Math.round(p.x/2), qy = Math.round(p.y/2), dx = qx-px, dy = qy-py;
+      if (i && Math.abs(dx) < 32 && Math.abs(dy) < 32) out += A64[dx+31] + A64[dy+31];
+      else out += A64[63] + w12(Math.max(0,qx)) + w12(Math.max(0,qy));   // 63 as a delta means: the two coordinates follow whole
+      out += A64[Math.round((normAng(p.a)+Math.PI)/(2*Math.PI)*63)];
+      px = qx; py = qy; bits += p.f ? '1' : '0';
+    }
+    let flags = '';
+    for (let i = 0; i < bits.length; i += 6) flags += A64[parseInt(bits.slice(i,i+6).padEnd(6,'0'), 2)];
+    out += '.' + flags;
+    if (out.length <= CAP) return out;
+  }
+  return null;                                                // a run this long does not fit, and a cut ghost is worse than none
+}
+function unpackReplay(str){
+  try {
+    if (typeof str !== 'string' || str[0] !== 'p') return null;
+    const iv = IX[str[1]], ticks = (IX[str[2]]<<12)|(IX[str[3]]<<6)|IX[str[4]];
+    const cut = str.lastIndexOf('.'), body = str.slice(5, cut), flags = str.slice(cut+1);
+    const pts = []; let i = 0, x = 0, y = 0;
+    while (i < body.length){
+      if (IX[body[i]] === 63){ x = (IX[body[i+1]]<<6)|IX[body[i+2]]; y = (IX[body[i+3]]<<6)|IX[body[i+4]]; i += 5; }
+      else { x += IX[body[i]]-31; y += IX[body[i+1]]-31; i += 2; }
+      const a = IX[body[i++]]/63*2*Math.PI - Math.PI, n = pts.length;
+      pts.push({x:x*2, y:y*2, a, f:(IX[flags[n/6|0]] >> (5-n%6)) & 1});
+    }
+    return (iv && ticks && pts.length > 1) ? {ticks, iv, pts} : null;
+  } catch (e) { return null; }                                // a blob from a future version of the game, or a hand-edited one
+}
+// Where a replayed ghost is at tick t: between the two samples around it.
+function playPath(g, rep, t){
+  const n = rep.pts.length;
+  if (t >= rep.ticks){ const p = rep.pts[n-1]; g.x = p.x; g.y = p.y; g.a = p.a; g.flame = 0; g.state = 'finished'; return; }
+  const i = Math.min(Math.floor(t/rep.iv), n-2), tA = i*rep.iv, tB = i === n-2 ? rep.ticks : (i+1)*rep.iv;
+  const u = tB > tA ? (t-tA)/(tB-tA) : 0, p = rep.pts[i], q = rep.pts[i+1];
+  g.x = p.x + (q.x-p.x)*u; g.y = p.y + (q.y-p.y)*u;
+  g.a = p.a + normAng(q.a-p.a)*u; g.flame = p.f; g.state = 'flying';
+}
+
+// ---- What the leaderboard may ask of the game ----
+// The board knows times and names; the game knows flying. This is the whole of
+// what passes between them, and the replay is opaque on the board's side.
+const Thruster = {
+  replay(lv){ const run = lv === li && store.bests[lv]; return run ? packReplay(run) : null; },
+  watch(lv, name, replay){ return start(lv, name, replay, true); },
+  race(lv, name, replay){ return start(lv, name, replay, false); },
+};
+function start(lv, name, replay, watching){
+  if (lv !== li) loadLevel(lv);
+  const rep = unpackReplay(replay);
+  if (!rep) return false;                                     // nothing is shown rather than something wrong
+  rival = watched = {name:String(name), ticks:rep.ticks, iv:rep.iv, pts:rep.pts};
+  reset();
+  if (!watching){ play(); return true; }
+  mode = 'watch'; closeModal(); document.body.classList.add('play','watch'); Snd.init(); Snd.resume(); hud();
+  return true;
+}
+window.Thruster = Thruster;
 
 // ---- Go ----
 li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; setGeom();
