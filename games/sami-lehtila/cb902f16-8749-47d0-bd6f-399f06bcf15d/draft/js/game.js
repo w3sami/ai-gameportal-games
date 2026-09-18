@@ -291,11 +291,18 @@ function hud(){
 
 // ---- Menus ----
 const modal = $('modal'), box = $('box');
-function openModal(html){ box.innerHTML = html; modal.classList.add('open'); document.body.classList.remove('play'); }
+function openModal(html){ box.innerHTML = html; modal.classList.add('open'); document.body.classList.remove('play');
+  if (window.LB) window.LB.mount(box); }                      // the boards fill themselves in; before the module lands there simply is none
 function closeModal(){ modal.classList.remove('open'); }
 function tiles(){
   return `<div class="grid">` + LEVELS.map((l,i) => { const b = store.bests[i], locked = i > store.unlocked;
     return `<button class="tile${i===li?' sel':''}" data-l="${i}" ${locked?'disabled':''}><b>${i+1}</b><small>${l.name}</small><em>${locked ? 'locked' : b ? fmt(b.ticks) : '—'}</em></button>`; }).join('') + `</div>`;
+}
+// A board holds whole numbers, and for a time attack the honest one is milliseconds.
+const msOf = t => Math.round(t*1000/120);
+function lbBlock(postTicks){
+  const post = postTicks ? ` data-lb-post="${msOf(postTicks)}"` : '';
+  return `<div data-lb-level="${li}" data-lb-title="${li+1}. ${L.name}"${post}></div>`;
 }
 function settingsRow(){
   return `<div class="settings"><div class="row">
@@ -313,7 +320,8 @@ function showMenu(){
       <div><b>Keyboard</b><br><kbd>◀</kbd> <kbd>▶</kbd> or <kbd>A</kbd> <kbd>D</kbd> steer<br><kbd>Space</kbd> <kbd>▲</kbd> <kbd>W</kbd> thrust<br><kbd>R</kbd> restart, <kbd>Esc</kbd> pause, <kbd>F</kbd> full screen</div>
     </div>
     <h2>Level</h2>${tiles()}
-    <div class="row"><button class="btn pri" data-act="start">Fly level ${li+1}</button></div>${settingsRow()}`);
+    <div class="row"><button class="btn pri" data-act="start">Fly level ${li+1}</button></div>
+    ${lbBlock(0)}${settingsRow()}`);
 }
 function showPause(){
   mode = 'paused';
@@ -329,7 +337,8 @@ function showComplete(){
     extra = `<p>All ten levels flown. Sum of your best times: <b>${fmt(total)}</b>.</p>`;
   }
   openModal(`<h2>${lastLevel ? 'Final level complete' : `Level ${li+1} complete`}</h2><div class="big">${fmt(r.ticks)}</div><div class="sub${r.isBest?' good':''}">${sub}</div>${extra}
-    <div class="row">${lastLevel ? `<button class="btn pri" data-act="menu">Levels</button>` : `<button class="btn pri" data-act="next">Next level</button>`}<button class="btn" data-act="restart">Fly again</button>${lastLevel ? '' : `<button class="btn" data-act="menu">Levels</button>`}</div>`);
+    <div class="row">${lastLevel ? `<button class="btn pri" data-act="menu">Levels</button>` : `<button class="btn pri" data-act="next">Next level</button>`}<button class="btn" data-act="restart">Fly again</button>${lastLevel ? '' : `<button class="btn" data-act="menu">Levels</button>`}</div>
+    ${lbBlock(store.bests[li].ticks)}`);
 }
 function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); Snd.init(); Snd.resume(); placeControls(); }
 box.addEventListener('click', e => {
@@ -453,6 +462,7 @@ ctl.addEventListener('contextmenu', e => e.preventDefault());
 
 const KEYMAP = {ArrowUp:'thrust',w:'thrust',W:'thrust',' ':'thrust',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'};
 addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') return;          // the name field on a board owns every key while it has focus
   const k = KEYMAP[e.key];
   if (mode === 'play'){
     if (k){ e.preventDefault(); keys[k] = true; return; }
