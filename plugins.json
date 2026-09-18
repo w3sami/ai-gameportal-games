@@ -50,5 +50,31 @@
     },
     "createdAt": "2026-09-13T18:31:02.706Z",
     "updatedAt": "2026-09-13T18:31:02.706Z"
+  },
+  {
+    "name": "leaderboard",
+    "description": "Yhteiset tulostaulut peleille. Peli lähettää tuloksen ja lukee taulun takaisin; avainta ei ole, koska portaali tietää kutsujan pelin omasta nimestä. Mikään ei heitä: submit palauttaa aina vastauksen ja kept on koko totuus. Mukana <leaderboard-panel>, valmis taulu pelin sisään.",
+    "author": "Sami",
+    "ownerId": "11ff8596-9f59-4bde-afb6-347992d19de7",
+    "ownerFolder": "sami",
+    "versions": [
+      {
+        "version": "1.0.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 18191
+          }
+        ],
+        "sizeBytes": 18191,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-18T12:05:27.360Z"
+      }
+    ],
+    "aliases": {
+      "v1": "1.0.0"
+    },
+    "createdAt": "2026-09-18T12:05:27.363Z",
+    "updatedAt": "2026-09-18T12:05:27.363Z"
   }
 ]
