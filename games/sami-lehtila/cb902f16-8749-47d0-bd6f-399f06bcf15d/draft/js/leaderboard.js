@@ -54,7 +54,13 @@ async function panel(host){
 async function send(lv, ms, status){
   status.className = 'lb-note';
   status.textContent = 'Posting your time…';
-  const r = await submit({ score: ms, board: boardOf(lv), data: {level: lv+1, time: fmt(ms)} });
+  const data = {v: 1, level: lv+1, time: fmt(ms)};
+  // The ghost rides along with the time. The game packs it and the board never
+  // looks inside; if it will not fit the 2 kB, the time goes up without one.
+  const replay = window.Thruster && window.Thruster.replay(lv);
+  if (replay) data.r = replay;
+  if (JSON.stringify(data).length > 1980) delete data.r;
+  const r = await submit({ score: ms, board: boardOf(lv), data });
   if (r.kept){
     mine[lv] = {ms, id: r.entry.id}; remember();
     status.className = 'lb-note good';
@@ -74,10 +80,29 @@ async function draw(lv, body, sub, title){
   const list = el('ol', 'lbrows');
   for (const e of page.entries){
     const row = el('li', `lbrow${e.rank <= 3 ? ' top' : ''}${e.id === highlight ? ' me' : ''}`);
-    row.append(el('span', 'r', e.rank), el('span', 'n', e.name), el('span', 't', fmt(e.score)));
+    row.append(el('span', 'r', e.rank), el('span', 'n', e.name), el('span', 't', fmt(e.score)), replayButtons(lv, e));
     list.append(row);
   }
   body.replaceChildren(list);
+}
+
+// A row whose entry carries a ghost gets two buttons: watch the run, or fly
+// against it. A row without one is just a time, and says nothing about it.
+function replayButtons(lv, entry){
+  const box = el('span', 'lbgo');
+  const replay = entry.data && entry.data.v === 1 ? entry.data.r : null;
+  if (!replay || !window.Thruster) return box;
+  box.append(
+    goButton('▶', `Watch ${entry.name}'s run`, () => window.Thruster.watch(lv, entry.name, replay)),
+    goButton('VS', `Race ${entry.name}'s ghost`, () => window.Thruster.race(lv, entry.name, replay)),
+  );
+  return box;
+}
+function goButton(text, label, fn){
+  const b = el('button', 'lbgo-b', text);
+  b.type = 'button'; b.title = label; b.setAttribute('aria-label', label);
+  b.addEventListener('click', fn);
+  return b;
 }
 
 // The name line, which is also the only place a name is ever asked for: a
