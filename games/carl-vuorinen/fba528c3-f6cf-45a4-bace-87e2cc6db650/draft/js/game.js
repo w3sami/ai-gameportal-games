@@ -92,6 +92,8 @@ const Snd = (() => {
     land(sp){ const v = Math.min(0.7, 0.15+sp/500); burst(0.18, 700, 120, v); tone(55, 0.25, v*0.8, 'sine'); },
     finish(){ tone(523, 0.18, 0.25, 'triangle'); tone(784, 0.22, 0.25, 'triangle', 0.14); tone(1046, 0.4, 0.22, 'triangle', 0.28); },
     click(){ tone(660, 0.06, 0.08, 'square'); },
+    crack(){ burst(0.28, 3200, 700, 0.35); },
+    thud(){ burst(0.3, 520, 80, 0.8); tone(58, 0.25, 0.5, 'sine'); },
   };
 })();
 
@@ -107,13 +109,13 @@ const fmt = t => { const s = t/120, m = Math.floor(s/60); return `${m}:${(s-m*60
 function spawn(){ const p = L.pads.start; return {x:p.x+p.w/2, y:p.y-11, vx:0, vy:0, a:0, state:'idle', flame:0}; }
 function reset(){
   ship = spawn(); best = store.bests[li] || null; ghost = best ? spawn() : null;
-  ticks = 0; gTick = 0; running = false; inputs = []; particles.length = 0; deadT = 0; doneT = 0; setMsg('','');
+  ticks = 0; gTick = 0; running = false; inputs = []; particles.length = 0; deadT = 0; doneT = 0; setMsg('',''); hazardReset();
   cam.x = ship.x - vw/(2*Z); cam.y = ship.y - vh/(2*Z);
   hud();
 }
 function loadLevel(i){
   li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; save();
-  setGeom(); buildMain(); resize(); reset();
+  setGeom(); buildMain(); buildHazards(); resize(); reset();
 }
 
 // One physics tick. Deterministic: same inputs → same run, which is what makes the ghost replay possible.
@@ -162,6 +164,9 @@ function tick(){
           if (hit.sp > 120) puff(hit.px, hit.py, hit.sp); Snd.land(hit.sp); settle(ship, hit.z);
           if (hit.key === 'target'){ ship.state = 'finished'; doneT = 1.3; celebrate(hit.px, hit.py); shake = 0.5; finish(); }
         } else { ship.state = 'dead'; deadT = 1.4; explode(hit.px, hit.py); shake = 1; Snd.explode(); setMsg('Crashed', ''); }
+      } else if (ship.state !== 'finished'){
+        const hz = updateHazards(ship);
+        if (hz){ ship.state = 'dead'; deadT = 1.4; explode(hz.px, hz.py); shake = 1; Snd.explode(); setMsg('Crashed', 'Stalactite'); }
       }
       if (ship.state === 'flying' && ship.flame) emitThrust(ship);
     }
@@ -181,6 +186,42 @@ function finish(){
   lastResult = {ticks, prev: prev ? prev.ticks : null, isBest};
 }
 
+// ---- Hazards: stalactites that shake loose when the rocket comes near, then drop ----
+// Driven only by the real rocket's position at fixed DT, so a run stays deterministic and the ghost replay still holds.
+const HZ = { trigger:200, wiggle:0.5, gravity:1.5 };
+let hazards = [];
+function buildHazards(){
+  hazards = (L.hazards||[]).map(h => {
+    const pts = spikePts(h), tip = pts.reduce((b,p) => Math.hypot(p[0]-h.tx,p[1]-h.ty) < Math.hypot(b[0]-h.tx,b[1]-h.ty) ? p : b);
+    const probe = [tip].concat(pts.filter(p => p !== tip && !isSolid(p[0],p[1])));   // landing is judged by the part that hangs in the open
+    return {h, pts, probe, sprite:renderSpikeSprite(pts, h.seed), state:'hang', t:0, a:0, dy:0, vy:0};
+  });
+}
+function hazardReset(){ for (const z of hazards){ z.state = 'hang'; z.t = 0; z.a = 0; z.dy = 0; z.vy = 0; } }
+const posePts = (z, pts) => { const h = z.h, c = Math.cos(z.a), s = Math.sin(z.a); return pts.map(p => { const dx = p[0]-h.x, dy = p[1]-h.y; return [h.x+dx*c-dy*s, h.y+dx*s+dy*c+z.dy]; }); };
+function pip(px,py,pts){ let inside = false; for (let i=0,j=pts.length-1;i<pts.length;j=i++){ const [xi,yi] = pts[i], [xj,yj] = pts[j]; if ((yi>py) !== (yj>py) && px < (xj-xi)*(py-yi)/(yj-yi)+xi) inside = !inside; } return inside; }
+function updateHazards(s){
+  for (const z of hazards){
+    if (z.state === 'gone') continue;
+    const h = z.h;
+    if (z.state === 'hang'){                                   // distance from the rocket to the spike's axis
+      const ax = h.tx-h.x, ay = h.ty-h.y, t = Math.max(0, Math.min(1, ((s.x-h.x)*ax+(s.y-h.y)*ay)/(ax*ax+ay*ay)));
+      if (Math.hypot(s.x-(h.x+ax*t), s.y-(h.y+ay*t)) < (h.trigger||HZ.trigger)){ z.state = 'wiggle'; z.t = 0; Snd.crack(); }
+    } else if (z.state === 'wiggle'){
+      z.t += DT; const k = Math.min(1, z.t/HZ.wiggle); z.a = Math.sin(z.t*38)*0.07*k;
+      if (Math.round(z.t*120) % 10 === 0) crumbs(h.x+(h.tx-h.x)*0.65, h.y+(h.ty-h.y)*0.65, 2);
+      if (z.t >= HZ.wiggle){ z.state = 'fall'; z.vy = 0; crumbs(h.x+(h.tx-h.x)*0.6, h.y+(h.ty-h.y)*0.6, 8); }
+    } else {
+      z.vy += P.gravity*HZ.gravity*DT; z.dy += z.vy*DT;
+      if (z.dy > 12 && posePts(z, z.probe).some(p => isSolid(p[0],p[1]))){ z.state = 'gone'; shatter(h.tx, h.ty+z.dy, z.vy); Snd.thud(); continue; }
+    }
+    const pts = posePts(z, z.pts), c = Math.cos(s.a), sn = Math.sin(s.a);    // hull points inside the spike, or spike vertices inside the rocket
+    for (const [lx,ly] of HULL){ const px = s.x+lx*c-ly*sn, py = s.y+lx*sn+ly*c; if (pip(px,py,pts)) return {px,py}; }
+    for (const p of pts){ if (Math.hypot(p[0]-s.x, p[1]-s.y) < 9) return {px:p[0], py:p[1]}; }
+  }
+  return null;
+}
+
 // ---- Particles ----
 function emitThrust(s){
   const dx = -Math.sin(s.a), dy = Math.cos(s.a), ox = s.x+dx*11, oy = s.y+dy*11;
@@ -197,6 +238,12 @@ function celebrate(px,py){
   for (let i=0;i<140;i++){ const a = -Math.PI*(0.1+0.8*Math.random()), sp = 180+Math.random()*420;
     particles.push({x:px+(Math.random()-0.5)*40,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1.0+Math.random()*1.4,max:2.4,sz:2.5+Math.random()*3.5,kind:3,col:cols[i%4]}); }
   for (let i=0;i<3;i++) particles.push({x:px,y:py,vx:0,vy:0,life:0.7+i*0.2,max:0.7+i*0.2,sz:160+i*90,kind:2,col:'rgba(120,235,150,'});
+}
+function crumbs(px,py,n){
+  for (let i=0;i<n;i++) particles.push({x:px+(Math.random()-0.5)*24,y:py,vx:(Math.random()-0.5)*30,vy:20+Math.random()*50,life:0.4+Math.random()*0.4,max:0.8,sz:1.5+Math.random()*2,kind:1});
+}
+function shatter(px,py,v){
+  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); particles.push({x:px+(Math.random()-0.5)*20,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.7,max:1.2,sz:2+Math.random()*4,kind:1}); }
 }
 function puff(px,py,sp){
   for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v*0.4,life:0.3+Math.random()*0.4,max:0.7,sz:2+Math.random()*3,kind:1}); }
@@ -266,6 +313,12 @@ function render(dt){
     const ox = -(cam.x+ly.padX)*Z*ly.f + vw/2*(1-ly.f) + sx*ly.f, oy = -(cam.y+ly.padY)*Z*ly.f + vh/2*(1-ly.f) + sy*ly.f, kk = Z*ly.f/ly.q;
     ctx.drawImage(ly.c, ox, oy, ly.c.width*kk, ly.c.height*kk);
   }
+  if (hazards.length){
+    ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
+    for (const z of hazards){ if (z.state === 'gone') continue; const h = z.h, sp = z.sprite;
+      ctx.save(); ctx.translate(h.x, h.y+z.dy); ctx.rotate(z.a); ctx.drawImage(sp.c, sp.ox-h.x, sp.oy-h.y); ctx.restore(); }
+    ctx.restore();
+  }
   ctx.drawImage(mainC, -cam.x*Z+sx, -cam.y*Z+sy, L.w*Z, L.h*Z);
 
   ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
@@ -326,7 +379,7 @@ function showComplete(){
   let extra = '';
   if (lastLevel && Object.keys(store.bests).length === LEVELS.length){
     const total = LEVELS.reduce((a,_,i) => a+store.bests[i].ticks, 0);
-    extra = `<p>All ten levels flown. Sum of your best times: <b>${fmt(total)}</b>.</p>`;
+    extra = `<p>All ${LEVELS.length} levels flown. Sum of your best times: <b>${fmt(total)}</b>.</p>`;
   }
   openModal(`<h2>${lastLevel ? 'Final level complete' : `Level ${li+1} complete`}</h2><div class="big">${fmt(r.ticks)}</div><div class="sub${r.isBest?' good':''}">${sub}</div>${extra}
     <div class="row">${lastLevel ? `<button class="btn pri" data-act="menu">Levels</button>` : `<button class="btn pri" data-act="next">Next level</button>`}<button class="btn" data-act="restart">Fly again</button>${lastLevel ? '' : `<button class="btn" data-act="menu">Levels</button>`}</div>`);
@@ -476,4 +529,4 @@ addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false
 
 // ---- Go ----
 li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; setGeom();
-resize(); buildMain(); reset(); showMenu(); requestAnimationFrame(frame);
+resize(); buildMain(); buildHazards(); reset(); showMenu(); requestAnimationFrame(frame);
