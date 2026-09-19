@@ -1,21 +1,32 @@
 /* Pompun malli omana moduulinaan, jotta sen voi ajaa ilman peliä.
  *
- * Idea: kovaa tullut lasku ei tapa heti. Ylitys lasketaan suhteessa sallittuun
- * lasku­nopeuteen, ja siitä nostetaan taksi takaisin ylös — vauhti hidastuu
- * itsestään painovoimassa, joten pomppujen määrää ei tarvitse laskea erikseen.
- * Se putoaa ulos kertoimesta: palautuva osuus (bounceRest) ratkaisee montako
- * kertaa pomppu ylittää vielä laskurajan. Yli bounceMax-kertaisesta ylityksestä
- * ei pompita vaan kolaroidaan.
+ * Pomppu on teleportti, ei kimmoke. Kosketuksessa taksi siirretään 5–10 px
+ * alustan yläpuolelle ja vauhdista jätetään osa jäljelle alaspäin — nostoa ei
+ * käännetä ylöspäin lainkaan. Painovoima hoitaa loput: pieneltä korkeudelta
+ * pudotessa osuma tulee pienemmällä vauhdilla kuin edellinen, ja ketju
+ * sammuu itsestään.
  *
- * Koska nousu ja lasku ovat symmetrisiä samassa painovoimassa, seuraavan
- * osuman nopeus on täsmälleen se jolla lähdettiin ylös. Siksi ketjun voi
- * laskea ilman integrointia — ja siksi tämä on testattavissa suoraan.
+ * Rajat suhteessa laskurajaan (landVY / landVX):
+ *   ratio <= bounceFrom   siisti lasku
+ *   bounceFrom < r <= 1   pomppu, nosto sitä isompi mitä lähempänä rajaa
+ *   ratio > 1             kolari
+ *
+ * Nosto on 5–10 px: puolet kiinteää, puolet ylityksen mukaan. Siitä seuraa
+ * 1–3 pomppua ilman että niitä lasketaan missään — bouncetest.js todistaa sen.
  */
 
-/** Nopeus jolla taksi lähtee ylös osumasta, joka tuli nopeudella vy. */
-export function bounceVelocity(vy, P) {
-  const floor = Math.min(140, P.landVY * 0.8);   // pomppu näkyy aina edes vähän
-  return Math.max(vy * P.bounceRest, floor);
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+
+/** Kuinka monta pikseliä taksi nostetaan tällä osumalla. */
+export function liftFor(ratio, P) {
+  const norm = clamp01((ratio - P.bounceFrom) / Math.max(0.01, 1 - P.bounceFrom));
+  return P.bounceLift * (0.5 + 0.5 * norm);
+}
+
+/** Seuraavan osuman nopeus: jäljelle jäänyt vauhti + pudotus nostosta. */
+export function nextImpact(v, lift, P) {
+  const kept = Math.max(0, v) * P.bounceKeep;
+  return Math.sqrt(kept * kept + 2 * P.grav * lift);
 }
 
 /** Koko ketju kerralla: montako pomppua ennen kuin taksi asettuu tai hajoaa. */
@@ -24,10 +35,11 @@ export function bounceChain(vy, P, max = 12) {
   let v = vy;
   for (let n = 0; n < max; n++) {
     const ratio = v / P.landVY;
-    if (ratio <= 1) return { bounces: n, outcome: 'lasku', steps };
-    if (ratio > P.bounceMax) return { bounces: n, outcome: 'kolari', steps };
-    v = bounceVelocity(v, P);
-    steps.push(Math.round(v));
+    if (ratio > 1) return { bounces: n, outcome: 'kolari', steps };
+    if (ratio <= P.bounceFrom) return { bounces: n, outcome: 'lasku', steps };
+    const lift = liftFor(ratio, P);
+    v = nextImpact(v, lift, P);
+    steps.push(`${lift.toFixed(1)}px → ${Math.round(v)}`);
   }
   return { bounces: max, outcome: 'ei asetu', steps };
 }
