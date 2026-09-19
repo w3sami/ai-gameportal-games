@@ -7,9 +7,10 @@
  * enemmän mitä nopeammin ja pehmeämmin keikka meni.
  *
  * Alusta on käyty kun siellä on pysähdytty: sekä nouto että jättö merkkaa
- * paikan. Määränpää arvotaan täysin vapaasti lähtöalustaa lukuun ottamatta.
- * Kun jokainen alusta on käyty, seuraava asiakas pyytää ylös — ja vasta hänen
- * kyydissään luukku on auki.
+ * paikan. Nouto arvotaan vapaasti mille tahansa alustalle, mutta määränpää on
+ * aina jokin käymätön alusta — ja jos käymättömiä ei ole, asiakas pyytää ylös.
+ * Näin väkäset ja jäljellä olevat keikat eivät voi mennä ristiin: kun kaikki
+ * alustat ovat vihreitä, seuraava kyyti vie katosta ulos.
  *
  * Kenttä alkaa ilmasta katon luukusta ja päättyy välianimaatioon: nousu
  * tilinpäätöksineen ja lasku seuraavan kentän nimen kanssa. Vuoron viimeisen
@@ -387,8 +388,7 @@ function loadLevel(i) {
   levelDeaths = 0;
   resetTaxi();
   if (level.init) level.init(api());
-  const from = level.firstFrom !== undefined ? level.firstFrom : pick(numbered()).id;
-  newJob(from, randomTarget(from), 1.2);
+  spawnJob(null, 1.2, level.firstFrom);
 }
 
 function beginEntry(showTitle) {
@@ -430,21 +430,21 @@ function resetTaxi() {
   dead = false; deadT = 0; wreck = null; bounces = 0;
 }
 
-/** Määränpää on puhdas arpa: mikä tahansa muu kuin lähtöalusta. */
-function randomTarget(fromId) {
-  const pool = numbered().filter(p => p.id !== fromId);
-  return pool.length ? pick(pool).id : fromId;
-}
-
-/* Nouto suositaan käymättömiin alustoihin — muuten kenttä voisi venyä
-   loputtomiin — mutta ei sille alustalle jolla juuri seistään. */
-function nextJobAfter(deliveredId) {
-  if (numbered().every(p => served[p.id])) return newJob(deliveredId, 'up', 1.6);
-
-  const others = numbered().filter(p => p.id !== deliveredId);
-  const fresh = others.filter(p => !served[p.id]);
-  const from = pick(fresh.length ? fresh : others).id;
-  newJob(from, randomTarget(from), 1.6);
+/* Uusi keikka.
+ *
+ * Nouto arvotaan vapaasti mille tahansa alustalle, paitsi sille jolla juuri
+ * seistään — muuten taksi ei liikkuisi keikkojen välissä. Määränpää sen sijaan
+ * on aina jokin käymätön alusta, ja jos sellaista ei ole, asiakas pyytää ylös.
+ * Näin kentän tavoite ja alustojen väkäset pysyvät samassa totuudessa: viimeinen
+ * vihreä väkänen tarkoittaa että seuraava kyyti menee katosta ulos.
+ */
+function spawnJob(avoidId, delay, forceFrom) {
+  const pool = numbered().filter(p => p.id !== avoidId);
+  const from = forceFrom !== undefined && padById(forceFrom)
+    ? forceFrom
+    : pick(pool.length ? pool : numbered()).id;
+  const open = numbered().filter(p => !served[p.id] && p.id !== from);
+  newJob(from, open.length ? pick(open).id : 'up', delay);
 }
 
 function newJob(from, to, delay) {
@@ -673,7 +673,7 @@ function onLanded(pad, softness) {
     sfx.pay();
     speakLine('thanks', kind);
     job = null;
-    nextJobAfter(pad.id);
+    spawnJob(pad.id, 1.6);
     return;
   }
 
