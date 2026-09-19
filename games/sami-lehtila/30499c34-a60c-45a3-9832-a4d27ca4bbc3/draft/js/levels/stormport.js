@@ -144,21 +144,32 @@ const PEND = HOOK_BOX.map((box, i) => {
    paikkaa, mutta vaimennus pitää liikkeen hitaana, joten se on aina pari
    sekuntia jäljessä.
 
-   Matka on eri mittainen eri suuntiin, koska kuilukin on: oikealla laituri
-   (QUAY alkaa 534) pysäyttää lautan, vasemmalla on avovettä ruudun reunaan
-   asti — ja se käytetään. Alanurkan napit eivät ole este: ne ovat läpikuultavia,
-   ja niiden alle ajautuva lautta on tilapäinen eikä sinne tarvitse laskeutua
-   juuri silloin.
+   Tuuli siirtää lauttaa aina samalla painolla kumpaankin suuntaan: iso puuska
+   vie pitkälle, henkäily nytkäyttää vähän. Lautta kertoo siis tuulesta saman
+   tarinan kuin tuulipussit ja säätölaatikon käyrä, eikä sen liikkeestä voi
+   lukea suuntaa väärin.
 
-   Raja tulee siis ruudun reunasta: kovalla rajalla 250 px lautan keula
-   pysähtyy 17:ään, eli vettä jää vielä näkyviin eikä alus leikkaudu reunaan.
-   Jousi jää noin 83 % tavoitteesta, joten normaaliarvoilla raja ei tule
-   vastaan — se on varmistus sen varalle että tuulen säätimet vedetään
-   ääriasentoihin. Pitkä matka lyhyessä puuskassa tarkoittaa myös vauhtia:
-   huippu on noin 165 px/s vasemmalle. Lasku onnistuu silti, koska laskun
-   vx-raja koskee taksin omaa vauhtia eikä alustan — mutta kyytiin pääsee
-   mukavimmin tyvenellä, mikä on koko kentän ajatus. */
-const BARGE = { left: 290, right: 52, min: -250, max: 80, stiff: 3.0, damp: 2.6, bob: 3.5 };
+   Epäsymmetria tulee vasta kuilun päistä. Oikealla laituri (QUAY alkaa 534)
+   pysäyttää ja vasemmalla ruudun reuna; molempiin jätetään `air` verran ilmaa.
+   Rajassa nopeus nollataan, joten lautta jää siihen nojaamaan kunnes tuuli
+   kääntyy — eikä jousi kerää painetta jonka se purkaisi kerralla.
+
+   reach  paino: montako pikseliä täysi puuska siirtää. Jousi jää noin 83 %
+          jäljessä, joten todellinen matka on sitä pienempi.
+   air    paljonko keulan ja perän eteen jätetään vettä rajalla. */
+const BARGE = { reach: 300, air: 16, stiff: 3.0, damp: 2.6, bob: 3.5 };
+
+/* Rungon ylitys alustan yli kummassakin päässä. barge() piirtää keulan ja perän
+   tämän verran alustan ulkopuolelle, ja sama luku rajaa ajelehtimisen — näin
+   kuva ja raja eivät voi erota toisistaan. */
+const HULL = 8;
+
+/** Mihin lautta mahtuu: poikkeaman ala- ja yläraja kotipaikkaan nähden. */
+function bargeSpan(pad, home) {
+  const min = BARGE.air + HULL - home;
+  const max = QUAY.x - BARGE.air - HULL - pad.w - home;
+  return { min, max: Math.max(min, max) };
+}
 
 const storm = {
   t: 0, seen: 0, flash: 0, bolt: null, taxi: null,
@@ -238,13 +249,13 @@ function stormUpdate(dt, api) {
      amplitudi on nolla, joten bx menee sellaisenaan perille — ja koska alustalla
      on move-kenttä, movePads siirtää taksin ja asiakkaan mukana. */
   const b = storm.barge;
-  const reach = vSeen < 0 ? BARGE.left : BARGE.right;
-  b.v += ((vSeen * reach - b.x) * BARGE.stiff - b.v * BARGE.damp) * dt;
+  b.v += ((vSeen * BARGE.reach - b.x) * BARGE.stiff - b.v * BARGE.damp) * dt;
   b.x += b.v * dt;
-  if (b.x < BARGE.min) { b.x = BARGE.min; if (b.v < 0) b.v = 0; }
-  else if (b.x > BARGE.max) { b.x = BARGE.max; if (b.v > 0) b.v = 0; }
   const fuel = api.pads.find(p => p.fuel);
   if (fuel) {
+    const lim = bargeSpan(fuel, b.home);
+    if (b.x < lim.min) { b.x = lim.min; if (b.v < 0) b.v = 0; }
+    else if (b.x > lim.max) { b.x = lim.max; if (b.v > 0) b.v = 0; }
     fuel.bx = b.home + b.x;
     fuel.by = b.homeY + Math.sin(storm.t * 1.5) * BARGE.bob;
   }
@@ -435,7 +446,7 @@ function barge(ctx, p, time) {
   const y = p.y + p.h, x0 = p.x, x1 = p.x + p.w;
   ctx.fillStyle = '#b5652f';
   ctx.beginPath();
-  ctx.moveTo(x0 - 8, y); ctx.lineTo(x1 + 8, y);
+  ctx.moveTo(x0 - HULL, y); ctx.lineTo(x1 + HULL, y);
   ctx.lineTo(x1 - 14, SEA + 2); ctx.lineTo(x0 + 14, SEA + 2);
   ctx.fill();
   ctx.fillStyle = 'rgba(28,18,10,.35)';
@@ -653,6 +664,13 @@ export const stormport = {
         { key: 'ramp', label: 'nousu ja lasku s', min: 0.05, max: 5, step: 0.05 },
         { key: 'lag', label: 'vaikutuksen viive s', min: 0, max: 3, step: 0.05 },
         { key: 'rand', label: 'satunnaisuus', min: 0, max: 1, step: 0.05 },
+      ],
+    },
+    {
+      name: 'bensalautta', obj: BARGE, open: false,
+      sliders: [
+        { key: 'reach', label: 'paino: matka puuskassa px', min: 0, max: 400, step: 10 },
+        { key: 'air', label: 'ilmaa päissä px', min: 0, max: 120, step: 2 },
       ],
     },
     { name: 'kentän kertoimet', open: false, mul: ['grav', 'thrust', 'burn', 'landVX'] },
