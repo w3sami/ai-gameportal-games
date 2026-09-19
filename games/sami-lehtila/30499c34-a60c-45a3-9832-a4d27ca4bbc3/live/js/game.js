@@ -33,6 +33,11 @@ import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/ind
 import { createGamepad } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
 import { portal, onPortal, setPortal }
   from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
+/* Saako debug tällä sivulla olla auki lainkaan. Omassa osoitteessaan peli on
+   omillaan; kehyksessä debug on portaalin myönnettävä, ja sen myöntää vain
+   tekijän oma sivu — sama sivu joka sanoo canWrite. Kytkin jota ei myönnetä ei
+   kuulu näkyä: nappi joka ei tee mitään on huonompi kuin nappi jota ei ole. */
+const debugAllowed = () => !portal.embedded || portal.canWrite;
 /* Sama moduuli nimiavaruutena. Tallennusfunktio tulee pluginiin vasta
    seuraavassa versiossa, ja nimetty tuonti puuttuvasta viennistä kaataisi
    koko moduulin latausvaiheessa — nimiavaruudesta puuttuva on vain
@@ -698,7 +703,7 @@ function toLogical(clientX, clientY) {
 const inBox = (p, b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 const onButtons = p =>
   inBox(p, GEAR_BOX) || inBox(p, HORN_BOX) ||
-  inBox(p, MUTE_BOX) || inBox(p, COG_BOX) || inBox(p, FULL_BOX);
+  inBox(p, MUTE_BOX) || (debugAllowed() && inBox(p, COG_BOX)) || inBox(p, FULL_BOX);
 
 function toggleGear() {
   if (state !== PLAY || dead) return;
@@ -734,7 +739,7 @@ canvas.addEventListener('pointerdown', e => {
   if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
   if (inBox(p, HORN_BOX)) { honk(); return; }
   if (inBox(p, MUTE_BOX)) { toggleMute(); return; }
-  if (inBox(p, COG_BOX)) { togglePanel(); return; }
+  if (debugAllowed() && inBox(p, COG_BOX)) { togglePanel(); return; }
   if (inBox(p, FULL_BOX)) toggleFullscreen();
 });
 
@@ -1993,7 +1998,7 @@ function drawButtons() {
     }
   });
 
-  smallBox(COG_BOX, (mx, my) => {
+  if (debugAllowed()) smallBox(COG_BOX, (mx, my) => {
     ctx.beginPath(); ctx.arc(mx, my, 6, 0, 6.3); ctx.stroke();
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2;
@@ -2499,7 +2504,7 @@ function showCard(html, pending, meta, fade) {
 const buttons = label => `
   <button id="go" class="btn">${label}</button>
   <button id="fs" class="btn ghost">${t('card.full')}</button>
-  <button id="set" class="btn ghost">${t('card.tune')}</button>
+  ${debugAllowed() ? `<button id="set" class="btn ghost">${t('card.tune')}</button>` : ''}
   <p class="hint">${t('card.keys')}</p>
   <p class="hint" id="padstate"></p>`;
 
@@ -2588,6 +2593,9 @@ if (portal.embedded) {
        portaalin kytkin avaa sen samoin kuin P. Kehyksessä P vaatii että fokus on
        pelissä, kytkin ei vaadi mitään. */
     onPortal('debug', setPanel);
+    /* canWrite ratkaisee näkyykö ratas ja kortin nappi, ja se saapuu vasta
+       tässä — kortti on jo ruudulla, joten se piirretään uusiksi. */
+    onPortal('canWrite', () => { if (state === MENU) showCard(menuCard(), 0, null); });
   });
 }
 
