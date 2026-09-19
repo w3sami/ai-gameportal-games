@@ -75,7 +75,7 @@ const STR = {
     'ui.horn': 'TÖÖT',
 
     'msg.hey': 'Hei, taksi!',
-    'msg.toPad': 'Alusta {n}, kiitos',
+    'msg.toPad': 'Alusta {n}, {tail}',
     'msg.up': 'Ylös, kiitos!',
     'msg.thanks': 'Kiitos! {fare} € (tippi {tip} €)',
     'msg.oops': 'Hups.',
@@ -84,7 +84,7 @@ const STR = {
 
     'say.hey': 'Hei taksi',
     'say.toPad': 'Alusta {n} {tail}',
-    'say.up': 'Ylös {tail}',
+    'say.up': 'Ylös kiitos',
     'say.tail.please': 'kiitos',
     'say.tail.kind': 'ole hyvä',
     'say.tail.quick': 'vähän äkkiä',
@@ -148,7 +148,7 @@ const STR = {
     'ui.horn': 'HONK',
 
     'msg.hey': 'Hey, taxi!',
-    'msg.toPad': 'Pad {n}, please',
+    'msg.toPad': 'Pad {n}, {tail}',
     'msg.up': 'Up, please!',
     'msg.thanks': 'Thanks! {fare} € (tip {tip} €)',
     'msg.oops': 'Oops.',
@@ -157,7 +157,7 @@ const STR = {
 
     'say.hey': 'Hey taxi',
     'say.toPad': 'Pad {n} {tail}',
-    'say.up': 'Up {tail}',
+    'say.up': 'Up please',
     'say.tail.please': 'please',
     'say.tail.kind': 'if you would',
     'say.tail.quick': 'and quickly',
