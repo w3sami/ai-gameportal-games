@@ -51,7 +51,7 @@ const FUEL_MAX = 100;
 const P = {
   grav: 250, thrust: 680,
   landVY: 135, landVX: 75, softVY: 50,
-  burn: 17, refuel: 32, price: 0.9,
+  burn: 12, refuel: 36, price: 0.9,
   fare: 45, tip: 55, tipTime: 22, exitBonus: 40,
 };
 
@@ -202,28 +202,35 @@ const MENU = 0, PLAY = 1, OVER = 2;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, stars, lowWarn, cleared, tookOff;
+    msg, msgT, bits, lowWarn;
+
+const stars = [];
+for (let i = 0; i < 70; i++) {
+  stars.push({ x: rand(20, W - 20), y: rand(20, H - 20), r: rand(0.6, 1.8), a: rand(0.1, 0.5), p: rand(0, 6.3) });
+}
 
 function newRun() {
-  money = 40; fuel = FUEL_MAX; lives = 3; runT = 0;
+  money = 40; lives = 3; runT = 0;
   served = { 1: false, 2: false };
-  gateOpen = false; cleared = false;
+  gateOpen = false;
   bits = []; lowWarn = 0;
   msg = ''; msgT = 0;
-  resetTaxi();
   job = null;
+  resetTaxi();
   /* Ensimmäinen asiakas on ylhäällä alustalla 2: vuoro alkaa lennolla eikä
      siitä että kaveri kävelee valmiiksi kyytiin. */
   newJob(2, 1, 1.0);
 }
 
+// Uusi taksi tulee tankki täynnä — alkuperäisessäkin polttoaine nollataan.
 function resetTaxi() {
   const p = padById(1);
   taxi = {
     x: p.x + p.w / 2, y: p.y - (TH / 2 + GEAR),
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
   };
-  dead = false; deadT = 0; tookOff = false;
+  fuel = FUEL_MAX;
+  dead = false; deadT = 0;
 }
 
 function newJob(from, to, delay) {
@@ -242,9 +249,6 @@ function burst(x, y, color, n, speed) {
     bits.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, color, r: rand(1.5, 4.5) });
   }
 }
-
-stars = [];
-for (let i = 0; i < 70; i++) stars.push({ x: rand(20, W - 20), y: rand(20, H - 20), r: rand(0.6, 1.8), a: rand(0.1, 0.5), p: rand(0, 6.3) });
 
 /* ------------------------------------------------------------------ syöte */
 const KEY = Object.create(null);
@@ -292,6 +296,32 @@ const stick = createJoystick({
   ignore: onButtons,
 });
 
+/** Ohjausvektori: näppäimet voittavat kun ne ovat pohjassa, muuten sauva. */
+function inputVector() {
+  const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
+  const ky = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
+  if (kx || ky) {
+    const l = Math.hypot(kx, ky) || 1;
+    return { x: kx / l, y: ky / l };
+  }
+  if (stick.active) {
+    let x = stick.x * stick.gain, y = stick.y * stick.gain;
+    const l = Math.hypot(x, y);
+    if (l > 1) { x /= l; y /= l; }
+    return { x, y };
+  }
+  return { x: 0, y: 0 };
+}
+
+/** Mitä suuttimista tulee ulos juuri nyt — sekä fysiikkaan että liekkeihin. */
+function activeThrust() {
+  if (state !== PLAY || dead || fuel <= 0) return { x: 0, y: 0 };
+  const v = inputVector();
+  if (taxi.gear > 0.35) v.x = 0;              // teline alhaalla: ei sivusuuttimia
+  if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
+  return v;
+}
+
 /* ------------------------------------------------------------- törmäykset */
 function taxiBox(t) {
   const gl = GEAR * t.gear;
@@ -310,9 +340,10 @@ function crash(reason) {
   if (dead) return;
   dead = true; deadT = 0;
   lives--;
-  const hadFare = job && job.phase === 'aboard';
-  if (hadFare) { newJob(job.from, job.to, 1.2); say('Keikka meni — ' + reason, 3); }
-  else say(reason, 3);
+  if (job && job.phase === 'aboard') {
+    newJob(job.from, job.to, 1.2);
+    say('Keikka meni — ' + reason, 3);
+  } else say(reason, 3);
   burst(taxi.x, taxi.y, '#ffd479', 34, 420);
   burst(taxi.x, taxi.y, '#ff5d7a', 26, 320);
   jetLevel(0);
@@ -333,7 +364,7 @@ function touchdown(pad, b) {
   onLanded(pad, soft);
 }
 
-/* ------------------------------------------------------------- keikkalogiikka */
+/* --------------------------------------------------------- keikkalogiikka */
 function onLanded(pad, softness) {
   if (!job) return;
 
@@ -350,21 +381,24 @@ function onLanded(pad, softness) {
 
     if (served[1] && served[2]) {
       gateOpen = true;
-      setTimeout(() => { if (state === PLAY) { say('Ylös, kiitos!', 4); sfx.gate(); } }, 900);
+      setTimeout(() => {
+        if (state === PLAY && served[1] && served[2]) { say('Ylös, kiitos!', 4); sfx.gate(); }
+      }, 900);
     } else {
-      const next = served[1] ? 2 : 1;
-      newJob(pad.id, next, 1.4);
+      newJob(pad.id, served[1] ? 2 : 1, 1.4);
     }
     return;
   }
 
-  // Alkuperäisessä kyydin päälle laskeutuminen saa asiakkaan huutamaan ja
-  // vaihtamaan paikkaa. Sama tässä: peukalosääntö on laskeutua viereen.
+  /* Alkuperäisessä kyydin päälle laskeutuminen saa asiakkaan huutamaan ja
+     vaihtamaan paikkaa. Sama tässä: laskeudu viereen, älä päälle. */
   if (job.phase === 'wait' && pad.id === job.from && job.shown) {
     const b = taxiBox(taxi);
     if (job.x > b.x - 6 && job.x < b.x + b.w + 6) {
       const p = padById(job.from);
-      job.x = job.x < p.x + p.w / 2 ? rand(p.x + p.w - 60, p.x + p.w - 18) : rand(p.x + 18, p.x + 60);
+      job.x = job.x < p.x + p.w / 2
+        ? rand(p.x + p.w - 60, p.x + p.w - 18)
+        : rand(p.x + 18, p.x + 60);
       say('Hei!', 1.4);
       sfx.hey();
     }
@@ -373,36 +407,33 @@ function onLanded(pad, softness) {
 
 function jobStep(dt) {
   if (!job) return;
-  if (job.phase === 'wait') {
-    if (job.wait > 0) { job.wait -= dt; return; }
-    if (!job.shown) { job.shown = true; say('Hei, taksi!', 2.2); sfx.hey(); }
-    // Kyytiin vain pysäköidystä taksista samalla alustalla.
-    const t = taxi;
-    if (!dead && t.landed && t.landed.id === job.from) {
-      const b = taxiBox(t);
-      const target = job.x < t.x ? b.x - 8 : b.x + b.w + 8;
-      job.x += Math.sign(target - job.x) * Math.min(Math.abs(target - job.x), 95 * dt);
-      job.walk += dt * 9;
-      if (Math.abs(target - job.x) < 3) {
-        job.phase = 'aboard'; job.t = 0;
-        say(`Alusta ${job.to}, kiitos`, 2.4);
-        sfx.pickup();
-      }
-    }
-    return;
+  if (job.phase === 'aboard') { job.t += dt; return; }
+
+  if (job.wait > 0) { job.wait -= dt; return; }
+  if (!job.shown) { job.shown = true; say('Hei, taksi!', 2.2); sfx.hey(); }
+
+  // Kyytiin vain pysäköidystä taksista samalla alustalla.
+  if (dead || !taxi.landed || taxi.landed.id !== job.from) return;
+  const b = taxiBox(taxi);
+  const target = job.x < taxi.x ? b.x - 8 : b.x + b.w + 8;
+  const d = target - job.x;
+  job.x += Math.sign(d) * Math.min(Math.abs(d), 95 * dt);
+  job.walk += dt * 9;
+  if (Math.abs(d) < 3) {
+    job.phase = 'aboard'; job.t = 0;
+    say(`Alusta ${job.to}, kiitos`, 2.4);
+    sfx.pickup();
   }
-  if (job.phase === 'aboard') job.t += dt;
 }
 
 const fareNow = () => job && job.phase === 'aboard'
   ? P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime))
   : 0;
 
-/* ------------------------------------------------------------------ päivitys */
+/* ---------------------------------------------------------------- päivitys */
 function update(dt) {
   runT += dt;
   if (msgT > 0) msgT -= dt;
-
   stepBits(dt);
 
   if (dead) {
@@ -415,41 +446,27 @@ function update(dt) {
     return;
   }
 
-  // ohjaus: näppäimet voittavat kun ne ovat pohjassa, muuten sauva ohjaa
-  const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
-  const ky = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
-  let ax = 0, ay = 0;
-  if (kx || ky) {
-    const l = Math.hypot(kx, ky) || 1;
-    ax = kx / l; ay = ky / l;
-  } else if (stick.active) {
-    ax = stick.x * stick.gain; ay = stick.y * stick.gain;
-    const l = Math.hypot(ax, ay);
-    if (l > 1) { ax /= l; ay /= l; }
-  }
-
-  // teline animoituu; alhaalla sivusuuttimet ovat poissa pelistä
+  // teline animoituu; maassa se on aina alhaalla
   const want = taxi.landed ? 1 : (taxi.gearWant ? 1 : 0);
   taxi.gear += clamp(want - taxi.gear, -dt * 4, dt * 4);
-  if (taxi.gear > 0.35) ax = 0;
-  if (fuel <= 0) { ax = 0; ay = 0; }
 
-  const throttle = Math.min(1, Math.hypot(ax, ay));
+  const v = activeThrust();
+  const raw = inputVector();
 
   if (taxi.landed) {
     jetLevel(0);
     if (taxi.landed.fuel) refuel(dt);
-    if (ay < -0.2 && fuel > 0) { taxi.landed = null; tookOff = true; }
-    else {
-      jobStep(dt);
-      if (fuel <= 0 && !taxi.landed) {}
-      return;
-    }
+    // Kuiva tankki muulla kuin tankkauslautasella on vuoron loppu, ei jumi.
+    if (fuel <= 0.5 && !taxi.landed.fuel) { crash('Tankki kuivui'); return; }
+    if (raw.y < -0.2 && fuel > 0) taxi.landed = null;
+    else { jobStep(dt); return; }
   }
 
-  if (throttle > 0 && fuel > 0) {
+  const throttle = Math.min(1, Math.hypot(v.x, v.y));
+  if (throttle > 0) {
+    const had = fuel;
     fuel = Math.max(0, fuel - P.burn * throttle * dt);
-    if (fuel <= 0) say('Tankki kuiva!', 3);
+    if (had > 0 && fuel <= 0) say('Tankki kuiva!', 3);
   }
   jetLevel(throttle);
 
@@ -458,15 +475,15 @@ function update(dt) {
     if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.35 + fuel / 60; }
   } else lowWarn = 0;
 
-  taxi.vx += ax * P.thrust * dt;
-  taxi.vy += ay * P.thrust * dt + P.grav * dt;
+  taxi.vx += v.x * P.thrust * dt;
+  taxi.vy += v.y * P.thrust * dt + P.grav * dt;
 
   /* Liike pilkotaan osiin, jotta kova pudotus ei hyppää alustan läpi. */
   const steps = Math.max(1, Math.ceil(Math.max(Math.abs(taxi.vx), Math.abs(taxi.vy)) * dt / 6));
   const sd = dt / steps;
   for (let i = 0; i < steps && !dead && state === PLAY; i++) move(sd);
 
-  if (!dead) jobStep(dt);
+  if (!dead && state === PLAY) jobStep(dt);
 }
 
 function move(dt) {
@@ -492,13 +509,13 @@ function refuel(dt) {
   if (fuel >= FUEL_MAX || money <= 0) return;
   const want = Math.min(P.refuel * dt, FUEL_MAX - fuel, money / P.price);
   if (want <= 0) return;
-  fuel += want; money -= want * P.price;
+  fuel += want;
+  money -= want * P.price;
   if (Math.random() < dt * 12) sfx.pump();
 }
 
 function finish() {
   money += P.exitBonus;
-  cleared = true;
   sfx.win();
   gameOver(true);
 }
@@ -532,28 +549,26 @@ function drawWall(r) {
 }
 
 function drawPad(p) {
-  const top = p.y;
   ctx.fillStyle = p.fuel ? '#2a4030' : '#2b3556';
-  ctx.beginPath(); ctx.roundRect(p.x, top, p.w, p.h, 4); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(p.x, p.y, p.w, p.h, 4); ctx.fill();
 
   const lit = p.fuel ? '#7bf0a0' : (served[p.id] ? '#6fe3ff' : '#ffd479');
   ctx.fillStyle = lit;
   ctx.shadowColor = lit; ctx.shadowBlur = 14;
-  ctx.fillRect(p.x + 6, top, p.w - 12, 3);
+  ctx.fillRect(p.x + 6, p.y, p.w - 12, 3);
   ctx.shadowBlur = 0;
 
-  // jalat
   ctx.fillStyle = 'rgba(30,40,70,.85)';
-  ctx.fillRect(p.x + 12, top + p.h, 8, 16);
-  ctx.fillRect(p.x + p.w - 20, top + p.h, 8, 16);
+  ctx.fillRect(p.x + 12, p.y + p.h, 8, 16);
+  ctx.fillRect(p.x + p.w - 20, p.y + p.h, 8, 16);
 
   ctx.fillStyle = 'rgba(233,237,255,.5)';
   ctx.font = '700 13px system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText(p.fuel ? 'TANKKAUS' : 'ALUSTA ' + p.id, p.x + 8, top + p.h + 30);
+  ctx.fillText(p.fuel ? 'TANKKAUS' : 'ALUSTA ' + p.id, p.x + 8, p.y + p.h + 30);
   if (!p.fuel && served[p.id]) {
     ctx.fillStyle = '#6fe3ff';
-    ctx.fillText('✓', p.x + p.w - 18, top + p.h + 30);
+    ctx.fillText('✓', p.x + p.w - 18, p.y + p.h + 30);
   }
 }
 
@@ -582,10 +597,9 @@ function drawGate() {
 function drawPassenger() {
   if (!job || job.phase !== 'wait' || !job.shown) return;
   const p = padById(job.from);
-  const y = p.y;
   const bob = Math.sin(job.walk) * 2;
   ctx.save();
-  ctx.translate(job.x, y - 2 + bob);
+  ctx.translate(job.x, p.y - 2 + bob);
   ctx.strokeStyle = '#ffe6a3'; ctx.fillStyle = '#ffe6a3';
   ctx.lineWidth = 2.6; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.arc(0, -26, 5, 0, 6.3); ctx.fill();
@@ -597,23 +611,14 @@ function drawPassenger() {
   ctx.moveTo(0, -9); ctx.lineTo(6, 0);
   ctx.stroke();
   ctx.restore();
-
-  // pieni puhekupla kun kaveri odottaa paikallaan
-  if (msgT > 0 && msg === 'Hei, taksi!') {
-    ctx.fillStyle = 'rgba(255,230,163,.85)';
-    ctx.font = '700 13px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Hei, taksi!', job.x, y - 44);
-  }
 }
 
-function drawTaxi(ax, ay) {
-  if (dead) return;
+function drawTaxi(v) {
+  if (dead || !taxi) return;
   const t = taxi, gl = GEAR * t.gear;
   ctx.save();
   ctx.translate(t.x, t.y);
 
-  // liekit
   const flame = (dx, dy, rot, len) => {
     ctx.save();
     ctx.translate(dx, dy); ctx.rotate(rot);
@@ -627,13 +632,12 @@ function drawTaxi(ax, ay) {
     ctx.closePath(); ctx.fill();
     ctx.restore();
   };
-  const jitter = () => rand(0.8, 1.2);
-  if (ay < -0.05) { const l = 26 * -ay * jitter(); flame(-14, TH / 2, 0, l); flame(14, TH / 2, 0, l); }
-  if (ay > 0.05) { const l = 18 * ay * jitter(); flame(0, -TH / 2, Math.PI, l); }
-  if (ax > 0.05) flame(-TW / 2, 0, -Math.PI / 2, 20 * ax * jitter());
-  if (ax < -0.05) flame(TW / 2, 0, Math.PI / 2, 20 * -ax * jitter());
+  const j = () => rand(0.8, 1.2);
+  if (v.y < -0.05) { const l = 26 * -v.y * j(); flame(-14, TH / 2, 0, l); flame(14, TH / 2, 0, l); }
+  if (v.y > 0.05) flame(0, -TH / 2, Math.PI, 18 * v.y * j());
+  if (v.x > 0.05) flame(-TW / 2, 0, -Math.PI / 2, 20 * v.x * j());
+  if (v.x < -0.05) flame(TW / 2, 0, Math.PI / 2, 20 * -v.x * j());
 
-  // teline
   if (gl > 0.5) {
     ctx.strokeStyle = '#9fb0d8'; ctx.lineWidth = 3; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -647,26 +651,22 @@ function drawTaxi(ax, ay) {
     ctx.stroke();
   }
 
-  // runko
   ctx.fillStyle = '#ffd479';
   ctx.shadowColor = 'rgba(255,212,121,.5)'; ctx.shadowBlur = 16;
   ctx.beginPath(); ctx.roundRect(-TW / 2, -TH / 2, TW, TH, 9); ctx.fill();
   ctx.shadowBlur = 0;
 
-  // ruudukkoraita
   ctx.save();
   ctx.beginPath(); ctx.roundRect(-TW / 2, -TH / 2, TW, TH, 9); ctx.clip();
   ctx.fillStyle = '#22293f';
   for (let i = 0; i < 9; i++) ctx.fillRect(-TW / 2 + i * 6, -TH / 2 + (i % 2 ? 5 : 0) + 8, 6, 5);
   ctx.restore();
 
-  // ohjaamo
   ctx.fillStyle = '#7fe6ff';
   ctx.beginPath(); ctx.ellipse(-12, -3, 11, 8, 0, 0, 6.3); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.ellipse(-15, -6, 4, 2.6, -0.4, 0, 6.3); ctx.fill();
 
-  // kattovalo: palaa kun kyydissä on asiakas
   const busy = job && job.phase === 'aboard';
   ctx.fillStyle = busy ? '#ff5d7a' : '#9fb0d8';
   if (busy) { ctx.shadowColor = '#ff5d7a'; ctx.shadowBlur = 12; }
@@ -704,17 +704,19 @@ function drawHud() {
   ctx.fillStyle = '#8a97be';
   ctx.font = '600 15px system-ui, sans-serif';
   ctx.fillText('taksit ' + Math.max(0, lives), W - 26, 40);
-  ctx.fillText(served[1] && served[2] ? 'ulos ylhäältä' : `keikat ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2`, W - 26, 62);
+  ctx.fillText(
+    served[1] && served[2] ? 'ulos ylhäältä' : `keikat ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2`,
+    W - 26, 62
+  );
 
   const fare = fareNow();
   if (fare) {
-    ctx.textAlign = 'right';
     ctx.fillStyle = '#ffd479';
     ctx.font = '700 22px system-ui, sans-serif';
-    ctx.fillText(fare + ' €', W - 26, 96);
+    ctx.fillText(fare + ' €', W - 26, 98);
     ctx.fillStyle = 'rgba(233,237,255,.45)';
     ctx.font = '600 11px system-ui, sans-serif';
-    ctx.fillText('MITTARI  →  ALUSTA ' + job.to, W - 26, 112);
+    ctx.fillText('MITTARI  →  ALUSTA ' + job.to, W - 26, 114);
   }
 
   if (msgT > 0) {
@@ -722,7 +724,7 @@ function drawHud() {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e9edff';
     ctx.font = '700 22px system-ui, sans-serif';
-    ctx.fillText(msg, W / 2, 150);
+    ctx.fillText(msg, W / 2, 160);
     ctx.globalAlpha = 1;
   }
 }
@@ -736,7 +738,7 @@ function drawButtons() {
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 16); ctx.fill(); ctx.stroke();
 
-  const cx = b.x + b.w / 2, cy = b.y + 36;
+  const cx = b.x + b.w / 2, cy = b.y + 38;
   ctx.strokeStyle = down ? '#6fe3ff' : '#9fb0d8';
   ctx.lineWidth = 3; ctx.lineCap = 'round';
   ctx.beginPath();
@@ -758,7 +760,6 @@ function drawButtons() {
   ctx.fillText(down ? 'TELINE ALHAALLA' : 'TELINE YLHÄÄLLÄ', cx, b.y + b.h - 14);
   ctx.restore();
 
-  // mykistys
   const m = MUTE_BOX, mx = m.x + m.w / 2, my = m.y + m.h / 2;
   ctx.save();
   ctx.globalAlpha = 0.5;
@@ -780,7 +781,7 @@ function drawButtons() {
   ctx.restore();
 }
 
-function draw(ax, ay) {
+function draw(v) {
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
 
   const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -805,7 +806,7 @@ function draw(ax, ay) {
   drawGate();
   for (const p of PADS) drawPad(p);
   drawPassenger();
-  drawTaxi(ax, ay);
+  drawTaxi(v);
 
   for (const b of bits) {
     ctx.globalAlpha = clamp(b.life, 0, 1);
@@ -834,7 +835,7 @@ const menuCard = () => `
   <p>Nosta tyyppi kyytiin ja vie hänet toiselle alustalle. Mitä nopeammin ja
      pehmeämmin, sitä isompi tippi.</p>
   <p><b>Laskuteline pitää laskea ennen kosketusta</b> — ja alhaalla se sammuttaa
-     sivusuuttimet, joten suunta pitää olla valmiina.</p>
+     sivusuuttimet, joten suunta on oltava valmiina.</p>
   <p>Keskellä tankataan omalla rahalla. Kun molemmilla alustoilla on käyty,
      katon luukku aukeaa.</p>
   <p class="hint">Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>
@@ -852,7 +853,7 @@ const overWon = () => `
   <button id="go" class="btn">Uusi vuoro</button>`;
 
 const overLost = () => `
-  <h1>Kolarit <span>loppu</span></h1>
+  <h1>Taksit <span>loppu</span></h1>
   <div class="big">${Math.round(money)} €</div>
   <p>Vuoro katkesi ${Math.round(runT)} sekunnin kohdalla.
      Keikkoja tehtynä ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2.</p>
@@ -864,9 +865,9 @@ function start() {
   newRun();
   state = PLAY;
   card.classList.add('hidden');
-  say('Hei, taksi!', 0.1);
 }
 
+newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
 
 /* ------------------------------------------------------------ debug-paneeli */
@@ -894,20 +895,11 @@ function loop(now) {
   last = now;
   resize();
 
-  let ax = 0, ay = 0;
-  if (state === PLAY && !dead) {
-    const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
-    const ky = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
-    if (kx || ky) { const l = Math.hypot(kx, ky) || 1; ax = kx / l; ay = ky / l; }
-    else if (stick.active) { ax = stick.x * stick.gain; ay = stick.y * stick.gain; }
-    if (taxi.gear > 0.35) ax = 0;
-    if (fuel <= 0 || taxi.landed) { ax = 0; if (taxi.landed && ay > 0) ay = 0; }
-  }
-
+  const v = activeThrust();               // sama vektori fysiikkaan ja liekkeihin
   if (state === PLAY) update(dt);
   else stepBits(dt);
 
-  draw(ax, ay);
+  draw(v);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
