@@ -18,9 +18,9 @@
  * Taksi tulee kenttään aina katon luukusta — myös kolarin jälkeen — jarruttaa
  * paikalleen ja peli käynnistyy READY–GO:lla. Kentän lopussa on välianimaatio:
  * nousu tilinpäätöksineen ja lasku seuraavan kentän nimen kanssa. Viimeisen
- * kentän jälkeen tulee pelkkä nousu koko vuoron tilastoilla, ja loppukortin
- * takana lentää hyperavaruus — tai, jos taksit loppuivat, valuvat tähdet
- * (js/hyperspace.js).
+ * kentän jälkeen tulee pelkkä nousu koko vuoron tilastoilla, ja loppuruudussa
+ * lentää hyperavaruus (js/hyperspace.js) — kortti häivähtää siihen vasta parin
+ * sekunnin päästä, jotta lennon ehtii nähdä.
  *
  * Tekstit ja puhe tulevat js/i18n.js:stä. Kieli päätellään ?lang-parametrista,
  * localStoragesta tai selaimen kielestä, ja suomea puhutaan vain jos laitteelta
@@ -60,6 +60,7 @@ const HORN_R = 150;
 const SQ_FALL = 0.4, SQ_WAIT = 0.3, SQ_RISE = 0.7;
 const SQ_DUR = SQ_FALL + SQ_WAIT + SQ_RISE;
 const GRAVE_MAX = 10;
+const END_CARD_DELAY = 2600;                               // tähdet ensin, kortti sitten
 
 let levelIndex = 0, level = LEVELS[0];
 let GATE = level.gate, WALLS = [], PADS = [];
@@ -363,7 +364,7 @@ let state = MENU;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, graves, squishes, wreck, bounces,
     titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
-    runDeaths = 0, runRuns = 0, carried = null, hyper = null;
+    runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
 
 const stars = [];
 for (let i = 0; i < 70; i++) {
@@ -439,7 +440,7 @@ function beginEntry(showTitle) {
 function beginLevel(i, showTitle) {
   loadLevel(i);
   beginEntry(showTitle);
-  card.classList.add('hidden');
+  hideCard();
 }
 
 function newRun() {
@@ -985,22 +986,28 @@ function buyTaxis(count, price) {
   lives = count;
   sfx.buy();
   beginEntry(false);
-  card.classList.add('hidden');
+  hideCard();
 }
 
-/* Vuoro päättyy. Kortin taakse tulee tausta, koska pysäytyskuva kentästä
-   näyttäisi siltä että peli jäi jumiin — ja tausta kertoo lopputuloksen jo
-   ennen tekstiä: suoritettu vuoro lähtee hyperavaruuteen, loppuneet taksit
-   jäävät valuvien tähtien ja sammuneiden värien alle. */
+/* Vuoro päättyy. Ensin pelkkä tausta — suoritetusta vuorosta hyperavaruus,
+   loppuneista takseista valuvat tähdet — ja vasta parin sekunnin päästä kortti
+   häivähtää päälle. Pysäytyskuva kentästä näyttäisi siltä kuin peli olisi
+   jäänyt jumiin, ja heti ilmestyvä kortti veisi koko efektin. */
 function gameOver(won) {
   state = OVER;
   jetLevel(0);
   money = Math.round(money);
   hyper = createHyperspace({ W, H, rand, mode: won ? 'warp' : 'drift' });
   if (won) sfx.warp(); else sfx.fade();
-  showCard(won ? overWon() : overLost(), money, {
-    cleared: won, seconds: runT, level: levelIndex + 1,
-  });
+  hideCard();
+
+  const html = won ? overWon() : overLost();
+  const pending = money;
+  const meta = { cleared: won, seconds: runT, level: levelIndex + 1 };
+  clearTimeout(endTimer);
+  endTimer = setTimeout(() => {
+    if (state === OVER) showCard(html, pending, meta, true);
+  }, END_CARD_DELAY);
 }
 
 function stepBits(dt) {
@@ -1838,9 +1845,27 @@ function togglePanel() {
 }
 
 /* ------------------------------------------------------------------ kortti */
-function showCard(html, pending, meta) {
+function hideCard() {
+  clearTimeout(endTimer);
+  card.classList.add('hidden');
+  card.style.transition = '';
+  card.style.opacity = '';
+}
+
+function showCard(html, pending, meta, fade) {
   card.classList.remove('hidden');
   card.innerHTML = html;
+  if (fade) {                                // häivytys tähtien päälle
+    card.style.transition = 'none';
+    card.style.opacity = '0';
+    requestAnimationFrame(() => {
+      card.style.transition = 'opacity .9s ease';
+      card.style.opacity = '1';
+    });
+  } else {
+    card.style.transition = '';
+    card.style.opacity = '';
+  }
   const lb = card.querySelector('#lb');
   if (lb) mountBoard(lb, pending || 0, meta);
   const go = card.querySelector('#go');
@@ -1961,7 +1986,7 @@ function loop(now) {
     return;
   }
 
-  if (state === OVER && hyper) {               // loppukortin tausta
+  if (state === OVER && hyper) {               // loppuruudun tausta
     hyper.update(dt);
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
     hyper.draw(ctx);
