@@ -18,7 +18,8 @@
  * Taksi tulee kenttään aina katon luukusta — myös kolarin jälkeen — jarruttaa
  * paikalleen ja peli käynnistyy READY–GO:lla. Kentän lopussa on välianimaatio:
  * nousu tilinpäätöksineen ja lasku seuraavan kentän nimen kanssa. Viimeisen
- * kentän jälkeen tulee pelkkä nousu koko vuoron tilastoilla ja sitten kortti.
+ * kentän jälkeen tulee pelkkä nousu koko vuoron tilastoilla, ja loppukortin
+ * takana lentää hyperavaruus (js/hyperspace.js).
  *
  * Tekstit ja puhe tulevat js/i18n.js:stä. Kieli päätellään ?lang-parametrista,
  * localStoragesta tai selaimen kielestä, ja suomea puhutaan vain jos laitteelta
@@ -34,6 +35,7 @@ import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/ind
 import { liftFor } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
+import { createHyperspace } from './hyperspace.js';
 import { LEVELS } from './levels.js';
 import { mountBoard } from './leaderboard.js';
 import { LANG, setLang, t, voiceFor } from './i18n.js';
@@ -340,6 +342,11 @@ const sfx = {
     tone(1047, 0.30, { type: 'triangle', gain: 0.14, delay: 0.34 });
     tone(1319, 0.5, { type: 'triangle', gain: 0.12, delay: 0.5 });
   },
+  /** Hyppy hyperavaruuteen loppukortin taustalle. */
+  warp() {
+    noise(1.6, 0.10, 180, 3000);
+    tone(70, 1.4, { type: 'sawtooth', gain: 0.07, to: 520 });
+  },
 };
 
 /* ------------------------------------------------------------------- tila */
@@ -349,7 +356,7 @@ let state = MENU;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, graves, squishes, wreck, bounces,
     titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
-    runDeaths = 0, runRuns = 0, carried = null;
+    runDeaths = 0, runRuns = 0, carried = null, hyper = null;
 
 const stars = [];
 for (let i = 0; i < 70; i++) {
@@ -431,7 +438,7 @@ function beginLevel(i, showTitle) {
 function newRun() {
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
-  cut = null; carried = null;
+  cut = null; carried = null; hyper = null;
   runDeaths = 0; runRuns = 0;
   loadLevel(0);
 }
@@ -974,10 +981,14 @@ function buyTaxis(count, price) {
   card.classList.add('hidden');
 }
 
+/* Vuoro päättyy: kortin taakse hyperavaruus, koska pysäytyskuva kentästä
+   näyttäisi siltä että peli jäi jumiin. */
 function gameOver(won) {
   state = OVER;
   jetLevel(0);
   money = Math.round(money);
+  hyper = createHyperspace({ W, H, rand });
+  sfx.warp();
   showCard(won ? overWon() : overLost(), money, {
     cleared: won, seconds: runT, level: levelIndex + 1,
   });
@@ -1882,7 +1893,7 @@ function start() {
   warmSpeech();
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
-  cut = null; carried = null;
+  cut = null; carried = null; hyper = null;
   runDeaths = 0; runRuns = 0;
   beginLevel(0, true);
 }
@@ -1891,7 +1902,7 @@ function startLevel(i) {
   warmSpeech();
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
-  cut = null; carried = null;
+  cut = null; carried = null; hyper = null;
   runDeaths = 0; runRuns = 0;
   beginLevel(i, true);
 }
@@ -1937,6 +1948,14 @@ function loop(now) {
   if (state === ENTER) {
     updateEnter(dt);
     draw({ x: 0, y: clamp(1 - taxi.vy / 300, 0.25, 1) });
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  if (state === OVER && hyper) {               // loppukortin tausta
+    hyper.update(dt);
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+    hyper.draw(ctx);
     requestAnimationFrame(loop);
     return;
   }
