@@ -146,12 +146,19 @@ const PEND = HOOK_BOX.map((box, i) => {
 
    Matka on eri mittainen eri suuntiin, koska kuilukin on: oikealla laituri
    (QUAY alkaa 534) pysäyttää lautan, vasemmalla on avovettä ruudun reunaan
-   asti. Vasemmalle saa siis ajautua yli kaksinkertaisesti — mutta ei tööttiä ja
-   laskutelinettä ohjaavien nappien alle (x 30…158), joten siellä on kova raja
-   105 px, jolloin lautan keula pysähtyy 162:een. Jousi jää muutenkin noin 83 %
-   tavoitteesta, joten rajat eivät normaaliarvoilla tule vastaan — ne ovat
-   varmistus sen varalle että tuulen säätimet vedetään ääriasentoihin. */
-const BARGE = { left: 120, right: 52, min: -105, max: 80, stiff: 3.0, damp: 2.6, bob: 3.5 };
+   asti — ja se käytetään. Alanurkan napit eivät ole este: ne ovat läpikuultavia,
+   ja niiden alle ajautuva lautta on tilapäinen eikä sinne tarvitse laskeutua
+   juuri silloin.
+
+   Raja tulee siis ruudun reunasta: kovalla rajalla 250 px lautan keula
+   pysähtyy 17:ään, eli vettä jää vielä näkyviin eikä alus leikkaudu reunaan.
+   Jousi jää noin 83 % tavoitteesta, joten normaaliarvoilla raja ei tule
+   vastaan — se on varmistus sen varalle että tuulen säätimet vedetään
+   ääriasentoihin. Pitkä matka lyhyessä puuskassa tarkoittaa myös vauhtia:
+   huippu on noin 165 px/s vasemmalle. Lasku onnistuu silti, koska laskun
+   vx-raja koskee taksin omaa vauhtia eikä alustan — mutta kyytiin pääsee
+   mukavimmin tyvenellä, mikä on koko kentän ajatus. */
+const BARGE = { left: 290, right: 52, min: -250, max: 80, stiff: 3.0, damp: 2.6, bob: 3.5 };
 
 const storm = {
   t: 0, seen: 0, flash: 0, bolt: null, taxi: null,
