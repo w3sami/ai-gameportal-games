@@ -1,11 +1,11 @@
-/* Tulostaulu. Yksi taulu, "vuoro-1", ja mitta on vuoron loppusaldo euroina.
+/* Tulostaulu. Yksi taulu, "kassa", ja mitta on koko vuoron loppusaldo: kentät
+   eivät saa omia taulujaan, vaan taululle menee vain lopputulos.
    Rivit piirretään tässä eikä <leaderboard-panel>-elementillä, koska rivillä
-   halutaan näyttää euromerkki ja merkki siitä selvisikö vuoro loppuun asti.
-   Muuten sanasto on sama kuin taulun omalla sivulla. */
+   halutaan näyttää euromerkki ja merkki siitä pääsikö vuoro loppuun asti. */
 import { submit, top, getName, setName }
   from 'https://plugins.game.bigbools.fi/leaderboard/v1/index.js';
 
-const BOARD = 'vuoro-1';
+const BOARD = 'kassa';
 const KEY = 'spacetaxi-lb-v1';
 
 let mine = null;                                  // {money, id}: tämän selaimen oma rivi
@@ -36,14 +36,14 @@ function el(tag, cls, text) {
  * Rakentaa taulun annettuun elementtiin.
  * @param host    tyhjä div kortin sisällä
  * @param pending vuoron saldo joka odottaa lähetystä, 0 valikossa
- * @param meta    {cleared, seconds} — kulkee rivin mukana taululle
+ * @param meta    {cleared, seconds, level} — kulkee rivin mukana taululle
  */
 export async function mountBoard(host, pending, meta) {
   pending = Math.max(0, Math.round(pending || 0));
   if (mine && pending <= mine.money) pending = 0;  // oma parempi tulos on jo taululla
 
   host.className = 'lb';
-  const sub = el('span', 'lb-sub', 'Vuoro 1');
+  const sub = el('span', 'lb-sub', 'Koko vuoro');
   const head = el('div', 'lb-h');
   head.append(el('b', null, 'Parhaat kuskit'), sub);
   const body = el('div', 'lb-body');
@@ -62,7 +62,12 @@ export async function mountBoard(host, pending, meta) {
 async function send(money, meta, status) {
   status.className = 'lb-note';
   status.textContent = 'Lähetetään tulosta…';
-  const data = { v: 1, cleared: !!(meta && meta.cleared), s: Math.round((meta && meta.seconds) || 0) };
+  const data = {
+    v: 1,
+    cleared: !!(meta && meta.cleared),
+    s: Math.round((meta && meta.seconds) || 0),
+    lvl: (meta && meta.level) || 1,
+  };
   const r = await submit({ score: money, board: BOARD, data });
   if (r.kept) {
     mine = { money, id: r.entry.id }; remember();
@@ -84,14 +89,14 @@ async function draw(body, sub) {
     return;
   }
 
-  sub.textContent = `Vuoro 1 · ${page.total} ${page.total === 1 ? 'vuoro' : 'vuoroa'}`;
+  sub.textContent = `Koko vuoro · ${page.total} ${page.total === 1 ? 'tulos' : 'tulosta'}`;
   const list = el('ol', 'lbrows');
   for (const e of page.entries) {
     const row = el('li', `lbrow${e.rank <= 3 ? ' top' : ''}${e.id === highlight ? ' me' : ''}`);
     const t = el('span', 't', euro(e.score));
     if (e.data && e.data.cleared) {
       const mark = el('span', 'cl', '✓');
-      mark.title = 'Vuoro ajettu loppuun';
+      mark.title = 'Kaikki kentät ajettu';
       t.append(mark);
     }
     row.append(el('span', 'r', e.rank), el('span', 'n', e.name), t);
