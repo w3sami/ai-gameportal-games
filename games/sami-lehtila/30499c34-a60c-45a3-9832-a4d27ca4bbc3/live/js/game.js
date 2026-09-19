@@ -14,6 +14,7 @@
  * Säätöpaneeli (ratas alakulmassa) on pelin oma eikä debug-pluginin: se on
  * auki kenellä tahansa ja arvot jäävät selaimen muistiin, jotta mekaniikkoja
  * voi hioa puhelimella ilman että kentän läpi joutuu ajamaan uusiksi.
+ * ?debug=1 avaa sen heti latauksessa.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
 import { mountBoard } from './leaderboard.js';
@@ -81,14 +82,14 @@ loadTune();
 
 /* Napit: iso telinenappi valitulla puolella, pikkunapit vastakkaisessa
    alakulmassa. Ohjaussauva jättää nämä kaikki rauhaan. */
-let GEAR_BOX, MUTE_BOX, COG_BOX;
+let GEAR_BOX, MUTE_BOX, COG_BOX, FULL_BOX;
 function layout() {
   const right = gearSide === 'right';
   GEAR_BOX = { x: right ? W - 158 : 30, y: H - 172, w: 128, h: 96 };
-  const bx = right ? 24 : W - 70;
-  const cx = right ? 78 : W - 124;
-  MUTE_BOX = { x: bx, y: H - 74, w: 46, h: 46 };
-  COG_BOX = { x: cx, y: H - 74, w: 46, h: 46 };
+  const col = i => right ? 24 + i * 54 : W - 70 - i * 54;
+  MUTE_BOX = { x: col(0), y: H - 74, w: 46, h: 46 };
+  COG_BOX = { x: col(1), y: H - 74, w: 46, h: 46 };
+  FULL_BOX = { x: col(2), y: H - 74, w: 46, h: 46 };
 }
 layout();
 
@@ -115,6 +116,33 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
 if (window.ResizeObserver) new ResizeObserver(resize).observe(document.documentElement);
 resize();
+
+/* ------------------------------------------------------------- koko ruutu
+   Peli ajetaan portaalissa iframessa, ja pyyntö menee läpi vain jos kehys on
+   merkitty allowfullscreeniksi. Jos ei, sama osoite avataan omaan
+   välilehteensä — siellä kangas saa koko ruudun joka tapauksessa. */
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+
+function popOut() {
+  try { window.open(location.href, '_blank', 'noopener'); } catch (e) {}
+}
+
+function toggleFullscreen() {
+  if (fsElement()) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document);
+    return;
+  }
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req) return popOut();
+  try {
+    const r = req.call(el, { navigationUI: 'hide' });
+    if (r && typeof r.catch === 'function') r.catch(popOut);
+  } catch (e) { popOut(); }
+}
+document.addEventListener('fullscreenchange', () => { lastVW = -1; resize(); });
+document.addEventListener('webkitfullscreenchange', () => { lastVW = -1; resize(); });
 
 if (!ctx.roundRect) {
   CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
@@ -292,7 +320,8 @@ function toLogical(clientX, clientY) {
   return { x: (clientX - r.left) / r.width * W, y: (clientY - r.top) / r.height * H };
 }
 const inBox = (p, b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
-const onButtons = p => inBox(p, GEAR_BOX) || inBox(p, MUTE_BOX) || inBox(p, COG_BOX);
+const onButtons = p =>
+  inBox(p, GEAR_BOX) || inBox(p, MUTE_BOX) || inBox(p, COG_BOX) || inBox(p, FULL_BOX);
 
 function toggleGear() {
   if (state !== PLAY || dead) return;
@@ -312,12 +341,14 @@ canvas.addEventListener('pointerdown', e => {
   const p = toLogical(e.clientX, e.clientY);
   if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
   if (inBox(p, MUTE_BOX)) { toggleMute(); return; }
-  if (inBox(p, COG_BOX)) togglePanel();
+  if (inBox(p, COG_BOX)) { togglePanel(); return; }
+  if (inBox(p, FULL_BOX)) toggleFullscreen();
 });
 
 addEventListener('keydown', e => {
   KEY[e.code] = true;
   if (e.code === 'KeyM') { toggleMute(); return; }
+  if (e.code === 'KeyF') { toggleFullscreen(); return; }
   if (e.code === 'Space' || e.code === 'KeyG') { e.preventDefault(); toggleGear(); }
   if (e.code === 'Enter' && state !== PLAY) { e.preventDefault(); start(); }
 });
@@ -832,6 +863,22 @@ function drawButtons() {
       ctx.stroke();
     }
   });
+
+  /* Koko ruutu: nuolet ulos, ja kokoruututilassa sisään. */
+  const out = !fsElement();
+  smallBox(FULL_BOX, (mx, my) => {
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const ox = mx + sx * 11, oy = my + sy * 11;
+      const ix = mx + sx * 4, iy = my + sy * 4;
+      ctx.beginPath();
+      if (out) {
+        ctx.moveTo(ox - sx * 7, oy); ctx.lineTo(ox, oy); ctx.lineTo(ox, oy - sy * 7);
+      } else {
+        ctx.moveTo(ix - sx * 7, iy); ctx.lineTo(ix, iy); ctx.lineTo(ix, iy - sy * 7);
+      }
+      ctx.stroke();
+    }
+  });
 }
 
 function draw(v) {
@@ -967,7 +1014,14 @@ function showCard(html, pending, meta) {
   if (go) go.addEventListener('click', start);
   const set = card.querySelector('#set');
   if (set) set.addEventListener('click', togglePanel);
+  const fs = card.querySelector('#fs');
+  if (fs) fs.addEventListener('click', toggleFullscreen);
 }
+
+const buttons = `
+  <button id="go" class="btn">%s</button>
+  <button id="fs" class="btn ghost">Koko ruutu</button>
+  <button id="set" class="btn ghost">Säädöt</button>`;
 
 const menuCard = () => `
   <h1>Space <span>Taxi</span></h1>
@@ -978,11 +1032,11 @@ const menuCard = () => `
   <p>Keskellä tankataan omalla rahalla. Kun molemmilla alustoilla on käyty,
      katon luukku aukeaa.</p>
   <p class="hint">Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>
-     Iso nappi laskee telineen, ratas avaa säädöt (myös kesken pelin).<br>
-     Näppäimillä <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot; äänet <kbd>M</kbd></p>
+     Iso nappi laskee telineen, ratas avaa säädöt, nuolinappi koko ruudun.<br>
+     Näppäimillä <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot;
+     koko ruutu <kbd>F</kbd> &middot; äänet <kbd>M</kbd></p>
   <div id="lb"></div>
-  <button id="go" class="btn">Aja vuoro</button>
-  <button id="set" class="btn ghost">Säädöt</button>`;
+  ${buttons.replace('%s', 'Aja vuoro')}`;
 
 const overWon = () => `
   <h1>Vuoro <span>selvä</span></h1>
@@ -990,8 +1044,7 @@ const overWon = () => `
   <p>Molemmat keikat ajettu ja ulos katosta — ${Math.round(runT)} sekuntia,
      ${Math.max(0, lives)} taksia ehjänä.</p>
   <div id="lb"></div>
-  <button id="go" class="btn">Uusi vuoro</button>
-  <button id="set" class="btn ghost">Säädöt</button>`;
+  ${buttons.replace('%s', 'Uusi vuoro')}`;
 
 const overLost = () => `
   <h1>Taksit <span>loppu</span></h1>
@@ -1000,8 +1053,7 @@ const overLost = () => `
      Keikkoja tehtynä ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2.</p>
   <p class="hint">Pehmeä lasku maksaa itsensä takaisin tippinä.</p>
   <div id="lb"></div>
-  <button id="go" class="btn">Uusi vuoro</button>
-  <button id="set" class="btn ghost">Säädöt</button>`;
+  ${buttons.replace('%s', 'Uusi vuoro')}`;
 
 function start() {
   newRun();
@@ -1011,6 +1063,14 @@ function start() {
 
 newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
+
+// ?debug=1 avaa säätöpaneelin heti — sama lippu kuin portaalin muissa peleissä.
+try {
+  const q = new URLSearchParams(location.search);
+  for (const [k, v] of q) {
+    if (k.toLowerCase() === 'debug' && v !== '0' && v !== 'false') { togglePanel(); break; }
+  }
+} catch (e) {}
 
 /* -------------------------------------------------------------------- loop */
 let last = performance.now();
