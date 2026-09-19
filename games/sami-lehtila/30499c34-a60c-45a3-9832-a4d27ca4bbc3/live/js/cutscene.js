@@ -1,24 +1,25 @@
 /* Kenttien välinen välianimaatio, kaksi vaihetta.
  *
- * 1) Ylös. Taksi jatkaa matkaa alareunan alta yläreunan yli, ja edellisen
- *    kentän tilinpäätös seisoo paikallaan ruudun keskellä isolla tekstillä.
- *    Alareunassa hehkuu sen kentän väri josta juuri tullaan.
+ * 1) Ylös. Taksi jatkaa matkaa alareunan alta yläreunan yli, ja tilinpäätös
+ *    seisoo paikallaan ruudun keskellä isolla tekstillä. Alareunassa hehkuu
+ *    sen kentän väri josta juuri tullaan.
  * 2) Alas. Taksi tulee ylhäältä, jarruttaa ylöspäin osoittavalla suuttimella
  *    ja hakeutuu tasan keskelle, jotta seuraava kenttä voi jatkaa samasta
  *    liikkeestä: siellä taksi tulee sisään katon luukusta.
  *
- * stats on rivilista: { text, icon?: 'wreck' | 'grave', good?, head? }.
- * good-rivi on puhdas suoritus ja piirretään vihreänä hehkuen.
+ * downSecs: 0 jättää laskuvaiheen pois — vuoron viimeinen ruutu on pelkkä
+ * nousu tilinpäätöksineen, ja sen jälkeen tulee vuoron loppukortti.
  *
- * Ei seiniä, ei ohjausta, ei törmäyksiä. Peli antaa taksin rungon piirtävän
- * funktion (body), jotta sama muoto piirtyy tässäkin.
+ * stats on rivilista: { text, icon?: 'wreck' | 'grave', good?, head? }.
+ * good-rivi on puhdas suoritus ja piirretään vihreänä hehkuen. Tekstit tulevat
+ * valmiina kutsujalta, joten tämä moduuli ei tiedä kielistä mitään.
  */
 export function createCut(cfg) {
   const {
     W, H, TW, TH, rand, body,
     upSecs = 3, downSecs = 2.4,
     fromGlow = '#6fe3ff', toGlow = '#6fe3ff',
-    name = '', index = 0, total = 1, stats = [],
+    name = '', label = '', stats = [],
   } = cfg;
 
   const TRAVEL = H + 220;
@@ -141,7 +142,7 @@ export function createCut(cfg) {
         ctx.globalAlpha = clamp01(Math.min(u / 0.25, (1 - u) / 0.3));
         ctx.fillStyle = 'rgba(233,237,255,.55)';
         ctx.font = '600 14px system-ui, sans-serif';
-        ctx.fillText(`KENTTÄ ${index + 1} / ${total}`, W / 2, H * 0.3);
+        ctx.fillText(label, W / 2, H * 0.3);
         ctx.fillStyle = toGlow;
         ctx.shadowColor = toGlow;
         ctx.shadowBlur = 24;
