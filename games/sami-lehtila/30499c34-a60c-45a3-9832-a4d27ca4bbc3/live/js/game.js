@@ -30,6 +30,16 @@
  * kielen, gate-test.html on luukun oma säätösivu.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
+import { createGamepad } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
+import { portal, onPortal, setPortal }
+  from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
+/* Sama moduuli nimiavaruutena. Tallennusfunktio tulee pluginiin vasta
+   seuraavassa versiossa, ja nimetty tuonti puuttuvasta viennistä kaataisi
+   koko moduulin latausvaiheessa — nimiavaruudesta puuttuva on vain
+   undefined, jolloin peli toimii ja nappi kertoo ettei tallennus ole
+   käytettävissä. */
+import * as portalApi
+  from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
 import { liftFor, bounceNorm } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
@@ -86,31 +96,157 @@ const DEFAULTS = {
   bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62,
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
+  /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
+     mittari laskee. Nämä ovat säätimissä, koska oikea tuntuma löytyy vain
+     ajamalla. Ks. TIPPERS. */
+  /* Tyhjän tankin pätkivä syöttö. Ks. dryThrust. */
+  dryOn: 0.3, dryOff: 0.7, dryJitter: 0.08, dryLife: 3,
+  tipCalm: 1, fadeCalm: 1,
+  tipRush: 1.85, fadeRush: 2.4,
+  tipHold: 1.35, fadeHold: 1.4,
   stick: 2.05,
 };
 const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
 let gearSide = DEFAULT_SIDE;
 
+/* Viritys kahdessa kerroksessa.
+ *
+ * BASE on globaali viritys: säätimet kirjoittavat siihen ja tallennus lukee
+ * sen. MUL on kentän kerroin samaan avaimeen, 1 kun kenttä ei ota kantaa.
+ * P on näiden tulo eli se mitä fysiikka lukee — ja nimenomaan sama olio kuin
+ * ennen, joten yksikään käyttökohta ei muutu eikä tiedä tästä mitään.
+ *
+ * Kerros on olemassa siksi, että painovoima ja työntö ovat eri asia eri
+ * kentässä mutta niiden suhde globaaliin viritykseen ei saa kadota: kun
+ * säätää painovoimaa, myrskykentän raskaampi painovoima seuraa mukana.
+ * Kenttä voi julkaista lähtökertoimensa (level.mul), ja säätöpaneeli antaa
+ * muuttaa niitä lennossa. */
+const BASE = Object.assign({}, DEFAULTS);
+
+/* Kertoimet säilyvät kentittäin koko istunnon: kentästä toiseen käyminen ei
+   saa nollata sitä mitä juuri säädit. MUL osoittaa aina nykyisen kentän
+   omaan olioon. */
+const MULS = {};
+const mulOf = lv => MULS[lv.name] || (MULS[lv.name] = Object.assign({}, lv.mul));
+let MUL = {};
+
+/* Sauva syntyy vasta paljon alempana, ja tätä kutsutaan jo tallennettua
+   viritystä ladattaessa. `typeof stick` EI kelpaa vartijaksi: const-muuttujan
+   kuolleessa vyöhykkeessä typeof heittää ReferenceErrorin sen sijaan että
+   palauttaisi 'undefined', joten vartija kaataisi juuri sen kutsun jota se
+   yrittää suojata. Tavallinen lippu on ainoa joka toimii. */
+let stickReady = false;
+
+function applyMul() {
+  for (const k of Object.keys(DEFAULTS)) {
+    const m = MUL[k];
+    P[k] = BASE[k] * (typeof m === 'number' && isFinite(m) ? m : 1);
+  }
+  if (stickReady) stick.gain = P.stick;
+}
+
+/* Koko viritys yhtenä oliona: globaali pohja ja jokaisen kentän omat arvot.
+ *
+ * Kenttien arvoja ei tarvitse luetella täällä, koska kenttä kertoo itse mitä
+ * sillä on (level.tune). Peli ei siis tiedä yhdenkään kentän sisällöstä mitään
+ * tälläkään puolella — uusi kenttä uusine säätimineen tallentuu ilman että
+ * tätä koodia kosketaan.
+ *
+ * stamp on tallennushetki. Sitä tarvitaan siihen, kumpi voittaa kun sekä
+ * peliin tallennettu tune.json että selaimen paikalliset kokeilut ovat
+ * olemassa: uudempi voittaa. Muuten vanha localStorage jäisi jyräämään juuri
+ * julkaistut oletukset, ja se vika näkyisi vasta pelaajilla. */
+function tuneAll(stamp) {
+  const levels = {};
+  for (const lv of LEVELS) {
+    const entry = {};
+    const m = MULS[lv.name];
+    if (m && Object.keys(m).length) entry.mul = Object.assign({}, m);
+    const own = {};
+    for (const g of lv.tune || []) {
+      if (!g.obj || !g.sliders) continue;
+      const o = own[g.name] = {};
+      for (const sl of g.sliders) o[sl.key] = g.obj[sl.key];
+    }
+    if (Object.keys(own).length) entry.own = own;
+    if (Object.keys(entry).length) levels[lv.name] = entry;
+  }
+  return { v: 1, stamp: stamp || Date.now(), gearSide, global: Object.assign({}, BASE), levels };
+}
+
+/** Lukee tuneAllin tuotoksen takaisin. Tuntemattomat avaimet ohitetaan, joten
+    vanha tiedosto ei kaadu uuteen koodiin eikä toisin päin. */
+function applyAll(raw) {
+  if (!raw || typeof raw !== 'object') return false;
+  const g = raw.global || raw;                 // vanha muoto oli pelkkä pohja
+  for (const k of Object.keys(DEFAULTS)) {
+    if (typeof g[k] === 'number' && isFinite(g[k])) BASE[k] = g[k];
+  }
+  if (raw.gearSide === 'left' || raw.gearSide === 'right') { gearSide = raw.gearSide; layout(); }
+  for (const lv of LEVELS) {
+    const e = (raw.levels || {})[lv.name];
+    if (!e) continue;
+    if (e.mul) {
+      const m = mulOf(lv);
+      for (const k of Object.keys(DEFAULTS)) {
+        if (typeof e.mul[k] === 'number' && isFinite(e.mul[k])) m[k] = e.mul[k];
+      }
+    }
+    for (const grp of lv.tune || []) {
+      const o = e.own && e.own[grp.name];
+      if (!o || !grp.obj) continue;
+      for (const sl of grp.sliders || []) {
+        if (typeof o[sl.key] === 'number' && isFinite(o[sl.key])) grp.obj[sl.key] = o[sl.key];
+      }
+    }
+  }
+  MUL = mulOf(level);
+  applyMul();
+  return true;
+}
+
 const STORE = 'spacetaxi.tune';
-const tuneJSON = () => JSON.stringify(Object.assign({ gearSide }, P));
+/* Peli saa kirjoittaa vain config-kansioon ja vain JSONia. Rajaus on
+   palvelimella; tämä on vain se nimi jonka tämä peli on siellä valinnut. */
+const TUNE_FILE = 'config/tune.json';
+let localStamp = 0;                            // milloin selaimen kopio tallennettiin
+
+const tuneJSON = () => JSON.stringify(tuneAll(localStamp), null, 1);
 
 function applyTune(src) {
   let raw = src;
   if (typeof src === 'string') {
     try { raw = JSON.parse(src); } catch (e) { return false; }
   }
-  if (!raw || typeof raw !== 'object') return false;
-  let n = 0;
-  for (const k of Object.keys(DEFAULTS)) {
-    if (typeof raw[k] === 'number' && isFinite(raw[k])) { P[k] = raw[k]; n++; }
-  }
-  if (raw.gearSide === 'left' || raw.gearSide === 'right') { gearSide = raw.gearSide; layout(); n++; }
-  if (typeof stick !== 'undefined' && stick) stick.gain = P.stick;
-  return n > 0;
+  return applyAll(raw);
 }
-function loadTune() { try { applyTune(localStorage.getItem(STORE) || ''); } catch (e) {} }
-function saveTune() { try { localStorage.setItem(STORE, tuneJSON()); } catch (e) {} }
+function loadTune() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (raw && applyAll(raw)) localStamp = +raw.stamp || 0;
+  } catch (e) {}
+}
+function saveTune() {
+  localStamp = Date.now();
+  try { localStorage.setItem(STORE, JSON.stringify(tuneAll(localStamp))); } catch (e) {}
+}
+
+/* Peliin tallennetut arvot. Ne ovat oletukset kaikille pelaajille, ja selaimen
+   paikalliset kokeilut voittavat vain jos ne ovat tiedostoa uudempia — muuten
+   vanha localStorage jyräisi juuri julkaistut oletukset, ja se vika näkyisi
+   vasta pelaajilla eikä koskaan tekijällä itsellään. */
+function loadGameTune() {
+  fetch(TUNE_FILE, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => {
+      if (!j || (+j.stamp || 0) < localStamp) return;
+      applyAll(j);
+      localStamp = +j.stamp || 0;
+      if (!panelEl.classList.contains('hidden')) buildPanel();
+    })
+    .catch(() => {});
+}
 
 let GEAR_BOX, MUTE_BOX, COG_BOX, FULL_BOX, HORN_BOX;
 function layout() {
@@ -122,8 +258,33 @@ function layout() {
   COG_BOX = { x: col(1), y: H - 74, w: 46, h: 46 };
   FULL_BOX = { x: col(2), y: H - 74, w: 46, h: 46 };
 }
+/* Kenttien omat lähtöarvot talteen ennen kuin tallennettu viritys kirjoittaa
+   niiden päälle. Kentän olio on ainoa paikka jossa ne elävät, joten ilman tätä
+   "oletukset" ei voisi palauttaa niitä millään. */
+const LEVEL_DEF = new Map();
+for (const lv of LEVELS) {
+  for (const g of lv.tune || []) {
+    if (!g.obj || !g.sliders) continue;
+    const d = {};
+    for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
+    LEVEL_DEF.set(lv.name + '\u0000' + g.name, d);
+  }
+}
+
+function resetLevelTune() {
+  for (const k of Object.keys(MULS)) delete MULS[k];
+  for (const lv of LEVELS) {
+    for (const g of lv.tune || []) {
+      const d = LEVEL_DEF.get(lv.name + '\u0000' + g.name);
+      if (d && g.obj) Object.assign(g.obj, d);
+    }
+  }
+  MUL = mulOf(level);
+}
+
 layout();
 loadTune();
+loadGameTune();
 
 /* ------------------------------------------------------------------ kangas */
 let scale = 1, dpr = 1, lastVW = -1, lastVH = -1;
@@ -255,10 +416,25 @@ function jetLevel(v) {
    Suomea puhutaan vain jos laitteelta löytyy suomenkielinen ääni. */
 const SPEAKS = 'speechSynthesis' in window;
 
+/* Loppukaneetti on osa hahmoa: sama ääni pyytää aina samalla tavalla,
+   kohteliaasta kiireiseen. Kaneetteja on kuusi ja hahmoja viisi, joten yksi jää
+   odottamaan seuraavaa hahmoa.
+
+   Ylöspyynnössä kaneettia ei ole: se keikka maksetaan vasta seuraavan kentän
+   alussa, eikä kellään ole vielä kiire mihinkään. */
+const TAILS = ['please', 'kind', 'quick', 'hurry', 'go', 'rush'];
+const tailFor = kind => 'say.tail.' + TAILS[kind % TAILS.length];
+
 function speakLine(key, kind, params) {
   if (muted || !SPEAKS) return;
   const v = LANG === 'fi' ? voiceFor('fi') : null;
-  const text = t('say.' + key, params, v ? 'fi' : 'en');
+  const lang = v ? 'fi' : 'en';
+  /* Kaneetti ratkaistaan samalla kielellä kuin lause, ettei suomalainen
+     "vähän äkkiä" päädy englanninkielisen lauseen perään. */
+  const p = params && params.tail
+    ? Object.assign({}, params, { tail: t(params.tail, null, lang) })
+    : params;
+  const text = t('say.' + key, p, lang);
   try {
     const u = new SpeechSynthesisUtterance(text);
     if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
@@ -361,6 +537,8 @@ const sfx = {
 const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
+let thrustNow = 0;
+let dryT = 0, dryPhase = 0, dryFiring = false;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
     graves, squishes,
@@ -393,6 +571,8 @@ const api = () => ({ P, taxi, pads: PADS, walls: WALLS, t: runT, rand, say, leve
 function loadLevel(i) {
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   level = LEVELS[levelIndex];
+  MUL = mulOf(level);                        // kentän kertoimet, säätimet muuttavat näitä
+  applyMul();
   GATE = level.gate;
   WALLS = frameWalls(GATE).concat(level.walls || []);
   PADS = (level.pads || []).map(p => Object.assign({ h: 18 }, p, { bx: p.x, by: p.y }));
@@ -415,6 +595,7 @@ function loadLevel(i) {
     job = {
       from: null, to: pick(open.length ? open : numbered()).id,
       phase: 'aboard', wait: 0, kind: carried.kind, announce: true,
+      tipper: (Math.random() * TIPPERS.length) | 0,
       x: 0, t: 0, walk: 0, moving: false, shown: true, flee: null,
     };
     carried = null;
@@ -489,6 +670,7 @@ function newJob(from, to, delay) {
   job = {
     from, to, phase: 'wait', wait: delay || 0,
     kind: nextAlien(),
+    tipper: (Math.random() * TIPPERS.length) | 0,
     x, t: 0, walk: 0, moving: false, shown: false, flee: null,
   };
 }
@@ -592,7 +774,62 @@ const stick = createJoystick({
   radius: 96,
   ignore: onButtons,
 });
+stickReady = true;
 stick.gain = P.stick;
+
+/* Ohjain. keys: false, koska peli lukee näppäimistön jo itse — plugin lukisi
+   sen toiseen kertaan ja teline kääntyisi kahdesti yhdestä välilyönnistä.
+   Sauvalle ei anneta gainia: kosketussauvan herkkyyskerroin on siellä siksi
+   että peukalon matka on lyhyt, eikä oikea sauva tarvitse sitä.
+
+   Napit ovat eri asioita sen mukaan näkyykö kortti. Kortti ja peli eivät ole
+   koskaan yhtä aikaa esillä, joten sama nappi saa olla kummassakin eri asia. */
+const gamepad = createGamepad({
+  keys: false,
+  actions: {
+    gear:  ['A', 'LB', 'RB'],
+    horn:  ['B', 'X'],
+    sound: ['Back'],
+    go:    ['Start', 'A'],
+    fleet: ['Y'],
+    quit:  ['B'],
+  },
+});
+
+/* Kerran per ruutu, ennen kuin mitään kysytään: pressed on tämän ja edellisen
+   kutsun erotus. Kutsutaan myös korttiruuduissa, jotta vuoron saa käyntiin
+   ohjaimella — ja jotta ohjain ylipäätään tulee näkyviin, sillä selain
+   paljastaa sen vasta kun jotain on painettu. */
+function padInput() {
+  gamepad.poll();
+
+  if (!card.classList.contains('hidden')) {
+    /* Selain ei paljasta ohjainta ennen kuin sen nappia on painettu, joten
+       "ei ohjainta" ja "ohjain jota ei ole koskettu" näyttävät täältä samalta
+       — siksi teksti on kehotus eikä vikailmoitus. textContent eikä
+       innerHTML: id tulee laitteelta, ei meiltä. */
+    const el = card.querySelector('#padstate');
+    if (el) {
+      const want = gamepad.connected ? t('pad.on', { id: gamepad.id }) : t('pad.none');
+      if (el.textContent !== want) el.textContent = want;
+    }
+
+    const click = sel => {
+      const b = card.querySelector(sel);
+      if (!b) return false;
+      b.click();
+      return true;
+    };
+    if (gamepad.pressed('go') && (click('#go') || click('#buy'))) return;
+    if (gamepad.pressed('fleet') && click('#fleet')) return;
+    if (gamepad.pressed('quit') && click('#end')) return;
+    return;
+  }
+
+  if (gamepad.pressed('sound')) { toggleMute(); return; }
+  if (gamepad.pressed('horn')) { honk(); return; }
+  if (gamepad.pressed('gear')) toggleGear();
+}
 
 function inputVector() {
   const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
@@ -601,6 +838,8 @@ function inputVector() {
   if (kx || ky) {
     const l = Math.hypot(kx, ky) || 1;
     v = { x: kx / l, y: ky / l };
+  } else if (gamepad.x || gamepad.y) {
+    v = { x: gamepad.x, y: gamepad.y };       // plugin lupaa jo vektorin <= 1
   } else if (stick.active) {
     let x = stick.x * stick.gain, y = stick.y * stick.gain;
     const l = Math.hypot(x, y);
@@ -610,11 +849,58 @@ function inputVector() {
   return level.input ? level.input(v, api()) : v;
 }
 
+/* Tyhjä tankki ei sammuta suuttimia vaan antaa pätkivää syöttöä: tyhjän tankin
+   pelastus, jolla pääsee vielä bensa-asemalle. Niin kauan kuin tankissa on
+   jotain, suutin palaa tasaisesti eikä katko mitään — pätkintä alkaa vasta
+   mittarin nollasta.
+
+   Neljä säädintä:
+     dryOn      kuinka kauan bensaa tulee kerrallaan
+     dryOff     kuinka pitkä tauko niiden välissä on
+     dryJitter  kummankin päälle arvotaan tämän verran suuntaan tai toiseen,
+                joten sykäykset eivät ole metronomi vaan yskähtelevä moottori
+     dryLife    kuinka kauan tyhjästä tankista ylipäätään irtoaa mitään; sen
+                jälkeen suuttimet ovat kuolleet eikä sivuillekaan jää tehoa
+
+   Se mistä jarruttaminen on kiinni: keskiteho on dryOn/(dryOn+dryOff) kertaa
+   täysi työntö, ja paikallaan pysyminen vaatii P.grav. Oletuksilla
+   0.3/1.0 * 920 = 276 vastaan 250, eli vauhtia lähtee pois ja laskun voi
+   pelastaa. Jos suhde lasketaan alle grav/thrust = 0.27:n, jarruttaminen
+   muuttuu mahdottomaksi ja jäljelle jää vain hitaampi putoaminen.
+
+   Alustalta ei pääse lähtöön tälläkään, koska lähtö vaatii bensaa erikseen.
+   Pelastus on nimenomaan matka tankkaukselle. */
+const DRY_SIDE = 0.5;
+
+/** Yhden vaiheen kesto arvottuna: pohja-arvo ja hajonta sen ympärillä. */
+const dryLen = firing =>
+  Math.max(0.02, (firing ? P.dryOn : P.dryOff) + rand(-P.dryJitter, P.dryJitter));
+
+/* Vaihetta kuljetetaan kerran ruudussa, koska activeThrust kutsutaan kahdesti
+   — piirtoa ja fysiikkaa varten — ja kaksi kertaa etenevä vaihe pätkisi
+   tuplasti. */
+function stepDry(dt) {
+  if (fuel > 0) { dryT = 0; dryPhase = 0; dryFiring = false; return; }
+  dryT += dt;
+  dryPhase -= dt;
+  while (dryPhase <= 0) {
+    dryFiring = !dryFiring;
+    dryPhase += dryLen(dryFiring);
+  }
+}
+
+function dryThrust(v) {
+  if (dryT > P.dryLife) { v.x = 0; v.y = 0; return; }
+  v.x *= DRY_SIDE;
+  if (!dryFiring) v.y = 0;
+}
+
 function activeThrust() {
-  if (state !== PLAY || dead || fuel <= 0) return { x: 0, y: 0 };
+  if (state !== PLAY || dead) return { x: 0, y: 0 };
   const v = inputVector();
   if (taxi.gear > 0.35) v.x = 0;
   if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
+  if (fuel <= 0) dryThrust(v);
   return v;
 }
 
@@ -658,6 +944,7 @@ function crash() {
   jetLevel(0);
   if (SPEAKS) { try { speechSynthesis.cancel(); } catch (e) {} }
   sfx.crash();
+  gamepad.rumble({ duration: 260, strong: 0.85, weak: 0.45 });
 }
 
 function touchdown(pad, b) {
@@ -676,6 +963,9 @@ function touchdown(pad, b) {
     t2.vx *= P.bounceKeep;
     bounces = Math.min(bounces + 1, 3);
     sfx.bounce(bounces);
+    /* Tärinä on lisä sen päälle mitä peli jo kertoo äänellä ja valolistalla,
+       ei ainoa tapa kertoa se: useimmissa ohjaimissa ei ole moottoreita. */
+    gamepad.rumble({ duration: 90, strong: 0.18 + bounces * 0.14, weak: 0.1 });
     return;
   }
 
@@ -694,8 +984,9 @@ function touchdown(pad, b) {
 function askForPad() {
   if (!job) return;
   job.announce = false;
-  say(t('msg.toPad', { n: job.to }), 2.4);
-  speakLine('toPad', job.kind, { n: job.to });
+  const tail = tailFor(job.kind);               // sama kaneetti ruudulle ja ääneen
+  say(t('msg.toPad', { n: job.to, tail: t(tail) }), 2.4);
+  speakLine('toPad', job.kind, { n: job.to, tail });
   sfx.pickup();
 }
 
@@ -704,7 +995,7 @@ function onLanded(pad, softness) {
 
   if (job.phase === 'aboard' && pad.id === job.to) {
     const mult = softness < P.softVY ? 1 : softness < P.landVY * 0.75 ? 0.6 : 0.25;
-    const tip = Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime) * mult);
+    const tip = Math.round(P.tip * tipMul() * tipLeft() * mult);
     const fare = P.fare + tip;
     const kind = job.kind;
     money += fare;
@@ -733,7 +1024,12 @@ function onLanded(pad, softness) {
 
 function jobStep(dt) {
   if (!job) return;
-  if (job.phase === 'aboard') { job.t += dt; return; }
+  if (job.phase === 'aboard') {
+    /* Kaasuprofiililla mittari seisoo niin kauan kuin suuttimet ovat päällä. */
+    const pr = tipper();
+    if (!(pr.onlyIdle && thrustNow > 0.05)) job.t += dt * P[pr.fade];
+    return;
+  }
 
   if (job.wait > 0) { job.wait -= dt; return; }
   if (!job.shown) {
@@ -789,8 +1085,42 @@ function stepSquish(dt) {
   }
 }
 
+/* Asiakkaat eroavat siinä mistä tippi on kiinni. Kolme profiilia:
+
+     tyyni     perustippi, mittari laskee tasaisesti
+     kiireinen maksaa lähes kaksinkertaisen tipin mutta mittari laskee yli
+               kaksi kertaa nopeammin — pitkä keikka ei kannata
+     kaasu     mittari seisoo niin kauan kuin suuttimet ovat päällä, ja lähtee
+               laskemaan vasta kun ajaja lopettaa painamisen
+
+   Kertoimet ovat säätimissä (P), koska oikea tuntuma löytyy vain ajamalla. */
+const TIPPERS = [
+  { mul: 'tipCalm', fade: 'fadeCalm', onlyIdle: false },
+  { mul: 'tipRush', fade: 'fadeRush', onlyIdle: false },
+  { mul: 'tipHold', fade: 'fadeHold', onlyIdle: true },
+];
+const tipper = () => TIPPERS[job ? job.tipper : 0] || TIPPERS[0];
+const tipMul = () => P[tipper().mul];
+
+/* Kaasuasiakas maksaa bensan. Hänen kyydissään suuttimet eivät kuluta tankkia,
+   mikä on se syy pitää kaasu pohjassa: mittari ei laske eikä tankki tyhjene.
+   Mittari hehkuu sen merkiksi oman värinsä ja syaanin väliä, jotta tilan
+   tunnistaa vilkaisulla. */
+const holdRide = () => !!job && job.phase === 'aboard' && tipper().onlyIdle;
+const FUEL_HOLD = '#6fe3ff';
+
+/** Kahden hex-värin sekoitus: u = 0 antaa a:n, u = 1 antaa b:n. */
+function mixHex(a, b, u) {
+  const na = parseInt(a.slice(1), 16), nb = parseInt(b.slice(1), 16);
+  const ch = sh => Math.round(((na >> sh) & 255) * (1 - u) + ((nb >> sh) & 255) * u);
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+}
+
+/** Jäljellä oleva tippi, 0…1. Sama kaava kassanäytössä ja maksussa. */
+const tipLeft = () => Math.max(0, 1 - job.t / P.tipTime);
+
 const fareNow = () => job && job.phase === 'aboard'
-  ? P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime))
+  ? P.fare + Math.round(P.tip * tipMul() * tipLeft())
   : 0;
 
 const targetId = () => {
@@ -824,6 +1154,7 @@ function movePads() {
 function clearWarnings() {
   lowWarn = 0; fastWarn = 0;
   padWarn = null; padBlink = 0;
+  dryT = 0; dryPhase = 0; dryFiring = false;
 }
 
 /* Mille alustalle ollaan tulossa ja liiankos kovaa? Raja on sama mistä pomppu
@@ -940,19 +1271,23 @@ function update(dt) {
 
   warnings(dt);                              // piippaukset myös alustalla
 
+  stepDry(dt);
   const v = activeThrust();
+  thrustNow = Math.min(1, Math.hypot(v.x, v.y));   // kaasuprofiili kysyy tätä
   const raw = inputVector();
 
   if (taxi.landed) {
     jetLevel(0);
     if (taxi.landed.fuel) refuel(dt);
-    if (fuel <= 0.5 && !taxi.landed.fuel) { crash(); return; }
+    /* Tankilla kuolee myös: tyhjä tankki ja tyhjä kassa ei ratkea istumalla,
+       joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
+    if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
     if (raw.y < -0.2 && fuel > 0) taxi.landed = null;
     else { jobStep(dt); return; }
   }
 
   const throttle = Math.min(1, Math.hypot(v.x, v.y));
-  if (throttle > 0) {
+  if (throttle > 0 && !holdRide()) {
     const had = fuel;
     fuel = Math.max(0, fuel - P.burn * throttle * dt);
     if (had > 0 && fuel <= 0) say(t('msg.dry'), 3);
@@ -988,6 +1323,9 @@ function move(dt) {
   for (const r of solids()) if (hit(b, r)) return crash();
 }
 
+/** Saako tankista vielä bensaa? Ilmainen bensa ei koskaan lopu kassan takia. */
+const canBuyFuel = () => P.price <= 0 || money > 0.01;
+
 function refuel(dt) {
   if (fuel >= FUEL_MAX || money <= 0) return;
   const want = Math.min(P.refuel * dt, FUEL_MAX - fuel, money / P.price);
@@ -1004,7 +1342,7 @@ function finish() {
   let paid = P.exitBonus;
   if (job && job.phase === 'aboard') {
     if (nextIndex === null) {
-      paid += P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime));
+      paid += P.fare + Math.round(P.tip * tipMul() * tipLeft());
       speakLine('thanks', job.kind);
     } else {
       carried = { kind: job.kind };
@@ -1509,8 +1847,10 @@ function drawHud() {
 
   const f = clamp(fuel / FUEL_MAX, 0, 1);
   const blink = fuel < FUEL_LOW ? 0.55 + Math.sin(runT * 9) * 0.45 : 1;
+  const own = f > 0.45 ? '#7bf0a0' : f > 0.2 ? '#ffd479' : '#ff5d7a';
+  const col = holdRide() ? mixHex(own, FUEL_HOLD, 0.5 + Math.sin(runT * 4) * 0.5) : own;
   ctx.globalAlpha = blink;
-  bar(26, 74, 200, 11, f, f > 0.45 ? '#7bf0a0' : f > 0.2 ? '#ffd479' : '#ff5d7a', t('ui.fuel'));
+  bar(26, 74, 200, 11, f, col, t('ui.fuel'));
   ctx.globalAlpha = 1;
 
   drawLives();
@@ -1745,6 +2085,105 @@ function draw(v) {
 
 /* ------------------------------------------------------------ säätöpaneeli
    Paneeli on kehittäjän työkalu ja pysyy suomeksi. */
+
+/* Miksi tallennus ei onnistunut, ihmisen kielellä. Tuntematon syy näytetään
+   sellaisenaan, jottei uusi syy katoa tyhjään ruutuun. */
+const SAVE_FAIL = {
+  unframed: 'peli ei ole portaalin sivulla',
+  'not-owner': 'vain pelin tekijä voi tallentaa',
+  'bad-path': 'tiedostonimi ei kelpaa',
+  'bad-json': 'arvot eivät ole kelvollista JSONia',
+  'too-big': 'tiedosto on liian iso',
+  'config-full': 'asetuskansio on täynnä',
+  quota: 'pelin tila on täynnä',
+  timeout: 'portaali ei vastannut',
+  refused: 'portaali kieltäytyi',
+  failed: 'tuntematon virhe',
+};
+
+/* Käppyrä ryhmän alimmaksi. Piirtofunktio saa tyhjän ctx:n ja mitat eikä tiedä
+   mistä sitä kutsutaan, joten kenttä voi julkaista omansa tietämättä mitään
+   paneelista. Kuva päivittyy joka ruudulla niin kauan kuin paneeli on auki —
+   siihen voi siis piirtää myös sen missä kohtaa kierrosta juuri nyt ollaan,
+   ja säätimen liikuttaminen näkyy käyrässä samalla hetkellä. */
+let graphDraws = [];
+
+function graphCanvas(draw) {
+  const c = document.createElement('canvas');
+  c.width = 560; c.height = 150;
+  Object.assign(c.style, {
+    width: '100%', height: 'auto', display: 'block',
+    margin: '2px 0 10px', borderRadius: '6px', background: 'rgba(8,16,31,.55)',
+  });
+  const g = c.getContext('2d');
+  const paint = () => {
+    g.clearRect(0, 0, c.width, c.height);
+    try { draw(g, c.width, c.height); } catch (e) {}
+  };
+  graphDraws.push(paint);
+  paint();
+  return c;
+}
+
+function paintGraphs() {
+  if (!graphDraws.length || panelEl.classList.contains('hidden')) return;
+  for (const d of graphDraws) d();
+}
+
+/* Tippikäyrä: kolme profiilia, kukin laskeva suora omalta korkeudeltaan omaan
+   nollakohtaansa. Kaasuprofiili on katkoviivalla, koska sen mittari seisoo niin
+   kauan kuin suuttimet ovat päällä — suora on sen pahin tapaus eikä toteuma,
+   ja yhtenäisenä viivana käyrä valehtelisi juuri siitä profiilista joka on
+   tehty palkitsemaan kaasun pitämisestä. */
+const TIP_COL = ['#6fe3ff', '#ff5d7a', '#ffd479'];
+const TIP_NAME = ['tyyni', 'kiireinen', 'kaasu'];
+
+function tipGraph(ctx, w, h) {
+  const L = 48, B = h - 38, T = 14, R = w - 12;
+  const zero = p => P.tipTime / Math.max(0.05, P[p.fade]);
+  const high = p => P.tip * P[p.mul];
+  const secs = Math.max(1, ...TIPPERS.map(zero)) * 1.08;
+  const top = Math.max(1, ...TIPPERS.map(high));
+
+  ctx.strokeStyle = 'rgba(120,160,255,.22)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(L, T); ctx.lineTo(L, B); ctx.lineTo(R, B);
+  ctx.stroke();
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(190,210,255,.55)';
+  ctx.textAlign = 'right';
+  ctx.fillText(Math.round(top) + ' €', L - 5, T + 11);
+  ctx.textAlign = 'center';
+  ctx.fillText(Math.round(secs) + ' s', R - 10, B + 16);
+
+  TIPPERS.forEach((p, i) => {
+    ctx.strokeStyle = TIP_COL[i] || '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash(p.onlyIdle ? [7, 5] : []);
+    ctx.beginPath();
+    ctx.moveTo(L, B - high(p) / top * (B - T));
+    ctx.lineTo(L + Math.min(1, zero(p) / secs) * (R - L), B);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = TIP_COL[i] || '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(TIP_NAME[i] + (p.onlyIdle ? ' (paras tapaus)' : ''), L + i * 150, h - 8);
+  });
+}
+/* Säätimet laatikoissa, koska niitä on yli kaksikymmentä eikä kukaan selaa
+   sellaista listaa. Ryhmään kuulumaton säädin päätyy "muut"-laatikkoon, joten
+   uusi säädin ei katoa näkyvistä vaikka lisääjä ei kävisi tätä listaa läpi. */
+const SLIDER_GROUPS = [
+  { name: 'lento', open: true, keys: ['grav', 'thrust', 'stick'] },
+  { name: 'laskeutuminen', open: false,
+    keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep'] },
+  { name: 'bensa', open: true,
+    keys: ['burn', 'refuel', 'price', 'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
+  { name: 'raha ja tipit', open: false, graph: tipGraph,
+    keys: ['fare', 'tip', 'tipTime',
+           'tipCalm', 'fadeCalm', 'tipRush', 'fadeRush', 'tipHold', 'fadeHold'] },
+];
+
 const SLIDERS = [
   { key: 'grav', label: 'painovoima', min: 80, max: 500, step: 10 },
   { key: 'thrust', label: 'työntö', min: 300, max: 1200, step: 20 },
@@ -1759,6 +2198,16 @@ const SLIDERS = [
   { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
   { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
+  { key: 'dryOn', label: 'pätkintä: bensaa s', min: 0, max: 1, step: 0.01 },
+  { key: 'dryOff', label: 'pätkintä: tauko s', min: 0.02, max: 2, step: 0.01 },
+  { key: 'dryJitter', label: 'pätkintä: satunnaisuus ±s', min: 0, max: 0.5, step: 0.01 },
+  { key: 'dryLife', label: 'pätkintä: kesto s', min: 0, max: 20, step: 0.5 },
+  { key: 'tipCalm', label: 'tyyni: tippi ×', min: 0.5, max: 3, step: 0.05 },
+  { key: 'fadeCalm', label: 'tyyni: lasku ×', min: 0.2, max: 4, step: 0.1 },
+  { key: 'tipRush', label: 'kiireinen: tippi ×', min: 0.5, max: 3, step: 0.05 },
+  { key: 'fadeRush', label: 'kiireinen: lasku ×', min: 0.2, max: 4, step: 0.1 },
+  { key: 'tipHold', label: 'kaasu: tippi ×', min: 0.5, max: 3, step: 0.05 },
+  { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
 ];
 
@@ -1779,6 +2228,7 @@ function pbutton(cls, text, fn) {
 
 function buildPanel() {
   panelEl.replaceChildren(el('h2', null, 'säädöt'));
+  graphDraws = [];                             // vanhat kankaat irtosivat DOMista
 
   const lvlRow = el('div', 'row');
   const lvlSeg = el('div', 'seg');
@@ -1794,9 +2244,9 @@ function buildPanel() {
   const langRow = el('div', 'row');
   const langSeg = el('div', 'seg');
   const lang = (code, text) => pbutton(LANG === code ? 'on' : null, text, () => {
-    setLang(code);
-    if (state === MENU) showCard(menuCard(), 0, null);
-    buildPanel();
+    applyLang(code);
+    /* Ja portaalille, jotta liput ylhäällä eivät jää eri mielelle. */
+    setPortal('lang', code);
   });
   langSeg.append(lang('fi', 'suomi'), lang('en', 'english'));
   langRow.append(el('label', null, 'kieli'), langSeg);
@@ -1811,32 +2261,100 @@ function buildPanel() {
   sideRow.append(el('label', null, 'napit'), seg);
   panelEl.append(sideRow);
 
-  for (const s of SLIDERS) {
+  /* Yksi säädinrivi. Arvo luetaan ja kirjoitetaan callbackeilla, joten sama
+     rivi kelpaa globaaliin viritykseen, kentän kertoimiin ja kentän omiin
+     arvoihin — paneelin ei tarvitse tietää kumpaa se milloinkin säätää. */
+  const sliderRow = (s, get, set) => {
     const row = el('div', 'row');
     const lab = el('label');
-    const val = el('b', null, String(P[s.key]));
+    const val = el('b', null, String(get()));
     lab.append(document.createTextNode(s.label), val);
     const input = el('input');
     input.type = 'range';
     input.min = s.min; input.max = s.max; input.step = s.step;
-    input.value = P[s.key];
+    input.value = get();
     input.addEventListener('input', () => {
-      P[s.key] = +input.value;
+      set(+input.value);
       val.textContent = input.value;
-      if (s.key === 'stick') stick.gain = P.stick;
-      saveTune();
-      if (ta && ta !== document.activeElement) ta.value = tuneJSON();
     });
     row.append(lab, input);
-    panelEl.append(row);
+    return row;
+  };
+
+  const globalRow = s => sliderRow(s, () => BASE[s.key], v => {
+    BASE[s.key] = v;
+    applyMul();
+    saveTune();
+    if (ta && ta !== document.activeElement) ta.value = tuneJSON();
+  });
+
+  /* Kentän arvot tallentuvat samalla tavalla kuin globaalit. Tämä puuttui
+     ensin, ja vika näkyi vasta sivun latauksessa: säädöt toimivat, mutta
+     katosivat. */
+  const levelChanged = () => {
+    saveTune();
+    if (ta && ta !== document.activeElement) ta.value = tuneJSON();
+  };
+
+  /* <details> hoitaa auki ja kiinni itse, joten laatikoille ei tarvita omaa
+     tilaa eikä kuuntelijaa. */
+  const group = (name, open, rows, graph) => {
+    const box = el('details', 'grp');
+    box.open = open;
+    box.append(el('summary', null, name));
+    const body = el('div', 'body');
+    for (const r of rows) body.append(r);
+    if (graph) body.append(graphCanvas(graph));
+    box.append(body);
+    return box;
+  };
+
+  const byKey = new Map(SLIDERS.map(s => [s.key, s]));
+
+  /* Kentän oma säätötaulu kenttänappien ja globaalien säädinten väliin. Kenttä
+     julkaisee sen itse (level.tune), joten peli ei tiedä minkään kentän
+     sisällöstä mitään — täällä on vain se miten taulu piirretään. Kahta lajia:
+
+       mul       kertoimet globaaleihin arvoihin, 1 = kenttä ei ota kantaa
+       sliders   kentän omat arvot, kirjoitetaan suoraan kentän omaan olioon
+
+     Taulu vaihtuu kenttää vaihdettaessa, koska buildPanel ajetaan uudestaan. */
+  for (const g of level.tune || []) {
+    const rows = [];
+    for (const key of g.mul || []) {
+      const base = byKey.get(key);
+      if (!base) continue;
+      rows.push(sliderRow(
+        { label: base.label + ' ×', min: 0.2, max: 3, step: 0.05 },
+        () => { const m = MUL[key]; return typeof m === 'number' ? m : 1; },
+        v => { MUL[key] = v; applyMul(); levelChanged(); },
+      ));
+    }
+    for (const sl of g.sliders || []) {
+      if (!g.obj) continue;
+      rows.push(sliderRow(sl, () => g.obj[sl.key], v => { g.obj[sl.key] = v; levelChanged(); }));
+    }
+    if (rows.length || g.graph) {
+      panelEl.append(group(level.name + ': ' + g.name, g.open !== false, rows, g.graph));
+    }
   }
+
+  const used = new Set();
+  for (const g of SLIDER_GROUPS) {
+    const rows = g.keys.map(k => byKey.get(k)).filter(Boolean);
+    for (const s of rows) used.add(s.key);
+    if (rows.length) panelEl.append(group(g.name, g.open, rows.map(globalRow), g.graph));
+  }
+  const rest = SLIDERS.filter(s => !used.has(s.key));
+  if (rest.length) panelEl.append(group('muut', false, rest.map(globalRow)));
 
   const foot = el('div', 'foot');
   foot.append(
     pbutton('btn sm ghost', 'oletukset', () => {
-      Object.assign(P, DEFAULTS);
+      Object.assign(BASE, DEFAULTS);
+      resetLevelTune();                        // myös kenttien omat arvot
       gearSide = DEFAULT_SIDE; layout();
-      stick.gain = P.stick;
+      applyMul();
       saveTune();
       panelNote = 'oletukset palautettu';
       buildPanel();
@@ -1873,6 +2391,32 @@ function buildPanel() {
         buildPanel();
       } else note.textContent = 'ei kelvollista JSONia';
     }),
+    /* Tallennus peliin kirjoittaa arvot pelin omaan tiedostoon draftissa,
+       jolloin julkaisu vie ne mukanaan oletuksiksi kaikille. Peli ei kirjoita
+       itse — se pyytää emosivulta, joka on kirjautunut ja jonka palvelinpuoli
+       tarkistaa omistajuuden. Siksi tämä toimii vain tekijän omalla sivulla,
+       ja siksi nappi kertoo sen ääneen kun se ei ole käytettävissä. */
+    pbutton('btn sm', 'tallenna peliin', () => {
+      const save = portalApi.savePortalFile;
+      if (typeof save !== 'function' || !portal.canWrite) {
+        note.textContent = 'tallennus peliin onnistuu vain omalta pelisivulta';
+        return;
+      }
+      note.textContent = 'tallennetaan…';
+      const body = JSON.stringify(tuneAll(Date.now()), null, 1);
+      /* Plugin ratkaisee lupauksen aina ja kertoo syyn tuloksessa — se ei heitä
+         eikä hylkää, joten tässä ei ole catchia eikä sellaista tarvita. */
+      Promise.resolve(save(TUNE_FILE, body)).then(res => {
+        if (res && res.saved) {
+          localStamp = JSON.parse(body).stamp;
+          try { localStorage.setItem(STORE, body); } catch (e) {}
+          note.textContent = 'tallennettu peliin — julkaise niin arvot lähtevät mukaan';
+        } else {
+          const why = (res && res.reason) || 'failed';
+          note.textContent = 'tallennus ei onnistunut: ' + (SAVE_FAIL[why] || why);
+        }
+      });
+    }),
   );
   io.append(ta, ioButtons, note);
 
@@ -1887,9 +2431,23 @@ function buildPanel() {
   panelEl.append(io);
 }
 
-function togglePanel() {
-  if (panelEl.classList.contains('hidden')) { buildPanel(); panelEl.classList.remove('hidden'); }
+function panelOpen() {
+  return !panelEl.classList.contains('hidden');
+}
+
+/* Asetettuun tilaan, ei vastakkaiseen. Portaalin kytkin tietää mihin asentoon
+   se on menossa, ja pelkkä toggle menisi sen kanssa ristiin heti kun paneeli on
+   avattu täältä rattaasta. */
+function setPanel(on) {
+  if (on === panelOpen()) return;
+  if (on) { buildPanel(); panelEl.classList.remove('hidden'); }
   else panelEl.classList.add('hidden');
+  /* Ja portaalille, jotta sen kytkin näyttää sen mikä on auki. */
+  setPortal('debug', on);
+}
+
+function togglePanel() {
+  setPanel(!panelOpen());
 }
 
 /* ------------------------------------------------------------------ kortti */
@@ -1934,7 +2492,8 @@ const buttons = label => `
   <button id="go" class="btn">${label}</button>
   <button id="fs" class="btn ghost">${t('card.full')}</button>
   <button id="set" class="btn ghost">${t('card.tune')}</button>
-  <p class="hint">${t('card.keys')}</p>`;
+  <p class="hint">${t('card.keys')}</p>
+  <p class="hint" id="padstate"></p>`;
 
 const menuCard = () => `
   <h1>${t('menu.t1')} <span>${t('menu.t2')}</span></h1>
@@ -1954,7 +2513,8 @@ const buyCard = () => `
     ? `<button id="fleet" class="btn">${t('buy.fleet', { c: FLEET_COUNT, p: FLEET_PRICE })}</button>`
     : ''}
   <button id="end" class="btn ghost">${t('buy.end')}</button>
-  <p class="hint">${t('buy.keys')}</p>`;
+  <p class="hint">${t('buy.keys')}</p>
+  <p class="hint" id="padstate"></p>`;
 
 const overWon = () => `
   <h1>${t('won.t1')} <span>${t('won.t2')}</span></h1>
@@ -1992,6 +2552,37 @@ function startLevel(i) {
 newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
 
+/* Kieli, kummasta päästä tahansa.
+ *
+ * Portaali on sivu pelin ympärillä ja sillä on omat lippunsa. Ilman tätä ne ja
+ * säätöpaneelin kielivalinta ovat kaksi kytkintä samalle asialle, ja kaksi
+ * kytkintä on kaksi paikkaa jotka ennen pitkää ovat eri mieltä.
+ *
+ * Kehyksettömänä ei kuunnella lainkaan: silloin portal.lang on selaimen kielestä
+ * tehty arvaus, ja i18n.js:n oma päättely tietää enemmän — se muistaa mitä
+ * pelaaja on aiemmin valinnut. Kehyksessä portaali tietää enemmän kuin kumpikaan,
+ * koska se on se kieli jolla ihminen juuri katsoo sivua. Se on sama paikka jonka
+ * i18n.js:n kommentti varasi ?lang-parametrille. */
+function applyLang(code) {
+  if (code === LANG) return;
+  setLang(code);
+  if (state === MENU) showCard(menuCard(), 0, null);
+  if (!panelEl.classList.contains('hidden')) buildPanel();
+}
+
+if (portal.embedded) {
+  /* Vasta vastauksen jälkeen: ennen sitä portal.lang on arvaus, ja arvaus ei saa
+     jyrätä pelaajan aiempaa valintaa. onPortal ajaa käsittelijän heti nykyisellä
+     arvolla, joten tilaaminen tässä riittää eikä erillistä lukua tarvita. */
+  portal.ready.then(() => {
+    onPortal('lang', applyLang);
+    /* Säädöt ovat tämän pelin dev-näkymä — kenttähyppy, viritys, kieli — ja
+       portaalin kytkin avaa sen samoin kuin P. Kehyksessä P vaatii että fokus on
+       pelissä, kytkin ei vaadi mitään. */
+    onPortal('debug', setPanel);
+  });
+}
+
 /* Liput osoitteesta: ?debug=1 säätöpaneeli, ?test=1 pompputesti, ?lang=fi|en. */
 try {
   const q = new URLSearchParams(location.search);
@@ -2009,6 +2600,8 @@ function loop(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   resize();
+  padInput();
+  paintGraphs();                               // vain auki olevaan paneeliin
 
   if (state === CUT) {
     cut.update(dt);
