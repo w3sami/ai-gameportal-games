@@ -20,10 +20,8 @@ const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d');
 let vw = 1, vh = 1, dpr = 1, Z = 1, layers = [], mainC = null, mask = null, motes = [];
 function buildMain(){
-  mainC = renderLayer(1, STYLE.main, 0, 0);
-  const d = mainC.maskAlpha; mainC.maskAlpha = null;
-  mask = new Uint8Array(L.w*L.h);
-  for (let i=0,j=3;i<mask.length;i++,j+=4) mask[i] = d[j] > 100 ? 1 : 0;
+  mainC = renderLayer(1, STYLE.main, 0, 0);            // tiled; see art.js
+  mask = mainC.mask; mainC.mask = null;
 }
 function isSolid(x,y){ if (x<0||y<0||x>=L.w||y>=L.h) return true; return mask[(y|0)*L.w+(x|0)] === 1; }
 function buildLayers(){
@@ -399,7 +397,7 @@ function render(dt){
   if (k2 > 0) for (const g of cb.glows) glow(g, k2);
   for (const ly of layers){   // true perspective about the screen centre: screen = (p - cam)·f·Z + centre·(1-f)
     const ox = -(cam.x+ly.padX)*Z*ly.f + vw/2*(1-ly.f) + sx*ly.f, oy = -(cam.y+ly.padY)*Z*ly.f + vh/2*(1-ly.f) + sy*ly.f, kk = Z*ly.f/ly.q;
-    ctx.drawImage(ly.c, ox, oy, ly.c.width*kk, ly.c.height*kk);
+    drawLayer(ctx, ly.c, ox, oy, kk, vw, vh);
   }
   if (hazards.length){
     ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
@@ -409,7 +407,7 @@ function render(dt){
   }
   const tsec = performance.now()/1000;
   ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z); drawForces(tsec, false); ctx.restore();   // pools, under the terrain
-  ctx.drawImage(mainC, -cam.x*Z+sx, -cam.y*Z+sy, L.w*Z, L.h*Z);
+  drawLayer(ctx, mainC, -cam.x*Z+sx, -cam.y*Z+sy, Z, vw, vh);
 
   ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
   drawParticles();
