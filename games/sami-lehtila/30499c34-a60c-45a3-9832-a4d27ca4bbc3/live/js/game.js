@@ -12,7 +12,9 @@
  *
  * Kolme varoitusta, kolme eri ääntä: matala piippaus vähistä bensoista, korkea
  * lähestymisvaroitus kun teline on alhaalla ja vauhti lähestyy laskurajaa, ja
- * murahtava törmäysvaroitus kun ollaan menossa päin seinää.
+ * murahtava törmäysvaroitus kun ollaan menossa päin seinää. Alusta varoittaa
+ * myös itse: sen valolista vilkkuu punaisen ja sinisen väliä siitä lähtien kun
+ * vauhti riittäisi pomppuun, ja tihenee laskurajaa kohti.
  *
  * Katosta ulos lähtenyt asiakas jatkaa kyydissä seuraavaan kenttään, joten uusi
  * kenttä alkaa jättökeikalla ja hän maksaa vasta perillä. Taksi tulee kenttään
@@ -28,7 +30,7 @@
  * kielen, gate-test.html on luukun oma säätösivu.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
-import { liftFor } from './bounce.js';
+import { liftFor, bounceNorm } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
 import { createHyperspace } from './hyperspace.js';
@@ -59,6 +61,10 @@ const END_CARD_DELAY = 2600;
 const LAND_WARN_FROM = 0.75;               // varoitus jo ennen laskurajaa
 const NEAR_LEAD = 0.4;                     // sekuntia eteenpäin törmäystarkistus
 const NEAR_PAD = 10;                        // kiinteä marginaali sen ympärille
+const PAD_WARN_LEAD = 1.0;                 // sekuntia pudotusta ennen kuin alusta vilkkuu
+const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
+const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
+const PAD_WARN_HOT = '#ff5d7a', PAD_WARN_COLD = '#6fe3ff';
 
 let levelIndex = 0, level = LEVELS[0];
 let GATE = level.gate, WALLS = [], PADS = [];
@@ -360,7 +366,8 @@ const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, fastWarn, nearWarn, nearFx, graves, squishes,
+    msg, msgT, bits, lowWarn, fastWarn, nearWarn, padWarn, padBlink,
+    graves, squishes,
     wreck, bounces, titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
     runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
 
@@ -398,7 +405,7 @@ function loadLevel(i) {
   gateOpen = false;
   graves = []; squishes = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
   msg = ''; msgT = 0; titleT = 0; goT = 0;
-  lowWarn = 0; fastWarn = 0; nearWarn = 0; nearFx = 0;
+  clearWarnings();
   job = null;
   levelMoney0 = money;
   levelDeaths = 0;
@@ -429,7 +436,7 @@ function beginEntry(showTitle) {
   dead = false; deadT = 0; wreck = null; bounces = 0;
   gateOpen = true;
   enterT = 0; goT = 0;
-  lowWarn = 0; fastWarn = 0; nearWarn = 0; nearFx = 0;
+  clearWarnings();
   titleT = showTitle ? 2.0 : 0;
   state = ENTER;
   sfx.levelStart();
@@ -830,10 +837,34 @@ function movePads() {
      bensa   — matala piippaus, tihenee tankin tyhjetessä
      lasku   — korkea, alkaa jo 75 %:ssa laskurajasta ja nousee ja tihenee
                sitä mukaa kun raja lähenee; yli mentäessä tiheintä
-     törmäys — murahdus kun 0,4 sekunnin päässä on seinä */
-function warnings(dt) {
-  if (nearFx > 0) nearFx -= dt;
+     törmäys — murahdus kun 0,4 sekunnin päässä on seinä; pelkkä ääni,
+               sillä alustan oma valo riittää katseelle */
+function clearWarnings() {
+  lowWarn = 0; fastWarn = 0; nearWarn = 0;
+  padWarn = null; padBlink = 0;
+}
 
+/* Mille alustalle ollaan tulossa ja liiankos kovaa? Raja on sama mistä pomppu
+   alkaa — landRatio yli P.bounceFrom — eli valo syttyy täsmälleen silloin kun
+   lasku ei enää menisi siististi. Alusta otetaan mukaan vasta kun se on
+   sekunnin pudotuksen päässä, jottei koko kenttä vilku sen takia että jonkin
+   alustan yläpuolella sattuu kiitämään. */
+function warnPad() {
+  if (dead || state !== PLAY || !taxi || taxi.landed || taxi.vy <= 0) return null;
+  if (landRatio() <= P.bounceFrom) return null;
+  const b = taxiBox(taxi);
+  const reach = Math.max(PAD_WARN_NEAR, taxi.vy * PAD_WARN_LEAD);
+  let best = null, bestGap = Infinity;
+  for (const p of PADS) {
+    if (b.x + b.w <= p.x || b.x >= p.x + p.w) continue;
+    const gap = p.y - (b.y + b.h);
+    if (gap < 0 || gap > reach || gap >= bestGap) continue;
+    best = p; bestGap = gap;
+  }
+  return best;
+}
+
+function warnings(dt) {
   if (fuel < FUEL_LOW && fuel > 0 && !dead) {
     lowWarn -= dt;
     if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.25 + fuel / 45; }
@@ -850,8 +881,16 @@ function warnings(dt) {
 
   if (!dead && nearWall()) {
     nearWarn -= dt;
-    if (nearWarn <= 0) { sfx.near(); nearWarn = 0.2; nearFx = 0.2; }
+    if (nearWarn <= 0) { sfx.near(); nearWarn = 0.2; }
   } else nearWarn = 0;
+
+  /* Vilkun tahti kertyy vaiheeseen eikä kellonaikaan, jotta se voi kiihtyä
+     kesken pudotuksen ilman että väri hyppää. */
+  padWarn = warnPad();
+  if (padWarn) {
+    const n = bounceNorm(landRatio(), P);
+    padBlink += (PAD_BLINK_SLOW + (PAD_BLINK_FAST - PAD_BLINK_SLOW) * n) * dt;
+  } else padBlink = 0;
 }
 
 /* ------------------------------------------------------------ sisääntulo */
@@ -894,7 +933,7 @@ function update(dt) {
   if (dead) {
     deadT += dt;
     jetLevel(0);
-    lowWarn = 0; fastWarn = 0; nearWarn = 0; nearFx = 0;
+    clearWarnings();
     if (wreck) {
       wreck.vy += 640 * dt;
       wreck.x += wreck.vx * dt;
@@ -1135,12 +1174,15 @@ function drawPad(p) {
   const isTarget = !p.fuel && p.id === targetId();
   const done = !p.fuel && served[p.id];
   const col = p.fuel ? '#ffd479' : (isTarget ? '#6fe3ff' : '#ff5d7a');
+  /* Liian kovaa tulossa: valolista vilkkuu, tunnus alla pysyy omanvärisenä. */
+  const warn = state === PLAY && p === padWarn;
+  const lamp = warn ? (padBlink % 1 < 0.5 ? PAD_WARN_HOT : PAD_WARN_COLD) : col;
 
   ctx.fillStyle = p.fuel ? '#3a3320' : (isTarget ? '#20394a' : '#3a2230');
   ctx.beginPath(); ctx.roundRect(p.x, p.y, p.w, p.h, 4); ctx.fill();
 
-  ctx.fillStyle = col;
-  ctx.shadowColor = col; ctx.shadowBlur = isTarget ? 22 : 12;
+  ctx.fillStyle = lamp;
+  ctx.shadowColor = lamp; ctx.shadowBlur = warn ? 26 : (isTarget ? 22 : 12);
   ctx.fillRect(p.x + 6, p.y, p.w - 12, 3);
   ctx.shadowBlur = 0;
 
@@ -1513,16 +1555,6 @@ function drawHud() {
     ctx.fillStyle = 'rgba(233,237,255,.45)';
     ctx.font = '600 11px system-ui, sans-serif';
     ctx.fillText(job.to === 'up' ? t('ui.meterUp') : t('ui.meterPad', { n: job.to }), W - 26, 140);
-  }
-
-  // törmäysvaroituksen välähdys ruudun reunoilla
-  if (nearFx > 0) {
-    ctx.save();
-    ctx.globalAlpha = clamp(nearFx / 0.2, 0, 1) * 0.45;
-    ctx.strokeStyle = '#ff5d7a';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(5, 5, W - 10, H - 10);
-    ctx.restore();
   }
 
   if (msgT > 0) {
