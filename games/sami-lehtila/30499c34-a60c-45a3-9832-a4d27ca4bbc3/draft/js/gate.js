@@ -19,14 +19,14 @@ const clampSpread = s => Math.min(80, Math.max(5, s));
 
 /* Arvot luukkutestistä (gate-test.html). Sieltä kopioitu JSON menee tähän. */
 export const GATE_LOOK = {
-  radius: 35,         // kuinka kauas valo kantaa aukosta alaspäin
+  radius: 50,         // kuinka kauas valo kantaa aukosta alaspäin
   spread: 50,         // puolikulma asteina
-  glow: 1.55,         // hehkun voimakkuuden kerroin
-  ripples: 3,         // montako aaltoa kerrallaan
+  glow: 1.15,         // hehkun voimakkuuden kerroin
+  ripples: 2,         // montako aaltoa kerrallaan
   rippleWidth: 40,    // aallon paksuus pikseleinä
-  rippleAlpha: 0.28,  // aallon kirkkain kohta
+  rippleAlpha: 0.24,  // aallon kirkkain kohta
   rippleSpeed: 0.25,  // kierrosta sekunnissa
-  breathe: 3.4,       // hehkun hengityksen taajuus
+  breathe: 2.8,       // hehkun hengityksen taajuus
 };
 
 export function rgba(hex, a) {
