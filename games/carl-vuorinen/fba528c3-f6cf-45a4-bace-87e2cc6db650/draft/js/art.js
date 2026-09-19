@@ -72,41 +72,58 @@ function solidGroups(pal){
 }
 
 // One rendering of the level at canvas scale q: terrain with facets, cave cut out, solids put back.
-// The main layer (q=1) also yields the collision mask. Depth layers reuse it with a darker palette and a lower q.
+// The layer is produced as a grid of tiles no larger than TILE on a side. Big levels would otherwise need one canvas of
+// 20M+ pixels, past the size browsers keep on the GPU, and every frame's drawImage turns into a software blit. Each tile
+// re-runs the same deterministic drawing offset to its corner (off-tile geometry is clipped for free), so the tiles fit
+// seamlessly. The main layer (q=1) also yields the collision mask, assembled tile by tile. Depth layers reuse the same
+// code with a darker palette and a lower q. Returns {w, h, tiles:[{x, y, c}], mask?}.
+const TILE = 2048, TM = 2;                                           // TM: tiles overlap by this many pixels so scaled edges never show a seam
 function renderLayer(q, st, padX, padY){
-  const W = Math.ceil((L.w+2*padX)*q), H = Math.ceil((L.h+2*padY)*q), c = mkCanvas(W,H), x = c.getContext('2d'), r = rng(L.rooms[0].seed*31+7), pal = st.pal;
-  x.fillStyle = pal.rock; x.fillRect(0,0,W,H);
-  x.translate(padX*q, padY*q); x.scale(q,q);
-  if (STYLE.terrain) STYLE.terrain(x, rng(L.rooms[0].seed*47+11), pal, -400, -400, L.w+800, L.h+800);
-  facets(x, r, -400, -400, L.w+800, L.h+800, Math.round(L.w*L.h/60000), 260, 800, st.amp);
-  const caveShapes = (fill) => {
-    x.fillStyle = fill; x.strokeStyle = fill; angular(x);
+  const W = Math.ceil((L.w+2*padX)*q), H = Math.ceil((L.h+2*padY)*q), pal = st.pal, out = {w:W, h:H, tiles:[], mask:st.captureMask ? new Uint8Array(L.w*L.h) : null};
+  for (let ty=0; ty<H; ty+=TILE) for (let tx=0; tx<W; tx+=TILE){
+    const tw = Math.min(TILE, W-tx), th = Math.min(TILE, H-ty), c = mkCanvas(tw+2*TM,th+2*TM), x = c.getContext('2d'), r = rng(L.rooms[0].seed*31+7);
+    x.fillStyle = pal.rock; x.fillRect(0,0,tw+2*TM,th+2*TM);
+    x.translate(padX*q-tx+TM, padY*q-ty+TM); x.scale(q,q);
+    if (STYLE.terrain) STYLE.terrain(x, rng(L.rooms[0].seed*47+11), pal, -400, -400, L.w+800, L.h+800);
+    facets(x, r, -400, -400, L.w+800, L.h+800, Math.round(L.w*L.h/60000), 260, 800, st.amp);
+    x.globalCompositeOperation = 'destination-out'; x.fillStyle = '#000';
     for (const pts of G.caves){ poly(x,pts); x.fill(); }
     for (const p of G.clear) x.fillRect(p[0], p[1], p[2], p[3]);
-  };
-  x.globalCompositeOperation = 'destination-out'; caveShapes('#000');
-  // a faint shadow band just inside every cave edge, so the outline reads without a drawn line. Done before the solids
-  // go in, so the band stays on the terrain and never crosses a stump or spike that straddles a room edge.
-  const edgeCol = `rgba(0,0,0,${st.edgeAlpha||0.14})`, edgeW = st.edge || 10;
-  x.globalCompositeOperation = 'source-atop'; x.strokeStyle = edgeCol; angular(x); x.lineWidth = edgeW;
-  for (const pts of G.caves){ poly(x,pts); x.stroke(); }
-  for (const p of G.clear) x.strokeRect(p[0],p[1],p[2],p[3]);
-  // solids (rocks, trunks, foliage, pad blocks) on a scratch canvas, composited behind the terrain so overlaps never show.
-  // Each group is filled, faceted, detailed and edge-shaded inside its own clip, so one group's edge never marks another.
-  const tc = mkCanvas(W,H), t = tc.getContext('2d'); t.translate(padX*q, padY*q); t.scale(q,q);
-  for (const g of solidGroups(pal)){
-    t.save(); groupPath(t,g); t.clip();
-    t.fillStyle = g.col; t.fillRect(-400,-400,L.w+800,L.h+800);
-    facets(t, r, -400, -400, L.w+800, L.h+800, Math.round(L.w*L.h/45000), 60, 240, st.amp);
-    if (g.detail) g.detail(t, r);
-    t.strokeStyle = `rgba(0,0,0,${(st.edgeAlpha||0.14)*(g.edgeK||1)})`; angular(t); t.lineWidth = edgeW; groupPath(t,g); t.stroke();
-    t.restore();
+    // a faint shadow band just inside every cave edge, so the outline reads without a drawn line. Done before the solids
+    // go in, so the band stays on the terrain and never crosses a stump or spike that straddles a room edge.
+    const edgeCol = `rgba(0,0,0,${st.edgeAlpha||0.14})`, edgeW = st.edge || 10;
+    x.globalCompositeOperation = 'source-atop'; x.strokeStyle = edgeCol; angular(x); x.lineWidth = edgeW;
+    for (const pts of G.caves){ poly(x,pts); x.stroke(); }
+    for (const p of G.clear) x.strokeRect(p[0],p[1],p[2],p[3]);
+    // solids (rocks, trunks, foliage, pad blocks) on a scratch canvas, composited behind the terrain so overlaps never show.
+    // Each group is filled, faceted, detailed and edge-shaded inside its own clip, so one group's edge never marks another.
+    const tc = mkCanvas(tw+2*TM,th+2*TM), t = tc.getContext('2d'); t.translate(padX*q-tx+TM, padY*q-ty+TM); t.scale(q,q);
+    for (const g of solidGroups(pal)){
+      t.save(); groupPath(t,g); t.clip();
+      t.fillStyle = g.col; t.fillRect(-400,-400,L.w+800,L.h+800);
+      facets(t, r, -400, -400, L.w+800, L.h+800, Math.round(L.w*L.h/45000), 60, 240, st.amp);
+      if (g.detail) g.detail(t, r);
+      t.strokeStyle = `rgba(0,0,0,${(st.edgeAlpha||0.14)*(g.edgeK||1)})`; angular(t); t.lineWidth = edgeW; groupPath(t,g); t.stroke();
+      t.restore();
+    }
+    x.globalCompositeOperation = 'destination-over'; x.save(); x.setTransform(1,0,0,1,0,0); x.drawImage(tc,0,0); x.restore();
+    x.globalCompositeOperation = 'source-over';
+    if (out.mask){                                                    // main layer: q = 1, no padding, so tile pixel (i,j) is level pixel (tx+i, ty+j)
+      const d = x.getImageData(TM,TM,tw,th).data, m = out.mask;
+      for (let j=0;j<th;j++){ const row = (ty+j)*L.w+tx, src = j*tw*4+3; for (let i=0;i<tw;i++) m[row+i] = d[src+i*4] > 100 ? 1 : 0; }
+    }
+    if (st.pads){ drawPad(x,L.pads.start,PAL.start,st.padK); drawPad(x,L.pads.target,PAL.target,st.padK); }
+    out.tiles.push({x:tx, y:ty, c});
   }
-  x.globalCompositeOperation = 'destination-over'; x.save(); x.setTransform(1,0,0,1,0,0); x.drawImage(tc,0,0); x.restore();
-  x.globalCompositeOperation = 'source-over';
-  if (st.captureMask) c.maskAlpha = x.getImageData(0,0,W,H).data;
-  if (st.pads){ drawPad(x,L.pads.start,PAL.start,st.padK); drawPad(x,L.pads.target,PAL.target,st.padK); }
-  return c;
+  return out;
+}
+// Draws a tiled layer with its origin at screen (ox,oy) and scale k, skipping tiles outside the viewport.
+function drawLayer(ctx, lr, ox, oy, k, vw, vh){
+  for (const t of lr.tiles){
+    const dx = ox+(t.x-TM)*k, dy = oy+(t.y-TM)*k, dw = t.c.width*k, dh = t.c.height*k;
+    if (dx > vw || dy > vh || dx+dw < 0 || dy+dh < 0) continue;
+    ctx.drawImage(t.c, dx, dy, dw, dh);
+  }
 }
 // Falling hazards are drawn live rather than baked into the layers, so each gets a small sprite in the level's style.
 function renderSpikeSprite(pts, seed, kind, axis){
