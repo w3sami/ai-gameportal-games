@@ -644,7 +644,7 @@ export const stormport = {
  * etenee, joten säätimen vaikutuksen näkee heti eikä vasta seuraavassa
  * puuskassa. */
 function windGraph(ctx, w, h) {
-  const L = 8, R = w - 8, T = 10, B = h - 20;
+  const L = 8, R = w - 8, T = 24, B = h - 22;
   const mid = (T + B) / 2, half = (B - T) / 2;
   const span = WIND.swing;
   const at = (x, v) => [L + x * (R - L), mid - v * half];
@@ -675,7 +675,7 @@ function windGraph(ctx, w, h) {
   ctx.font = '13px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(190,210,255,.55)';
   ctx.textAlign = 'left';
-  ctx.fillText('± ' + Math.round(WIND.peak) + ' px/s²', L + 2, T + 11);
+  ctx.fillText('± ' + Math.round(WIND.peak) + ' px/s²', L + 2, 14);
   ctx.textAlign = 'right';
   ctx.fillText(Math.round(span) + ' s', R - 2, B + 15);
   ctx.textAlign = 'left';
