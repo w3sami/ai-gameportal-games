@@ -599,6 +599,7 @@ function animStep() {
 function stormBack(ctx, api) {
   const time = animStep();
   const w = windAt(storm.t);
+  globalThis.__wind = { t: storm.t, dir: w.dir, s: w.s, sock: windAt(storm.t + WIND.lead) };
   ctx.save();
   lighthouse(ctx, time);
   shore(ctx);
