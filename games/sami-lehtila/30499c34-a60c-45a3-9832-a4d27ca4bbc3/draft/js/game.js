@@ -33,6 +33,13 @@ import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/ind
 import { createGamepad } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
 import { portal, onPortal, setPortal }
   from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
+/* Sama moduuli nimiavaruutena. Tallennusfunktio tulee pluginiin vasta
+   seuraavassa versiossa, ja nimetty tuonti puuttuvasta viennistä kaataisi
+   koko moduulin latausvaiheessa — nimiavaruudesta puuttuva on vain
+   undefined, jolloin peli toimii ja nappi kertoo ettei tallennus ole
+   käytettävissä. */
+import * as portalApi
+  from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
 import { liftFor, bounceNorm } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
@@ -116,6 +123,12 @@ let gearSide = DEFAULT_SIDE;
  * Kenttä voi julkaista lähtökertoimensa (level.mul), ja säätöpaneeli antaa
  * muuttaa niitä lennossa. */
 const BASE = Object.assign({}, DEFAULTS);
+
+/* Kertoimet säilyvät kentittäin koko istunnon: kentästä toiseen käyminen ei
+   saa nollata sitä mitä juuri säädit. MUL osoittaa aina nykyisen kentän
+   omaan olioon. */
+const MULS = {};
+const mulOf = lv => MULS[lv.name] || (MULS[lv.name] = Object.assign({}, lv.mul));
 let MUL = {};
 
 /* Sauva syntyy vasta paljon alempana, ja tätä kutsutaan jo tallennettua
@@ -133,27 +146,107 @@ function applyMul() {
   if (stickReady) stick.gain = P.stick;
 }
 
+/* Koko viritys yhtenä oliona: globaali pohja ja jokaisen kentän omat arvot.
+ *
+ * Kenttien arvoja ei tarvitse luetella täällä, koska kenttä kertoo itse mitä
+ * sillä on (level.tune). Peli ei siis tiedä yhdenkään kentän sisällöstä mitään
+ * tälläkään puolella — uusi kenttä uusine säätimineen tallentuu ilman että
+ * tätä koodia kosketaan.
+ *
+ * stamp on tallennushetki. Sitä tarvitaan siihen, kumpi voittaa kun sekä
+ * peliin tallennettu tune.json että selaimen paikalliset kokeilut ovat
+ * olemassa: uudempi voittaa. Muuten vanha localStorage jäisi jyräämään juuri
+ * julkaistut oletukset, ja se vika näkyisi vasta pelaajilla. */
+function tuneAll(stamp) {
+  const levels = {};
+  for (const lv of LEVELS) {
+    const entry = {};
+    const m = MULS[lv.name];
+    if (m && Object.keys(m).length) entry.mul = Object.assign({}, m);
+    const own = {};
+    for (const g of lv.tune || []) {
+      if (!g.obj || !g.sliders) continue;
+      const o = own[g.name] = {};
+      for (const sl of g.sliders) o[sl.key] = g.obj[sl.key];
+    }
+    if (Object.keys(own).length) entry.own = own;
+    if (Object.keys(entry).length) levels[lv.name] = entry;
+  }
+  return { v: 1, stamp: stamp || Date.now(), gearSide, global: Object.assign({}, BASE), levels };
+}
+
+/** Lukee tuneAllin tuotoksen takaisin. Tuntemattomat avaimet ohitetaan, joten
+    vanha tiedosto ei kaadu uuteen koodiin eikä toisin päin. */
+function applyAll(raw) {
+  if (!raw || typeof raw !== 'object') return false;
+  const g = raw.global || raw;                 // vanha muoto oli pelkkä pohja
+  for (const k of Object.keys(DEFAULTS)) {
+    if (typeof g[k] === 'number' && isFinite(g[k])) BASE[k] = g[k];
+  }
+  if (raw.gearSide === 'left' || raw.gearSide === 'right') { gearSide = raw.gearSide; layout(); }
+  for (const lv of LEVELS) {
+    const e = (raw.levels || {})[lv.name];
+    if (!e) continue;
+    if (e.mul) {
+      const m = mulOf(lv);
+      for (const k of Object.keys(DEFAULTS)) {
+        if (typeof e.mul[k] === 'number' && isFinite(e.mul[k])) m[k] = e.mul[k];
+      }
+    }
+    for (const grp of lv.tune || []) {
+      const o = e.own && e.own[grp.name];
+      if (!o || !grp.obj) continue;
+      for (const sl of grp.sliders || []) {
+        if (typeof o[sl.key] === 'number' && isFinite(o[sl.key])) grp.obj[sl.key] = o[sl.key];
+      }
+    }
+  }
+  MUL = mulOf(level);
+  applyMul();
+  return true;
+}
+
 const STORE = 'spacetaxi.tune';
-/* Tallennus käsittelee pohjaa eikä tuloa. Muuten kentän kerroin kirjoittuisi
-   pohjaksi ja kerrottaisiin seuraavalla latauksella uudestaan päälle. */
-const tuneJSON = () => JSON.stringify(Object.assign({ gearSide }, BASE));
+/* Peli saa kirjoittaa vain config-kansioon ja vain JSONia. Rajaus on
+   palvelimella; tämä on vain se nimi jonka tämä peli on siellä valinnut. */
+const TUNE_FILE = 'config/tune.json';
+let localStamp = 0;                            // milloin selaimen kopio tallennettiin
+
+const tuneJSON = () => JSON.stringify(tuneAll(localStamp), null, 1);
 
 function applyTune(src) {
   let raw = src;
   if (typeof src === 'string') {
     try { raw = JSON.parse(src); } catch (e) { return false; }
   }
-  if (!raw || typeof raw !== 'object') return false;
-  let n = 0;
-  for (const k of Object.keys(DEFAULTS)) {
-    if (typeof raw[k] === 'number' && isFinite(raw[k])) { BASE[k] = raw[k]; n++; }
-  }
-  if (raw.gearSide === 'left' || raw.gearSide === 'right') { gearSide = raw.gearSide; layout(); n++; }
-  applyMul();
-  return n > 0;
+  return applyAll(raw);
 }
-function loadTune() { try { applyTune(localStorage.getItem(STORE) || ''); } catch (e) {} }
-function saveTune() { try { localStorage.setItem(STORE, tuneJSON()); } catch (e) {} }
+function loadTune() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (raw && applyAll(raw)) localStamp = +raw.stamp || 0;
+  } catch (e) {}
+}
+function saveTune() {
+  localStamp = Date.now();
+  try { localStorage.setItem(STORE, JSON.stringify(tuneAll(localStamp))); } catch (e) {}
+}
+
+/* Peliin tallennetut arvot. Ne ovat oletukset kaikille pelaajille, ja selaimen
+   paikalliset kokeilut voittavat vain jos ne ovat tiedostoa uudempia — muuten
+   vanha localStorage jyräisi juuri julkaistut oletukset, ja se vika näkyisi
+   vasta pelaajilla eikä koskaan tekijällä itsellään. */
+function loadGameTune() {
+  fetch(TUNE_FILE, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => {
+      if (!j || (+j.stamp || 0) < localStamp) return;
+      applyAll(j);
+      localStamp = +j.stamp || 0;
+      if (!panelEl.classList.contains('hidden')) buildPanel();
+    })
+    .catch(() => {});
+}
 
 let GEAR_BOX, MUTE_BOX, COG_BOX, FULL_BOX, HORN_BOX;
 function layout() {
@@ -167,6 +260,7 @@ function layout() {
 }
 layout();
 loadTune();
+loadGameTune();
 
 /* ------------------------------------------------------------------ kangas */
 let scale = 1, dpr = 1, lastVW = -1, lastVH = -1;
@@ -453,7 +547,7 @@ const api = () => ({ P, taxi, pads: PADS, walls: WALLS, t: runT, rand, say, leve
 function loadLevel(i) {
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   level = LEVELS[levelIndex];
-  MUL = Object.assign({}, level.mul);        // kentän kertoimet, säätimet muuttavat näitä
+  MUL = mulOf(level);                        // kentän kertoimet, säätimet muuttavat näitä
   applyMul();
   GATE = level.gate;
   WALLS = frameWalls(GATE).concat(level.walls || []);
@@ -1968,6 +2062,20 @@ function draw(v) {
 /* ------------------------------------------------------------ säätöpaneeli
    Paneeli on kehittäjän työkalu ja pysyy suomeksi. */
 
+/* Miksi tallennus ei onnistunut, ihmisen kielellä. Tuntematon syy näytetään
+   sellaisenaan, jottei uusi syy katoa tyhjään ruutuun. */
+const SAVE_FAIL = {
+  unframed: 'peli ei ole portaalin sivulla',
+  'not-owner': 'vain pelin tekijä voi tallentaa',
+  'bad-path': 'tiedostonimi ei kelpaa',
+  'bad-json': 'arvot eivät ole kelvollista JSONia',
+  'too-big': 'tiedosto on liian iso',
+  quota: 'pelin tila on täynnä',
+  timeout: 'portaali ei vastannut',
+  refused: 'portaali kieltäytyi',
+  failed: 'tuntematon virhe',
+};
+
 /* Käppyrä ryhmän alimmaksi. Piirtofunktio saa tyhjän ctx:n ja mitat eikä tiedä
    mistä sitä kutsutaan, joten kenttä voi julkaista omansa tietämättä mitään
    paneelista. Kuva päivittyy joka ruudulla niin kauan kuin paneeli on auki —
@@ -2211,7 +2319,8 @@ function buildPanel() {
   foot.append(
     pbutton('btn sm ghost', 'oletukset', () => {
       Object.assign(BASE, DEFAULTS);
-      MUL = Object.assign({}, level.mul);
+      delete MULS[level.name];
+      MUL = mulOf(level);
       gearSide = DEFAULT_SIDE; layout();
       applyMul();
       saveTune();
@@ -2249,6 +2358,32 @@ function buildPanel() {
         panelNote = 'arvot otettu käyttöön';
         buildPanel();
       } else note.textContent = 'ei kelvollista JSONia';
+    }),
+    /* Tallennus peliin kirjoittaa arvot pelin omaan tiedostoon draftissa,
+       jolloin julkaisu vie ne mukanaan oletuksiksi kaikille. Peli ei kirjoita
+       itse — se pyytää emosivulta, joka on kirjautunut ja jonka palvelinpuoli
+       tarkistaa omistajuuden. Siksi tämä toimii vain tekijän omalla sivulla,
+       ja siksi nappi kertoo sen ääneen kun se ei ole käytettävissä. */
+    pbutton('btn sm', 'tallenna peliin', () => {
+      const save = portalApi.savePortalFile;
+      if (typeof save !== 'function' || !portal.canWrite) {
+        note.textContent = 'tallennus peliin onnistuu vain omalta pelisivulta';
+        return;
+      }
+      note.textContent = 'tallennetaan…';
+      const body = JSON.stringify(tuneAll(Date.now()), null, 1);
+      /* Plugin ratkaisee lupauksen aina ja kertoo syyn tuloksessa — se ei heitä
+         eikä hylkää, joten tässä ei ole catchia eikä sellaista tarvita. */
+      Promise.resolve(save(TUNE_FILE, body)).then(res => {
+        if (res && res.saved) {
+          localStamp = JSON.parse(body).stamp;
+          try { localStorage.setItem(STORE, body); } catch (e) {}
+          note.textContent = 'tallennettu peliin — julkaise niin arvot lähtevät mukaan';
+        } else {
+          const why = (res && res.reason) || 'failed';
+          note.textContent = 'tallennus ei onnistunut: ' + (SAVE_FAIL[why] || why);
+        }
+      });
     }),
   );
   io.append(ta, ioButtons, note);
