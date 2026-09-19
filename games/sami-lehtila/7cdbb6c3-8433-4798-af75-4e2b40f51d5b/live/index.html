@@ -169,6 +169,7 @@
       <dt>vastasi</dt><dd id="p-answered">—</dd>
       <dt>lang</dt><dd id="p-lang">—</dd>
       <dt>debug</dt><dd id="p-debug">—</dd>
+      <dt>saa kirjoittaa</dt><dd id="p-canwrite">—</dd>
     </dl>
     <p style="margin:8px 0 0;display:flex;gap:6px">
       <button id="p-fi" type="button">suomi</button>
@@ -181,6 +182,23 @@
   </section>
 
   <section>
+    <h2>Kirjoitus</h2>
+    <p style="margin:0 0 8px;color:var(--muted)">
+      Peli saa tallentaa asetuksensa omaan <code>config/</code>-kansioonsa, mutta
+      vain tekijän omalla sivulla. Täällä julkaistulla sivulla oikea vastaus on
+      <b>not-owner</b> — se ei ole vika vaan se mitä pelaaja näkee.
+    </p>
+    <p style="margin:0 0 8px;display:flex;gap:6px;flex-wrap:wrap">
+      <button id="w-ok" type="button">config/ohjainkoe.json</button>
+      <button id="w-bad" type="button">kielletty polku</button>
+    </p>
+    <dl>
+      <dt>saved</dt><dd id="w-saved">—</dd>
+      <dt>reason</dt><dd id="w-reason">—</dd>
+    </dl>
+  </section>
+
+  <section>
     <h2>Loki</h2>
     <ol id="log" reversed></ol>
   </section>
@@ -190,8 +208,9 @@
 <script type="module">
 import { createGamepad, BUTTONS }
   from "https://plugins.game.bigbools.fi/gamepad/v1/index.js";
-import { portal, onPortal, setPortal }
+import * as portalEvents
   from "https://plugins.game.bigbools.fi/portal-events/v1/index.js";
+const { portal, onPortal, setPortal, savePortalFile } = portalEvents;
 
 const $ = (id) => document.getElementById(id);
 const fixed = (v, n = 3) => v.toFixed(n);
@@ -353,6 +372,45 @@ window.addEventListener("message", (e) => {
 });
 $("p-fi").addEventListener("click", () => log(`setPortal fi -> ${setPortal("lang", "fi")}`));
 $("p-en").addEventListener("click", () => log(`setPortal en -> ${setPortal("lang", "en")}`));
+
+// --- the writing half -------------------------------------------------------
+// savePortalFile arrives in portal-events 1.2.0. Until the v1 alias moves there
+// it is simply not here, and saying so plainly is more useful than hiding the
+// buttons — a reader wants to know which of the two they are looking at.
+const canWriteText = () => {
+  if (!savePortalFile) return "plugin ei tarjoa vielä savePortalFileä (1.2.0)";
+  if (portal.canWrite === undefined) return "plugin ei kerro (vanhempi kuin 1.2.0)";
+  return portal.canWrite ? "kyllä" : "ei — vain tekijän omalla sivulla";
+};
+const showCanWrite = () => {
+  $("p-canwrite").textContent = canWriteText();
+  $("p-canwrite").className = portal.canWrite ? "" : "warn";
+};
+showCanWrite();
+// Harmless against 1.1.0: the handler runs once with undefined and never again.
+onPortal("canWrite", showCanWrite);
+
+async function tryWrite(path) {
+  $("w-saved").textContent = "…";
+  $("w-reason").textContent = "";
+  if (!savePortalFile) {
+    $("w-saved").textContent = "ei käytettävissä";
+    $("w-saved").className = "warn";
+    $("w-reason").textContent = "plugin on vanhempi kuin 1.2.0";
+    log(`savePortalFile puuttuu — ${path} jäi kirjoittamatta`);
+    return;
+  }
+  const body = JSON.stringify({ kirjoitettu: new Date().toISOString(), lähde: "ohjainkoe" });
+  const { saved, reason } = await savePortalFile(path, body);
+  $("w-saved").textContent = saved ? "kyllä" : "ei";
+  $("w-saved").className = saved ? "" : "warn";
+  $("w-reason").textContent = reason ?? "—";
+  log(`savePortalFile ${path} -> saved=${saved} reason=${reason ?? "null"}`);
+  showCanWrite();
+}
+$("w-ok").addEventListener("click", () => tryWrite("config/ohjainkoe.json"));
+// Proves the limit lives on the server and not only in the game's own code.
+$("w-bad").addEventListener("click", () => tryWrite("js/ohjainkoe.js"));
 
 // A document without focus is shown no controllers at all, so say so rather
 // than leaving the page looking broken.
