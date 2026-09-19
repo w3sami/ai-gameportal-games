@@ -125,7 +125,7 @@ const STR = {
     'lost.hint': 'Pehmeä lasku maksaa itsensä takaisin tippinä.',
     'card.keys': 'Näppäimet: <kbd>enter</kbd> aja &middot; <kbd>F</kbd> koko ruutu &middot; <kbd>P</kbd> säädöt',
     'pad.none': 'Ohjainta ei näy. Paina ohjaimen nappia — selain piilottaa ohjaimen siihen asti, ja myös silloin kun tämä ikkuna ei ole päällimmäisenä.',
-    'pad.on': 'Ohjain: {id}',
+    'pad.on': 'Ohjain: {id} · mappaus {map} · sauva {x} {y} · viimeksi painettu {btn} · ruutuja {n}',
   },
 
   en: {
@@ -192,7 +192,7 @@ const STR = {
     'lost.hint': 'A soft landing pays for itself in tips.',
     'card.keys': 'Keys: <kbd>enter</kbd> drive &middot; <kbd>F</kbd> fullscreen &middot; <kbd>P</kbd> tuning',
     'pad.none': 'No controller visible. Press a button on it — the browser hides a controller until then, and also whenever this window is not the focused one.',
-    'pad.on': 'Controller: {id}',
+    'pad.on': 'Controller: {id} · mapping {map} · stick {x} {y} · last pressed {btn} · frames {n}',
   },
 };
 
