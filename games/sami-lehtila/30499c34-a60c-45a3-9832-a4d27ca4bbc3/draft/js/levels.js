@@ -140,7 +140,11 @@ export const LEVELS = [
        puuskassa lähestyminen kannattaa jättää väliin ja odottaa tyventä.
 
        Kolari nollaa kierroksen (ks. stormUpdate), joten uusi taksi saa aina
-       neljä sekuntia tyventä ennen ensimmäistä puuskaa. */
+       neljä sekuntia tyventä ennen ensimmäistä puuskaa.
+
+       Tikkaat alkavat oikealta, koska vasemman alanurkan peittävät tööttiä ja
+       laskutelinettä ohjaavat napit (y 778…964): vasemmalle jää vain kaksi
+       puomia, molemmat nappien yläpuolelle. */
     name: 'Stormport',
     glow: '#9db4ff',
     sky: ['#070c17', '#141f33', '#22374e', '#31536a'],
@@ -148,11 +152,11 @@ export const LEVELS = [
     start: 3,
     firstFrom: 2,
     pads: [
-      { id: 1, x: 16, y: 300, w: 170, h: 18 },
-      { id: 2, x: 534, y: 470, w: 170, h: 18 },
-      { id: 3, x: 16, y: 640, w: 170, h: 18 },
-      { id: 4, x: 534, y: 810, w: 170, h: 18 },
-      { id: 5, x: 16, y: 940, w: 170, h: 18 },
+      { id: 1, x: 534, y: 300, w: 170, h: 18 },
+      { id: 2, x: 16, y: 450, w: 170, h: 18 },
+      { id: 3, x: 534, y: 600, w: 170, h: 18 },
+      { id: 4, x: 16, y: 740, w: 170, h: 18 },
+      { id: 5, x: 534, y: 900, w: 170, h: 18 },
       { id: 0, x: 275, y: 960, w: 170, h: 18, fuel: true },
     ],
     init: stormInit,
@@ -579,7 +583,7 @@ function stormBack(ctx, api) {
   sea(ctx, time, w);
   for (const p of api.pads) {
     if (p.fuel) barge(ctx, p, time);
-    else if (p.y > 900) quay(ctx, p, w, time);
+    else if (p.y >= 880) quay(ctx, p, w, time);
     else boom(ctx, p, w, time);
   }
   rain(ctx, time, w, 1, 980, 30);              // lähempi sade rakenteiden eteen
@@ -595,14 +599,17 @@ function stormBack(ctx, api) {
 function lighthouse(ctx, time) {
   const x = 228, top = 706, lampY = top - 13;
   ctx.save();
-  ctx.globalAlpha = 0.09;
-  ctx.fillStyle = '#ffe6b0';
+  const beam = ctx.createRadialGradient(x, lampY, 0, x, lampY, 820);
+  beam.addColorStop(0, 'rgba(255,230,176,.14)');
+  beam.addColorStop(0.45, 'rgba(255,230,176,.05)');
+  beam.addColorStop(1, 'rgba(255,230,176,0)');
+  ctx.fillStyle = beam;
   for (const k of [0, Math.PI]) {
-    const a = time * 0.5 + k, s = 0.15;
+    const a = time * 0.5 + k, s = 0.13;
     ctx.beginPath();
     ctx.moveTo(x, lampY);
-    ctx.lineTo(x + Math.cos(a - s) * 900, lampY + Math.sin(a - s) * 900);
-    ctx.lineTo(x + Math.cos(a + s) * 900, lampY + Math.sin(a + s) * 900);
+    ctx.lineTo(x + Math.cos(a - s) * 820, lampY + Math.sin(a - s) * 820);
+    ctx.lineTo(x + Math.cos(a + s) * 820, lampY + Math.sin(a + s) * 820);
     ctx.fill();
   }
   ctx.globalAlpha = 0.3;
@@ -723,17 +730,19 @@ function boom(ctx, p, w, time) {
 /** Alarivin laituri: betonia veteen asti ja renkaasta tehty lepuuttaja, joka
     heiluu kuilun puoleisessa reunassa. */
 function quay(ctx, p, w, time) {
-  const y = p.y + p.h, edge = p.x + p.w;
+  const y = p.y + p.h;
+  const edge = p.x < W / 2 ? p.x + p.w : p.x;     // kuilun puoleinen reuna
+  const d = p.x < W / 2 ? -1 : 1;
   ctx.fillStyle = '#2b3547';
   ctx.fillRect(p.x, y, p.w, SEA - y + 6);
   ctx.strokeStyle = 'rgba(12,18,30,.55)'; ctx.lineWidth = 2;
   ctx.beginPath();
-  for (let yy = y + 16; yy < SEA; yy += 16) { ctx.moveTo(p.x, yy); ctx.lineTo(edge, yy); }
-  for (let xx = p.x + 30; xx < edge; xx += 34) { ctx.moveTo(xx, y); ctx.lineTo(xx, SEA); }
+  for (let yy = y + 16; yy < SEA; yy += 16) { ctx.moveTo(p.x, yy); ctx.lineTo(p.x + p.w, yy); }
+  for (let xx = p.x + 30; xx < p.x + p.w; xx += 34) { ctx.moveTo(xx, y); ctx.lineTo(xx, SEA); }
   ctx.stroke();
 
   const a = w.dir * w.s * 0.5 + Math.sin(time * 1.3) * 0.06;
-  const cx = edge - 6, cy = y + 18;
+  const cx = edge + d * 6, cy = y + 18;
   const ex = cx + Math.sin(a) * 46, ey = cy + Math.cos(a) * 46;
   ctx.strokeStyle = '#6b5a3f'; ctx.lineWidth = 3;
   ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
@@ -772,7 +781,7 @@ function barge(ctx, p, time) {
     Tyvenellä pussi roikkuu suorana alas, puuskassa se nousee vaakaan ja
     osoittaa siihen suuntaan johon taksia viedään. */
 function windsock(ctx, w, time) {
-  const mx = 140, my = 104, L = 54 + w.s * 58;
+  const mx = 140, my = 118, L = 54 + w.s * 58;
   ctx.save();
   ctx.strokeStyle = '#46546c'; ctx.lineWidth = 5; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(mx, my - 12); ctx.lineTo(mx, my + 158); ctx.stroke();
