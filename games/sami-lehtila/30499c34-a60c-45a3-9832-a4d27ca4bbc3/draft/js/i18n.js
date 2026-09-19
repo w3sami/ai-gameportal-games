@@ -79,7 +79,7 @@ const STR = {
     'msg.up': 'Ylös, kiitos!',
     'msg.thanks': 'Kiitos! {fare} € (tippi {tip} €)',
     'msg.oops': 'Hups.',
-    'msg.dry': 'Tankki kuiva!',
+    'msg.dry': 'Tankki kuiva — enää sykäyksiä!',
     'msg.coming': 'Hei! Tulossa ollaan.',
 
     'say.hey': 'Hei taksi',
@@ -152,7 +152,7 @@ const STR = {
     'msg.up': 'Up, please!',
     'msg.thanks': 'Thanks! {fare} € (tip {tip} €)',
     'msg.oops': 'Oops.',
-    'msg.dry': 'Tank is dry!',
+    'msg.dry': 'Tank is dry — sputtering only!',
     'msg.coming': 'Hey! On my way.',
 
     'say.hey': 'Hey taxi',
