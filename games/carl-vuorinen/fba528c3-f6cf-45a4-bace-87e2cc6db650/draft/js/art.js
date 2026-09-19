@@ -28,7 +28,7 @@ const angular = (ctx) => { ctx.lineJoin = 'miter'; ctx.lineCap = 'square'; ctx.m
 // screen centre the pedestal's top face reads as a receding landing deck rather than a lid over the rocket.
 function drawPad(x,p,col,k){
   if (k !== undefined){ x.fillStyle = shade(col,k); x.fillRect(p.x,p.y,p.w,18); return; }
-  x.fillStyle = '#4a4f57'; x.fillRect(p.x-6,p.y,p.w+12,12);
+  x.fillStyle = p.base === 'bark' ? '#3a2816' : p.base === 'leaf' ? '#2a4d28' : '#4a4f57'; x.fillRect(p.x-6,p.y,p.w+12,12);
   x.fillStyle = col; x.fillRect(p.x,p.y,p.w,6);
   x.fillStyle = 'rgba(255,255,255,.45)'; for (let i=0;i<5;i++) x.fillRect(p.x+8+i*(p.w-16)/4-2, p.y+8, 4, 2);
 }
@@ -61,12 +61,14 @@ function leafDetail(t, items, pal, r){
   }
 }
 function solidGroups(pal){
-  const gs = [ {col:pal.rock, polys:G.rocks.map(rk => rk.pts), rects:G.blocks, walls:L.walls} ];
+  const blocksOf = kind => G.blocks.filter((b,i) => (G.blockKinds ? G.blockKinds[i] : 'rock') === kind);   // pad pedestals: rock, or wood / leaves where rock makes no sense
+  const gs = [ {col:pal.rock, polys:G.rocks.map(rk => rk.pts), rects:blocksOf('rock'), walls:L.walls} ];
   // branches before trunks, so a trunk's fill covers the branch outline where the two join
   for (const items of [G.branches, G.trunks]) if (items.length) gs.push({col:pal.bark, polys:items.map(it => it.pts), detail:(t,r) => barkLines(t, items, r)});
+  if (blocksOf('bark').length) gs.push({col:pal.bark, polys:[], rects:blocksOf('bark')});
   for (let tone=0; tone<4; tone++){
     const fl = G.foliage.filter(f => f.tone === tone);
-    if (fl.length) gs.push({col:pal.leaf[tone], polys:fl.map(f => f.pts), edgeK:0.4, detail:(t,r) => leafDetail(t, fl, pal, r)});
+    if (fl.length || (tone === 1 && blocksOf('leaf').length)) gs.push({col:pal.leaf[tone], polys:fl.map(f => f.pts), rects:tone === 1 ? blocksOf('leaf') : [], edgeK:0.4, detail:(t,r) => leafDetail(t, fl, pal, r)});
   }
   return gs.filter(g => g.polys.length || (g.rects&&g.rects.length) || (g.walls&&g.walls.length));
 }
