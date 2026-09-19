@@ -19,7 +19,8 @@
  * paikalleen ja peli käynnistyy READY–GO:lla. Kentän lopussa on välianimaatio:
  * nousu tilinpäätöksineen ja lasku seuraavan kentän nimen kanssa. Viimeisen
  * kentän jälkeen tulee pelkkä nousu koko vuoron tilastoilla, ja loppukortin
- * takana lentää hyperavaruus (js/hyperspace.js).
+ * takana lentää hyperavaruus — tai, jos taksit loppuivat, valuvat tähdet
+ * (js/hyperspace.js).
  *
  * Tekstit ja puhe tulevat js/i18n.js:stä. Kieli päätellään ?lang-parametrista,
  * localStoragesta tai selaimen kielestä, ja suomea puhutaan vain jos laitteelta
@@ -342,10 +343,16 @@ const sfx = {
     tone(1047, 0.30, { type: 'triangle', gain: 0.14, delay: 0.34 });
     tone(1319, 0.5, { type: 'triangle', gain: 0.12, delay: 0.5 });
   },
-  /** Hyppy hyperavaruuteen loppukortin taustalle. */
+  /** Hyppy hyperavaruuteen: vuoro suoritettu. */
   warp() {
     noise(1.6, 0.10, 180, 3000);
     tone(70, 1.4, { type: 'sawtooth', gain: 0.07, to: 520 });
+  },
+  /** Taksit loppu: moottorit sammuvat ja jäljelle jää hiljaisuus. */
+  fade() {
+    tone(220, 1.8, { type: 'sine', gain: 0.08, to: 55 });
+    tone(165, 2.2, { type: 'sine', gain: 0.06, to: 41, delay: 0.3 });
+    noise(1.2, 0.05, 400, 60);
   },
 };
 
@@ -981,14 +988,16 @@ function buyTaxis(count, price) {
   card.classList.add('hidden');
 }
 
-/* Vuoro päättyy: kortin taakse hyperavaruus, koska pysäytyskuva kentästä
-   näyttäisi siltä että peli jäi jumiin. */
+/* Vuoro päättyy. Kortin taakse tulee tausta, koska pysäytyskuva kentästä
+   näyttäisi siltä että peli jäi jumiin — ja tausta kertoo lopputuloksen jo
+   ennen tekstiä: suoritettu vuoro lähtee hyperavaruuteen, loppuneet taksit
+   jäävät valuvien tähtien ja sammuneiden värien alle. */
 function gameOver(won) {
   state = OVER;
   jetLevel(0);
   money = Math.round(money);
-  hyper = createHyperspace({ W, H, rand });
-  sfx.warp();
+  hyper = createHyperspace({ W, H, rand, mode: won ? 'warp' : 'drift' });
+  if (won) sfx.warp(); else sfx.fade();
   showCard(won ? overWon() : overLost(), money, {
     cleared: won, seconds: runT, level: levelIndex + 1,
   });

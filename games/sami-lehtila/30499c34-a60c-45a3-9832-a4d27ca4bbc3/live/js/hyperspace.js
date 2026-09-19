@@ -1,20 +1,28 @@
-/* Hyperavaruus: vuoron loppukortin tausta.
+/* Loppukortin taustat.
  *
- * Tähdet lähtevät ruudun keskeltä ja kiihtyvät ulospäin — mitä kauempana, sitä
- * pidempi viiru ja kirkkaampi väri, kuten valo venyisi ohi. Kiihtyvyys on
- * eksponentiaalinen (r += r * k), koska lineaarinen liike näyttää sateelta eikä
- * ylivalonnopeudelta, ja koko kuva kiihtyy vielä erikseen pariin sekuntiin,
- * jotta kortin ilmestyminen tuntuu lähdöltä eikä pysähtymiseltä.
+ * Kaksi tunnelmaa samasta tähtitaivaasta:
  *
- * Tämä ei tiedä pelistä mitään: sille annetaan ruudun mitat ja se piirtää.
+ *   warp  — vuoro suoritettu. Tähdet lähtevät keskeltä ja kiihtyvät ulospäin
+ *           eksponentiaalisesti (r += r * k), koska lineaarinen liike näyttää
+ *           sateelta eikä ylivalonnopeudelta. Koko kuva kiihtyy vielä erikseen
+ *           pariin sekuntiin, jotta kortin ilmestyminen tuntuu lähdöltä.
+ *   drift — taksit loppu. Ei lähtöä minnekään: tähdet valuvat hitaasti alas,
+ *           värit ovat sammuneet ja alareunassa hehkuu tumma punerrus.
+ *
+ * Kumpikaan ei tiedä pelistä mitään: sille annetaan ruudun mitat ja se piirtää.
  */
 export function createHyperspace(cfg) {
-  const { W, H, rand } = cfg;
+  const { W, H, rand, mode = 'warp' } = cfg;
+  return mode === 'drift' ? drift(W, H, rand) : warp(W, H, rand);
+}
+
+/* ------------------------------------------------------------------- warp */
+function warp(W, H, rand) {
   const cx = W / 2, cy = H / 2;
   const maxR = Math.hypot(cx, cy) + 80;
   const COUNT = 260;
 
-  const spawn = (near) => ({
+  const spawn = near => ({
     a: rand(0, Math.PI * 2),
     r: near ? rand(2, 24) : rand(6, maxR * 0.95),
     v: rand(0.8, 2.3),
@@ -28,11 +36,11 @@ export function createHyperspace(cfg) {
   return {
     update(dt) {
       t += dt;
-      const warp = 0.3 + Math.min(1, t / 1.8) * 1.7;      // kiihtyy lähdössä
+      const w = 0.3 + Math.min(1, t / 1.8) * 1.7;
       for (let i = 0; i < stars.length; i++) {
         const s = stars[i];
         const prev = s.r;
-        s.r += (s.r * 1.5 + 26) * s.v * warp * dt;
+        s.r += (s.r * 1.5 + 26) * s.v * w * dt;
         s.len = s.r - prev;
         if (s.r > maxR) stars[i] = spawn(true);
       }
@@ -67,6 +75,49 @@ export function createHyperspace(cfg) {
       core.addColorStop(1, 'rgba(120,180,255,0)');
       ctx.fillStyle = core;
       ctx.beginPath(); ctx.arc(cx, cy, 120, 0, 6.3); ctx.fill();
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ drift */
+function drift(W, H, rand) {
+  const stars = Array.from({ length: 130 }, () => ({
+    x: rand(0, W), y: rand(0, H),
+    r: rand(0.5, 2.1), v: rand(5, 26),
+    a: rand(0.06, 0.34), p: rand(0, 6.3),
+  }));
+  let t = 0;
+
+  return {
+    update(dt) {
+      t += dt;
+      for (const s of stars) {
+        s.y += s.v * dt;
+        if (s.y > H + 3) { s.y = -3; s.x = rand(0, W); }
+      }
+    },
+
+    draw(ctx) {
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, '#0a0c16');
+      bg.addColorStop(0.6, '#07080f');
+      bg.addColorStop(1, '#040409');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      for (const s of stars) {
+        ctx.globalAlpha = s.a * (0.7 + Math.sin(t * 0.7 + s.p) * 0.3);
+        ctx.fillStyle = '#6b7ba0';
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.3); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // sammuneen vuoron hehku alareunassa
+      const g = ctx.createLinearGradient(0, H * 0.55, 0, H);
+      g.addColorStop(0, 'rgba(70,22,38,0)');
+      g.addColorStop(1, 'rgba(70,22,38,.55)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, H * 0.55, W, H * 0.45);
     },
   };
 }
