@@ -1,5 +1,6 @@
 'use strict';
-// Level data and derived geometry. Shapes are cut out of solid rock; rocks, spikes and pad blocks are put back.
+// Level data and derived geometry. Shapes are cut out of the solid mass; rocks, spikes, trunks, foliage and pad blocks are put back.
+// Optional per level: theme ('cave' default | 'jungle'), groundY / canopyY (jungle terrain bands), trunks, foliage, spikes[].kind='branch'.
 const LEVELS = [
   {name:'Lift-off', w:1600, h:1000,
    rooms:[{x:800,y:540,rx:620,ry:340,wob:0.08,seed:21}],
@@ -120,6 +121,18 @@ const LEVELS = [
    rocks:[{x:1200,y:2100,r:55,seed:238}, {x:1450,y:2250,r:45,seed:239}, {x:2100,y:1450,r:50,seed:240}, {x:2300,y:1600,r:40,seed:241}, {x:3300,y:1050,r:60,seed:242}, {x:3550,y:1200,r:50,seed:243}, {x:1250,y:1000,r:38,seed:244}, {x:2450,y:480,r:40,seed:245}],
    hazards:[{x:1100,y:1760,tx:1105,ty:1930,w:80,seed:246}, {x:2000,y:1160,tx:2005,ty:1330,w:80,seed:247}, {x:2300,y:1170,tx:2295,ty:1330,w:80,seed:248}, {x:3150,y:650,tx:3155,ty:880,w:90,seed:249}, {x:3500,y:720,tx:3495,ty:900,w:80,seed:250}, {x:2600,y:200,tx:2605,ty:360,w:80,seed:251}], walls:[],
    pads:{start:{x:320,y:2490,w:120,h:100}, target:{x:3740,y:2390,w:120,h:100}}},
+  {name:'Canopy', theme:'jungle', w:2400, h:1400, groundY:1080, canopyY:400,
+   rooms:[{x:1200,y:760,rx:1060,ry:480,wob:0.08,seed:261}],
+   corridors:[],
+   rocks:[{x:1250,y:1240,r:90,ry:70,wob:0.2,seed:262}],
+   spikes:[{x:130,y:700,tx:340,ty:730,w:120,seed:264}, {x:915,y:900,tx:1140,ty:850,w:56,seed:265,kind:'branch'}, {x:1585,y:900,tx:1810,ty:860,w:52,seed:266,kind:'branch'}, {x:905,y:1050,tx:720,ty:1090,w:48,seed:267,kind:'branch'}],
+   trunks:[{x:900,y1:1260,y0:700,lean:40,w:120,seed:268}, {x:1600,y1:1260,y0:640,lean:-30,w:96,seed:269}],
+   foliage:[{x:950,y:640,r:200,ry:120,seed:270,tone:1}, {x:880,y:600,r:130,ry:85,seed:279,tone:2}, {x:1050,y:690,r:110,ry:70,seed:280,tone:0}, {x:1150,y:840,r:100,ry:60,seed:271,tone:2},
+            {x:1560,y:560,r:190,ry:120,seed:272,tone:0}, {x:1630,y:510,r:120,ry:80,seed:281,tone:1}, {x:1480,y:610,r:100,ry:65,seed:282,tone:2}, {x:1820,y:850,r:95,ry:58,seed:273,tone:1},
+            {x:300,y:280,r:220,ry:110,seed:275,tone:1}, {x:1250,y:300,r:150,ry:90,seed:276,tone:2}, {x:1180,y:270,r:100,ry:70,seed:283,tone:0}, {x:2050,y:320,r:240,ry:120,seed:277,tone:2}],
+   hazards:[{x:1580,y:800,tx:1380,ty:860,w:46,seed:278,kind:'branch'}],
+   walls:[],
+   pads:{start:{x:300,y:1150,w:120,h:100}, target:{x:1950,y:1120,w:120,h:100}}},
 ];
 let L = LEVELS[0], PADS, G, ZONES;
 // Corridors are chains of overlapping blobs, so tunnels vary in width and never run dead straight.
@@ -143,13 +156,27 @@ function spikePts(s){
   const j = (r()-0.5)*s.w*0.2;
   return a.concat([[s.tx+nx*j+ux*s.w*0.08, s.ty+ny*j+uy*s.w*0.08]], b.reverse());
 }
+// Trunks: a tapered, slightly leaning column from a base buried in the ground at (x,y1) to a top at (x+lean,y0),
+// with a flared root. The top should sit inside a foliage blob. Straight edges only. Solids, like spikes.
+function trunkPts(t){
+  const r = rng(t.seed*2917+9), ax = t.x, ay = t.y1, bx = t.x+(t.lean||0), by = t.y0, dx = bx-ax, dy = by-ay, len = Math.hypot(dx,dy), ux = dx/len, uy = dy/len, nx = -uy, ny = ux;
+  const n = 3+Math.floor(len/130), taper = 0.55, a = [], b = [];
+  for (let i=0;i<=n;i++){
+    const tt = i/n, flare = i === 0 ? 1.3 : 1, hw = t.w/2*(1-tt*taper)*flare*(0.88+r()*0.24), px = ax+ux*len*tt, py = ay+uy*len*tt;
+    a.push([px+nx*hw, py+ny*hw]); b.push([px-nx*hw, py-ny*hw]);
+  }
+  return {pts:a.concat(b.reverse()), ax, ay, bx, by, w:t.w, taper};
+}
 function setGeom(){
   PADS = Object.values(L.pads);
   const rooms = L.rooms.map(r => polyPts(r.x,r.y,r.rx,r.ry,r.wob,r.seed));
   G = {
     rooms,
     caves: rooms.concat(...L.corridors.map(corridorBlobs)),
-    rocks: L.rocks.map(r => ({cx:r.x,cy:r.y,r:r.r,pts:polyPts(r.x,r.y,r.r,r.ry||r.r,r.wob||0.18,r.seed)})).concat((L.spikes||[]).map(sp => ({pts:spikePts(sp)}))),
+    rocks: L.rocks.map(r => ({cx:r.x,cy:r.y,r:r.r,pts:polyPts(r.x,r.y,r.r,r.ry||r.r,r.wob||0.18,r.seed)})).concat((L.spikes||[]).filter(sp => sp.kind !== 'branch').map(sp => ({pts:spikePts(sp)}))),
+    trunks: (L.trunks||[]).map(trunkPts),
+    branches: (L.spikes||[]).filter(sp => sp.kind === 'branch').map(sp => ({pts:spikePts(sp), ax:sp.x, ay:sp.y, bx:sp.tx, by:sp.ty, w:sp.w, taper:0.85})),
+    foliage: (L.foliage||[]).map(f => ({x:f.x, y:f.y, r:f.r, ry:f.ry||f.r, tone:f.tone||0, seed:f.seed, pts:polyPts(f.x,f.y,f.r,f.ry||f.r,0.22,f.seed)})),
     clear: PADS.map(p => [p.x-34, p.y-190, p.w+68, 190]),
     blocks: PADS.map(p => [p.x-14, p.y, p.w+28, p.h||100]),
   };
