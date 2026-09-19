@@ -97,7 +97,7 @@ const numbered = () => PADS.filter(p => !p.fuel);
 
 const DEFAULTS = {
   grav: 250, thrust: 920,
-  landVY: 215, landVX: 200, softVY: 50,
+  landVY: 215, landVX: 200,
   bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62,
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
@@ -1000,12 +1000,11 @@ function touchdown(pad, b) {
     return;
   }
 
-  const soft = t2.vy;
   t2.y = pad.y - (TH / 2 + GEAR * t2.gear);
   t2.vx = 0; t2.vy = 0; t2.landed = pad; t2.gearWant = true;
   bounces = 0;
   sfx.land();
-  onLanded(pad, soft);
+  onLanded(pad);
 }
 
 /* --------------------------------------------------------- keikkalogiikka */
@@ -1021,12 +1020,15 @@ function askForPad() {
   sfx.pickup();
 }
 
-function onLanded(pad, softness) {
+function onLanded(pad) {
   if (!job) return;
 
   if (job.phase === 'aboard' && pad.id === job.to) {
-    const mult = softness < P.softVY ? 1 : softness < P.landVY * 0.75 ? 0.6 : 0.25;
-    const tip = Math.round(P.tip * tipMul() * tipLeft() * mult);
+    /* Tippi on kiinni vain ajasta. Laskun pehmeys ei enää kerro sitä alas:
+       kova lasku rankaisee jo itsessään, koska pomppu vie sekunteja ja
+       sekunnit tippiä, eikä kaksi rangaistusta samasta asiasta houkuta
+       ajamaan lujaa — mitä peli nimenomaan hakee. */
+    const tip = tipNow();
     const fare = P.fare + tip;
     const kind = job.kind;
     money += fare;
@@ -1147,12 +1149,14 @@ function mixHex(a, b, u) {
   return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
 }
 
-/** Jäljellä oleva tippi, 0…1. Sama kaava kassanäytössä ja maksussa. */
+/** Jäljellä oleva tippi, 0…1. */
 const tipLeft = () => Math.max(0, 1 - job.t / P.tipTime);
 
-const fareNow = () => job && job.phase === 'aboard'
-  ? P.fare + Math.round(P.tip * tipMul() * tipLeft())
-  : 0;
+/** Tippi juuri nyt. Yksi kaava, jota sekä kassanäyttö että maksu lukevat:
+    mittari lupaa tasan sen mitä perillä maksetaan. */
+const tipNow = () => Math.round(P.tip * tipMul() * tipLeft());
+
+const fareNow = () => job && job.phase === 'aboard' ? P.fare + tipNow() : 0;
 
 const targetId = () => {
   if (!job) return null;
@@ -1373,7 +1377,7 @@ function finish() {
   let paid = P.exitBonus;
   if (job && job.phase === 'aboard') {
     if (nextIndex === null) {
-      paid += P.fare + Math.round(P.tip * tipMul() * tipLeft());
+      paid += P.fare + tipNow();
       speakLine('thanks', job.kind);
     } else {
       carried = { kind: job.kind };
