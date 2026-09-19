@@ -30,6 +30,7 @@
  * kielen, gate-test.html on luukun oma säätösivu.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
+import { createGamepad } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
 import { liftFor, bounceNorm } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
@@ -594,6 +595,51 @@ const stick = createJoystick({
 });
 stick.gain = P.stick;
 
+/* Ohjain. keys: false, koska peli lukee näppäimistön jo itse — plugin lukisi
+   sen toiseen kertaan ja teline kääntyisi kahdesti yhdestä välilyönnistä.
+   Sauvalle ei anneta gainia: kosketussauvan herkkyyskerroin on siellä siksi
+   että peukalon matka on lyhyt, eikä oikea sauva tarvitse sitä.
+
+   Napit ovat eri asioita sen mukaan näkyykö kortti. Kortti ja peli eivät ole
+   koskaan yhtä aikaa esillä, joten sama nappi saa olla kummassakin eri asia:
+   A on kortilla "aja" ja pelissä teline, B kortilla "lopeta" ja pelissä töötti. */
+const gamepad = createGamepad({
+  keys: false,
+  actions: {
+    gear:  ['A', 'LB', 'RB'],
+    horn:  ['B', 'X'],
+    sound: ['Back'],
+    go:    ['Start', 'A'],
+    fleet: ['Y'],
+    quit:  ['B'],
+  },
+});
+
+/* Kerran per ruutu, ennen kuin mitään kysytään: pressed on tämän ja edellisen
+   kutsun erotus. Kutsutaan myös korttiruuduissa, jotta vuoron saa käyntiin
+   ohjaimella — ja jotta ohjain ylipäätään tulee näkyviin, sillä selain
+   paljastaa sen vasta kun jotain on painettu. */
+function padInput() {
+  gamepad.poll();
+
+  if (!card.classList.contains('hidden')) {
+    const click = sel => {
+      const b = card.querySelector(sel);
+      if (!b) return false;
+      b.click();
+      return true;
+    };
+    if (gamepad.pressed('go') && (click('#go') || click('#buy'))) return;
+    if (gamepad.pressed('fleet') && click('#fleet')) return;
+    if (gamepad.pressed('quit') && click('#end')) return;
+    return;
+  }
+
+  if (gamepad.pressed('sound')) { toggleMute(); return; }
+  if (gamepad.pressed('horn')) { honk(); return; }
+  if (gamepad.pressed('gear')) toggleGear();
+}
+
 function inputVector() {
   const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
   const ky = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
@@ -601,6 +647,8 @@ function inputVector() {
   if (kx || ky) {
     const l = Math.hypot(kx, ky) || 1;
     v = { x: kx / l, y: ky / l };
+  } else if (gamepad.x || gamepad.y) {
+    v = { x: gamepad.x, y: gamepad.y };       // plugin lupaa jo vektorin <= 1
   } else if (stick.active) {
     let x = stick.x * stick.gain, y = stick.y * stick.gain;
     const l = Math.hypot(x, y);
@@ -658,6 +706,7 @@ function crash() {
   jetLevel(0);
   if (SPEAKS) { try { speechSynthesis.cancel(); } catch (e) {} }
   sfx.crash();
+  gamepad.rumble({ duration: 260, strong: 0.85, weak: 0.45 });
 }
 
 function touchdown(pad, b) {
@@ -676,6 +725,9 @@ function touchdown(pad, b) {
     t2.vx *= P.bounceKeep;
     bounces = Math.min(bounces + 1, 3);
     sfx.bounce(bounces);
+    /* Tärinä on lisä sen päälle mitä peli jo kertoo äänellä ja valolistalla,
+       ei ainoa tapa kertoa se: useimmissa ohjaimissa ei ole moottoreita. */
+    gamepad.rumble({ duration: 90, strong: 0.18 + bounces * 0.14, weak: 0.1 });
     return;
   }
 
@@ -2009,6 +2061,7 @@ function loop(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   resize();
+  padInput();
 
   if (state === CUT) {
     cut.update(dt);
