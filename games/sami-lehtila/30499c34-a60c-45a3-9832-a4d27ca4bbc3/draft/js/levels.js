@@ -119,6 +119,46 @@ export const LEVELS = [
     ],
     drawBack: funfairBack,
   },
+  {
+    /* Myrskysatama. Kenttä on porraskäytävä: viisi 170 px puomia vuorotellen
+       vasemmassa ja oikeassa seinässä, ja keskelle jää 348 px leveä kuilu joka
+       on auki katon luukulta bensalautalle asti. Alustat eivät liiku — tässä
+       kentässä liikkuu taksi.
+
+       Sivutuuli hengittää kierroksissa: tyven 4,0 s, nouseva puhuri 2,2 s,
+       tasainen puuska 2,6 s ja laantuminen 1,8 s, ja suunta vaihtuu joka
+       kierroksella. Tuulipussi lukee tuulta WIND.lead sekuntia etuajassa, eli
+       se on ehtinyt nousta tiukalle ennen kuin taksiin osuu mitään; nostureiden
+       koukut ja laiturin lepuuttaja kertovat saman siellä missä laskeudutaan.
+       Puhurin alku välähtää lisäksi salamana.
+
+       Huippuvoima 120 px/s² on 13 % suuttimen työnnöstä, ja vähän pitääkin
+       olla: lentäessä sen korjaa huomaamatta. Oikeasti vaarallinen se on vain
+       laskuteline alhaalla, jolloin sivusuuttimet eivät toimi lainkaan — siksi
+       puuska on lyhyt ja tyven on kierroksen pisin osa. Puomit ovat kiinni
+       seinässä, joten alustan ulkopää on umpiseinää: ulospäin puhaltavassa
+       puuskassa lähestyminen kannattaa jättää väliin ja odottaa tyventä.
+
+       Kolari nollaa kierroksen (ks. stormUpdate), joten uusi taksi saa aina
+       neljä sekuntia tyventä ennen ensimmäistä puuskaa. */
+    name: 'Stormport',
+    glow: '#9db4ff',
+    sky: ['#070c17', '#141f33', '#22374e', '#31536a'],
+    gate: HATCH,
+    start: 3,
+    firstFrom: 2,
+    pads: [
+      { id: 1, x: 16, y: 300, w: 170, h: 18 },
+      { id: 2, x: 534, y: 470, w: 170, h: 18 },
+      { id: 3, x: 16, y: 640, w: 170, h: 18 },
+      { id: 4, x: 534, y: 810, w: 170, h: 18 },
+      { id: 5, x: 16, y: 940, w: 170, h: 18 },
+      { id: 0, x: 275, y: 960, w: 170, h: 18, fuel: true },
+    ],
+    init: stormInit,
+    update: stormUpdate,
+    drawBack: stormBack,
+  },
 ];
 
 /* ---------------------------------------------------------- huvipuiston kulissit
@@ -439,3 +479,352 @@ const RIDES = {
   5: { draw: drawFlowerBed,  flip: false },
   0: { draw: drawBanana,     flip: true },
 };
+
+/* ------------------------------------------------------------- myrskysatama
+
+   Kentän mekaniikka on yhdessä rivissä: airborne-taksiin lisätään joka ruudulla
+   sivukiihtyvyyttä. Kaikki muu täällä on sitä, että pelaaja näkee sen tulevan.
+
+   Tuuli on jaksollinen, ei satunnainen — sen voi oppia. Yksi kierros on
+   tyven, nouseva puhuri, tasainen puuska ja laantuminen, ja suunta vaihtuu
+   joka kierroksella. Tuulipussi piirretään tuulella joka on WIND.lead
+   sekuntia edellä, joten se roikkuu tyvenellä suorana alas, nousee vaakaan
+   ennen puuskaa ja laskee ennen sen loppumista. */
+
+const WIND = {
+  calm: 4.0, build: 2.2, hold: 2.6, ease: 1.8,
+  peak: 120,                                  // px/s² puuskan huipulla
+  lead: 1.4,                                  // sekuntia jotka tuulipussi on edellä
+};
+const WIND_CYCLE = WIND.calm + WIND.build + WIND.hold + WIND.ease;
+const smooth = x => x * x * (3 - 2 * x);
+
+const storm = { t: 0, flash: 0, bolt: null, taxi: null };
+
+function stormInit() { storm.t = 0; storm.flash = 0; storm.bolt = null; storm.taxi = null; }
+
+/** Tuuli hetkellä time: suunta ±1 ja voimakkuus 0…1. */
+function windAt(time) {
+  const n = Math.floor(time / WIND_CYCLE);
+  const u = time - n * WIND_CYCLE - WIND.calm;
+  const dir = n % 2 ? -1 : 1;
+  let s = 0;
+  if (u > 0) {
+    if (u < WIND.build) s = smooth(u / WIND.build);
+    else if (u < WIND.build + WIND.hold) s = 1;
+    else s = 1 - smooth((u - WIND.build - WIND.hold) / WIND.ease);
+  }
+  return { dir, s };
+}
+
+/* Kierros alkaa alusta aina kun taksi on vaihtunut: beginEntry tekee uuden
+   olion, joten pelkkä identiteetin vertailu riittää kertomaan että luukusta
+   tuli uusi auto. Kolarin jälkeen saa siis aina neljä sekuntia tyventä. */
+function stormUpdate(dt, api) {
+  if (api.taxi !== storm.taxi) { storm.taxi = api.taxi; storm.t = 0; }
+  const was = storm.t;
+  storm.t += dt;
+
+  const rise = Math.floor(was / WIND_CYCLE) * WIND_CYCLE + WIND.calm;
+  if (was < rise && storm.t >= rise) {         // salama kun puhuri lähtee nousuun
+    storm.flash = FLASH;
+    storm.bolt = makeBolt(api.rand);
+  }
+  storm.flash = Math.max(0, storm.flash - dt);
+
+  const w = windAt(storm.t);
+  if (!api.taxi.landed) api.taxi.vx += w.dir * w.s * WIND.peak * dt;
+}
+
+/* ---------------------------------------------------------- sataman kulissit
+
+   Kaikki tämä on drawBackissa eli taivaan päällä mutta seinien, alustojen ja
+   taksin alla: mikään ei peitä sitä mitä pelaajan pitää nähdä, eikä mikään ole
+   kiinteää. Nosturit, laituri ja lautta piirretään alustan alapuolelle samalla
+   säännöllä kuin huvipuiston hahmot — alusta on niiden yläpinta. */
+
+const SEA = 996;                               // vedenpinta
+const FLASH = 0.45;                            // salaman kesto sekunteina
+const RAIN_N = 80;
+const STEEL = '#39465c', STEEL_DARK = '#212b3c', CABLE = '#8b98ad';
+
+/* Kaukainen ranta: leveys, korkeus ja paikka käsin, jotta silhuetti on rytmikäs
+   eikä tasavälinen. */
+const SHORE = [
+  [0, 118, 52], [104, 84, 76], [180, 72, 38], [246, 128, 62],
+  [366, 58, 90], [418, 98, 46], [506, 76, 68], [570, 156, 54],
+];
+
+const frac = x => x - Math.floor(x);
+const hash = i => frac(Math.sin(i * 12.9898 + 4.1) * 43758.5453);
+
+/* Koristeilla on oma kello: pelin runT pysähtyy luukusta tullessa ja kolarin
+   jälkeen, ja pysähtynyt sade näyttäisi rikkinäiseltä. */
+let animT = 0, animLast = 0;
+function animStep() {
+  const now = performance.now() / 1000;
+  animT += animLast ? Math.min(0.05, now - animLast) : 0;
+  animLast = now;
+  return animT;
+}
+
+function stormBack(ctx, api) {
+  const time = animStep();
+  const w = windAt(storm.t);
+  ctx.save();
+  lighthouse(ctx, time);
+  shore(ctx);
+  if (storm.bolt && storm.flash > 0) drawBolt(ctx, storm.bolt, storm.flash);
+  rain(ctx, time, w, 0.5, 620, 16);            // kaukainen sade rakenteiden taakse
+  sea(ctx, time, w);
+  for (const p of api.pads) {
+    if (p.fuel) barge(ctx, p, time);
+    else if (p.y > 900) quay(ctx, p, w, time);
+    else boom(ctx, p, w, time);
+  }
+  rain(ctx, time, w, 1, 980, 30);              // lähempi sade rakenteiden eteen
+  windsock(ctx, windAt(storm.t + WIND.lead), time);
+  if (storm.flash > 0) {
+    ctx.fillStyle = `rgba(190,215,255,${Math.pow(storm.flash / FLASH, 1.6) * 0.3})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.restore();
+}
+
+/** Majakka kuilun takana: matala kontrasti, hidas keila. */
+function lighthouse(ctx, time) {
+  const x = 228, top = 706, lampY = top - 13;
+  ctx.save();
+  ctx.globalAlpha = 0.09;
+  ctx.fillStyle = '#ffe6b0';
+  for (const k of [0, Math.PI]) {
+    const a = time * 0.5 + k, s = 0.15;
+    ctx.beginPath();
+    ctx.moveTo(x, lampY);
+    ctx.lineTo(x + Math.cos(a - s) * 900, lampY + Math.sin(a - s) * 900);
+    ctx.lineTo(x + Math.cos(a + s) * 900, lampY + Math.sin(a + s) * 900);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = '#0c1424';
+  ctx.beginPath();
+  ctx.moveTo(x - 19, top); ctx.lineTo(x + 19, top);
+  ctx.lineTo(x + 33, SEA); ctx.lineTo(x - 33, SEA);
+  ctx.fill();
+  ctx.fillRect(x - 25, top - 26, 50, 26);
+  ctx.fillRect(x - 31, top - 32, 62, 8);
+  ctx.globalAlpha = 0.5 + Math.sin(time * 3) * 0.12;
+  ctx.fillStyle = '#ffe6b0';
+  ctx.beginPath(); ctx.arc(x, lampY, 7, 0, 6.3); ctx.fill();
+  ctx.restore();
+}
+
+/** Ranta ja satamanosturit vedenpinnan takana. */
+function shore(ctx) {
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = '#0a1120'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
+  for (const cx of [150, 470]) {                // kaksi A-nosturia
+    ctx.beginPath();
+    ctx.moveTo(cx - 54, SEA); ctx.lineTo(cx, SEA - 172); ctx.lineTo(cx + 54, SEA);
+    ctx.moveTo(cx - 90, SEA - 150); ctx.lineTo(cx + 104, SEA - 186);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#0a1120';
+  for (const [x, w0, h0] of SHORE) ctx.fillRect(x, SEA - h0, w0, h0);
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(255,214,140,.13)';
+  for (const [x, w0, h0] of SHORE) {
+    for (let yy = SEA - h0 + 12; yy < SEA - 14; yy += 18) {
+      for (let xx = x + 10; xx < x + w0 - 12; xx += 16) {
+        if (hash(xx * 0.7 + yy) > 0.45) ctx.fillRect(xx, yy, 6, 7);
+      }
+    }
+  }
+}
+
+/** Sade. Kalteva kulma on suoraan tuulesta, joten sen näkee koko ruudulta. */
+function rain(ctx, time, w, a, speed, len) {
+  const sx = 0.12 + w.dir * w.s * 0.9;
+  ctx.strokeStyle = `rgba(174,206,236,${0.3 * a})`;
+  ctx.lineWidth = a > 0.8 ? 1.6 : 1.1;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < RAIN_N; i++) {
+    const r = hash(i), x = hash(i + 97) * W;
+    const v = speed * (0.8 + r * 0.5);
+    const y = frac((time * v + r * 2000) / (H + 200)) * (H + 200) - 100;
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - sx * len, y - len);
+  }
+  ctx.stroke();
+}
+
+/** Vesi. Aallokko kasvaa tuulen mukana. */
+function sea(ctx, time, w) {
+  const g = ctx.createLinearGradient(0, SEA - 8, 0, H);
+  g.addColorStop(0, '#173b52');
+  g.addColorStop(1, '#08131f');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, SEA - 8, W, H - SEA + 8);
+  ctx.strokeStyle = 'rgba(150,200,230,.2)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 3; i++) {
+    const y = SEA + 1 + i * 9, amp = 2 + w.s * 3.5;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 12) {
+      const yy = y + Math.sin(x / 44 + time * (1.2 + i * 0.4) + i * 2) * amp;
+      x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy);
+    }
+    ctx.stroke();
+  }
+}
+
+/** Nosturin puomi alustan alla: kotelo, ristikko ja seinään nojaava tuki.
+    Sisäpäästä roikkuu vaijeri ja koukku, joka kallistuu tuulen mukana — sama
+    varoitus kuin tuulipussissa, mutta siinä missä laskeudutaan. */
+function boom(ctx, p, w, time) {
+  const y = p.y + p.h;
+  const left = p.x < W / 2;
+  const d = left ? 1 : -1;                     // seinästä kuilua kohti
+  const wall = left ? p.x : p.x + p.w;
+  const tip = left ? p.x + p.w : p.x;
+
+  ctx.fillStyle = STEEL;
+  ctx.fillRect(p.x, y, p.w, 13);
+  ctx.strokeStyle = STEEL_DARK; ctx.lineWidth = 2; ctx.lineCap = 'butt';
+  ctx.beginPath();
+  for (let i = 0; i < 7; i++) {
+    const x0 = wall + d * (8 + i * 24);
+    ctx.moveTo(x0, y + 1); ctx.lineTo(x0 + d * 22, y + 12);
+    ctx.moveTo(x0 + d * 22, y + 1); ctx.lineTo(x0, y + 12);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = STEEL_DARK;                  // tuki seinästä puomin alle
+  ctx.beginPath();
+  ctx.moveTo(wall, y + 13);
+  ctx.lineTo(wall + d * p.w * 0.66, y + 13);
+  ctx.lineTo(wall, y + 104);
+  ctx.fill();
+
+  const hx = tip - d * 26, hy = y + 13;        // vaijeri koukkuineen
+  const a = w.dir * w.s * 0.42 + Math.sin(time * 1.1 + p.y) * 0.05;
+  const ex = hx + Math.sin(a) * 82, ey = hy + Math.cos(a) * 82;
+  ctx.strokeStyle = CABLE; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.fillStyle = '#b9c4d4';
+  ctx.beginPath(); ctx.roundRect(ex - 8, ey, 16, 15, 4); ctx.fill();
+  ctx.strokeStyle = '#b9c4d4'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(ex, ey + 24, 9, 0.5, 5.2); ctx.stroke();
+}
+
+/** Alarivin laituri: betonia veteen asti ja renkaasta tehty lepuuttaja, joka
+    heiluu kuilun puoleisessa reunassa. */
+function quay(ctx, p, w, time) {
+  const y = p.y + p.h, edge = p.x + p.w;
+  ctx.fillStyle = '#2b3547';
+  ctx.fillRect(p.x, y, p.w, SEA - y + 6);
+  ctx.strokeStyle = 'rgba(12,18,30,.55)'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let yy = y + 16; yy < SEA; yy += 16) { ctx.moveTo(p.x, yy); ctx.lineTo(edge, yy); }
+  for (let xx = p.x + 30; xx < edge; xx += 34) { ctx.moveTo(xx, y); ctx.lineTo(xx, SEA); }
+  ctx.stroke();
+
+  const a = w.dir * w.s * 0.5 + Math.sin(time * 1.3) * 0.06;
+  const cx = edge - 6, cy = y + 18;
+  const ex = cx + Math.sin(a) * 46, ey = cy + Math.cos(a) * 46;
+  ctx.strokeStyle = '#6b5a3f'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.strokeStyle = '#1b1f28'; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.arc(ex, ey + 13, 13, 0, 6.3); ctx.stroke();
+}
+
+/** Bensalautta kuilun pohjalla. Ruostunut runko on tarkoituksella lämmin —
+    tankkausalustan pitää erottua kentän kylmästä teräksestä. */
+function barge(ctx, p, time) {
+  const y = p.y + p.h, x0 = p.x, x1 = p.x + p.w;
+  ctx.fillStyle = '#b5652f';
+  ctx.beginPath();
+  ctx.moveTo(x0 - 8, y); ctx.lineTo(x1 + 8, y);
+  ctx.lineTo(x1 - 14, SEA + 2); ctx.lineTo(x0 + 14, SEA + 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(28,18,10,.35)';
+  ctx.beginPath();
+  ctx.moveTo(x0 - 4, y + 11); ctx.lineTo(x1 + 4, y + 11);
+  ctx.lineTo(x1 - 14, SEA + 2); ctx.lineTo(x0 + 14, SEA + 2);
+  ctx.fill();
+  ctx.fillStyle = '#e5a33f';
+  for (let i = 0; i < 3; i++) ctx.fillRect(x0 + 24 + i * 46, y + 3, 22, 6);
+
+  ctx.strokeStyle = 'rgba(210,235,250,.35)'; ctx.lineWidth = 3;
+  ctx.beginPath();                              // vaahtoa vesirajassa
+  for (let x = x0 - 6; x <= x1 + 6; x += 10) {
+    const yy = SEA + Math.sin(x / 18 + time * 2.4) * 2.5;
+    x === x0 - 6 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+  }
+  ctx.stroke();
+}
+
+/** Tuulipussi. Tämä on kentän varoitusvalo: se saa tuulen WIND.lead sekuntia
+    etuajassa, joten se on tiukalla ennen kuin ensimmäinenkään pikseli työntää.
+    Tyvenellä pussi roikkuu suorana alas, puuskassa se nousee vaakaan ja
+    osoittaa siihen suuntaan johon taksia viedään. */
+function windsock(ctx, w, time) {
+  const mx = 140, my = 104, L = 54 + w.s * 58;
+  ctx.save();
+  ctx.strokeStyle = '#46546c'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(mx, my - 12); ctx.lineTo(mx, my + 158); ctx.stroke();
+  ctx.strokeStyle = '#7387a3'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(mx, my, 13, 0, 6.3); ctx.stroke();
+
+  /* Pussi on quadratic-käyrä renkaalta kärkeen: ohjauspiste vedetään alaspäin
+     sitä enemmän mitä heikompi tuuli, jolloin lerppa roikkuu ja tiukka suoristuu. */
+  const phi = (1 - w.s) * Math.PI / 2;
+  const ex = mx + w.dir * L * Math.cos(phi), ey = my + L * Math.sin(phi);
+  const cx = (mx + ex) / 2, cy = (my + ey) / 2 + (1 - w.s) * 30;
+  const N = 10, pts = [];
+  for (let i = 0; i <= N; i++) {
+    const u = i / N, v = 1 - u;
+    pts.push([
+      v * v * mx + 2 * v * u * cx + u * u * ex,
+      v * v * my + 2 * v * u * cy + u * u * ey + Math.sin(time * 6 - u * 7) * 3.2 * w.s,
+    ]);
+  }
+  for (let i = 0; i < N; i++) {
+    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
+    const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
+    const nx = -dy / l, ny = dx / l;
+    const r0 = 17 - i / N * 10, r1 = 17 - (i + 1) / N * 10;
+    ctx.fillStyle = i % 2 ? '#f2e5d4' : '#ff8a3d';
+    ctx.beginPath();
+    ctx.moveTo(x0 + nx * r0, y0 + ny * r0);
+    ctx.lineTo(x1 + nx * r1, y1 + ny * r1);
+    ctx.lineTo(x1 - nx * r1, y1 - ny * r1);
+    ctx.lineTo(x0 - nx * r0, y0 - ny * r0);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Salaman polyviiva ylhäältä alas, uusi joka välähdykseen. */
+function makeBolt(rand) {
+  const pts = [[rand(140, 580), 0]];
+  for (let y = 0; y < 560;) {
+    y += rand(48, 96);
+    pts.push([pts[pts.length - 1][0] + rand(-52, 52), y]);
+  }
+  return pts;
+}
+
+function drawBolt(ctx, pts, flash) {
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, flash / (FLASH * 0.45));
+  ctx.strokeStyle = '#dce9ff'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  ctx.shadowColor = '#9db4ff'; ctx.shadowBlur = 18;
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+  ctx.stroke();
+  ctx.restore();
+}
