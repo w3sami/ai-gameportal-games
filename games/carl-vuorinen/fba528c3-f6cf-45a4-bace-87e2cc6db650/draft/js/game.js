@@ -219,9 +219,9 @@ const HZ = { trigger:200, wiggle:0.5, gravity:1.5 };
 let hazards = [];
 function buildHazards(){
   hazards = (L.hazards||[]).map(h => {
-    const pts = spikePts(h), tip = pts.reduce((b,p) => Math.hypot(p[0]-h.tx,p[1]-h.ty) < Math.hypot(b[0]-h.tx,b[1]-h.ty) ? p : b);
+    const pts = h.kind === 'branch' ? branchPts(h) : spikePts(h), tip = pts.reduce((b,p) => Math.hypot(p[0]-h.tx,p[1]-h.ty) < Math.hypot(b[0]-h.tx,b[1]-h.ty) ? p : b);
     const probe = [tip].concat(pts.filter(p => p !== tip && !isSolid(p[0],p[1])));   // landing is judged by the part that hangs in the open
-    const sprite = renderSpikeSprite(pts, h.seed, h.kind, {ax:h.x, ay:h.y, bx:h.tx, by:h.ty, w:h.w, taper:0.85});
+    const sprite = renderSpikeSprite(pts, h.seed, h.kind, {ax:h.x, ay:h.y, bx:h.tx, by:h.ty, w:h.w, taper:h.kind === 'branch' ? 0.35 : 0.85});
     return {h, pts, probe, sprite, col: h.kind === 'branch' ? '120,86,52' : null, state:'hang', t:0, a:0, dy:0, vy:0};
   });
 }
@@ -234,7 +234,7 @@ function updateHazards(s){
     const h = z.h;
     if (z.state === 'hang'){                                   // distance from the rocket to the spike's axis
       const ax = h.tx-h.x, ay = h.ty-h.y, t = Math.max(0, Math.min(1, ((s.x-h.x)*ax+(s.y-h.y)*ay)/(ax*ax+ay*ay)));
-      if (Math.hypot(s.x-(h.x+ax*t), s.y-(h.y+ay*t)) < (h.trigger||HZ.trigger)){ z.state = 'wiggle'; z.t = 0; Snd.crack(); }
+      if (Math.hypot(s.x-(h.x+ax*t), s.y-(h.y+ay*t)) < (h.trigger || HZ.trigger*(h.kind === 'branch' ? 2 : 1))){ z.state = 'wiggle'; z.t = 0; Snd.crack(); }   // branches shake loose from twice as far: the jungle is open
     } else if (z.state === 'wiggle'){
       z.t += DT; const k = Math.min(1, z.t/HZ.wiggle); z.a = Math.sin(z.t*38)*0.07*k;
       if (Math.round(z.t*120) % 10 === 0) crumbs(h.x+(h.tx-h.x)*0.65, h.y+(h.ty-h.y)*0.65, 2, z.col);
@@ -325,6 +325,7 @@ function drawParticles(){
   }
 }
 
+const CAVE_IN = { top:'#0a0b10', bottom:'#030305' };
 const inRockZone = (x, y) => (L.rockZones||[]).some(z => { const dx = (x-z.x)/z.r, dy = (y-z.y)/(z.ry||z.r); return dx*dx+dy*dy <= 1; });
 const mixHex = (a, b, k) => { const A = parseInt(a.slice(1),16), B = parseInt(b.slice(1),16), ch = sh => Math.round(((A>>sh)&255)*(1-k)+((B>>sh)&255)*k); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
 
@@ -385,7 +386,8 @@ function render(dt){
   // inside a rock zone the backdrop crossfades to the cave theme's, so a cave carved into a jungle level feels like a cave
   caveK += ((inRockZone(ship.x, ship.y) ? 1 : 0) - caveK)*(1-Math.exp(-3*dt));
   const cb = THEMES.cave.bg, jb = STYLE.bg, k2 = STYLE === THEMES.cave ? 0 : caveK;
-  const vg = ctx.createLinearGradient(0,0,0,vh); vg.addColorStop(0,mixHex(jb.top, cb.top, k2)); vg.addColorStop(1,mixHex(jb.bottom, cb.bottom, k2)); ctx.fillStyle = vg; ctx.fillRect(0,0,vw,vh);
+  const vg = ctx.createLinearGradient(0,0,0,vh); vg.addColorStop(0,mixHex(jb.top, CAVE_IN.top, k2)); vg.addColorStop(1,mixHex(jb.bottom, CAVE_IN.bottom, k2));   // darker than the cave chapter itself: a hole in the daylight
+  ctx.fillStyle = vg; ctx.fillRect(0,0,vw,vh);
   const glow = (g, am) => {
     const bf = jb.f, gx = (g.u*L.w-cam.x)*Z*bf + vw/2*(1-bf), gy = (g.v*L.h-cam.y)*Z*bf + vh/2*(1-bf), rad = g.r*(L.w+L.h)*0.5*Z*0.7;
     if (am < 0.02 || gx < -rad || gx > vw+rad || gy < -rad || gy > vh+rad) return;
@@ -394,7 +396,7 @@ function render(dt){
     ctx.fillStyle = rg; ctx.fillRect(Math.max(0,gx-rad),Math.max(0,gy-rad),Math.min(vw,gx+rad)-Math.max(0,gx-rad),Math.min(vh,gy+rad)-Math.max(0,gy-rad));
   };
   for (const g of jb.glows) glow(g, 1-k2);
-  if (k2 > 0) for (const g of cb.glows) glow(g, k2);
+  if (k2 > 0) for (const g of cb.glows) glow(g, k2*0.6);
   for (const ly of layers){   // true perspective about the screen centre: screen = (p - cam)·f·Z + centre·(1-f)
     const ox = -(cam.x+ly.padX)*Z*ly.f + vw/2*(1-ly.f) + sx*ly.f, oy = -(cam.y+ly.padY)*Z*ly.f + vh/2*(1-ly.f) + sy*ly.f, kk = Z*ly.f/ly.q;
     drawLayer(ctx, ly.c, ox, oy, kk, vw, vh);
