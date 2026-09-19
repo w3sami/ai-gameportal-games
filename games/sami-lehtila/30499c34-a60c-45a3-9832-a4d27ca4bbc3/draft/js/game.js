@@ -118,15 +118,19 @@ let gearSide = DEFAULT_SIDE;
 const BASE = Object.assign({}, DEFAULTS);
 let MUL = {};
 
+/* Sauva syntyy vasta paljon alempana, ja tätä kutsutaan jo tallennettua
+   viritystä ladattaessa. `typeof stick` EI kelpaa vartijaksi: const-muuttujan
+   kuolleessa vyöhykkeessä typeof heittää ReferenceErrorin sen sijaan että
+   palauttaisi 'undefined', joten vartija kaataisi juuri sen kutsun jota se
+   yrittää suojata. Tavallinen lippu on ainoa joka toimii. */
+let stickReady = false;
+
 function applyMul() {
   for (const k of Object.keys(DEFAULTS)) {
     const m = MUL[k];
     P[k] = BASE[k] * (typeof m === 'number' && isFinite(m) ? m : 1);
   }
-  /* Sauvan herkkyys on ainoa arvo joka elää P:n ulkopuolella. Se pitää peilata
-     täällä, muuten kentän kerroin jäisi siihen vaikuttamatta siihen asti että
-     joku koskee säädintä. */
-  if (typeof stick !== 'undefined' && stick) stick.gain = P.stick;
+  if (stickReady) stick.gain = P.stick;
 }
 
 const STORE = 'spacetaxi.tune';
@@ -652,6 +656,7 @@ const stick = createJoystick({
   radius: 96,
   ignore: onButtons,
 });
+stickReady = true;
 stick.gain = P.stick;
 
 /* Ohjain. keys: false, koska peli lukee näppäimistön jo itse — plugin lukisi
