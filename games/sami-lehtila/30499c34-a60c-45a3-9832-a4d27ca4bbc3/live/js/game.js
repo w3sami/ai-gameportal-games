@@ -2,20 +2,21 @@
  *
  * Säännöt ovat Muse Softwaren 1984 C64-pelistä: painovoima vetää koko ajan,
  * suuntasuuttimet kiihdyttävät, ja laskutelineen pitää olla alhaalla ennen
- * kosketusta. Teline alhaalla sivusuuttimet eivät toimi — se on alkuperäisen
- * kauppa ja samalla se mikä tekee lähestymisestä päätöksen eikä refleksin.
- * Matkustaja ilmestyy alustan reunaan, kertoo minne haluaa, ja maksaa perillä
- * sitä enemmän mitä nopeammin ja pehmeämmin keikka meni. Kun molemmilla
- * alustoilla on käyty, katon luukku aukeaa.
+ * kosketusta. Teline alhaalla sivusuuttimet eivät toimi. Asiakas ilmestyy
+ * alustan reunaan, huutaa taksin, kertoo minne haluaa ja maksaa perillä sitä
+ * enemmän mitä nopeammin ja pehmeämmin keikka meni. Kun molemmilla alustoilla
+ * on käyty, viimeinen asiakas pyytää ylös — ja vasta se avaa katon luukun.
+ * Puhe on alkuperäisen tapaan asiakkaan suusta, jokaisella lajilla oma korkeus.
  *
  * Kenttä on kiinteä 720x1040 ja kangas sovitetaan siihen (contain), joten
  * geometria on sama joka näytöllä. Ohjaussauva tulee portaalin pluginista.
  * Grafiikka on koodissa: ei yhtään tiedostoa, ei yhtään ulkoista hakua.
  *
- * Säätöpaneeli (ratas alakulmassa) on pelin oma eikä debug-pluginin, ?debug=1
- * avaa sen heti, ja sen JSON-kenttä siirtää arvot koneelta toiselle.
+ * Säätöpaneeli (ratas alakulmassa) on pelin oma, ?debug=1 avaa sen heti, ja
+ * sen JSON-kenttä siirtää arvot koneelta toiselle. ?test=1 ajaa pompputestin.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
+import { bounceVelocity } from './bounce.js';
 import { mountBoard } from './leaderboard.js';
 
 const canvas = document.getElementById('c');
@@ -26,6 +27,15 @@ const panelEl = document.getElementById('panel');
 /* ------------------------------------------------------------------ kenttä */
 const W = 720, H = 1040;
 const GATE = { x: 300, w: 120 };
+
+/* Luukun hehkun väri vaihtuu kentän mukaan; ensimmäinen on sininen. */
+const LEVEL = 0;
+const GLOW = ['#6fe3ff', '#7bf0a0', '#ff9ae0', '#ffd479', '#c79bff'];
+const glowColor = () => GLOW[LEVEL % GLOW.length];
+function rgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
 
 const WALLS = [
   { x: 0, y: 0, w: GATE.x, h: 16 },                        // katto, luukun vasen puoli
@@ -54,6 +64,7 @@ const FUEL_MAX = 100;
 const DEFAULTS = {
   grav: 250, thrust: 920,
   landVY: 215, landVX: 200, softVY: 50,
+  bounceRest: 0.45, bounceMax: 5,
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
   stick: 2.05,
@@ -241,9 +252,41 @@ function jetLevel(v) {
   jet.f.frequency.setTargetAtTime(420 + v * 950, a.currentTime, 0.05);
 }
 
+/* ------------------------------------------------------------------- puhe
+   Alkuperäisen näytteet ("Hey taxi!", "Pad one please", "Up please") tulevat
+   tässä selaimen puhesyntetisaattorilta. Korkeus ja nopeus tulevat asiakkaan
+   lajista, joten eri tyypit kuulostavat eri asiakkailta kuten C64:llä. */
+const SPEAKS = 'speechSynthesis' in window;
+
+function speak(text, kind) {
+  if (muted || !SPEAKS) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    u.pitch = clamp(0.6 + (kind % 5) * 0.34, 0.1, 2);
+    u.rate = 1.06 - (kind % 3) * 0.08;
+    u.volume = 0.95;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+/* iOS haluaa ensimmäisen puheen tulevan suoraan eleestä, joten aloitusnappi
+   lämmittää syntetisaattorin äänettömällä lausahduksella. */
+function warmSpeech() {
+  if (!SPEAKS) return;
+  try {
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+const PAD_WORD = { 1: 'one', 2: 'two' };
+
 const sfx = {
   gear() { tone(180, 0.12, { type: 'square', gain: 0.06, to: 120 }); },
   land() { tone(220, 0.14, { type: 'triangle', gain: 0.12, to: 320 }); },
+  bounce(n) { tone(320 + n * 120, 0.13, { type: 'triangle', gain: 0.13, to: 180 + n * 90 }); },
   pickup() {
     tone(520, 0.09, { type: 'triangle', gain: 0.14 });
     tone(780, 0.12, { type: 'triangle', gain: 0.12, delay: 0.07 });
@@ -285,6 +328,24 @@ for (let i = 0; i < 70; i++) {
   stars.push({ x: rand(20, W - 20), y: rand(20, H - 20), r: rand(0.6, 1.8), a: rand(0.1, 0.5), p: rand(0, 6.3) });
 }
 
+/* Lajit sekoitetusta pussista, ei arvonnasta: pussi sisältää jokaisen lajin
+   kerran, ja uusi sekoitus torjutaan jos sen ensimmäinen olisi sama kuin
+   edellinen nostettu. Niin samaa tyyppiä ei koskaan tule kahdesti peräkkäin. */
+let bag = [], lastKind = -1;
+function nextAlien() {
+  if (!bag.length) {
+    do {
+      bag = ALIENS.map((_, i) => i);
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = (Math.random() * (i + 1)) | 0;
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+    } while (bag.length > 1 && bag[0] === lastKind);
+  }
+  lastKind = bag.shift();
+  return lastKind;
+}
+
 function newRun() {
   money = 40; lives = 3; runT = 0;
   served = { 1: false, 2: false };
@@ -292,6 +353,7 @@ function newRun() {
   bits = []; graves = []; wreck = null; lowWarn = 0;
   msg = ''; msgT = 0;
   job = null;
+  bag = []; lastKind = -1;
   resetTaxi();
   /* Ensimmäinen asiakas on ylhäällä alustalla 2: vuoro alkaa lennolla eikä
      siitä että kaveri kävelee valmiiksi kyytiin. */
@@ -311,7 +373,7 @@ function resetTaxi() {
 
 /* Asiakas seisoo aina alustan reunassa: keskeltä häntä ei voi väistää, kun
    taksi on leveämpi kuin väistövara. Puoli valitaan siltä laidalta jossa ei
-   jo ole hautakiveä. */
+   jo ole hautakiveä. Kohde on alustan numero tai 'up' viimeisellä keikalla. */
 function newJob(from, to, delay) {
   const p = padById(from);
   const left = p.x + 20, right = p.x + p.w - 20;
@@ -322,7 +384,7 @@ function newJob(from, to, delay) {
   else x = Math.random() < 0.5 ? left : right;
   job = {
     from, to, phase: 'wait', wait: delay || 0,
-    kind: (Math.random() * ALIENS.length) | 0,
+    kind: nextAlien(),
     x, t: 0, walk: 0, moving: false, shown: false,
   };
 }
@@ -350,9 +412,10 @@ const inBox = (p, b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b
 const onButtons = p =>
   inBox(p, GEAR_BOX) || inBox(p, MUTE_BOX) || inBox(p, COG_BOX) || inBox(p, FULL_BOX);
 
+/* Telineen saa nostaa myös alustalla seistessä: lähtö on helpompi ohjata kun
+   sivusuuttimet ovat jo käytössä. Taksi laskeutuu samalla mahalleen. */
 function toggleGear() {
   if (state !== PLAY || dead) return;
-  if (taxi.landed) return;                    // maassa teline pysyy alhaalla
   taxi.gearWant = !taxi.gearWant;
   sfx.gear();
 }
@@ -361,6 +424,7 @@ function toggleMute() {
   muted = !muted;
   try { localStorage.setItem('spacetaxi.muted', muted ? '1' : '0'); } catch (e) {}
   if (muted && jet) jet.g.gain.value = 0;
+  if (muted && SPEAKS) { try { speechSynthesis.cancel(); } catch (e) {} }
   if (!muted) sfx.gear();
 }
 
@@ -450,19 +514,36 @@ function crash(reason) {
   };
   burst(taxi.x, taxi.y, '#ffd479', 8, 220);   // irronneita paloja, ei tulipalloa
   jetLevel(0);
+  if (SPEAKS) { try { speechSynthesis.cancel(); } catch (e) {} }
   sfx.crash();
 }
 
+let bounces = 0;
+
 function touchdown(pad, b) {
   const t = taxi;
+  const ratio = Math.max(t.vy / P.landVY, Math.abs(t.vx) / P.landVX);
+
   if (t.gear < 0.85) return crash('Laskuteline ylhäällä');
-  if (t.vy > P.landVY) return crash('Liian kova lasku');
-  if (Math.abs(t.vx) > P.landVX) return crash('Sivuluisu');
   if (b.x < pad.x - 2 || b.x + b.w > pad.x + pad.w + 2) return crash('Jalka ilmassa');
+  if (ratio > P.bounceMax) return crash('Liian kova lasku');
+
+  /* Ylinopeus ei tapa heti: taksi ponnahtaa takaisin ylös ja vauhti hidastuu
+     itsestään. Malli on js/bounce.js:ssä, jotta sen voi ajaa testinä. */
+  if (ratio > 1) {
+    const gl = GEAR * t.gear;
+    t.y = pad.y - (TH / 2 + gl) - 1.5;
+    t.vy = -bounceVelocity(Math.max(t.vy, Math.abs(t.vx)), P);
+    t.vx *= 0.55;
+    bounces++;
+    sfx.bounce(Math.min(bounces, 3));
+    return;
+  }
 
   const soft = t.vy;
   t.y = pad.y - (TH / 2 + GEAR * t.gear);
   t.vx = 0; t.vy = 0; t.landed = pad; t.gearWant = true;
+  bounces = 0;
   sfx.land();
   onLanded(pad, soft);
 }
@@ -475,21 +556,17 @@ function onLanded(pad, softness) {
     const mult = softness < P.softVY ? 1 : softness < P.landVY * 0.75 ? 0.6 : 0.25;
     const tip = Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime) * mult);
     const fare = P.fare + tip;
+    const kind = job.kind;
     money += fare;
     served[pad.id] = true;
     say(`Kiitos! ${fare} € (tippi ${tip} €)`, 2.6);
     burst(taxi.x, taxi.y - 20, '#6fe3ff', 16, 160);
     sfx.pay();
+    speak('Thanks!', kind);
     job = null;
 
-    if (served[1] && served[2]) {
-      gateOpen = true;
-      setTimeout(() => {
-        if (state === PLAY && served[1] && served[2]) { say('Ylös, kiitos!', 4); sfx.gate(); }
-      }, 900);
-    } else {
-      newJob(pad.id, served[1] ? 2 : 1, 1.4);
-    }
+    // Viimeinen asiakas ei mene alustalle vaan ylös, ja vasta hän avaa luukun.
+    newJob(pad.id, served[1] && served[2] ? 'up' : (served[1] ? 2 : 1), 1.6);
     return;
   }
 
@@ -511,7 +588,12 @@ function jobStep(dt) {
   if (job.phase === 'aboard') { job.t += dt; return; }
 
   if (job.wait > 0) { job.wait -= dt; return; }
-  if (!job.shown) { job.shown = true; say('Hei, taksi!', 2.2); sfx.hey(); }
+  if (!job.shown) {
+    job.shown = true;
+    say('Hei, taksi!', 2.2);
+    sfx.hey();
+    speak('Hey, taxi!', job.kind);
+  }
 
   // Kyytiin vain pysäköidystä taksista samalla alustalla.
   job.moving = false;
@@ -521,8 +603,16 @@ function jobStep(dt) {
     const d = target - job.x;
     if (Math.abs(d) < 3) {
       job.phase = 'aboard'; job.t = 0;
-      say(`Alusta ${job.to}, kiitos`, 2.4);
-      sfx.pickup();
+      if (job.to === 'up') {
+        gateOpen = true;                    // luukku aukeaa vasta tästä pyynnöstä
+        say('Ylös, kiitos!', 3);
+        speak('Up please', job.kind);
+        sfx.gate();
+      } else {
+        say(`Alusta ${job.to}, kiitos`, 2.4);
+        speak(`Pad ${PAD_WORD[job.to] || job.to} please`, job.kind);
+        sfx.pickup();
+      }
       return;
     }
     job.moving = true;
@@ -567,9 +657,9 @@ function update(dt) {
     return;
   }
 
-  // teline animoituu; maassa se on aina alhaalla
-  const want = taxi.landed ? 1 : (taxi.gearWant ? 1 : 0);
-  taxi.gear += clamp(want - taxi.gear, -dt * 4, dt * 4);
+  // teline animoituu; maassa taksi laskeutuu telineen mukana mahalleen
+  taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * 4, dt * 4);
+  if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
 
   const v = activeThrust();
   const raw = inputVector();
@@ -635,8 +725,15 @@ function refuel(dt) {
   if (Math.random() < dt * 12) sfx.pump();
 }
 
+/** Ulos luukusta. Viimeinen asiakas on kyydissä, joten hänkin maksaa. */
 function finish() {
-  money += P.exitBonus;
+  let paid = P.exitBonus;
+  if (job && job.phase === 'aboard') {
+    paid += P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime));
+    speak('Thanks!', job.kind);
+    job = null;
+  }
+  money += paid;
   sfx.win();
   gameOver(true);
 }
@@ -693,26 +790,62 @@ function drawPad(p) {
   }
 }
 
+/* Luukku: kiinni tavallinen seinä, auki kaksi efektiä päällekkäin — hengittävä
+   hehku ja sen läpi ylöspäin juoksevat pulssit. Väri tulee kentästä. */
 function drawGate() {
   const g = GATE;
-  if (gateOpen) {
-    const pulse = 0.55 + Math.sin(runT * 5) * 0.45;
-    ctx.fillStyle = `rgba(111,227,255,${(0.14 + pulse * 0.16).toFixed(3)})`;
-    ctx.fillRect(g.x, 0, g.w, 60);
-    ctx.strokeStyle = '#6fe3ff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.5 + pulse * 0.5;
-    for (let i = 0; i < 3; i++) {
-      const y = 46 - i * 14;
-      ctx.beginPath();
-      ctx.moveTo(g.x + 30, y + 10); ctx.lineTo(g.x + g.w / 2, y); ctx.lineTo(g.x + g.w - 30, y + 10);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  } else {
+  if (!gateOpen) {
     drawWall(GATE_BAR);
     ctx.fillStyle = 'rgba(255,93,122,.5)';
     for (let x = g.x + 6; x < g.x + g.w - 6; x += 18) ctx.fillRect(x, 3, 8, 10);
+    return;
   }
+
+  const col = glowColor();
+  const tall = 150;
+  const breathe = 0.6 + Math.sin(runT * 2.4) * 0.4;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(g.x, 0, g.w, tall); ctx.clip();
+
+  // 1) hehku: kirkkaimmillaan aukolla, haipuu alaspäin
+  const grad = ctx.createLinearGradient(0, 0, 0, tall);
+  grad.addColorStop(0, rgba(col, 0.30 + breathe * 0.26));
+  grad.addColorStop(0.45, rgba(col, 0.12 + breathe * 0.12));
+  grad.addColorStop(1, rgba(col, 0));
+  ctx.fillStyle = grad;
+  ctx.fillRect(g.x, 0, g.w, tall);
+
+  // reunojen valoviivat, jotta aukko erottuu seinästä
+  ctx.strokeStyle = rgba(col, 0.5 + breathe * 0.3);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(g.x + 1.5, tall); ctx.lineTo(g.x + 1.5, 0);
+  ctx.moveTo(g.x + g.w - 1.5, tall); ctx.lineTo(g.x + g.w - 1.5, 0);
+  ctx.stroke();
+
+  // 2) pulssit: kolme valokaistaa nousee pohjalta aukkoon ja haipuu
+  for (let i = 0; i < 3; i++) {
+    const p = ((runT * 0.75 + i / 3) % 1);
+    const y = tall - p * tall;
+    const a = Math.sin(p * Math.PI) * 0.55;
+    const half = g.w / 2 * (0.55 + p * 0.45);
+    const band = ctx.createLinearGradient(0, y - 16, 0, y + 16);
+    band.addColorStop(0, rgba(col, 0));
+    band.addColorStop(0.5, rgba(col, a));
+    band.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = band;
+    ctx.fillRect(g.x + g.w / 2 - half, y - 16, half * 2, 32);
+  }
+  ctx.restore();
+
+  // aukon huulet hehkuvat kirkkaimmin
+  ctx.save();
+  ctx.shadowColor = col; ctx.shadowBlur = 22;
+  ctx.fillStyle = rgba(col, 0.75 + breathe * 0.25);
+  ctx.fillRect(g.x - 4, 0, 6, 16);
+  ctx.fillRect(g.x + g.w - 2, 0, 6, 16);
+  ctx.restore();
 }
 
 /* ------------------------------------------------------------------ alienit
@@ -824,7 +957,7 @@ function drawGrave(g) {
   ctx.lineTo(9, 0);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = '#39405180'; ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(57,64,81,.85)'; ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, -17); ctx.lineTo(0, -6);
   ctx.moveTo(-4.5, -13); ctx.lineTo(4.5, -13);
@@ -843,7 +976,6 @@ function drawPassenger() {
 }
 
 function taxiShape(w, h, broken) {
-  // runko
   ctx.fillStyle = broken ? '#c9a253' : '#ffd479';
   if (!broken) { ctx.shadowColor = 'rgba(255,212,121,.5)'; ctx.shadowBlur = 16; }
   ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 9); ctx.fill();
@@ -862,7 +994,6 @@ function taxiShape(w, h, broken) {
   }
   ctx.restore();
 
-  // ohjaamo
   ctx.fillStyle = broken ? '#3d6470' : '#7fe6ff';
   ctx.beginPath(); ctx.ellipse(-w * 0.22, -3, w * 0.2, h * 0.28, 0, 0, 6.3); ctx.fill();
   if (!broken) {
@@ -927,7 +1058,6 @@ function drawWreck() {
   ctx.translate(wreck.x, wreck.y);
   ctx.rotate(wreck.rot);
   taxiShape(TW, TH, true);
-  // roikkuva laskuteline
   ctx.strokeStyle = '#7b87a8'; ctx.lineWidth = 3; ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(-16, TH / 2 - 2); ctx.lineTo(-24, TH / 2 + 12);
@@ -984,7 +1114,7 @@ function drawHud() {
   ctx.fillStyle = '#8a97be';
   ctx.font = '600 15px system-ui, sans-serif';
   ctx.fillText(
-    served[1] && served[2] ? 'ulos ylhäältä' : `keikat ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2`,
+    gateOpen ? 'ulos ylhäältä' : `keikat ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2`,
     W - 26, 74
   );
 
@@ -995,7 +1125,7 @@ function drawHud() {
     ctx.fillText(fare + ' €', W - 26, 108);
     ctx.fillStyle = 'rgba(233,237,255,.45)';
     ctx.font = '600 11px system-ui, sans-serif';
-    ctx.fillText('MITTARI  →  ALUSTA ' + job.to, W - 26, 124);
+    ctx.fillText(job.to === 'up' ? 'MITTARI  →  ULOS' : 'MITTARI  →  ALUSTA ' + job.to, W - 26, 124);
   }
 
   if (msgT > 0) {
@@ -1003,7 +1133,7 @@ function drawHud() {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e9edff';
     ctx.font = '700 22px system-ui, sans-serif';
-    ctx.fillText(msg, W / 2, 170);
+    ctx.fillText(msg, W / 2, 190);
     ctx.globalAlpha = 1;
   }
 }
@@ -1143,6 +1273,8 @@ const SLIDERS = [
   { key: 'thrust', label: 'työntö', min: 300, max: 1200, step: 20 },
   { key: 'landVY', label: 'lasku vy max', min: 40, max: 300, step: 5 },
   { key: 'landVX', label: 'lasku vx max', min: 10, max: 200, step: 5 },
+  { key: 'bounceRest', label: 'pompun palautus', min: 0.1, max: 0.9, step: 0.05 },
+  { key: 'bounceMax', label: 'pompun raja x', min: 1.5, max: 10, step: 0.5 },
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
   { key: 'refuel', label: 'tankkaus / s', min: 5, max: 80, step: 1 },
   { key: 'price', label: 'bensan hinta', min: 0, max: 3, step: 0.1 },
@@ -1247,6 +1379,16 @@ function buildPanel() {
     }),
   );
   io.append(ta, ioButtons, note);
+
+  // pompputesti nykyisillä arvoilla, tulos konsoliin
+  io.append(pbutton('btn sm ghost', 'aja pompputesti', () => {
+    import('./bouncetest.js')
+      .then(m => {
+        const bad = m.run(P);
+        note.textContent = bad ? `${bad} riviä haarukan ulkopuolella (konsoli)` : 'pomput 1–3, kaikki ok';
+      })
+      .catch(() => { note.textContent = 'testiä ei saatu ladattua'; });
+  }));
   panelEl.append(io);
 }
 
@@ -1279,9 +1421,9 @@ const menuCard = () => `
   <p>Nosta alien kyytiin ja vie hänet toiselle alustalle. Mitä nopeammin ja
      pehmeämmin, sitä isompi tippi. Laskeudu viereen, älä päälle.</p>
   <p><b>Laskuteline pitää laskea ennen kosketusta</b> — ja alhaalla se sammuttaa
-     sivusuuttimet, joten suunta on oltava valmiina.</p>
+     sivusuuttimet, joten nosta se heti lähdössä.</p>
   <p>Keskellä tankataan omalla rahalla. Kun molemmilla alustoilla on käyty,
-     katon luukku aukeaa.</p>
+     viimeinen asiakas pyytää ylös ja katon luukku aukeaa.</p>
   <p class="hint">Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>
      Iso nappi laskee telineen, ratas avaa säädöt, nuolinappi koko ruudun.<br>
      Näppäimillä <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot;
@@ -1292,7 +1434,7 @@ const menuCard = () => `
 const overWon = () => `
   <h1>Vuoro <span>selvä</span></h1>
   <div class="big">${Math.round(money)} €</div>
-  <p>Molemmat keikat ajettu ja ulos katosta — ${Math.round(runT)} sekuntia,
+  <p>Kaikki keikat ajettu ja ulos katosta — ${Math.round(runT)} sekuntia,
      ${Math.max(0, lives)} taksia ehjänä${graves.length ? `, ${graves.length} hautakiveä` : ''}.</p>
   <div id="lb"></div>
   ${buttons.replace('%s', 'Uusi vuoro')}`;
@@ -1307,6 +1449,7 @@ const overLost = () => `
   ${buttons.replace('%s', 'Uusi vuoro')}`;
 
 function start() {
+  warmSpeech();                            // iOS: ensimmäinen puhe eleen alta
   newRun();
   state = PLAY;
   card.classList.add('hidden');
@@ -1315,11 +1458,14 @@ function start() {
 newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
 
-// ?debug=1 avaa säätöpaneelin heti — sama lippu kuin portaalin muissa peleissä.
+/* Liput osoitteesta: ?debug=1 avaa säätöpaneelin, ?test=1 ajaa pompputestin. */
 try {
   const q = new URLSearchParams(location.search);
   for (const [k, v] of q) {
-    if (k.toLowerCase() === 'debug' && v !== '0' && v !== 'false') { togglePanel(); break; }
+    const key = k.toLowerCase();
+    const on = v !== '0' && v !== 'false';
+    if (key === 'debug' && on) togglePanel();
+    if (key === 'test' && on) import('./bouncetest.js').then(m => m.run(P)).catch(() => {});
   }
 } catch (e) {}
 
