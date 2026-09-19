@@ -249,7 +249,7 @@
     "id": "cb902f16-8749-47d0-bd6f-399f06bcf15d",
     "slug": "thruster-2",
     "title": "Thruster Time Attack",
-    "description": "A cave-flying time attack with shared leaderboards and ghosts. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Every level has its own board: land, put your name up once, and the fastest pilots are there in the menu and on the finish screen. Every posted time carries the run that flew it, so any row can be watched from the outside or raced as a ghost beside you. Analog stick that steers relative to the rocket's heading, keyboard support, and everything (levels, art, sound) generated in code. A fork of Thruster by Carl Vuorinen, with the portal's leaderboard plugin added.",
+    "description": "A cave-flying time attack with shared leaderboards and ghosts. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Every level has its own board: land, put your name up once, and the fastest pilots are there in the menu and on the finish screen. Every posted time carries the run that flew it, so any row can be watched from the outside or raced as a ghost beside you. Touch, keyboard and controller all fly it: the analog stick points where the rocket should go rather than turning it, and a gamepad walks the menus too. Everything (levels, art, sound) is generated in code. A fork of Thruster by Carl Vuorinen, with the portal's leaderboard and gamepad plugins added.",
     "author": "Sami Lehtilä",
     "tags": [
       "arcade",
@@ -257,7 +257,8 @@
       "time-attack",
       "cave-flyer",
       "mobile",
-      "tulostaulu"
+      "tulostaulu",
+      "ohjain"
     ],
     "status": "published",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
@@ -270,7 +271,7 @@
     },
     "sizeBytes": 72988,
     "createdAt": "2026-09-18T13:05:01.785Z",
-    "updatedAt": "2026-09-19T18:52:42.429Z"
+    "updatedAt": "2026-09-19T19:57:51.859Z"
   },
   {
     "id": "30499c34-a60c-45a3-9832-a4d27ca4bbc3",
