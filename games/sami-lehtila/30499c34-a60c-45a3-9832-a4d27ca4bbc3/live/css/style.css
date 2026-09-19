@@ -29,6 +29,9 @@ canvas { display: block; touch-action: none; cursor: none; }
   width: min(420px, 100%);
   max-height: 94%;
   overflow: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   text-align: center;
   backdrop-filter: blur(8px);
   box-shadow: 0 24px 60px rgba(0, 0, 0, .6);
@@ -66,14 +69,20 @@ kbd {
   background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer;
 }
 
-/* ---- säätöpaneeli: pelin oma, ei riipu debug-pluginista ---- */
+/* ---- säätöpaneeli: pelin oma, ei riipu debug-pluginista ----
+   Oikeaan reunaan jätetään vapaa kaista, josta paneelin saa rullattua ilman
+   että sormi osuu liukuriin. Liukurit itse ottavat kosketuksen kokonaan
+   (touch-action: none), joten veto niiden päällä säätää eikä vieritä. */
 #panel {
   pointer-events: auto;
   position: fixed; top: 10px; right: 10px;
-  width: min(268px, calc(100vw - 20px));
+  width: min(296px, calc(100vw - 20px));
   max-height: calc(100vh - 20px);
-  overflow: auto;
-  padding: 14px 16px 16px;
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 40px 16px 16px;
   border-radius: 14px;
   background: rgba(8, 13, 30, .94);
   border: 1px solid rgba(120, 160, 255, .28);
@@ -81,6 +90,20 @@ kbd {
   font-size: 12px;
 }
 #panel.hidden { display: none; }
+
+/* vierityskaistan merkki: pisteviiva oikeassa reunassa, ei ota osumia */
+#panel::after {
+  content: '';
+  position: absolute; top: 12px; right: 15px; bottom: 12px; width: 7px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(120,160,255,.38) 0 5px,
+    rgba(120,160,255,0) 5px 12px
+  );
+  pointer-events: none;
+}
+
 #panel h2 {
   margin: 0 0 10px; font-size: 12px; font-weight: 700;
   letter-spacing: .12em; text-transform: uppercase; color: #8a97be;
@@ -91,7 +114,10 @@ kbd {
   color: #a9b6dd; margin-bottom: 4px;
 }
 #panel .row label b { color: #ffd479; font-variant-numeric: tabular-nums; }
-#panel input[type=range] { width: 100%; accent-color: #ffd479; margin: 0; }
+#panel input[type=range] {
+  width: 100%; accent-color: #ffd479; margin: 0;
+  touch-action: none;                 /* veto liukurilla säätää, ei vieritä */
+}
 #panel .seg { display: flex; gap: 6px; }
 #panel .seg button {
   flex: 1; font: inherit; font-size: 12px; padding: 8px 0;
@@ -109,6 +135,7 @@ kbd {
   color: #e9edff; background: rgba(255,255,255,.06);
   border: 1px solid rgba(120,160,255,.28); border-radius: 9px;
   padding: 8px; resize: vertical;
+  touch-action: auto;
   -webkit-user-select: text; user-select: text;
 }
 #panel textarea:focus { outline: none; border-color: rgba(111,227,255,.6); }
@@ -150,5 +177,7 @@ kbd {
   padding: 8px 10px; border-radius: 9px;
   color: #e9edff; background: rgba(255,255,255,.06);
   border: 1px solid rgba(120,160,255,.28);
+  touch-action: auto;
+  -webkit-user-select: text; user-select: text;
 }
 .lb-form input:focus { outline: none; border-color: rgba(111,227,255,.6); }
