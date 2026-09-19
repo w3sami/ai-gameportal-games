@@ -154,10 +154,19 @@ const PEND = HOOK_BOX.map((box, i) => {
    Rajassa nopeus nollataan, joten lautta jää siihen nojaamaan kunnes tuuli
    kääntyy — eikä jousi kerää painetta jonka se purkaisi kerralla.
 
-   reach  paino: montako pikseliä täysi puuska siirtää. Jousi jää noin 83 %
-          jäljessä, joten todellinen matka on sitä pienempi.
+   Voima tulee tuulesta ja matka painosta: täysi puuska työntää lauttaa samalla
+   `WIND.peak`illa jonka taksikin tuntee, ja matka on se jaettuna painolla.
+   Kaksi kertaa raskaampi lautta liikkuu siis puolet vähemmän, ja tuulen
+   voimakkuuden säätäminen liikuttaa sekä taksia että lauttaa.
+
+   mass   lautan paino. Iso = liikkuu vähemmän.
    air    paljonko keulan ja perän eteen jätetään vettä rajalla. */
-const BARGE = { reach: 300, air: 16, stiff: 3.0, damp: 2.6, bob: 3.5 };
+const BARGE = { mass: 8, air: 16, stiff: 3.0, damp: 2.6, bob: 3.5 };
+
+/* Purjepinta: montako pikseliä painoyksikkö siirtyy jokaista tuulen px/s²:a
+   kohti. Tämä on pelkkä mittakaava, jotta paino on luettava luku eikä murtoluku
+   — oletuksilla (paino 8, max puuska 220) täyden puuskan tavoite on 275 px. */
+const SAIL = 10;
 
 /* Rungon ylitys alustan yli kummassakin päässä. barge() piirtää keulan ja perän
    tämän verran alustan ulkopuolelle, ja sama luku rajaa ajelehtimisen — näin
@@ -249,7 +258,8 @@ function stormUpdate(dt, api) {
      amplitudi on nolla, joten bx menee sellaisenaan perille — ja koska alustalla
      on move-kenttä, movePads siirtää taksin ja asiakkaan mukana. */
   const b = storm.barge;
-  b.v += ((vSeen * BARGE.reach - b.x) * BARGE.stiff - b.v * BARGE.damp) * dt;
+  const pull = vSeen * WIND.peak * SAIL / Math.max(0.5, BARGE.mass);
+  b.v += ((pull - b.x) * BARGE.stiff - b.v * BARGE.damp) * dt;
   b.x += b.v * dt;
   const fuel = api.pads.find(p => p.fuel);
   if (fuel) {
@@ -669,7 +679,7 @@ export const stormport = {
     {
       name: 'bensalautta', obj: BARGE, open: false,
       sliders: [
-        { key: 'reach', label: 'paino: matka puuskassa px', min: 0, max: 400, step: 10 },
+        { key: 'mass', label: 'paino (iso = liikkuu vähemmän)', min: 1, max: 40, step: 0.5 },
         { key: 'air', label: 'ilmaa päissä px', min: 0, max: 120, step: 2 },
       ],
     },
