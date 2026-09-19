@@ -199,6 +199,8 @@
       Rajat ovat 64 kt per tiedosto (<code>too-big</code>), 256 kt ja 20 tiedostoa
       koko kansiolle (<code>config-full</code>). Jos pysähdys tulee noin
       viidenteen tiedostoon, yhteiskoko täyttyi; jos vasta 21:een, lukumäärä.
+      Syy <code>quota</code> on eri asia: silloin pelin oma 2 Mt kiintiö tuli
+      vastaan ensin, eikä kansion katosta tiedetä vielä mitään.
     </p>
     <dl>
       <dt>saved</dt><dd id="w-saved">—</dd>
@@ -436,16 +438,25 @@ async function fillFolder() {
     const path = `config/koe-${i}.json`;
     const { saved, reason } = await savePortalFile(path, chunk);
     if (!saved) {
-      $("w-saved").textContent = `pysähtyi tiedostoon ${i}`;
-      $("w-saved").className = reason === "config-full" ? "" : "warn";
+      // Three different outcomes, and only one of them is the answer. A stop is
+      // not a pass: the game's own 2 MB quota can bite before the folder cap
+      // does, and then the folder cap is simply untested — which looks exactly
+      // like success if the page only reports that something stopped.
+      const verdict = reason === "config-full"
+        ? ["kansion katto valvoo", ""]
+        : reason === "quota"
+          ? ["pelin kiintiö pysäytti ensin — kansion kattoa EI todistettu", "warn"]
+          : [`pysähtyi odottamattomaan syyhyn`, "warn"];
+      $("w-saved").textContent = `${verdict[0]} (tiedosto ${i})`;
+      $("w-saved").className = verdict[1];
       $("w-reason").textContent = reason ?? "—";
-      log(`täyttö pysähtyi ${path} -> ${reason} (${i - 1} kirjoitettu)`);
+      log(`täyttö pysähtyi ${path} -> ${reason} (${i - 1} kirjoitettu, ${(i - 1) * 60} kt)`);
       return;
     }
   }
   // Twenty-five 60 kB files is 1.5 MB. If every one of them was accepted, the
   // folder is not being counted at all, and that is the finding.
-  $("w-saved").textContent = "25 meni läpi";
+  $("w-saved").textContent = "25 tiedostoa meni läpi (1,5 Mt)";
   $("w-saved").className = "warn";
   $("w-reason").textContent = "yhteiskattoa ei valvota";
   log("täyttö: 25 tiedostoa meni läpi — yhteiskattoa ei valvota");
