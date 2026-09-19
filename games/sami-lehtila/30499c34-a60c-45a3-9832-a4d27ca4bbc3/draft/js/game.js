@@ -258,10 +258,25 @@ function jetLevel(v) {
    Suomea puhutaan vain jos laitteelta löytyy suomenkielinen ääni. */
 const SPEAKS = 'speechSynthesis' in window;
 
+/* Loppukaneetti on osa hahmoa: sama ääni pyytää aina samalla tavalla,
+   kohteliaasta kiireiseen. Kaneetteja on kuusi ja hahmoja viisi, joten yksi jää
+   odottamaan seuraavaa hahmoa.
+
+   Ylöspyynnössä kaneettia ei ole: se keikka maksetaan vasta seuraavan kentän
+   alussa, eikä kellään ole vielä kiire mihinkään. */
+const TAILS = ['please', 'kind', 'quick', 'hurry', 'go', 'rush'];
+const tailFor = kind => 'say.tail.' + TAILS[kind % TAILS.length];
+
 function speakLine(key, kind, params) {
   if (muted || !SPEAKS) return;
   const v = LANG === 'fi' ? voiceFor('fi') : null;
-  const text = t('say.' + key, params, v ? 'fi' : 'en');
+  const lang = v ? 'fi' : 'en';
+  /* Kaneetti ratkaistaan samalla kielellä kuin lause, ettei suomalainen
+     "vähän äkkiä" päädy englanninkielisen lauseen perään. */
+  const p = params && params.tail
+    ? Object.assign({}, params, { tail: t(params.tail, null, lang) })
+    : params;
+  const text = t('say.' + key, p, lang);
   try {
     const u = new SpeechSynthesisUtterance(text);
     if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
@@ -697,8 +712,9 @@ function touchdown(pad, b) {
 function askForPad() {
   if (!job) return;
   job.announce = false;
-  say(t('msg.toPad', { n: job.to }), 2.4);
-  speakLine('toPad', job.kind, { n: job.to });
+  const tail = tailFor(job.kind);               // sama kaneetti ruudulle ja ääneen
+  say(t('msg.toPad', { n: job.to, tail: t(tail) }), 2.4);
+  speakLine('toPad', job.kind, { n: job.to, tail });
   sfx.pickup();
 }
 
