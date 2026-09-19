@@ -2,10 +2,10 @@
  *
  * Kaksi tunnelmaa samasta tähtitaivaasta:
  *
- *   warp  — vuoro suoritettu. Tähdet lähtevät keskeltä ja kiihtyvät ulospäin
- *           eksponentiaalisesti (r += r * k), koska lineaarinen liike näyttää
- *           sateelta eikä ylivalonnopeudelta. Koko kuva kiihtyy vielä erikseen
- *           pariin sekuntiin, jotta kortin ilmestyminen tuntuu lähdöltä.
+ *   warp  — vuoro suoritettu. Kaikki tähdet lähtevät yhdestä pisteestä ruudun
+ *           keskeltä ja kiihtyvät ulospäin eksponentiaalisesti (r += r * k),
+ *           koska lineaarinen liike näyttää sateelta eikä ylivalonnopeudelta.
+ *           Peli antaa katsoa hetken pelkkää lentoa ennen kuin kortti tulee.
  *   drift — taksit loppu. Ei lähtöä minnekään: tähdet valuvat hitaasti alas,
  *           värit ovat sammuneet ja alareunassa hehkuu tumma punerrus.
  *
@@ -22,27 +22,27 @@ function warp(W, H, rand) {
   const maxR = Math.hypot(cx, cy) + 80;
   const COUNT = 260;
 
-  const spawn = near => ({
+  const spawn = () => ({
     a: rand(0, Math.PI * 2),
-    r: near ? rand(2, 24) : rand(6, maxR * 0.95),
+    r: rand(1, 14),                 // kaikki lähtevät samasta pisteestä
     v: rand(0.8, 2.3),
     hue: rand(190, 265),
     len: 0,
   });
 
-  const stars = Array.from({ length: COUNT }, () => spawn(false));
+  const stars = Array.from({ length: COUNT }, spawn);
   let t = 0;
 
   return {
     update(dt) {
       t += dt;
-      const w = 0.3 + Math.min(1, t / 1.8) * 1.7;
+      const w = 0.35 + Math.min(1, t / 1.6) * 1.65;
       for (let i = 0; i < stars.length; i++) {
         const s = stars[i];
         const prev = s.r;
         s.r += (s.r * 1.5 + 26) * s.v * w * dt;
         s.len = s.r - prev;
-        if (s.r > maxR) stars[i] = spawn(true);
+        if (s.r > maxR) stars[i] = spawn();
       }
     },
 
@@ -57,7 +57,7 @@ function warp(W, H, rand) {
       ctx.lineCap = 'round';
       for (const s of stars) {
         const f = Math.min(1, s.r / maxR);
-        const tail = Math.min(s.r - 2, s.len * 3.2 + f * 26);
+        const tail = Math.min(s.r - 1, s.len * 3.2 + f * 26);
         const ca = Math.cos(s.a), sa = Math.sin(s.a);
         ctx.globalAlpha = Math.min(1, 0.15 + f * 1.2);
         ctx.strokeStyle = `hsl(${s.hue}, 95%, ${62 + f * 30}%)`;
