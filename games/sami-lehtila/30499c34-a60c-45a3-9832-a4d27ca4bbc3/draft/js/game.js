@@ -89,6 +89,7 @@ const DEFAULTS = {
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
   stick: 2.05,
+  wind: 0.3, sputter: 35,
 };
 const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
@@ -364,7 +365,7 @@ const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
+    msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink, sputT, sputOff,
     graves, squishes,
     wreck, bounces, titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
     runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
@@ -613,7 +614,7 @@ function inputVector() {
 }
 
 function activeThrust() {
-  if (state !== PLAY || dead || fuel <= 0) return { x: 0, y: 0 };
+  if (state !== PLAY || dead || fuel <= 0 || sputOff) return { x: 0, y: 0 };
   const v = inputVector();
   if (taxi.gear > 0.35) v.x = 0;
   if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
@@ -826,6 +827,7 @@ function movePads() {
 function clearWarnings() {
   lowWarn = 0; fastWarn = 0;
   padWarn = null; padBlink = 0;
+  sputT = 0; sputOff = false;
 }
 
 /* Mille alustalle ollaan tulossa ja liiankos kovaa? Raja on sama mistä pomppu
@@ -853,6 +855,21 @@ function warnings(dt) {
     lowWarn -= dt;
     if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.25 + fuel / 45; }
   } else lowWarn = 0;
+
+  /* Yskintä. Tankin pohjalla suuttimet katkovat: kerroin kasvaa nollasta yhteen
+     rajalta tyhjään, ja katko pitenee ja tihenee sen mukana. Katkon aikana
+     bensaa ei kulu, joten yskintä myös venyttää viimeisiä tippoja.
+
+     Tyhjällä tankilla ei yskitä lainkaan — silloin ei ole mitä polttaa, ja sen
+     kertoo jo teksti. Säätimen nolla ottaa koko ilmiön pois. */
+  if (P.sputter > 0 && fuel > 0 && fuel < P.sputter && !dead) {
+    const k = 1 - fuel / P.sputter;
+    sputT -= dt;
+    if (sputT <= 0) {
+      sputOff = !sputOff;
+      sputT = sputOff ? 0.03 + k * 0.10 : 0.34 - k * 0.12;
+    }
+  } else { sputT = 0; sputOff = false; }
 
   const r = !dead && taxi && !taxi.landed ? landRatio() : 0;
   if (!dead && taxi && !taxi.landed && taxi.gear > 0.5 && r > LAND_WARN_FROM) {
@@ -1762,6 +1779,8 @@ const SLIDERS = [
   { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
+  { key: 'wind', label: 'tuulen nousuaika s', min: 0.05, max: 3, step: 0.05 },
+  { key: 'sputter', label: 'yskintä alkaa bensa', min: 0, max: 100, step: 5 },
 ];
 
 let panelNote = '';
