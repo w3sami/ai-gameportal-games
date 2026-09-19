@@ -79,12 +79,18 @@ const STR = {
     'msg.up': 'Ylös, kiitos!',
     'msg.thanks': 'Kiitos! {fare} € (tippi {tip} €)',
     'msg.oops': 'Hups.',
-    'msg.dry': 'Tankki kuiva!',
+    'msg.dry': 'Tankki kuiva — enää sykäyksiä!',
     'msg.coming': 'Hei! Tulossa ollaan.',
 
     'say.hey': 'Hei taksi',
-    'say.toPad': 'Alusta {n} kiitos',
-    'say.up': 'Ylös kiitos',
+    'say.toPad': 'Alusta {n} {tail}',
+    'say.up': 'Ylös {tail}',
+    'say.tail.please': 'kiitos',
+    'say.tail.kind': 'ole hyvä',
+    'say.tail.quick': 'vähän äkkiä',
+    'say.tail.hurry': 'nopeasti jo',
+    'say.tail.go': 'mene mene mene',
+    'say.tail.rush': 'kiireellä',
     'say.thanks': 'Kiitos',
 
     'cut.level': 'KENTTÄ {i} / {t}',
@@ -109,7 +115,7 @@ const STR = {
     'menu.p1': 'Nosta alien kyytiin ja vie hänet pyydetylle alustalle. Syaani alusta on kohde, punaiset eivät, ja vihreä pallo kertoo että siellä on jo käyty — sekä nouto että jättö merkkaa alustan. Mitä nopeammin ja pehmeämmin, sitä isompi tippi, ja laskeudu viereen, älä päälle.',
     'menu.p2': '<b>Laskuteline pitää laskea ennen kosketusta</b> — ja alhaalla se sammuttaa sivusuuttimet, joten nosta se heti lähdössä. Matala piippaus varoittaa bensasta, korkea ja tiheä siitä että teline on alhaalla mutta vauhti hajottaisi taksin.',
     'menu.p3': 'Töötti kuuluu lähelle: jos asiakas kuulee sen, hän siirtyy alustan toiseen laitaan. Keltainen alusta on tankkaus, ja bensa maksaa omasta kassasta. Kentästä ilman kolareita tai ilman yliajoja maksetaan {bonus} euron bonus kummastakin. {levels} kenttää, ja varikolta saa uuden taksin {price} eurolla tai kolme {fleet} eurolla.',
-    'menu.hint': 'Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>Isot napit: teline ja töötti. Ratas avaa säädöt, nuoli koko ruudun.<br>Näppäimillä <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot; töötti <kbd>shift</kbd> &middot; säädöt <kbd>P</kbd> &middot; koko ruutu <kbd>F</kbd> &middot; äänet <kbd>M</kbd><br>Ohjaimella sauva ohjaa &middot; teline <kbd>A</kbd> &middot; töötti <kbd>B</kbd> &middot; aja <kbd>Start</kbd> &middot; äänet <kbd>Back</kbd>. Selain näkee ohjaimen vasta kun sen nappia on painettu.',
+    'menu.hint': '<b>Kosketus:</b> vedä mistä tahansa ruudulta — ohjainsauva on käytössä sormen alla. Isot napit ovat teline ja töötti, ratas avaa säädöt ja nuoli koko ruudun.<br><b>Näppäimet:</b> <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot; töötti <kbd>shift</kbd> &middot; säädöt <kbd>P</kbd> &middot; koko ruutu <kbd>F</kbd> &middot; äänet <kbd>M</kbd><br><b>Ohjain:</b> vasen sauva ohjaa &middot; teline <kbd>A</kbd> &middot; töötti <kbd>B</kbd> &middot; aja <kbd>Start</kbd> &middot; äänet <kbd>Back</kbd>',
 
     'buy.t1': 'Taksi', 'buy.t2': 'hajosi',
     'buy.p': 'Kenttä jatkuu siitä mihin jäit: käydyt alustat ja odottava asiakas säilyvät. Kolmen erä tulee halvemmaksi per auto, mutta sitoo rahaa joka olisi voinut jäädä tulokseen.',
@@ -124,8 +130,8 @@ const STR = {
     'lost.p': 'Vuoro katkesi kentällä {i}/{t} ({name}), {secs} sekunnin kohdalla.',
     'lost.hint': 'Pehmeä lasku maksaa itsensä takaisin tippinä.',
     'card.keys': 'Näppäimet: <kbd>enter</kbd> aja &middot; <kbd>F</kbd> koko ruutu &middot; <kbd>P</kbd> säädöt',
-    'pad.none': 'Ohjainta ei näy. Paina ohjaimen nappia — selain piilottaa ohjaimen siihen asti, ja myös silloin kun tämä ikkuna ei ole päällimmäisenä.',
-    'pad.on': 'Ohjain: {id} · mappaus {map} · sauva {x} {y} · viimeksi painettu {btn} · ruutuja {n}',
+    'pad.none': 'Ohjainta ei näy. Paina ohjaimen nappia — selain piilottaa ohjaimen siihen asti, ja aina kun ikkuna ei ole päällimmäisenä.',
+    'pad.on': 'Ohjain: {id}',
   },
 
   en: {
@@ -146,12 +152,18 @@ const STR = {
     'msg.up': 'Up, please!',
     'msg.thanks': 'Thanks! {fare} € (tip {tip} €)',
     'msg.oops': 'Oops.',
-    'msg.dry': 'Tank is dry!',
+    'msg.dry': 'Tank is dry — sputtering only!',
     'msg.coming': 'Hey! On my way.',
 
     'say.hey': 'Hey taxi',
-    'say.toPad': 'Pad {n} please',
-    'say.up': 'Up please',
+    'say.toPad': 'Pad {n} {tail}',
+    'say.up': 'Up {tail}',
+    'say.tail.please': 'please',
+    'say.tail.kind': 'if you would',
+    'say.tail.quick': 'and quickly',
+    'say.tail.hurry': 'hurry now',
+    'say.tail.go': 'go go go',
+    'say.tail.rush': 'in a hurry',
     'say.thanks': 'Thanks',
 
     'cut.level': 'LEVEL {i} / {t}',
@@ -176,7 +188,7 @@ const STR = {
     'menu.p1': 'Pick up an alien and fly them to the pad they ask for. Cyan is the target, red pads are not, and a green dot means that pad is already done — both a pickup and a drop-off count. The faster and softer the ride, the bigger the tip, and land beside your passenger, not on them.',
     'menu.p2': '<b>The landing gear has to be down before you touch a pad</b> — and while it is down the side thrusters are dead, so raise it as you leave. A low beep warns about fuel, a high fast one means the gear is down but your speed would wreck the taxi.',
     'menu.p3': 'The horn only carries a short way: if the passenger hears it, they scoot to the other end of the pad. The yellow pad is fuel, and it is paid from your own till. A level with no crashes or no run-overs pays a {bonus} € bonus for each. {levels} levels, and the depot sells one taxi for {price} € or three for {fleet} €.',
-    'menu.hint': 'Drag anywhere — the stick appears under your thumb.<br>Big buttons: gear and horn. The cog opens tuning, the arrows fullscreen.<br>Keys <kbd>WASD</kbd>/arrows &middot; gear <kbd>space</kbd> &middot; horn <kbd>shift</kbd> &middot; tuning <kbd>P</kbd> &middot; fullscreen <kbd>F</kbd> &middot; sound <kbd>M</kbd><br>On a controller the stick steers &middot; gear <kbd>A</kbd> &middot; horn <kbd>B</kbd> &middot; drive <kbd>Start</kbd> &middot; sound <kbd>Back</kbd>. The browser only sees a controller once a button has been pressed.',
+    'menu.hint': '<b>Touch:</b> drag anywhere — the stick appears under your thumb. The big buttons are gear and horn, the cog opens tuning and the arrows fullscreen.<br><b>Keys:</b> <kbd>WASD</kbd>/arrows &middot; gear <kbd>space</kbd> &middot; horn <kbd>shift</kbd> &middot; tuning <kbd>P</kbd> &middot; fullscreen <kbd>F</kbd> &middot; sound <kbd>M</kbd><br><b>Controller:</b> left stick steers &middot; gear <kbd>A</kbd> &middot; horn <kbd>B</kbd> &middot; drive <kbd>Start</kbd> &middot; sound <kbd>Back</kbd>',
 
     'buy.t1': 'Taxi', 'buy.t2': 'wrecked',
     'buy.p': 'The level carries on where you left it: finished pads and the waiting passenger stay put. Three taxis cost less per car, but that money is out of your final score.',
@@ -191,8 +203,8 @@ const STR = {
     'lost.p': 'The shift ended on level {i}/{t} ({name}) at {secs} seconds.',
     'lost.hint': 'A soft landing pays for itself in tips.',
     'card.keys': 'Keys: <kbd>enter</kbd> drive &middot; <kbd>F</kbd> fullscreen &middot; <kbd>P</kbd> tuning',
-    'pad.none': 'No controller visible. Press a button on it — the browser hides a controller until then, and also whenever this window is not the focused one.',
-    'pad.on': 'Controller: {id} · mapping {map} · stick {x} {y} · last pressed {btn} · frames {n}',
+    'pad.none': 'No controller visible. Press a button on it — the browser hides one until then, and whenever this window is not the focused one.',
+    'pad.on': 'Controller: {id}',
   },
 };
 
