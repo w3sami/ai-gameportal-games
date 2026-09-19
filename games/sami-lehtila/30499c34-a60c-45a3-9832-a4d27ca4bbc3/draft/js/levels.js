@@ -497,7 +497,7 @@ const RIDES = {
    ennen puuskaa ja laskee ennen sen loppumista. */
 
 const WIND = {
-  calm: 4.0, build: 2.2, hold: 2.6, ease: 1.8,
+  calm: 0.3, build: 0.6, hold: 14, ease: 1.8,
   peak: 120,                                  // px/s² puuskan huipulla
   lead: 1.4,                                  // sekuntia jotka tuulipussi on edellä
 };
