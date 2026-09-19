@@ -9,25 +9,20 @@
  * Alusta on käyty kun siellä on pysähdytty: sekä nouto että jättö merkkaa
  * paikan. Nouto arvotaan vapaasti mille tahansa alustalle, mutta määränpää on
  * aina jokin käymätön alusta — ja jos käymättömiä ei ole, asiakas pyytää ylös.
- * Näin väkäset ja jäljellä olevat keikat eivät voi mennä ristiin.
  *
- * Katosta ulos lähtenyt asiakas ei jää luukkuun: hän jatkaa kyydissä seuraavaan
- * kenttään, joten uusi kenttä alkaa jättökeikalla ja hän maksaa vasta perillä.
- * Vuoron viimeisellä kentällä hän maksaa ulosajosta, koska matka päättyy siihen.
+ * Kolme varoitusta, kolme eri ääntä: matala piippaus vähistä bensoista, korkea
+ * lähestymisvaroitus kun teline on alhaalla ja vauhti lähestyy laskurajaa, ja
+ * murahtava törmäysvaroitus kun ollaan menossa päin seinää.
  *
- * Taksi tulee kenttään aina katon luukusta — myös kolarin jälkeen — jarruttaa
- * paikalleen ja peli käynnistyy READY–GO:lla. Kentän lopussa on välianimaatio:
- * nousu tilinpäätöksineen ja lasku seuraavan kentän nimen kanssa. Viimeisen
- * kentän jälkeen tulee pelkkä nousu koko vuoron tilastoilla, ja loppuruudussa
- * lentää hyperavaruus (js/hyperspace.js) — kortti häivähtää siihen vasta parin
- * sekunnin päästä, jotta lennon ehtii nähdä.
+ * Katosta ulos lähtenyt asiakas jatkaa kyydissä seuraavaan kenttään, joten uusi
+ * kenttä alkaa jättökeikalla ja hän maksaa vasta perillä. Taksi tulee kenttään
+ * aina katon luukusta — myös kolarin jälkeen. Kentän lopussa on välianimaatio,
+ * ja vuoron jälkeen loppuruutu (js/hyperspace.js), johon kortti häivähtää vasta
+ * parin sekunnin päästä.
  *
- * Tekstit ja puhe tulevat js/i18n.js:stä. Kieli päätellään ?lang-parametrista,
- * localStoragesta tai selaimen kielestä, ja suomea puhutaan vain jos laitteelta
- * löytyy suomenkielinen ääni.
- *
- * Kentät ovat js/levels.js:ssä, luukun ulkoasu js/gate.js, pompun malli
- * js/bounce.js, välianimaatio js/cutscene.js ja tulostaulu js/leaderboard.js.
+ * Tekstit ja puhe tulevat js/i18n.js:stä. Kentät ovat js/levels.js:ssä, luukun
+ * ulkoasu js/gate.js, pompun malli js/bounce.js, välianimaatio js/cutscene.js
+ * ja tulostaulu js/leaderboard.js.
  *
  * ?debug=1 avaa säätöpaneelin, ?test=1 ajaa pompputestin, ?lang=fi|en pakottaa
  * kielen, gate-test.html on luukun oma säätösivu.
@@ -60,7 +55,10 @@ const HORN_R = 150;
 const SQ_FALL = 0.4, SQ_WAIT = 0.3, SQ_RISE = 0.7;
 const SQ_DUR = SQ_FALL + SQ_WAIT + SQ_RISE;
 const GRAVE_MAX = 10;
-const END_CARD_DELAY = 2600;                               // tähdet ensin, kortti sitten
+const END_CARD_DELAY = 2600;
+const LAND_WARN_FROM = 0.75;               // varoitus jo ennen laskurajaa
+const NEAR_LEAD = 0.4;                     // sekuntia eteenpäin törmäystarkistus
+const NEAR_PAD = 10;                        // kiinteä marginaali sen ympärille
 
 let levelIndex = 0, level = LEVELS[0];
 let GATE = level.gate, WALLS = [], PADS = [];
@@ -250,9 +248,7 @@ function jetLevel(v) {
 }
 
 /* -------------------------------------------------------------------- puhe
-   Suomea puhutaan vain jos laitteelta löytyy suomenkielinen ääni. Muuten
-   englanti, koska englantilainen ääni suomenkielisellä tekstillä kuulostaa
-   siltä kuin taksi olisi tilattu väärästä maasta. */
+   Suomea puhutaan vain jos laitteelta löytyy suomenkielinen ääni. */
 const SPEAKS = 'speechSynthesis' in window;
 
 function speakLine(key, kind, params) {
@@ -310,8 +306,10 @@ const sfx = {
   pump() { tone(90, 0.06, { type: 'square', gain: 0.04 }); },
   /** Bensavaroitus: matala ja rauhallinen, tiivistyy tankin tyhjetessä. */
   warn() { tone(196, 0.10, { type: 'square', gain: 0.06, to: 165 }); },
-  /** Lähestymisvaroitus: korkea ja tiheä, teline alhaalla ja vauhtia liikaa. */
-  fast() { tone(1175, 0.05, { type: 'square', gain: 0.05 }); },
+  /** Lähestymisvaroitus: nousee ja tihenee sitä mukaa kun laskuraja lähenee. */
+  fast(r) { tone(850 + clamp(r, 0, 1.5) * 450, 0.05, { type: 'square', gain: 0.05 }); },
+  /** Törmäysvaroitus: murahtava, selvästi eri ääni kuin kaksi muuta. */
+  near() { tone(330, 0.08, { type: 'sawtooth', gain: 0.07, to: 220 }); },
   buy() {
     tone(330, 0.10, { type: 'square', gain: 0.12 });
     tone(494, 0.12, { type: 'triangle', gain: 0.14, delay: 0.09 });
@@ -362,8 +360,8 @@ const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, fastWarn, graves, squishes, wreck, bounces,
-    titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
+    msg, msgT, bits, lowWarn, fastWarn, nearWarn, nearFx, graves, squishes,
+    wreck, bounces, titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
     runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
 
 const stars = [];
@@ -400,7 +398,7 @@ function loadLevel(i) {
   gateOpen = false;
   graves = []; squishes = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
   msg = ''; msgT = 0; titleT = 0; goT = 0;
-  lowWarn = 0; fastWarn = 0;
+  lowWarn = 0; fastWarn = 0; nearWarn = 0; nearFx = 0;
   job = null;
   levelMoney0 = money;
   levelDeaths = 0;
@@ -431,7 +429,7 @@ function beginEntry(showTitle) {
   dead = false; deadT = 0; wreck = null; bounces = 0;
   gateOpen = true;
   enterT = 0; goT = 0;
-  lowWarn = 0; fastWarn = 0;
+  lowWarn = 0; fastWarn = 0; nearWarn = 0; nearFx = 0;
   titleT = showTitle ? 2.0 : 0;
   state = ENTER;
   sfx.levelStart();
@@ -463,12 +461,9 @@ function resetTaxi() {
   dead = false; deadT = 0; wreck = null; bounces = 0;
 }
 
-/* Uusi keikka.
- *
- * Nouto arvotaan vapaasti mille tahansa alustalle, paitsi sille jolla juuri
- * seistään — muuten taksi ei liikkuisi keikkojen välissä. Määränpää sen sijaan
- * on aina jokin käymätön alusta, ja jos sellaista ei ole, asiakas pyytää ylös.
- */
+/* Uusi keikka. Nouto arvotaan vapaasti mille tahansa alustalle paitsi sille
+   jolla juuri seistään; määränpää on aina jokin käymätön alusta, ja jos
+   sellaista ei ole, asiakas pyytää ylös. */
 function spawnJob(avoidId, delay, forceFrom) {
   const pool = numbered().filter(p => p.id !== avoidId);
   const from = forceFrom !== undefined && padById(forceFrom)
@@ -637,6 +632,27 @@ function solids() {
 /** Kuinka lähellä laskurajaa ollaan: yli 1 hajottaa taksin. */
 const landRatio = () => Math.max(taxi.vy / P.landVY, Math.abs(taxi.vx) / P.landVX);
 
+/* Ollaanko menossa päin seinää? Laatikkoa venytetään 0,4 sekunnin verran
+   siihen suuntaan mihin ollaan menossa ja sen ympärille jätetään pieni
+   marginaali. Pelkkä etäisyys ei kelpaa mittariksi: Highrisen käytävässä
+   seinä on aina lähellä, ja jatkuva piippaus olisi pelkkää kohinaa. Alustat
+   jätetään pois — niitä kohti mennään tarkoituksella ja niistä varoittaa
+   lähestymisvaroitin. */
+function nearWall() {
+  if (!taxi || taxi.landed) return false;
+  const b = taxiBox(taxi);
+  const dx = taxi.vx * NEAR_LEAD, dy = taxi.vy * NEAR_LEAD;
+  const sweep = {
+    x: Math.min(b.x, b.x + dx) - NEAR_PAD,
+    y: Math.min(b.y, b.y + dy) - NEAR_PAD,
+    w: b.w + Math.abs(dx) + NEAR_PAD * 2,
+    h: b.h + Math.abs(dy) + NEAR_PAD * 2,
+  };
+  const list = gateOpen ? WALLS : WALLS.concat([gateBar()]);
+  for (const r of list) if (hit(sweep, r)) return true;
+  return false;
+}
+
 /* Kolari vie taksin ja kyydissä olleen asiakkaan — syytä ei selitetä, romu
    kertoo sen itse. Kaikki muu kentän tilanne jää koskematta. */
 function crash() {
@@ -646,7 +662,6 @@ function crash() {
   levelDeaths++;
   if (job && job.phase === 'aboard') {
     if (job.to === 'up') gateOpen = false;
-    // menetetty kyyti: sama keikka odottamaan, tai uusi jos lähtöä ei ole
     if (padById(job.from)) newJob(job.from, job.to, 1.2);
     else spawnJob(null, 1.2);
   }
@@ -789,8 +804,6 @@ const fareNow = () => job && job.phase === 'aboard'
   ? P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime))
   : 0;
 
-/* Noutoalusta syttyy vasta kun asiakas on ilmestynyt, ei jo odotusajan
-   aikana. */
 const targetId = () => {
   if (!job) return null;
   if (job.phase === 'aboard') return job.to;
@@ -812,17 +825,33 @@ function movePads() {
   }
 }
 
-/* ------------------------------------------------------------ varoitukset */
+/* ------------------------------------------------------------ varoitukset
+   Kolme eri hätää, kolme eri ääntä ja tahtia:
+     bensa   — matala piippaus, tihenee tankin tyhjetessä
+     lasku   — korkea, alkaa jo 75 %:ssa laskurajasta ja nousee ja tihenee
+               sitä mukaa kun raja lähenee; yli mentäessä tiheintä
+     törmäys — murahdus kun 0,4 sekunnin päässä on seinä */
 function warnings(dt) {
+  if (nearFx > 0) nearFx -= dt;
+
   if (fuel < FUEL_LOW && fuel > 0 && !dead) {
     lowWarn -= dt;
     if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.25 + fuel / 45; }
   } else lowWarn = 0;
 
-  if (!dead && taxi && !taxi.landed && taxi.gear > 0.5 && landRatio() > 1) {
+  const r = !dead && taxi && !taxi.landed ? landRatio() : 0;
+  if (!dead && taxi && !taxi.landed && taxi.gear > 0.5 && r > LAND_WARN_FROM) {
     fastWarn -= dt;
-    if (fastWarn <= 0) { sfx.fast(); fastWarn = 0.13; }
+    if (fastWarn <= 0) {
+      sfx.fast(r);
+      fastWarn = clamp(0.30 - (r - LAND_WARN_FROM) * 0.5, 0.08, 0.30);
+    }
   } else fastWarn = 0;
+
+  if (!dead && nearWall()) {
+    nearWarn -= dt;
+    if (nearWarn <= 0) { sfx.near(); nearWarn = 0.2; nearFx = 0.2; }
+  } else nearWarn = 0;
 }
 
 /* ------------------------------------------------------------ sisääntulo */
@@ -865,7 +894,7 @@ function update(dt) {
   if (dead) {
     deadT += dt;
     jetLevel(0);
-    lowWarn = 0; fastWarn = 0;
+    lowWarn = 0; fastWarn = 0; nearWarn = 0; nearFx = 0;
     if (wreck) {
       wreck.vy += 640 * dt;
       wreck.x += wreck.vx * dt;
@@ -952,8 +981,7 @@ function refuel(dt) {
 }
 
 /* Ulos luukusta. Jos kenttiä on vielä jäljellä, kyydissä oleva asiakas jatkaa
-   matkaa seuraavaan kenttään ja maksaa vasta siellä perillä. Viimeisellä
-   kentällä matka päättyy tähän, joten hän maksaa nyt. */
+   matkaa seuraavaan kenttään ja maksaa vasta siellä perillä. */
 function finish() {
   const nextIndex = levelIndex < LEVELS.length - 1 ? levelIndex + 1 : null;
   let paid = P.exitBonus;
@@ -991,8 +1019,7 @@ function buyTaxis(count, price) {
 
 /* Vuoro päättyy. Ensin pelkkä tausta — suoritetusta vuorosta hyperavaruus,
    loppuneista takseista valuvat tähdet — ja vasta parin sekunnin päästä kortti
-   häivähtää päälle. Pysäytyskuva kentästä näyttäisi siltä kuin peli olisi
-   jäänyt jumiin, ja heti ilmestyvä kortti veisi koko efektin. */
+   häivähtää päälle. */
 function gameOver(won) {
   state = OVER;
   jetLevel(0);
@@ -1488,6 +1515,16 @@ function drawHud() {
     ctx.fillText(job.to === 'up' ? t('ui.meterUp') : t('ui.meterPad', { n: job.to }), W - 26, 140);
   }
 
+  // törmäysvaroituksen välähdys ruudun reunoilla
+  if (nearFx > 0) {
+    ctx.save();
+    ctx.globalAlpha = clamp(nearFx / 0.2, 0, 1) * 0.45;
+    ctx.strokeStyle = '#ff5d7a';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(5, 5, W - 10, H - 10);
+    ctx.restore();
+  }
+
   if (msgT > 0) {
     ctx.globalAlpha = Math.min(1, msgT * 2);
     ctx.textAlign = 'center';
@@ -1534,7 +1571,8 @@ function smallBox(b, draw) {
 
 function drawButtons() {
   const b = GEAR_BOX, down = taxi && taxi.gear > 0.5;
-  const hot = fastWarn > 0;
+  // punainen vasta kun vauhti oikeasti hajottaisi taksin, ei jo varoitusalueella
+  const hot = taxi && !taxi.landed && taxi.gear > 0.5 && !dead && landRatio() > 1;
   ctx.save();
   ctx.globalAlpha = 0.82;
   ctx.fillStyle = hot ? 'rgba(255,93,122,.2)' : down ? 'rgba(111,227,255,.18)' : 'rgba(255,255,255,.07)';
