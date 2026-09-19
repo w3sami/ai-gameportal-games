@@ -103,7 +103,7 @@ const Snd = (() => {
 
 // ---- Game state ----
 let ship, ghost = null, best = null, particles = [], ticks = 0, gTick = 0, running = false, inputs = [], deadT = 0, shake = 0, doneT = 0;
-let mode = 'menu', wet = false;                              // menu | play | paused | complete; wet: rocket inside a waterfall
+let mode = 'menu', wet = false, caveK = 0;                   // menu | play | paused | complete; wet: rocket inside a waterfall; caveK: 0 jungle → 1 cave backdrop
 const cam = {x:0,y:0};
 const keys = {thrust:false,left:false,right:false};
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -197,6 +197,7 @@ function tick(){
       if (ship.state === 'flying' && ship.flame) emitThrust(ship);
       wet = ship.state === 'flying' && inWater(ship);
       if (wet && ticks % 3 === 0) spray(ship);
+      froth();
     }
   }
   if (ghost && running && ghost.state !== 'dead'){
@@ -278,6 +279,13 @@ function spray(s){
   const a = Math.random()*6.283, v = 40+Math.random()*120;
   particles.push({x:s.x+(Math.random()-0.5)*16,y:s.y+(Math.random()-0.5)*16,vx:Math.cos(a)*v+s.vx*0.3,vy:Math.sin(a)*v-40,life:0.3+Math.random()*0.3,max:0.6,sz:1.5+Math.random()*2,kind:1,col:'200,228,255'});
 }
+function froth(){                                                                                   // droplets thrown up where each visible waterfall meets its pool
+  for (const f of L.forces||[]){ if (f.kind !== 'water' || f.r !== undefined || !f.pool) continue;
+    if (f.x+f.w < cam.x-100 || f.x > cam.x+vw/Z+100 || f.y+f.h < cam.y-100 || f.y+f.h-200 > cam.y+vh/Z) continue;
+    for (let k=0;k<2;k++){ const px = f.x-30+Math.random()*(f.w+60), py = f.y+f.h-f.pool.h-2, v = 140+Math.random()*260;
+      particles.push({x:px,y:py,vx:(Math.random()-0.5)*220,vy:-v,life:0.4+Math.random()*0.5,max:0.9,sz:3+Math.random()*3.5,kind:1,col:'235,246,255'}); }
+  }
+}
 function puff(px,py,sp){
   for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v*0.4,life:0.3+Math.random()*0.4,max:0.7,sz:2+Math.random()*3,kind:1}); }
 }
@@ -319,6 +327,9 @@ function drawParticles(){
   }
 }
 
+const inRockZone = (x, y) => (L.rockZones||[]).some(z => { const dx = (x-z.x)/z.r, dy = (y-z.y)/(z.ry||z.r); return dx*dx+dy*dy <= 1; });
+const mixHex = (a, b, k) => { const A = parseInt(a.slice(1),16), B = parseInt(b.slice(1),16), ch = sh => Math.round(((A>>sh)&255)*(1-k)+((B>>sh)&255)*k); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
+
 // Force fields. Pools go under the terrain (so the floor clips them), the curtains over the rocket (a waterfall half-hides what is inside it). Animation is
 // visual only and runs on wall time; the force itself runs on sim ticks. Everything drawn is a rect, in keeping with the level art.
 function drawForces(t, over){
@@ -328,7 +339,9 @@ function drawForces(t, over){
     if (f.x > vx1 || f.x+f.w < vx0 || f.y > vy1 || f.y+f.h < vy0) continue;
     if (f.kind === 'water'){
       if (!over){ if (f.pool){ const p = f.pool, py = f.y+f.h-p.h; ctx.fillStyle = 'rgba(70,130,210,.6)'; ctx.fillRect(p.x, py, p.w, p.h);
-        ctx.fillStyle = 'rgba(210,235,255,.45)'; for (let i=0;i<5;i++){ const rx = p.x + ((t*70 + i*p.w/5) % p.w); ctx.fillRect(rx, py+2, Math.min(22, p.x+p.w-rx), 2); } } continue; }
+        ctx.fillStyle = 'rgba(210,235,255,.45)'; for (let i=0;i<5;i++){ const rx = p.x + ((t*70 + i*p.w/5) % p.w); ctx.fillRect(rx, py+2, Math.min(22, p.x+p.w-rx), 2); }
+        for (let i=0;i<16;i++){ const hx = ((i*7919)%89)/89, hy = ((i*104729)%67)/67, ph = (t*(1.2+hy) + hx*7) % 1, fw = 24+hy*40, fx = f.x+f.w/2+(hx-0.5)*(f.w+150)-fw/2, fh = 8+12*Math.sin(ph*3.1416);   // froth: white slabs heaving on the surface
+          ctx.fillStyle = `rgba(240,248,255,${0.4+0.5*Math.sin(ph*3.1416)})`; ctx.fillRect(fx, py-fh*0.7, fw, fh); } } continue; }
       ctx.fillStyle = 'rgba(110,165,235,.26)'; ctx.fillRect(f.x, f.y, f.w, f.h);
       const n = Math.floor(f.w/9);                                                                   // strands of varying weight, each with highlights rolling down every ~220 px
       for (let i=0;i<n;i++){ const hx = ((i*7919)%97)/97, cx = f.x+4.5+i*9, sw = 3+hx*5;
@@ -336,8 +349,8 @@ function drawForces(t, over){
         const len = 50+hx*90, step = 220+hx*80; ctx.fillStyle = `rgba(225,242,255,${0.28+hx*0.2})`;
         for (let yy = ((t*(800+hx*250) + hx*step) % step) - len; yy < f.h; yy += step){ const y0 = Math.max(f.y, f.y+yy), y1 = Math.min(f.y+f.h, f.y+yy+len); if (y1 > y0) ctx.fillRect(cx-1.5, y0, 3, y1-y0); } }
       ctx.fillStyle = 'rgba(235,245,255,.4)'; ctx.fillRect(f.x-6, f.y, f.w+12, 10);                    // the lip
-      ctx.fillStyle = 'rgba(225,240,255,.28)';                                                          // mist at the foot
-      for (let i=0;i<6;i++){ const ph = (t*0.6 + i*0.17) % 1, mx = f.x+f.w/2+(i-2.5)*f.w*0.35, my = f.y+f.h-ph*70, ms = 26*(1-ph)+6; ctx.fillRect(mx-ms/2, my-ms*0.3, ms, ms*0.6); }
+      for (let i=0;i<10;i++){ const ph = (t*0.7 + i*0.1) % 1, mx = f.x+f.w/2+(i-4.5)*(f.w+80)*0.11, my = f.y+f.h-40-ph*110, ms = 44*(1-ph)+10;   // mist billowing up from the foot
+        ctx.fillStyle = `rgba(225,240,255,${0.32*(1-ph)})`; ctx.fillRect(mx-ms/2, my-ms*0.3, ms, ms*0.6); }
     } else if (over){                                                                                   // wind, gas: streaks along the push, faint when off
       const on = forceOn(f, ticks), len = Math.hypot(f.ax||0, f.ay||0) || 1, ux = (f.ax||0)/len, uy = (f.ay||0)/len, span = Math.abs(ux)*f.w + Math.abs(uy)*f.h;
       ctx.strokeStyle = f.kind === 'gas' ? `rgba(170,225,130,${on?.4:.08})` : `rgba(225,232,240,${on?.35:.07})`; ctx.lineWidth = 2; ctx.beginPath();
@@ -371,13 +384,19 @@ function render(dt){
   const sx = reduced ? 0 : (Math.random()-.5)*shake*14, sy = reduced ? 0 : (Math.random()-.5)*shake*14;
 
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  const vg = ctx.createLinearGradient(0,0,0,vh); vg.addColorStop(0,STYLE.bg.top); vg.addColorStop(1,STYLE.bg.bottom); ctx.fillStyle = vg; ctx.fillRect(0,0,vw,vh);
-  for (const g of STYLE.bg.glows){
-    const bf = STYLE.bg.f, gx = (g.u*L.w-cam.x)*Z*bf + vw/2*(1-bf), gy = (g.v*L.h-cam.y)*Z*bf + vh/2*(1-bf), rad = g.r*(L.w+L.h)*0.5*Z*0.7;
-    if (gx < -rad || gx > vw+rad || gy < -rad || gy > vh+rad) continue;
-    const rg = ctx.createRadialGradient(gx,gy,0,gx,gy,rad); rg.addColorStop(0,g.c); rg.addColorStop(0.55,g.c.replace(/[\d.]+\)$/,'0.12)')); rg.addColorStop(1,'rgba(0,0,0,0)');
+  // inside a rock zone the backdrop crossfades to the cave theme's, so a cave carved into a jungle level feels like a cave
+  caveK += ((inRockZone(ship.x, ship.y) ? 1 : 0) - caveK)*(1-Math.exp(-3*dt));
+  const cb = THEMES.cave.bg, jb = STYLE.bg, k2 = STYLE === THEMES.cave ? 0 : caveK;
+  const vg = ctx.createLinearGradient(0,0,0,vh); vg.addColorStop(0,mixHex(jb.top, cb.top, k2)); vg.addColorStop(1,mixHex(jb.bottom, cb.bottom, k2)); ctx.fillStyle = vg; ctx.fillRect(0,0,vw,vh);
+  const glow = (g, am) => {
+    const bf = jb.f, gx = (g.u*L.w-cam.x)*Z*bf + vw/2*(1-bf), gy = (g.v*L.h-cam.y)*Z*bf + vh/2*(1-bf), rad = g.r*(L.w+L.h)*0.5*Z*0.7;
+    if (am < 0.02 || gx < -rad || gx > vw+rad || gy < -rad || gy > vh+rad) return;
+    const a0 = parseFloat(g.c.match(/[\d.]+\)$/)[0]), c0 = g.c.replace(/[\d.]+\)$/, (a0*am).toFixed(3)+')');
+    const rg = ctx.createRadialGradient(gx,gy,0,gx,gy,rad); rg.addColorStop(0,c0); rg.addColorStop(0.55,g.c.replace(/[\d.]+\)$/,(0.12*am).toFixed(3)+')')); rg.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle = rg; ctx.fillRect(Math.max(0,gx-rad),Math.max(0,gy-rad),Math.min(vw,gx+rad)-Math.max(0,gx-rad),Math.min(vh,gy+rad)-Math.max(0,gy-rad));
-  }
+  };
+  for (const g of jb.glows) glow(g, 1-k2);
+  if (k2 > 0) for (const g of cb.glows) glow(g, k2);
   for (const ly of layers){   // true perspective about the screen centre: screen = (p - cam)·f·Z + centre·(1-f)
     const ox = -(cam.x+ly.padX)*Z*ly.f + vw/2*(1-ly.f) + sx*ly.f, oy = -(cam.y+ly.padY)*Z*ly.f + vh/2*(1-ly.f) + sy*ly.f, kk = Z*ly.f/ly.q;
     ctx.drawImage(ly.c, ox, oy, ly.c.width*kk, ly.c.height*kk);
