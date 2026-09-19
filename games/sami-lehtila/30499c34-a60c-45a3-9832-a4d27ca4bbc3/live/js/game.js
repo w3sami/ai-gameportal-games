@@ -8,8 +8,8 @@
  * on toimitettu, viimeinen asiakas pyytää ylös — ja vasta hänen kyydissään
  * luukku on auki.
  *
- * Kenttä alkaa aina ilmasta: taksi tulee katon luukusta, luukku sulkeutuu
- * perässä ja peli käynnistyy READY–GO:lla. Kenttien välissä on kaksivaiheinen
+ * Kenttä alkaa aina ilmasta: taksi tulee katon luukusta, jarruttaa paikalleen
+ * ja peli käynnistyy READY–GO:lla. Kenttien välissä on kaksivaiheinen
  * välianimaatio (js/cutscene.js): ylös tilinpäätöksen kanssa, alas seuraavan
  * kentän nimen kanssa, ja siitä suoraan luukusta sisään.
  *
@@ -39,6 +39,7 @@ const CEIL = 16;
 const TW = 54, TH = 28, GEAR = 14;
 const FUEL_MAX = 100;
 const TAXI_PRICE = 500;
+const ENTER_Y = H * 0.30;                                  // mihin sisääntulo pysähtyy
 
 let levelIndex = 0, level = LEVELS[0];
 let GATE = level.gate, WALLS = [], PADS = [];
@@ -280,18 +281,15 @@ const sfx = {
     tone(494, 0.12, { type: 'triangle', gain: 0.14, delay: 0.09 });
     tone(659, 0.20, { type: 'triangle', gain: 0.14, delay: 0.19 });
   },
-  /** Alkusoitto kun taksi tulee luukusta sisään. */
   levelStart() {
     tone(392, 0.11, { type: 'triangle', gain: 0.13 });
     tone(523, 0.11, { type: 'triangle', gain: 0.13, delay: 0.10 });
     tone(784, 0.22, { type: 'triangle', gain: 0.13, delay: 0.20 });
   },
-  /** Ohjaus pelaajalle. */
   go() {
     tone(660, 0.09, { type: 'square', gain: 0.13 });
     tone(990, 0.16, { type: 'triangle', gain: 0.14, delay: 0.07 });
   },
-  /** Välianimaation nouseva kulku. */
   cutscene() {
     const seq = [262, 330, 392, 523, 659, 784, 1047];
     seq.forEach((f, i) => tone(f, 0.28, { type: 'triangle', gain: 0.11, delay: i * 0.33 }));
@@ -355,8 +353,8 @@ function loadLevel(i) {
   newJob(from, pickTarget(from), 1.2);
 }
 
-/* Kenttä alkaa ilmasta: taksi tulee luukusta, luukku sulkeutuu perässä ja
-   ohjaus annetaan pelaajalle vasta GO:ssa. */
+/* Kenttä alkaa ilmasta: taksi tulee luukusta, jarruttaa paikalleen ja ohjaus
+   annetaan pelaajalle vasta kun se on pysähtynyt. */
 function beginEntry(showTitle) {
   taxi = {
     x: GATE.x + GATE.w / 2, y: -60,
@@ -398,6 +396,26 @@ function pickTarget(fromId) {
   const open = numbered().filter(p => p.id !== fromId && !served[p.id]);
   const pool = open.length ? open : numbered().filter(p => p.id !== fromId);
   return pool.length ? pick(pool).id : fromId;
+}
+
+/* Seuraava keikka toimituksen jälkeen. Asiakas haetaan mieluiten muualta kuin
+   siltä alustalta jolle juuri laskeuduttiin — muuten taksi ei liikkuisi
+   toimitusten välissä lainkaan. Samalta alustalta lähdetään vain kun jäljellä
+   on enää yksi käymätön alusta, jolloin muuta paria ei ole. */
+function nextJobAfter(deliveredId) {
+  const all = numbered().every(p => served[p.id]);
+  if (all) return newJob(deliveredId, 'up', 1.6);
+
+  const unserved = numbered().filter(p => !served[p.id]);
+  const froms = numbered().filter(
+    p => p.id !== deliveredId && unserved.some(u => u.id !== p.id)
+  );
+  if (froms.length) {
+    const from = pick(froms).id;
+    const to = pick(unserved.filter(u => u.id !== from)).id;
+    return newJob(from, to, 1.6);
+  }
+  return newJob(deliveredId, unserved[0].id, 1.6);
 }
 
 function newJob(from, to, delay) {
@@ -580,9 +598,7 @@ function onLanded(pad, softness) {
     sfx.pay();
     speak('Thanks!', kind);
     job = null;
-
-    const all = numbered().every(p => served[p.id]);
-    newJob(pad.id, all ? 'up' : pickTarget(pad.id), 1.6);
+    nextJobAfter(pad.id);
     return;
   }
 
@@ -654,18 +670,25 @@ function movePads() {
   }
 }
 
-/* ------------------------------------------------------------ sisääntulo */
+/* ------------------------------------------------------------ sisääntulo
+   Vakiovauhtia luukusta sisään, sitten jarrutus paikalleen: nopeus seuraa
+   jäljellä olevaa matkaa, joten pysähdys on pehmeä ja peli alkaa paikaltaan. */
 function updateEnter(dt) {
   runT += dt;
   enterT += dt;
   if (titleT > 0) titleT -= dt;
   stepBits(dt);
   movePads();
+
+  const d = ENTER_Y - taxi.y;
+  taxi.vy = clamp(d * 2.4, 0, 300);
   taxi.y += taxi.vy * dt;
-  jetLevel(0.3);
+  jetLevel(clamp(1 - taxi.vy / 300, 0.15, 1) * 0.5);
   if (taxi.y > 120) gateOpen = false;          // luukku sulkeutuu perässä
-  if (taxi.y > H * 0.3) {
-    taxi.vy = 170;                             // ohjaus pelaajalle vauhdissa
+
+  if (d < 3 || enterT > 4) {
+    taxi.y = ENTER_Y;
+    taxi.vy = 0;                               // peli alkaa pysähdyksistä
     goT = 0.8;
     state = PLAY;
     sfx.go();
@@ -1196,7 +1219,7 @@ function drawHud() {
     ctx.globalAlpha = 1;
   }
 
-  if (titleT > 0) {                              // kentän nimi ensimmäisellä
+  if (titleT > 0) {
     ctx.globalAlpha = clamp(titleT / 0.8, 0, 1) * 0.85;
     ctx.textAlign = 'center';
     ctx.fillStyle = level.glow || '#6fe3ff';
@@ -1208,7 +1231,6 @@ function drawHud() {
     ctx.globalAlpha = 1;
   }
 
-  // READY kun tullaan sisään, GO kun ohjaus siirtyy pelaajalle
   if (state === ENTER || goT > 0) {
     const ready = state === ENTER;
     ctx.textAlign = 'center';
@@ -1326,7 +1348,7 @@ function drawSky() {
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.3); ctx.fill();
   }
 
-  const dim = level.sky ? 0.3 : 1;              // kirkkaalla taivaalla tähdet haipuvat
+  const dim = level.sky ? 0.3 : 1;
   for (const s of stars) {
     ctx.globalAlpha = s.a * (0.6 + Math.sin(runT * 1.6 + s.p) * 0.4) * dim;
     ctx.fillStyle = '#9fc4ff';
@@ -1573,7 +1595,7 @@ const overLost = () => `
   ${buttons.replace('%s', 'Uusi vuoro')}`;
 
 function start() {
-  warmSpeech();                            // iOS: ensimmäinen puhe eleen alta
+  warmSpeech();
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
   cut = null;
@@ -1628,7 +1650,8 @@ function loop(now) {
 
   if (state === ENTER) {
     updateEnter(dt);
-    draw({ x: 0, y: 0.55 });               // jarrutusliekki ylöspäin
+    // jarrutusliekki voimistuu kun vauhti hiipuu
+    draw({ x: 0, y: clamp(1 - taxi.vy / 300, 0.25, 1) });
     requestAnimationFrame(loop);
     return;
   }
