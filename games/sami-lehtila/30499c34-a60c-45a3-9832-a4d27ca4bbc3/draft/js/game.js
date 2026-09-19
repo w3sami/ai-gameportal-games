@@ -366,7 +366,7 @@ const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, fastWarn, nearWarn, nearFx, padWarn, padBlink,
+    msg, msgT, bits, lowWarn, fastWarn, nearWarn, padWarn, padBlink,
     graves, squishes,
     wreck, bounces, titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
     runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
@@ -837,10 +837,10 @@ function movePads() {
      bensa   — matala piippaus, tihenee tankin tyhjetessä
      lasku   — korkea, alkaa jo 75 %:ssa laskurajasta ja nousee ja tihenee
                sitä mukaa kun raja lähenee; yli mentäessä tiheintä
-     törmäys — murahdus kun 0,4 sekunnin päässä on seinä
-   Ääntä vastaa alustan oma valo: se vilkkuu punaisen ja sinisen väliä. */
+     törmäys — murahdus kun 0,4 sekunnin päässä on seinä; pelkkä ääni,
+               sillä alustan oma valo riittää katseelle */
 function clearWarnings() {
-  lowWarn = 0; fastWarn = 0; nearWarn = 0; nearFx = 0;
+  lowWarn = 0; fastWarn = 0; nearWarn = 0;
   padWarn = null; padBlink = 0;
 }
 
@@ -865,8 +865,6 @@ function warnPad() {
 }
 
 function warnings(dt) {
-  if (nearFx > 0) nearFx -= dt;
-
   if (fuel < FUEL_LOW && fuel > 0 && !dead) {
     lowWarn -= dt;
     if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.25 + fuel / 45; }
@@ -883,7 +881,7 @@ function warnings(dt) {
 
   if (!dead && nearWall()) {
     nearWarn -= dt;
-    if (nearWarn <= 0) { sfx.near(); nearWarn = 0.2; nearFx = 0.2; }
+    if (nearWarn <= 0) { sfx.near(); nearWarn = 0.2; }
   } else nearWarn = 0;
 
   /* Vilkun tahti kertyy vaiheeseen eikä kellonaikaan, jotta se voi kiihtyä
@@ -1557,16 +1555,6 @@ function drawHud() {
     ctx.fillStyle = 'rgba(233,237,255,.45)';
     ctx.font = '600 11px system-ui, sans-serif';
     ctx.fillText(job.to === 'up' ? t('ui.meterUp') : t('ui.meterPad', { n: job.to }), W - 26, 140);
-  }
-
-  // törmäysvaroituksen välähdys ruudun reunoilla
-  if (nearFx > 0) {
-    ctx.save();
-    ctx.globalAlpha = clamp(nearFx / 0.2, 0, 1) * 0.45;
-    ctx.strokeStyle = '#ff5d7a';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(5, 5, W - 10, H - 10);
-    ctx.restore();
   }
 
   if (msgT > 0) {
