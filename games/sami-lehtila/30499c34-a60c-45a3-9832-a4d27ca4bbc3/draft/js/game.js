@@ -2448,7 +2448,14 @@ function setPanel(on) {
 }
 
 function togglePanel() {
-  setPanel(!panelOpen());
+  const want = !panelOpen();
+  /* Kehyksessä debug on portaalin myönnettävä eikä pelin otettava: pyydä ja
+     piirrä vastauksesta, niin kuin kielessäkin. Tekijän sivulla portaali vastaa
+     ja paneeli avautuu; julkaistulla sivulla pyyntö kuolee hiljaa, eikä P
+     avaa säätimiä joiden arvoja kukaan ei siellä saa tallentaa. Pelin omassa
+     osoitteessa ei ole portaalia kysyttäväksi, joten siellä P tekee työn itse. */
+  if (portal.embedded) { setPortal('debug', want); return; }
+  setPanel(want);
 }
 
 /* ------------------------------------------------------------------ kortti */
