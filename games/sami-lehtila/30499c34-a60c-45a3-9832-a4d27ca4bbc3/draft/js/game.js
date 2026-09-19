@@ -92,13 +92,13 @@ const DEFAULTS = {
   /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
      mittari laskee. Nämä ovat säätimissä, koska oikea tuntuma löytyy vain
      ajamalla. Ks. TIPPERS. */
-  /* Tyhjän tankin sykäykset. Ks. dryThrust. */
-  dryHz: 8, dryPower: 1.15, drySide: 0.5,
+  /* Tyhjän tankin pätkivä syöttö. Ks. dryThrust. */
+  dryFlow: 0.3,
   tipCalm: 1, fadeCalm: 1,
   tipRush: 1.85, fadeRush: 2.4,
   tipHold: 1.35, fadeHold: 1.4,
   stick: 2.05,
-  wind: 0.3, sputter: 35,
+  wind: 0.3,
 };
 const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
@@ -390,7 +390,7 @@ let state = MENU;
 
 let thrustNow = 0;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink, sputT, sputOff,
+    msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
     graves, squishes,
     wreck, bounces, titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
     runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
@@ -696,41 +696,32 @@ function inputVector() {
   return level.input ? level.input(v, api()) : v;
 }
 
-/* Tyhjä tankki ei sammuta suuttimia vaan jättää pätkivän rippeen: tyhjän
-   tankin pelastus, jolla pääsee vielä bensa-asemalle.
+/* Tyhjä tankki ei sammuta suuttimia vaan antaa pätkivää syöttöä: tyhjän tankin
+   pelastus, jolla pääsee vielä bensa-asemalle. Bensaa on vain silloin kun
+   mittari on nollassa — niin kauan kuin tankissa on jotain, suutin palaa
+   tasaisesti eikä katko mitään.
 
-   Teho mitataan siinä mitä leijuminen vaatii, eli osuutena grav/thrust
-   täydestä. Yksikkö on tässä koko juju:
+   Jakso on sekunti ja säädin kertoo montako sekuntia siitä bensaa tulee.
+   Oletus 0.3 tarkoittaa siis 0.3 s syöttöä ja 0.7 s taukoa.
 
-     alle 1  vauhti kasvaa, hitaammin kuin vapaassa pudotuksessa — mutta
-             jarruttaa ei voi, koska keskiteho jää painovoimaa pienemmäksi
-     1       vauhti pysyy siinä mikä se on
-     yli 1   vauhdista lähtee pois, eli laskeutumisen voi pelastaa
-
-   Ensimmäinen versio oli 0.8 eikä jarruttanut lainkaan, mikä oli koko
-   ominaisuuden pointti. Oletus on siksi 1.15.
-
-   Katkotaajuus ratkaisee tarkkuuden. Harva katko antaa yksittäisiä potkuja ja
-   niiden välissä ehtii pudota: 4 Hz:llä vauhti heiluu ±43 px/s, 8 Hz:llä
-   ±22 px/s. Puhdas lasku vaatii alle 108 px/s, joten harvalla katkolla
-   osuminen siihen ikkunaan on arpapeliä ja tiheällä hallittavaa.
+   Se mistä jarruttaminen on kiinni: syöttö × täysi työntö on keskimäärin
+   P.dryFlow * P.thrust, ja paikallaan pysyminen vaatii P.grav. Oletuksilla
+   0.3 * 920 = 276 vastaan 250, eli vauhtia lähtee pois ja laskun voi pelastaa.
+   Jos syöttö lasketaan alle grav/thrust = 0.27:n, jarruttaminen muuttuu
+   mahdottomaksi ja jäljelle jää vain hitaampi putoaminen.
 
    Alustalta ei pääse lähtöön tälläkään, koska lähtö vaatii bensaa erikseen,
    eikä tyhjänä tavalliselle alustalle jääminen pelasta — se on yhä kolari.
-   Pelastus on nimenomaan matka tankkaukselle.
-
-   Eri asia kuin yskintä (P.sputter), joka koskee vähissä olevaa tankkia ja
-   loppuu kun bensa loppuu. Tästä se jatkuu. */
-const dryDuty = () => clamp(P.dryPower * P.grav / P.thrust, 0, 1);
+   Pelastus on nimenomaan matka tankkaukselle. */
+const DRY_SIDE = 0.5;
 
 function dryThrust(v) {
-  v.x *= P.drySide;
-  const period = 1 / Math.max(1, P.dryHz);
-  if (runT % period >= period * dryDuty()) v.y = 0;
+  v.x *= DRY_SIDE;
+  if (runT % 1 >= P.dryFlow) v.y = 0;
 }
 
 function activeThrust() {
-  if (state !== PLAY || dead || sputOff) return { x: 0, y: 0 };
+  if (state !== PLAY || dead) return { x: 0, y: 0 };
   const v = inputVector();
   if (taxi.gear > 0.35) v.x = 0;
   if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
@@ -988,7 +979,6 @@ function movePads() {
 function clearWarnings() {
   lowWarn = 0; fastWarn = 0;
   padWarn = null; padBlink = 0;
-  sputT = 0; sputOff = false;
 }
 
 /* Mille alustalle ollaan tulossa ja liiankos kovaa? Raja on sama mistä pomppu
@@ -1016,21 +1006,6 @@ function warnings(dt) {
     lowWarn -= dt;
     if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.25 + fuel / 45; }
   } else lowWarn = 0;
-
-  /* Yskintä. Tankin pohjalla suuttimet katkovat: kerroin kasvaa nollasta yhteen
-     rajalta tyhjään, ja katko pitenee ja tihenee sen mukana. Katkon aikana
-     bensaa ei kulu, joten yskintä myös venyttää viimeisiä tippoja.
-
-     Tyhjällä tankilla ei yskitä lainkaan — silloin ei ole mitä polttaa, ja sen
-     kertoo jo teksti. Säätimen nolla ottaa koko ilmiön pois. */
-  if (P.sputter > 0 && fuel > 0 && fuel < P.sputter && !dead) {
-    const k = 1 - fuel / P.sputter;
-    sputT -= dt;
-    if (sputT <= 0) {
-      sputOff = !sputOff;
-      sputT = sputOff ? 0.03 + k * 0.10 : 0.34 - k * 0.12;
-    }
-  } else { sputT = 0; sputOff = false; }
 
   const r = !dead && taxi && !taxi.landed ? landRatio() : 0;
   if (!dead && taxi && !taxi.landed && taxi.gear > 0.5 && r > LAND_WARN_FROM) {
@@ -1942,9 +1917,7 @@ const SLIDERS = [
   { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
   { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
-  { key: 'dryHz', label: 'kuiva: katkot / s', min: 1, max: 24, step: 0.5 },
-  { key: 'dryPower', label: 'kuiva: teho (1 = leijuu)', min: 0.3, max: 2, step: 0.05 },
-  { key: 'drySide', label: 'kuiva: sivut', min: 0, max: 1, step: 0.05 },
+  { key: 'dryFlow', label: 'pätkintä: syöttö s', min: 0, max: 1, step: 0.01 },
   { key: 'tipCalm', label: 'tyyni: tippi ×', min: 0.5, max: 3, step: 0.05 },
   { key: 'fadeCalm', label: 'tyyni: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'tipRush', label: 'kiireinen: tippi ×', min: 0.5, max: 3, step: 0.05 },
@@ -1953,7 +1926,6 @@ const SLIDERS = [
   { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
   { key: 'wind', label: 'tuulen nousuaika s', min: 0.05, max: 3, step: 0.05 },
-  { key: 'sputter', label: 'yskintä alkaa bensa', min: 0, max: 100, step: 5 },
 ];
 
 let panelNote = '';
