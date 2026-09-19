@@ -125,6 +125,20 @@ kbd {
   border: 1px solid rgba(120,160,255,.26); border-radius: 9px; cursor: pointer;
 }
 #panel .seg button.on { color: #08101f; background: #6fe3ff; border-color: #6fe3ff; font-weight: 600; }
+/* Säätöryhmät. <details> hoitaa auki ja kiinni ilman omaa koodia. */
+#panel .grp { margin-bottom: 9px; border: 1px solid rgba(120,160,255,.18); border-radius: 10px; }
+#panel .grp > summary {
+  cursor: pointer; list-style: none; padding: 8px 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: #8a97be; user-select: none;
+}
+#panel .grp > summary::-webkit-details-marker { display: none; }
+#panel .grp > summary::before { content: '\25b8  '; color: #6fe3ff; }
+#panel .grp[open] > summary::before { content: '\25be  '; }
+#panel .grp[open] > summary { border-bottom: 1px solid rgba(120,160,255,.14); }
+#panel .grp .body { padding: 10px 10px 0; }
+#panel .grp .row:last-child { margin-bottom: 10px; }
+
 #panel .foot { display: flex; gap: 6px; margin-top: 12px; }
 #panel .foot button { flex: 1; margin: 0; }
 
