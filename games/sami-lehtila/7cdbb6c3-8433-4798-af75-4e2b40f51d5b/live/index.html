@@ -163,6 +163,24 @@
   </section>
 
   <section>
+    <h2>Portaali</h2>
+    <dl>
+      <dt>kehyksessä</dt><dd id="p-embedded">—</dd>
+      <dt>vastasi</dt><dd id="p-answered">—</dd>
+      <dt>lang</dt><dd id="p-lang">—</dd>
+      <dt>debug</dt><dd id="p-debug">—</dd>
+    </dl>
+    <p style="margin:8px 0 0;display:flex;gap:6px">
+      <button id="p-fi" type="button">suomi</button>
+      <button id="p-en" type="button">english</button>
+    </p>
+    <p style="margin:8px 0 0;color:var(--muted)">
+      Napit kertovat portaalille. Jos sivun kieli vaihtuu perässä, silmukka
+      toimii molempiin suuntiin.
+    </p>
+  </section>
+
+  <section>
     <h2>Loki</h2>
     <ol id="log" reversed></ol>
   </section>
@@ -172,6 +190,8 @@
 <script type="module">
 import { createGamepad, BUTTONS }
   from "https://plugins.game.bigbools.fi/gamepad/v1/index.js";
+import { portal, onPortal, setPortal }
+  from "https://plugins.game.bigbools.fi/portal-events/v1/index.js";
 
 const $ = (id) => document.getElementById(id);
 const fixed = (v, n = 3) => v.toFixed(n);
@@ -301,6 +321,38 @@ function frame() {
 
   requestAnimationFrame(frame);
 }
+
+// --- the page around this one ----------------------------------------------
+// Everything below is a live check of portal-events: whether the portal speaks
+// at all, and whether it listens.
+$("p-embedded").textContent = portal.embedded ? "kyllä" : "ei";
+$("p-embedded").className = portal.embedded ? "" : "warn";
+
+let answered = false;
+onPortal("lang", (v) => {
+  $("p-lang").textContent = v;
+  log(`portaali: lang = ${v}`);
+});
+onPortal("debug", (v) => {
+  $("p-debug").textContent = v ? "päällä" : "pois";
+  log(`portaali: debug = ${v}`);
+});
+portal.ready.then(() => {
+  // A silent portal resolves ready too, so the only honest thing to report is
+  // whether a message ever arrived — which is what a change tells us.
+  $("p-answered").textContent = answered ? "kyllä" : "ei kuulunut mitään";
+  $("p-answered").className = answered ? "" : "warn";
+});
+window.addEventListener("message", (e) => {
+  if (e.source === window.parent && e.data?.source === "peliportaali") {
+    answered = true;
+    $("p-answered").textContent = "kyllä";
+    $("p-answered").className = "";
+    log(`viesti portaalilta: ${JSON.stringify(e.data)}`);
+  }
+});
+$("p-fi").addEventListener("click", () => log(`setPortal fi -> ${setPortal("lang", "fi")}`));
+$("p-en").addEventListener("click", () => log(`setPortal en -> ${setPortal("lang", "en")}`));
 
 // A document without focus is shown no controllers at all, so say so rather
 // than leaving the page looking broken.
