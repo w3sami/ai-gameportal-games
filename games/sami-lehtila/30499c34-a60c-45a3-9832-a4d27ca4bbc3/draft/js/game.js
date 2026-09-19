@@ -9,13 +9,16 @@
  * Alusta on käyty kun siellä on pysähdytty: sekä nouto että jättö merkkaa
  * paikan. Nouto arvotaan vapaasti mille tahansa alustalle, mutta määränpää on
  * aina jokin käymätön alusta — ja jos käymättömiä ei ole, asiakas pyytää ylös.
- * Näin väkäset ja jäljellä olevat keikat eivät voi mennä ristiin: kun kaikki
- * alustat ovat vihreitä, seuraava kyyti vie katosta ulos.
+ * Näin väkäset ja jäljellä olevat keikat eivät voi mennä ristiin.
  *
- * Kenttä alkaa ilmasta katon luukusta ja päättyy välianimaatioon: nousu
- * tilinpäätöksineen ja lasku seuraavan kentän nimen kanssa. Vuoron viimeisen
- * kentän jälkeen tulee pelkkä nousu koko vuoron tilastoilla, ja vasta sitten
- * loppukortti.
+ * Katosta ulos lähtenyt asiakas ei jää luukkuun: hän jatkaa kyydissä seuraavaan
+ * kenttään, joten uusi kenttä alkaa jättökeikalla ja hän maksaa vasta perillä.
+ * Vuoron viimeisellä kentällä hän maksaa ulosajosta, koska matka päättyy siihen.
+ *
+ * Taksi tulee kenttään aina katon luukusta — myös kolarin jälkeen — jarruttaa
+ * paikalleen ja peli käynnistyy READY–GO:lla. Kentän lopussa on välianimaatio:
+ * nousu tilinpäätöksineen ja lasku seuraavan kentän nimen kanssa. Viimeisen
+ * kentän jälkeen tulee pelkkä nousu koko vuoron tilastoilla ja sitten kortti.
  *
  * Tekstit ja puhe tulevat js/i18n.js:stä. Kieli päätellään ?lang-parametrista,
  * localStoragesta tai selaimen kielestä, ja suomea puhutaan vain jos laitteelta
@@ -346,7 +349,7 @@ let state = MENU;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, graves, squishes, wreck, bounces,
     titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
-    runDeaths = 0, runRuns = 0;
+    runDeaths = 0, runRuns = 0, carried = null;
 
 const stars = [];
 for (let i = 0; i < 70; i++) {
@@ -388,7 +391,20 @@ function loadLevel(i) {
   levelDeaths = 0;
   resetTaxi();
   if (level.init) level.init(api());
-  spawnJob(null, 1.2, level.firstFrom);
+
+  if (carried) {
+    /* Edellisestä kentästä mukaan tullut asiakas: kenttä alkaa jättökeikalla
+       ja mittari alkaa nollasta, koska välimatka ei ole hänen syytään. */
+    const open = numbered().filter(p => !served[p.id]);
+    job = {
+      from: null, to: pick(open.length ? open : numbered()).id,
+      phase: 'aboard', wait: 0, kind: carried.kind,
+      x: 0, t: 0, walk: 0, moving: false, shown: true, flee: null,
+    };
+    carried = null;
+  } else {
+    spawnJob(null, 1.2, level.firstFrom);
+  }
 }
 
 function beginEntry(showTitle) {
@@ -415,11 +431,13 @@ function beginLevel(i, showTitle) {
 function newRun() {
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
-  cut = null;
+  cut = null; carried = null;
   runDeaths = 0; runRuns = 0;
   loadLevel(0);
 }
 
+/** Taksi aloitusalustalle. Käytetään vain kentän latauksessa — pelaajan taksi
+    saapuu aina luukusta. */
 function resetTaxi() {
   const p = padById(level.start) || numbered()[0];
   taxi = {
@@ -435,8 +453,6 @@ function resetTaxi() {
  * Nouto arvotaan vapaasti mille tahansa alustalle, paitsi sille jolla juuri
  * seistään — muuten taksi ei liikkuisi keikkojen välissä. Määränpää sen sijaan
  * on aina jokin käymätön alusta, ja jos sellaista ei ole, asiakas pyytää ylös.
- * Näin kentän tavoite ja alustojen väkäset pysyvät samassa totuudessa: viimeinen
- * vihreä väkänen tarkoittaa että seuraava kyyti menee katosta ulos.
  */
 function spawnJob(avoidId, delay, forceFrom) {
   const pool = numbered().filter(p => p.id !== avoidId);
@@ -615,7 +631,9 @@ function crash() {
   levelDeaths++;
   if (job && job.phase === 'aboard') {
     if (job.to === 'up') gateOpen = false;
-    newJob(job.from, job.to, 1.2);           // menetetty kyyti, uusi tyyppi tilalle
+    // menetetty kyyti: sama keikka odottamaan, tai uusi jos lähtöä ei ole
+    if (padById(job.from)) newJob(job.from, job.to, 1.2);
+    else spawnJob(null, 1.2);
   }
   msg = ''; msgT = 0;
   wreck = {
@@ -851,7 +869,7 @@ function update(dt) {
     const gone = wreck && wreck.y > H + 160;
     if (gone || deadT > 3.2) {
       if (lives <= 0) return taxiLost();
-      resetTaxi();                           // uusi taksi, kenttä ennallaan
+      beginEntry(false);                     // korvaava taksi tulee luukusta
     }
     return;
   }
@@ -918,17 +936,24 @@ function refuel(dt) {
   if (Math.random() < dt * 12) sfx.pump();
 }
 
-/** Ulos luukusta. Viimeinen asiakas on kyydissä, joten hänkin maksaa. */
+/* Ulos luukusta. Jos kenttiä on vielä jäljellä, kyydissä oleva asiakas jatkaa
+   matkaa seuraavaan kenttään ja maksaa vasta siellä perillä. Viimeisellä
+   kentällä matka päättyy tähän, joten hän maksaa nyt. */
 function finish() {
+  const nextIndex = levelIndex < LEVELS.length - 1 ? levelIndex + 1 : null;
   let paid = P.exitBonus;
   if (job && job.phase === 'aboard') {
-    paid += P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime));
-    speakLine('thanks', job.kind);
+    if (nextIndex === null) {
+      paid += P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime));
+      speakLine('thanks', job.kind);
+    } else {
+      carried = { kind: job.kind };
+    }
     job = null;
   }
   money += paid;
   jetLevel(0);
-  startCut(levelIndex < LEVELS.length - 1 ? levelIndex + 1 : null);
+  startCut(nextIndex);
 }
 
 function taxiLost() {
@@ -1857,7 +1882,7 @@ function start() {
   warmSpeech();
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
-  cut = null;
+  cut = null; carried = null;
   runDeaths = 0; runRuns = 0;
   beginLevel(0, true);
 }
@@ -1866,7 +1891,7 @@ function startLevel(i) {
   warmSpeech();
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
-  cut = null;
+  cut = null; carried = null;
   runDeaths = 0; runRuns = 0;
   beginLevel(i, true);
 }
