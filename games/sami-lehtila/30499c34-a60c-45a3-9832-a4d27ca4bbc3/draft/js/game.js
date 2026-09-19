@@ -30,7 +30,8 @@
  * kielen, gate-test.html on luukun oma säätösivu.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
-import { createGamepad } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
+import { portal, onPortal, setPortal }
+  from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
 import { liftFor, bounceNorm } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
@@ -87,12 +88,6 @@ const DEFAULTS = {
   bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62,
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
-  /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
-     mittari laskee. Nämä ovat säätimissä, koska oikea tuntuma löytyy vain
-     ajamalla. Ks. TIPPERS. */
-  tipCalm: 1, fadeCalm: 1,
-  tipRush: 1.85, fadeRush: 2.4,
-  tipHold: 1.35, fadeHold: 1.4,
   stick: 2.05,
 };
 const DEFAULT_SIDE = 'left';
@@ -368,7 +363,6 @@ const sfx = {
 const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
-let thrustNow = 0;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
     graves, squishes,
@@ -420,11 +414,9 @@ function loadLevel(i) {
     /* Edellisestä kentästä mukaan tullut asiakas: kenttä alkaa jättökeikalla
        ja mittari alkaa nollasta, koska välimatka ei ole hänen syytään. */
     const open = numbered().filter(p => !served[p.id]);
-    const ti = (Math.random() * TIPPERS.length) | 0;
     job = {
       from: null, to: pick(open.length ? open : numbered()).id,
       phase: 'aboard', wait: 0, kind: carried.kind, announce: true,
-      tipper: ti, tail: pick(TIPPERS[ti].tails),
       x: 0, t: 0, walk: 0, moving: false, shown: true, flee: null,
     };
     carried = null;
@@ -496,11 +488,9 @@ function newJob(from, to, delay) {
   if (taken(left) && !taken(right)) x = right;
   else if (taken(right) && !taken(left)) x = left;
   else x = Math.random() < 0.5 ? left : right;
-  const ti = (Math.random() * TIPPERS.length) | 0;
   job = {
     from, to, phase: 'wait', wait: delay || 0,
     kind: nextAlien(),
-    tipper: ti, tail: pick(TIPPERS[ti].tails),
     x, t: 0, walk: 0, moving: false, shown: false, flee: null,
   };
 }
@@ -606,61 +596,6 @@ const stick = createJoystick({
 });
 stick.gain = P.stick;
 
-/* Ohjain. keys: false, koska peli lukee näppäimistön jo itse — plugin lukisi
-   sen toiseen kertaan ja teline kääntyisi kahdesti yhdestä välilyönnistä.
-   Sauvalle ei anneta gainia: kosketussauvan herkkyyskerroin on siellä siksi
-   että peukalon matka on lyhyt, eikä oikea sauva tarvitse sitä.
-
-   Napit ovat eri asioita sen mukaan näkyykö kortti. Kortti ja peli eivät ole
-   koskaan yhtä aikaa esillä, joten sama nappi saa olla kummassakin eri asia:
-   A on kortilla "aja" ja pelissä teline, B kortilla "lopeta" ja pelissä töötti. */
-const gamepad = createGamepad({
-  keys: false,
-  actions: {
-    gear:  ['A', 'LB', 'RB'],
-    horn:  ['B', 'X'],
-    sound: ['Back'],
-    go:    ['Start', 'A'],
-    fleet: ['Y'],
-    quit:  ['B'],
-  },
-});
-
-/* Kerran per ruutu, ennen kuin mitään kysytään: pressed on tämän ja edellisen
-   kutsun erotus. Kutsutaan myös korttiruuduissa, jotta vuoron saa käyntiin
-   ohjaimella — ja jotta ohjain ylipäätään tulee näkyviin, sillä selain
-   paljastaa sen vasta kun jotain on painettu. */
-function padInput() {
-  gamepad.poll();
-
-  if (!card.classList.contains('hidden')) {
-    /* Ohjaimen tila näkyviin. Selain ei paljasta ohjainta ennen kuin sen nappia
-       on painettu, joten "ei ohjainta" ja "ohjain jota ei ole vielä koskettu"
-       näyttävät täältä samalta — siksi teksti on kehotus eikä vikailmoitus.
-       textContent eikä innerHTML: id tulee laitteelta, ei meiltä. */
-    const el = card.querySelector('#padstate');
-    if (el) {
-      const want = gamepad.connected ? t('pad.on', { id: gamepad.id }) : t('pad.none');
-      if (el.textContent !== want) el.textContent = want;
-    }
-
-    const click = sel => {
-      const b = card.querySelector(sel);
-      if (!b) return false;
-      b.click();
-      return true;
-    };
-    if (gamepad.pressed('go') && (click('#go') || click('#buy'))) return;
-    if (gamepad.pressed('fleet') && click('#fleet')) return;
-    if (gamepad.pressed('quit') && click('#end')) return;
-    return;
-  }
-
-  if (gamepad.pressed('sound')) { toggleMute(); return; }
-  if (gamepad.pressed('horn')) { honk(); return; }
-  if (gamepad.pressed('gear')) toggleGear();
-}
-
 function inputVector() {
   const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
   const ky = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
@@ -668,8 +603,6 @@ function inputVector() {
   if (kx || ky) {
     const l = Math.hypot(kx, ky) || 1;
     v = { x: kx / l, y: ky / l };
-  } else if (gamepad.x || gamepad.y) {
-    v = { x: gamepad.x, y: gamepad.y };       // plugin lupaa jo vektorin <= 1
   } else if (stick.active) {
     let x = stick.x * stick.gain, y = stick.y * stick.gain;
     const l = Math.hypot(x, y);
@@ -679,36 +612,11 @@ function inputVector() {
   return level.input ? level.input(v, api()) : v;
 }
 
-/* Tyhjä tankki ei enää sammuta suuttimia kokonaan, vaan jättää pätkivän rippeen.
-
-   Nousuun jää lyhyitä sykäyksiä: suutin palaa DRY_ON sekuntia joka DRY_PERIOD.
-   Sykäysten osuus ajasta on 0.12/0.55 = 0.22, ja paikallaan pysyminen vaatii
-   painovoiman verran eli grav/thrust = 0.27, joten keskiteho jää alle sen ja
-   taksi vajoaa sykäyksistä huolimatta. Nousu ei siis onnistu, mutta putoamisen
-   voi jarruttaa ja sitä voi vielä ohjata: sivuttain jää puolet tehosta, ja
-   jatkuvana, koska pätkivä sivusuutin olisi pelkkä kiusa eikä ohjaus.
-
-   Alustalta ei silti pääse lähtöön — lähtö vaatii bensaa erikseen — joten
-   tyhjällä tankilla alustalle jääminen päättyy yhä kolariin. */
-const DRY_PERIOD = 0.55, DRY_AVG = 0.8, DRY_SIDE = 0.5;
-
-/* Paikallaan pysyminen vaatii suuttimelta osuuden grav/thrust täydestä. Sykäys
-   mitoitetaan siitä eikä kiinteästä sekuntimäärästä, joten sääto paneelista
-   kevennetty painovoima ei tee kuivasta taksista lentokelpoista: keskiteho on
-   aina DRY_AVG verran siitä mitä leijuminen vaatisi, eli aina liian vähän. */
-const dryOn = () => DRY_PERIOD * DRY_AVG * Math.min(1, P.grav / P.thrust);
-
-function dryThrust(v) {
-  v.x *= DRY_SIDE;
-  if (runT % DRY_PERIOD >= dryOn()) v.y = 0;
-}
-
 function activeThrust() {
-  if (state !== PLAY || dead) return { x: 0, y: 0 };
+  if (state !== PLAY || dead || fuel <= 0) return { x: 0, y: 0 };
   const v = inputVector();
   if (taxi.gear > 0.35) v.x = 0;
   if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
-  if (fuel <= 0) dryThrust(v);
   return v;
 }
 
@@ -752,7 +660,6 @@ function crash() {
   jetLevel(0);
   if (SPEAKS) { try { speechSynthesis.cancel(); } catch (e) {} }
   sfx.crash();
-  gamepad.rumble({ duration: 260, strong: 0.85, weak: 0.45 });
 }
 
 function touchdown(pad, b) {
@@ -771,9 +678,6 @@ function touchdown(pad, b) {
     t2.vx *= P.bounceKeep;
     bounces = Math.min(bounces + 1, 3);
     sfx.bounce(bounces);
-    /* Tärinä on lisä sen päälle mitä peli jo kertoo äänellä ja valolistalla,
-       ei ainoa tapa kertoa se: useimmissa ohjaimissa ei ole moottoreita. */
-    gamepad.rumble({ duration: 90, strong: 0.18 + bounces * 0.14, weak: 0.1 });
     return;
   }
 
@@ -793,7 +697,7 @@ function askForPad() {
   if (!job) return;
   job.announce = false;
   say(t('msg.toPad', { n: job.to }), 2.4);
-  speakLine('toPad', job.kind, { n: job.to, tail: t('say.tail.' + (job.tail || 'please')) });
+  speakLine('toPad', job.kind, { n: job.to });
   sfx.pickup();
 }
 
@@ -802,7 +706,7 @@ function onLanded(pad, softness) {
 
   if (job.phase === 'aboard' && pad.id === job.to) {
     const mult = softness < P.softVY ? 1 : softness < P.landVY * 0.75 ? 0.6 : 0.25;
-    const tip = Math.round(P.tip * tipMul() * tipLeft() * mult);
+    const tip = Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime) * mult);
     const fare = P.fare + tip;
     const kind = job.kind;
     money += fare;
@@ -831,12 +735,7 @@ function onLanded(pad, softness) {
 
 function jobStep(dt) {
   if (!job) return;
-  if (job.phase === 'aboard') {
-    /* Kaasuprofiililla mittari seisoo niin kauan kuin suuttimet ovat päällä. */
-    const pr = tipper();
-    if (!(pr.onlyIdle && thrustNow > 0.05)) job.t += dt * P[pr.fade];
-    return;
-  }
+  if (job.phase === 'aboard') { job.t += dt; return; }
 
   if (job.wait > 0) { job.wait -= dt; return; }
   if (!job.shown) {
@@ -867,7 +766,7 @@ function jobStep(dt) {
       if (job.to === 'up') {
         gateOpen = true;
         say(t('msg.up'), 3);
-        speakLine('up', job.kind, { tail: t('say.tail.' + (job.tail || 'please')) });
+        speakLine('up', job.kind);
         sfx.gate();
       } else askForPad();
       return;
@@ -892,44 +791,8 @@ function stepSquish(dt) {
   }
 }
 
-/* Asiakkaat eroavat siinä mistä tippi on kiinni. Kolme profiilia:
-
-     tyyni     perustippi, mittari laskee tasaisesti
-     kiireinen maksaa lähes kaksinkertaisen tipin mutta mittari laskee yli
-               kaksi kertaa nopeammin — pitkä keikka ei kannata
-     kaasu     mittari seisoo niin kauan kuin suuttimet ovat päällä, ja lähtee
-               laskemaan vasta kun ajaja lopettaa painamisen
-
-   Profiili kuullaan ennen kuin se näkyy kassassa: pyyntörepliikin häntä
-   valitaan samasta profiilista, joten "mene mene mene" kertoo että kaasua
-   kannattaa pitää pohjassa ja "ole hyvä" että kiirettä ei ole. */
-const TIPPERS = [
-  { mul: 'tipCalm', fade: 'fadeCalm', onlyIdle: false, tails: ['please', 'kind'] },
-  { mul: 'tipRush', fade: 'fadeRush', onlyIdle: false, tails: ['quick', 'hurry'] },
-  { mul: 'tipHold', fade: 'fadeHold', onlyIdle: true,  tails: ['go', 'rush'] },
-];
-const tipper = () => TIPPERS[job ? job.tipper : 0] || TIPPERS[0];
-const tipMul = () => P[tipper().mul];
-
-/* Kaasuasiakas maksaa bensan. Hänen kyydissään suuttimet eivät kuluta tankkia,
-   mikä on se syy pitää kaasu pohjassa: mittari ei laske eikä tankki tyhjene.
-   Mittari hehkuu sen merkiksi oman värinsä ja syaanin väliä, jotta tilan
-   tunnistaa vilkaisulla eikä sitä tarvitse päätellä repliikistä. */
-const holdRide = () => !!job && job.phase === 'aboard' && tipper().onlyIdle;
-const FUEL_HOLD = '#6fe3ff';
-
-/** Kahden hex-värin sekoitus: u = 0 antaa a:n, u = 1 antaa b:n. */
-function mixHex(a, b, u) {
-  const na = parseInt(a.slice(1), 16), nb = parseInt(b.slice(1), 16);
-  const ch = sh => Math.round(((na >> sh) & 255) * (1 - u) + ((nb >> sh) & 255) * u);
-  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
-}
-
-/* Jäljellä oleva tippi, 0…1. Sama kaava kassanäytössä ja maksussa. */
-const tipLeft = () => Math.max(0, 1 - job.t / P.tipTime);
-
 const fareNow = () => job && job.phase === 'aboard'
-  ? P.fare + Math.round(P.tip * tipMul() * tipLeft())
+  ? P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime))
   : 0;
 
 const targetId = () => {
@@ -1080,7 +943,6 @@ function update(dt) {
   warnings(dt);                              // piippaukset myös alustalla
 
   const v = activeThrust();
-  thrustNow = Math.min(1, Math.hypot(v.x, v.y));   // kaasuprofiili kysyy tätä
   const raw = inputVector();
 
   if (taxi.landed) {
@@ -1092,7 +954,7 @@ function update(dt) {
   }
 
   const throttle = Math.min(1, Math.hypot(v.x, v.y));
-  if (throttle > 0 && !holdRide()) {
+  if (throttle > 0) {
     const had = fuel;
     fuel = Math.max(0, fuel - P.burn * throttle * dt);
     if (had > 0 && fuel <= 0) say(t('msg.dry'), 3);
@@ -1144,7 +1006,7 @@ function finish() {
   let paid = P.exitBonus;
   if (job && job.phase === 'aboard') {
     if (nextIndex === null) {
-      paid += P.fare + Math.round(P.tip * tipMul() * tipLeft());
+      paid += P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime));
       speakLine('thanks', job.kind);
     } else {
       carried = { kind: job.kind };
@@ -1649,10 +1511,8 @@ function drawHud() {
 
   const f = clamp(fuel / FUEL_MAX, 0, 1);
   const blink = fuel < FUEL_LOW ? 0.55 + Math.sin(runT * 9) * 0.45 : 1;
-  const own = f > 0.45 ? '#7bf0a0' : f > 0.2 ? '#ffd479' : '#ff5d7a';
-  const col = holdRide() ? mixHex(own, FUEL_HOLD, 0.5 + Math.sin(runT * 4) * 0.5) : own;
   ctx.globalAlpha = blink;
-  bar(26, 74, 200, 11, f, col, t('ui.fuel'));
+  bar(26, 74, 200, 11, f, f > 0.45 ? '#7bf0a0' : f > 0.2 ? '#ffd479' : '#ff5d7a', t('ui.fuel'));
   ctx.globalAlpha = 1;
 
   drawLives();
@@ -1901,12 +1761,6 @@ const SLIDERS = [
   { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
   { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
-  { key: 'tipCalm', label: 'tyyni: tippi ×', min: 0.5, max: 3, step: 0.05 },
-  { key: 'fadeCalm', label: 'tyyni: lasku ×', min: 0.2, max: 4, step: 0.1 },
-  { key: 'tipRush', label: 'kiireinen: tippi ×', min: 0.5, max: 3, step: 0.05 },
-  { key: 'fadeRush', label: 'kiireinen: lasku ×', min: 0.2, max: 4, step: 0.1 },
-  { key: 'tipHold', label: 'kaasu: tippi ×', min: 0.5, max: 3, step: 0.05 },
-  { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
 ];
 
@@ -1942,9 +1796,9 @@ function buildPanel() {
   const langRow = el('div', 'row');
   const langSeg = el('div', 'seg');
   const lang = (code, text) => pbutton(LANG === code ? 'on' : null, text, () => {
-    setLang(code);
-    if (state === MENU) showCard(menuCard(), 0, null);
-    buildPanel();
+    applyLang(code);
+    /* Ja portaalille, jotta liput ylhäällä eivät jää eri mielelle. */
+    setPortal('lang', code);
   });
   langSeg.append(lang('fi', 'suomi'), lang('en', 'english'));
   langRow.append(el('label', null, 'kieli'), langSeg);
@@ -2082,8 +1936,7 @@ const buttons = label => `
   <button id="go" class="btn">${label}</button>
   <button id="fs" class="btn ghost">${t('card.full')}</button>
   <button id="set" class="btn ghost">${t('card.tune')}</button>
-  <p class="hint">${t('card.keys')}</p>
-  <p class="hint" id="padstate"></p>`;
+  <p class="hint">${t('card.keys')}</p>`;
 
 const menuCard = () => `
   <h1>${t('menu.t1')} <span>${t('menu.t2')}</span></h1>
@@ -2103,8 +1956,7 @@ const buyCard = () => `
     ? `<button id="fleet" class="btn">${t('buy.fleet', { c: FLEET_COUNT, p: FLEET_PRICE })}</button>`
     : ''}
   <button id="end" class="btn ghost">${t('buy.end')}</button>
-  <p class="hint">${t('buy.keys')}</p>
-  <p class="hint" id="padstate"></p>`;
+  <p class="hint">${t('buy.keys')}</p>`;
 
 const overWon = () => `
   <h1>${t('won.t1')} <span>${t('won.t2')}</span></h1>
@@ -2142,6 +1994,31 @@ function startLevel(i) {
 newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
 
+/* Kieli, kummasta päästä tahansa.
+ *
+ * Portaali on sivu pelin ympärillä ja sillä on omat lippunsa. Ilman tätä ne ja
+ * säätöpaneelin kielivalinta ovat kaksi kytkintä samalle asialle, ja kaksi
+ * kytkintä on kaksi paikkaa jotka ennen pitkää ovat eri mieltä.
+ *
+ * Kehyksettömänä ei kuunnella lainkaan: silloin portal.lang on selaimen kielestä
+ * tehty arvaus, ja i18n.js:n oma päättely tietää enemmän — se muistaa mitä
+ * pelaaja on aiemmin valinnut. Kehyksessä portaali tietää enemmän kuin kumpikaan,
+ * koska se on se kieli jolla ihminen juuri katsoo sivua. Se on sama paikka jonka
+ * i18n.js:n kommentti varasi ?lang-parametrille. */
+function applyLang(code) {
+  if (code === LANG) return;
+  setLang(code);
+  if (state === MENU) showCard(menuCard(), 0, null);
+  if (!panelEl.classList.contains('hidden')) buildPanel();
+}
+
+if (portal.embedded) {
+  /* Vasta vastauksen jälkeen: ennen sitä portal.lang on arvaus, ja arvaus ei saa
+     jyrätä pelaajan aiempaa valintaa. onPortal ajaa käsittelijän heti nykyisellä
+     arvolla, joten tilaaminen tässä riittää eikä erillistä lukua tarvita. */
+  portal.ready.then(() => onPortal('lang', applyLang));
+}
+
 /* Liput osoitteesta: ?debug=1 säätöpaneeli, ?test=1 pompputesti, ?lang=fi|en. */
 try {
   const q = new URLSearchParams(location.search);
@@ -2159,7 +2036,6 @@ function loop(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   resize();
-  padInput();
 
   if (state === CUT) {
     cut.update(dt);
