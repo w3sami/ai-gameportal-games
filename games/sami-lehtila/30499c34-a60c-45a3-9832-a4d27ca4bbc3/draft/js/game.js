@@ -40,7 +40,8 @@ const W = 720, H = 1040;
 const CEIL = 16;
 const TW = 54, TH = 28, GEAR = 14;
 const FUEL_MAX = 100;
-const TAXI_PRICE = 500;
+const TAXI_PRICE = 500;                                    // yksi uusi taksi
+const FLEET_COUNT = 3, FLEET_PRICE = 1000;                 // kolmen auton erä
 const ENTER_Y = H * 0.30;                                  // mihin sisääntulo pysähtyy
 const HORN_R = 300;                                        // kuinka kauas tööttäys kuuluu
 
@@ -693,7 +694,13 @@ const fareNow = () => job && job.phase === 'aboard'
   ? P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime))
   : 0;
 
-const targetId = () => !job ? null : (job.phase === 'aboard' ? job.to : job.from);
+/* Kohdealusta värjätään vasta kun sinne oikeasti pitää mennä: noutoalusta
+   syttyy vasta kun asiakas on ilmestynyt, ei jo odotusajan aikana. */
+const targetId = () => {
+  if (!job) return null;
+  if (job.phase === 'aboard') return job.to;
+  return job.shown ? job.from : null;
+};
 
 function movePads() {
   for (const p of PADS) {
@@ -856,11 +863,13 @@ function taxiLost() {
   } else gameOver(false);
 }
 
-/* Ostettu taksi jatkaa samaa kenttää: käydyt alustat, hautakivet ja odottava
-   asiakas säilyvät, uusi auto vain tulee sisään katon luukusta. */
-function buyTaxi() {
-  money -= TAXI_PRICE;
-  lives = 1;
+/* Ostetut taksit jatkavat samaa kenttää: käydyt alustat, hautakivet ja
+   odottava asiakas säilyvät, uusi auto vain tulee sisään katon luukusta.
+   Kolmen erä on halvempi per auto, mutta sitoo rahaa joka olisi voinut jäädä
+   tulokseen — siinä on koko valinta. */
+function buyTaxis(count, price) {
+  money -= price;
+  lives = count;
   sfx.buy();
   beginEntry(false);
   card.classList.add('hidden');
@@ -1617,7 +1626,9 @@ function showCard(html, pending, meta) {
   const go = card.querySelector('#go');
   if (go) go.addEventListener('click', start);
   const buy = card.querySelector('#buy');
-  if (buy) buy.addEventListener('click', buyTaxi);
+  if (buy) buy.addEventListener('click', () => buyTaxis(1, TAXI_PRICE));
+  const fleet = card.querySelector('#fleet');
+  if (fleet) fleet.addEventListener('click', () => buyTaxis(FLEET_COUNT, FLEET_PRICE));
   const end = card.querySelector('#end');
   if (end) end.addEventListener('click', () => gameOver(false));
   const set = card.querySelector('#set');
@@ -1642,7 +1653,8 @@ const menuCard = () => `
   <p>Töötti kuuluu 300 pikselin päähän: jos asiakas kuulee sen, hän siirtyy
      alustan toiseen laitaan. Keltainen alusta on tankkaus, ja bensa maksaa
      omasta kassasta. ${LEVELS.length} kenttää, raha ja taksit kulkevat mukana,
-     ja uuden taksin saa ${TAXI_PRICE} eurolla.</p>
+     ja varikolta saa uuden taksin ${TAXI_PRICE} eurolla tai kolme
+     ${FLEET_PRICE} eurolla.</p>
   <p class="hint">Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>
      Isot napit: teline ja töötti. Ratas avaa säädöt, nuoli koko ruudun.<br>
      Näppäimillä <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot;
@@ -1653,9 +1665,13 @@ const menuCard = () => `
 const buyCard = () => `
   <h1>Taksi <span>hajosi</span></h1>
   <div class="big">${Math.floor(money)} €</div>
-  <p>Varikolta saa uuden ${TAXI_PRICE} eurolla. Kenttä jatkuu siitä mihin jäit:
-     käydyt alustat ja odottava asiakas säilyvät.</p>
-  <button id="buy" class="btn">Osta uusi taksi (${TAXI_PRICE} €)</button>
+  <p>Kenttä jatkuu siitä mihin jäit: käydyt alustat ja odottava asiakas
+     säilyvät. Kolmen erä tulee halvemmaksi per auto, mutta sitoo rahaa joka
+     olisi voinut jäädä tulokseen.</p>
+  <button id="buy" class="btn">Yksi taksi (${TAXI_PRICE} €)</button>
+  ${money >= FLEET_PRICE
+    ? `<button id="fleet" class="btn">${FLEET_COUNT} taksia (${FLEET_PRICE} €)</button>`
+    : ''}
   <button id="end" class="btn ghost">Lopeta vuoro</button>`;
 
 const overWon = () => `
