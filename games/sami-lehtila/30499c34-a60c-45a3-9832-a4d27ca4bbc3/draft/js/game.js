@@ -16,7 +16,7 @@
  * sen JSON-kenttä siirtää arvot koneelta toiselle. ?test=1 ajaa pompputestin.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
-import { bounceVelocity } from './bounce.js';
+import { liftFor } from './bounce.js';
 import { mountBoard } from './leaderboard.js';
 
 const canvas = document.getElementById('c');
@@ -60,11 +60,14 @@ const TW = 54, TH = 28, GEAR = 14;                         // taksin runko ja te
 const FUEL_MAX = 100;
 
 /* Säädettävät kertoimet yhdessä paikassa. Oletukset ovat puhelimella ajetusta
-   säätösessiosta, ja paneelin "oletukset" palaa näihin. */
+   säätösessiosta, ja paneelin "oletukset" palaa näihin.
+   Pomppu: bounceFrom on osuus laskurajasta jonka jälkeen kosketus pompauttaa,
+   bounceLift nostonsuurin pikselimäärä ja bounceKeep se osa vauhdista joka
+   jää jäljelle. Malli ja testi ovat js/bounce.js ja js/bouncetest.js. */
 const DEFAULTS = {
   grav: 250, thrust: 920,
   landVY: 215, landVX: 200, softVY: 50,
-  bounceRest: 0.45, bounceMax: 5,
+  bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62,
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
   stick: 2.05,
@@ -286,7 +289,7 @@ const PAD_WORD = { 1: 'one', 2: 'two' };
 const sfx = {
   gear() { tone(180, 0.12, { type: 'square', gain: 0.06, to: 120 }); },
   land() { tone(220, 0.14, { type: 'triangle', gain: 0.12, to: 320 }); },
-  bounce(n) { tone(320 + n * 120, 0.13, { type: 'triangle', gain: 0.13, to: 180 + n * 90 }); },
+  bounce(n) { tone(300 + n * 110, 0.09, { type: 'triangle', gain: 0.10, to: 200 + n * 80 }); },
   pickup() {
     tone(520, 0.09, { type: 'triangle', gain: 0.14 });
     tone(780, 0.12, { type: 'triangle', gain: 0.12, delay: 0.07 });
@@ -321,7 +324,7 @@ const MENU = 0, PLAY = 1, OVER = 2;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, graves, wreck;
+    msg, msgT, bits, lowWarn, graves, wreck, bounces;
 
 const stars = [];
 for (let i = 0; i < 70; i++) {
@@ -350,7 +353,7 @@ function newRun() {
   money = 40; lives = 3; runT = 0;
   served = { 1: false, 2: false };
   gateOpen = false;
-  bits = []; graves = []; wreck = null; lowWarn = 0;
+  bits = []; graves = []; wreck = null; lowWarn = 0; bounces = 0;
   msg = ''; msgT = 0;
   job = null;
   bag = []; lastKind = -1;
@@ -368,7 +371,7 @@ function resetTaxi() {
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
   };
   fuel = FUEL_MAX;
-  dead = false; deadT = 0; wreck = null;
+  dead = false; deadT = 0; wreck = null; bounces = 0;
 }
 
 /* Asiakas seisoo aina alustan reunassa: keskeltä häntä ei voi väistää, kun
@@ -518,25 +521,26 @@ function crash(reason) {
   sfx.crash();
 }
 
-let bounces = 0;
-
 function touchdown(pad, b) {
   const t = taxi;
   const ratio = Math.max(t.vy / P.landVY, Math.abs(t.vx) / P.landVX);
 
   if (t.gear < 0.85) return crash('Laskuteline ylhäällä');
   if (b.x < pad.x - 2 || b.x + b.w > pad.x + pad.w + 2) return crash('Jalka ilmassa');
-  if (ratio > P.bounceMax) return crash('Liian kova lasku');
+  if (ratio > 1) return crash('Liian kova lasku');
 
-  /* Ylinopeus ei tapa heti: taksi ponnahtaa takaisin ylös ja vauhti hidastuu
-     itsestään. Malli on js/bounce.js:ssä, jotta sen voi ajaa testinä. */
-  if (ratio > 1) {
+  /* Vähän liian kova kosketus pompauttaa: taksi siirretään muutama pikseli
+     alustan yläpuolelle ja vauhdista jää osa jäljelle. Nostoa ei käännetä
+     ylöspäin — painovoima tuo sen takaisin pienemmällä vauhdilla, ja ketju
+     sammuu itsestään 1–3 pompun jälkeen. Malli: js/bounce.js. */
+  if (ratio > P.bounceFrom) {
     const gl = GEAR * t.gear;
-    t.y = pad.y - (TH / 2 + gl) - 1.5;
-    t.vy = -bounceVelocity(Math.max(t.vy, Math.abs(t.vx)), P);
-    t.vx *= 0.55;
-    bounces++;
-    sfx.bounce(Math.min(bounces, 3));
+    const lift = liftFor(ratio, P);
+    t.y = pad.y - (TH / 2 + gl) - lift;
+    t.vy = Math.max(0, t.vy) * P.bounceKeep;
+    t.vx *= P.bounceKeep;
+    bounces = Math.min(bounces + 1, 3);
+    sfx.bounce(bounces);
     return;
   }
 
@@ -689,8 +693,9 @@ function update(dt) {
   taxi.vx += v.x * P.thrust * dt;
   taxi.vy += v.y * P.thrust * dt + P.grav * dt;
 
-  /* Liike pilkotaan osiin, jotta kova pudotus ei hyppää alustan läpi. */
-  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(taxi.vx), Math.abs(taxi.vy)) * dt / 6));
+  /* Liike pilkotaan osiin, jotta kova pudotus ei hyppää alustan läpi. Askel on
+     pienempi kuin pompun nosto, jottei pomppu jää huomaamatta. */
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(taxi.vx), Math.abs(taxi.vy)) * dt / 4));
   const sd = dt / steps;
   for (let i = 0; i < steps && !dead && state === PLAY; i++) move(sd);
 
@@ -1273,8 +1278,9 @@ const SLIDERS = [
   { key: 'thrust', label: 'työntö', min: 300, max: 1200, step: 20 },
   { key: 'landVY', label: 'lasku vy max', min: 40, max: 300, step: 5 },
   { key: 'landVX', label: 'lasku vx max', min: 10, max: 200, step: 5 },
-  { key: 'bounceRest', label: 'pompun palautus', min: 0.1, max: 0.9, step: 0.05 },
-  { key: 'bounceMax', label: 'pompun raja x', min: 1.5, max: 10, step: 0.5 },
+  { key: 'bounceFrom', label: 'pomppu alkaa x', min: 0.2, max: 0.95, step: 0.05 },
+  { key: 'bounceLift', label: 'pompun nosto px', min: 2, max: 30, step: 1 },
+  { key: 'bounceKeep', label: 'pompun jäävä vauhti', min: 0.2, max: 0.9, step: 0.02 },
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
   { key: 'refuel', label: 'tankkaus / s', min: 5, max: 80, step: 1 },
   { key: 'price', label: 'bensan hinta', min: 0, max: 3, step: 0.1 },
@@ -1421,7 +1427,8 @@ const menuCard = () => `
   <p>Nosta alien kyytiin ja vie hänet toiselle alustalle. Mitä nopeammin ja
      pehmeämmin, sitä isompi tippi. Laskeudu viereen, älä päälle.</p>
   <p><b>Laskuteline pitää laskea ennen kosketusta</b> — ja alhaalla se sammuttaa
-     sivusuuttimet, joten nosta se heti lähdössä.</p>
+     sivusuuttimet, joten nosta se heti lähdössä. Vauhdikas kosketus pompauttaa,
+     liian kova hajottaa.</p>
   <p>Keskellä tankataan omalla rahalla. Kun molemmilla alustoilla on käyty,
      viimeinen asiakas pyytää ylös ja katon luukku aukeaa.</p>
   <p class="hint">Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>
