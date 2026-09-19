@@ -564,16 +564,6 @@ addEventListener('keydown', e => {
   KEY[e.code] = true;
 
   if (!card.classList.contains('hidden')) {
-    /* Ohjaimen tila näkyviin. Selain ei paljasta ohjainta ennen kuin sen nappia
-       on painettu, joten "ei ohjainta" ja "ohjain jota ei ole vielä koskettu"
-       näyttävät täältä samalta — siksi teksti on kehotus eikä vikailmoitus.
-       textContent eikä innerHTML: id tulee laitteelta, ei meiltä. */
-    const el = card.querySelector('#padstate');
-    if (el) {
-      const want = gamepad.connected ? t('pad.on', { id: gamepad.id }) : t('pad.none');
-      if (el.textContent !== want) el.textContent = want;
-    }
-
     const click = sel => {
       const b = card.querySelector(sel);
       if (!b) return false;
@@ -633,6 +623,16 @@ function padInput() {
   gamepad.poll();
 
   if (!card.classList.contains('hidden')) {
+    /* Ohjaimen tila näkyviin. Selain ei paljasta ohjainta ennen kuin sen nappia
+       on painettu, joten "ei ohjainta" ja "ohjain jota ei ole vielä koskettu"
+       näyttävät täältä samalta — siksi teksti on kehotus eikä vikailmoitus.
+       textContent eikä innerHTML: id tulee laitteelta, ei meiltä. */
+    const el = card.querySelector('#padstate');
+    if (el) {
+      const want = gamepad.connected ? t('pad.on', { id: gamepad.id }) : t('pad.none');
+      if (el.textContent !== want) el.textContent = want;
+    }
+
     const click = sel => {
       const b = card.querySelector(sel);
       if (!b) return false;
