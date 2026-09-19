@@ -143,8 +143,9 @@ export const LEVELS = [
        neljä sekuntia tyventä ennen ensimmäistä puuskaa.
 
        Tikkaat alkavat oikealta, koska vasemman alanurkan peittävät tööttiä ja
-       laskutelinettä ohjaavat napit (y 778…964): vasemmalle jää vain kaksi
-       puomia, molemmat nappien yläpuolelle. */
+       laskutelinettä ohjaavat napit (x 30…158, y 778…964): vasemmalle jää vain
+       kaksi puomia, ja alempi niistä on y = 710 jotta senkin numerotunnus
+       (alustan alla + 22 px) jää nappien yläpuolelle. */
     name: 'Stormport',
     glow: '#9db4ff',
     sky: ['#070c17', '#141f33', '#22374e', '#31536a'],
@@ -153,9 +154,9 @@ export const LEVELS = [
     firstFrom: 2,
     pads: [
       { id: 1, x: 534, y: 300, w: 170, h: 18 },
-      { id: 2, x: 16, y: 450, w: 170, h: 18 },
-      { id: 3, x: 534, y: 600, w: 170, h: 18 },
-      { id: 4, x: 16, y: 740, w: 170, h: 18 },
+      { id: 2, x: 16, y: 440, w: 170, h: 18 },
+      { id: 3, x: 534, y: 590, w: 170, h: 18 },
+      { id: 4, x: 16, y: 710, w: 170, h: 18 },
       { id: 5, x: 534, y: 900, w: 170, h: 18 },
       { id: 0, x: 275, y: 960, w: 170, h: 18, fuel: true },
     ],
@@ -600,9 +601,9 @@ function lighthouse(ctx, time) {
   const x = 228, top = 706, lampY = top - 13;
   ctx.save();
   const beam = ctx.createRadialGradient(x, lampY, 0, x, lampY, 820);
-  beam.addColorStop(0, 'rgba(255,230,176,.14)');
-  beam.addColorStop(0.45, 'rgba(255,230,176,.05)');
-  beam.addColorStop(1, 'rgba(255,230,176,0)');
+  beam.addColorStop(0, 'rgba(255,230,176,.13)');
+  beam.addColorStop(0.35, 'rgba(255,230,176,.04)');
+  beam.addColorStop(0.75, 'rgba(255,230,176,0)');
   ctx.fillStyle = beam;
   for (const k of [0, Math.PI]) {
     const a = time * 0.5 + k, s = 0.13;
