@@ -15,7 +15,9 @@
  *
  * Puhe menee suomeksi vain jos laitteelta löytyy suomenkielinen ääni.
  * Muuten puhutaan englanniksi, koska englantilainen ääni suomenkielisellä
- * tekstillä kuulostaa hölmöltä.
+ * tekstillä kuulostaa hölmöltä. say.*-rivit ovat ilman pilkkuja, koska
+ * puhesyntetisaattori pitää pilkussa tauon eikä asiakkaalla ole aikaa
+ * dramaattisiin taukoihin.
  */
 
 const LS = 'spacetaxi.lang';
@@ -80,10 +82,10 @@ const STR = {
     'msg.dry': 'Tankki kuiva!',
     'msg.coming': 'Hei! Tulossa ollaan.',
 
-    'say.hey': 'Hei, taksi!',
-    'say.toPad': 'Alusta {n}, kiitos',
-    'say.up': 'Ylös, kiitos',
-    'say.thanks': 'Kiitos!',
+    'say.hey': 'Hei taksi',
+    'say.toPad': 'Alusta {n} kiitos',
+    'say.up': 'Ylös kiitos',
+    'say.thanks': 'Kiitos',
 
     'cut.level': 'KENTTÄ {i} / {t}',
     'cut.clear': '{name} SELVÄ',
@@ -145,10 +147,10 @@ const STR = {
     'msg.dry': 'Tank is dry!',
     'msg.coming': 'Hey! On my way.',
 
-    'say.hey': 'Hey, taxi!',
+    'say.hey': 'Hey taxi',
     'say.toPad': 'Pad {n} please',
     'say.up': 'Up please',
-    'say.thanks': 'Thanks!',
+    'say.thanks': 'Thanks',
 
     'cut.level': 'LEVEL {i} / {t}',
     'cut.clear': '{name} CLEAR',
