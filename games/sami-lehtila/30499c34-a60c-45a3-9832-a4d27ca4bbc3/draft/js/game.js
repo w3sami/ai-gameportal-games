@@ -2001,7 +2001,7 @@ const TIP_COL = ['#6fe3ff', '#ff5d7a', '#ffd479'];
 const TIP_NAME = ['tyyni', 'kiireinen', 'kaasu'];
 
 function tipGraph(ctx, w, h) {
-  const L = 34, B = h - 26, T = 12, R = w - 12;
+  const L = 48, B = h - 38, T = 14, R = w - 12;
   const zero = p => P.tipTime / Math.max(0.05, P[p.fade]);
   const high = p => P.tip * P[p.mul];
   const secs = Math.max(1, ...TIPPERS.map(zero)) * 1.08;
@@ -2029,7 +2029,7 @@ function tipGraph(ctx, w, h) {
     ctx.setLineDash([]);
     ctx.fillStyle = TIP_COL[i] || '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText(TIP_NAME[i] + (p.onlyIdle ? ' (kaasu pohjassa)' : ''), L + 6 + i * 126, T + 13);
+    ctx.fillText(TIP_NAME[i] + (p.onlyIdle ? ' (paras tapaus)' : ''), L + i * 150, h - 8);
   });
 }
 /* Säätimet laatikoissa, koska niitä on yli kaksikymmentä eikä kukaan selaa
