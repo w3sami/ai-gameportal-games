@@ -115,7 +115,7 @@ function reset(){
 }
 function loadLevel(i){
   li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; save();
-  setGeom(); buildMain(); buildHazards(); resize(); reset();
+  setGeom(); applyTheme(); buildMain(); buildHazards(); resize(); reset();
 }
 
 // One physics tick. Deterministic: same inputs → same run, which is what makes the ghost replay possible.
@@ -166,7 +166,7 @@ function tick(){
         } else { ship.state = 'dead'; deadT = 1.4; explode(hit.px, hit.py); shake = 1; Snd.explode(); setMsg('Crashed', ''); }
       } else if (ship.state !== 'finished'){
         const hz = updateHazards(ship);
-        if (hz){ ship.state = 'dead'; deadT = 1.4; explode(hz.px, hz.py); shake = 1; Snd.explode(); setMsg('Crashed', 'Stalactite'); }
+        if (hz){ ship.state = 'dead'; deadT = 1.4; explode(hz.px, hz.py); shake = 1; Snd.explode(); setMsg('Crashed', hz.kind === 'branch' ? 'Branch' : 'Stalactite'); }
       }
       if (ship.state === 'flying' && ship.flame) emitThrust(ship);
     }
@@ -186,7 +186,7 @@ function finish(){
   lastResult = {ticks, prev: prev ? prev.ticks : null, isBest};
 }
 
-// ---- Hazards: stalactites that shake loose when the rocket comes near, then drop ----
+// ---- Hazards: stalactites (or, in the jungle, branches) that shake loose when the rocket comes near, then drop ----
 // Driven only by the real rocket's position at fixed DT, so a run stays deterministic and the ghost replay still holds.
 const HZ = { trigger:200, wiggle:0.5, gravity:1.5 };
 let hazards = [];
@@ -194,7 +194,8 @@ function buildHazards(){
   hazards = (L.hazards||[]).map(h => {
     const pts = spikePts(h), tip = pts.reduce((b,p) => Math.hypot(p[0]-h.tx,p[1]-h.ty) < Math.hypot(b[0]-h.tx,b[1]-h.ty) ? p : b);
     const probe = [tip].concat(pts.filter(p => p !== tip && !isSolid(p[0],p[1])));   // landing is judged by the part that hangs in the open
-    return {h, pts, probe, sprite:renderSpikeSprite(pts, h.seed), state:'hang', t:0, a:0, dy:0, vy:0};
+    const sprite = renderSpikeSprite(pts, h.seed, h.kind, {ax:h.x, ay:h.y, bx:h.tx, by:h.ty, w:h.w, taper:0.85});
+    return {h, pts, probe, sprite, col: h.kind === 'branch' ? '120,86,52' : null, state:'hang', t:0, a:0, dy:0, vy:0};
   });
 }
 function hazardReset(){ for (const z of hazards){ z.state = 'hang'; z.t = 0; z.a = 0; z.dy = 0; z.vy = 0; } }
@@ -209,15 +210,15 @@ function updateHazards(s){
       if (Math.hypot(s.x-(h.x+ax*t), s.y-(h.y+ay*t)) < (h.trigger||HZ.trigger)){ z.state = 'wiggle'; z.t = 0; Snd.crack(); }
     } else if (z.state === 'wiggle'){
       z.t += DT; const k = Math.min(1, z.t/HZ.wiggle); z.a = Math.sin(z.t*38)*0.07*k;
-      if (Math.round(z.t*120) % 10 === 0) crumbs(h.x+(h.tx-h.x)*0.65, h.y+(h.ty-h.y)*0.65, 2);
-      if (z.t >= HZ.wiggle){ z.state = 'fall'; z.vy = 0; crumbs(h.x+(h.tx-h.x)*0.6, h.y+(h.ty-h.y)*0.6, 8); }
+      if (Math.round(z.t*120) % 10 === 0) crumbs(h.x+(h.tx-h.x)*0.65, h.y+(h.ty-h.y)*0.65, 2, z.col);
+      if (z.t >= HZ.wiggle){ z.state = 'fall'; z.vy = 0; crumbs(h.x+(h.tx-h.x)*0.6, h.y+(h.ty-h.y)*0.6, 8, z.col); }
     } else {
       z.vy += P.gravity*HZ.gravity*DT; z.dy += z.vy*DT;
-      if (z.dy > 12 && posePts(z, z.probe).some(p => isSolid(p[0],p[1]))){ z.state = 'gone'; shatter(h.tx, h.ty+z.dy, z.vy); Snd.thud(); continue; }
+      if (z.dy > 12 && posePts(z, z.probe).some(p => isSolid(p[0],p[1]))){ z.state = 'gone'; shatter(h.tx, h.ty+z.dy, z.vy, z.col); Snd.thud(); continue; }
     }
     const pts = posePts(z, z.pts), c = Math.cos(s.a), sn = Math.sin(s.a);    // hull points inside the spike, or spike vertices inside the rocket
-    for (const [lx,ly] of HULL){ const px = s.x+lx*c-ly*sn, py = s.y+lx*sn+ly*c; if (pip(px,py,pts)) return {px,py}; }
-    for (const p of pts){ if (Math.hypot(p[0]-s.x, p[1]-s.y) < 9) return {px:p[0], py:p[1]}; }
+    for (const [lx,ly] of HULL){ const px = s.x+lx*c-ly*sn, py = s.y+lx*sn+ly*c; if (pip(px,py,pts)) return {px,py,kind:h.kind}; }
+    for (const p of pts){ if (Math.hypot(p[0]-s.x, p[1]-s.y) < 9) return {px:p[0], py:p[1], kind:h.kind}; }
   }
   return null;
 }
@@ -239,11 +240,11 @@ function celebrate(px,py){
     particles.push({x:px+(Math.random()-0.5)*40,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1.0+Math.random()*1.4,max:2.4,sz:2.5+Math.random()*3.5,kind:3,col:cols[i%4]}); }
   for (let i=0;i<3;i++) particles.push({x:px,y:py,vx:0,vy:0,life:0.7+i*0.2,max:0.7+i*0.2,sz:160+i*90,kind:2,col:'rgba(120,235,150,'});
 }
-function crumbs(px,py,n){
-  for (let i=0;i<n;i++) particles.push({x:px+(Math.random()-0.5)*24,y:py,vx:(Math.random()-0.5)*30,vy:20+Math.random()*50,life:0.4+Math.random()*0.4,max:0.8,sz:1.5+Math.random()*2,kind:1});
+function crumbs(px,py,n,col){
+  for (let i=0;i<n;i++) particles.push({x:px+(Math.random()-0.5)*24,y:py,vx:(Math.random()-0.5)*30,vy:20+Math.random()*50,life:0.4+Math.random()*0.4,max:0.8,sz:1.5+Math.random()*2,kind:1,col});
 }
-function shatter(px,py,v){
-  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); particles.push({x:px+(Math.random()-0.5)*20,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.7,max:1.2,sz:2+Math.random()*4,kind:1}); }
+function shatter(px,py,v,col){
+  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); particles.push({x:px+(Math.random()-0.5)*20,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.7,max:1.2,sz:2+Math.random()*4,kind:1,col}); }
 }
 function puff(px,py,sp){
   for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v*0.4,life:0.3+Math.random()*0.4,max:0.7,sz:2+Math.random()*3,kind:1}); }
@@ -280,7 +281,7 @@ function drawShip(s, isGhost){
 function drawParticles(){
   for (const p of particles){ const t = Math.max(0, p.life/p.max);
     if (p.kind === 0){ ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `hsla(${20+40*t},100%,${55+35*t}%,${t})`; ctx.beginPath(); ctx.arc(p.x,p.y,p.sz*t+0.5,0,6.283); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
-    else if (p.kind === 1){ ctx.fillStyle = `rgba(236,230,218,${t*0.9})`; ctx.fillRect(p.x-p.sz/2,p.y-p.sz/2,p.sz,p.sz); }
+    else if (p.kind === 1){ ctx.fillStyle = `rgba(${p.col||'236,230,218'},${t*0.9})`; ctx.fillRect(p.x-p.sz/2,p.y-p.sz/2,p.sz,p.sz); }
     else if (p.kind === 3){ ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(1, t*1.5); ctx.fillStyle = p.col; ctx.fillRect(p.x-p.sz/2,p.y-p.sz/2,p.sz,p.sz*0.6); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
     else { ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = (p.col||'rgba(255,190,120,')+t+')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x,p.y,(1-t)*(p.sz||110),0,6.283); ctx.stroke(); ctx.globalCompositeOperation = 'source-over'; }
   }
@@ -326,7 +327,7 @@ function render(dt){
   if (ghost) drawShip(ghost, true);
   if (ship.state !== 'dead') drawShip(ship, false);
   ctx.restore();
-  const mf = 1.3; ctx.fillStyle = 'rgba(217,211,199,.16)';
+  const mf = 1.3; ctx.fillStyle = STYLE.bg.mote || 'rgba(217,211,199,.16)';
   for (const m of motes){ if (mode === 'play'){ m.y -= m.v*dt; if (m.y < 0) m.y += L.h; } const mx = (m.x-cam.x)*Z*mf + vw/2*(1-mf) + sx*mf, my = (m.y-cam.y)*Z*mf + vh/2*(1-mf) + sy*mf; if (mx>-4 && mx<vw+4 && my>-4 && my<vh+4) ctx.fillRect(mx, my, m.s, m.s); }
 
   Snd.thrust(mode === 'play' && ship.state === 'flying' && ship.flame);
@@ -528,5 +529,5 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false; });
 
 // ---- Go ----
-li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; setGeom();
+li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; setGeom(); applyTheme();
 resize(); buildMain(); buildHazards(); reset(); showMenu(); requestAnimationFrame(frame);
