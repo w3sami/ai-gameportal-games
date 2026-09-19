@@ -93,7 +93,7 @@ const DEFAULTS = {
      mittari laskee. Nämä ovat säätimissä, koska oikea tuntuma löytyy vain
      ajamalla. Ks. TIPPERS. */
   /* Tyhjän tankin pätkivä syöttö. Ks. dryThrust. */
-  dryFlow: 0.3,
+  dryOn: 0.3, dryOff: 0.7, dryJitter: 0.08, dryLife: 3,
   tipCalm: 1, fadeCalm: 1,
   tipRush: 1.85, fadeRush: 2.4,
   tipHold: 1.35, fadeHold: 1.4,
@@ -389,6 +389,7 @@ const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
 let thrustNow = 0;
+let dryT = 0, dryPhase = 0, dryFiring = false;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
     graves, squishes,
@@ -697,27 +698,49 @@ function inputVector() {
 }
 
 /* Tyhjä tankki ei sammuta suuttimia vaan antaa pätkivää syöttöä: tyhjän tankin
-   pelastus, jolla pääsee vielä bensa-asemalle. Bensaa on vain silloin kun
-   mittari on nollassa — niin kauan kuin tankissa on jotain, suutin palaa
-   tasaisesti eikä katko mitään.
+   pelastus, jolla pääsee vielä bensa-asemalle. Niin kauan kuin tankissa on
+   jotain, suutin palaa tasaisesti eikä katko mitään — pätkintä alkaa vasta
+   mittarin nollasta.
 
-   Jakso on sekunti ja säädin kertoo montako sekuntia siitä bensaa tulee.
-   Oletus 0.3 tarkoittaa siis 0.3 s syöttöä ja 0.7 s taukoa.
+   Neljä säädintä:
+     dryOn      kuinka kauan bensaa tulee kerrallaan
+     dryOff     kuinka pitkä tauko niiden välissä on
+     dryJitter  kummankin päälle arvotaan tämän verran suuntaan tai toiseen,
+                joten sykäykset eivät ole metronomi vaan yskähtelevä moottori
+     dryLife    kuinka kauan tyhjästä tankista ylipäätään irtoaa mitään; sen
+                jälkeen suuttimet ovat kuolleet eikä sivuillekaan jää tehoa
 
-   Se mistä jarruttaminen on kiinni: syöttö × täysi työntö on keskimäärin
-   P.dryFlow * P.thrust, ja paikallaan pysyminen vaatii P.grav. Oletuksilla
-   0.3 * 920 = 276 vastaan 250, eli vauhtia lähtee pois ja laskun voi pelastaa.
-   Jos syöttö lasketaan alle grav/thrust = 0.27:n, jarruttaminen muuttuu
-   mahdottomaksi ja jäljelle jää vain hitaampi putoaminen.
+   Se mistä jarruttaminen on kiinni: keskiteho on dryOn/(dryOn+dryOff) kertaa
+   täysi työntö, ja paikallaan pysyminen vaatii P.grav. Oletuksilla
+   0.3/1.0 * 920 = 276 vastaan 250, eli vauhtia lähtee pois ja laskun voi
+   pelastaa. Jos suhde lasketaan alle grav/thrust = 0.27:n, jarruttaminen
+   muuttuu mahdottomaksi ja jäljelle jää vain hitaampi putoaminen.
 
-   Alustalta ei pääse lähtöön tälläkään, koska lähtö vaatii bensaa erikseen,
-   eikä tyhjänä tavalliselle alustalle jääminen pelasta — se on yhä kolari.
+   Alustalta ei pääse lähtöön tälläkään, koska lähtö vaatii bensaa erikseen.
    Pelastus on nimenomaan matka tankkaukselle. */
 const DRY_SIDE = 0.5;
 
+/** Yhden vaiheen kesto arvottuna: pohja-arvo ja hajonta sen ympärillä. */
+const dryLen = firing =>
+  Math.max(0.02, (firing ? P.dryOn : P.dryOff) + rand(-P.dryJitter, P.dryJitter));
+
+/* Vaihetta kuljetetaan kerran ruudussa, koska activeThrust kutsutaan kahdesti
+   — piirtoa ja fysiikkaa varten — ja kaksi kertaa etenevä vaihe pätkisi
+   tuplasti. */
+function stepDry(dt) {
+  if (fuel > 0) { dryT = 0; dryPhase = 0; dryFiring = false; return; }
+  dryT += dt;
+  dryPhase -= dt;
+  while (dryPhase <= 0) {
+    dryFiring = !dryFiring;
+    dryPhase += dryLen(dryFiring);
+  }
+}
+
 function dryThrust(v) {
+  if (dryT > P.dryLife) { v.x = 0; v.y = 0; return; }
   v.x *= DRY_SIDE;
-  if (runT % 1 >= P.dryFlow) v.y = 0;
+  if (!dryFiring) v.y = 0;
 }
 
 function activeThrust() {
@@ -979,6 +1002,7 @@ function movePads() {
 function clearWarnings() {
   lowWarn = 0; fastWarn = 0;
   padWarn = null; padBlink = 0;
+  dryT = 0; dryPhase = 0; dryFiring = false;
 }
 
 /* Mille alustalle ollaan tulossa ja liiankos kovaa? Raja on sama mistä pomppu
@@ -1095,6 +1119,7 @@ function update(dt) {
 
   warnings(dt);                              // piippaukset myös alustalla
 
+  stepDry(dt);
   const v = activeThrust();
   thrustNow = Math.min(1, Math.hypot(v.x, v.y));   // kaasuprofiili kysyy tätä
   const raw = inputVector();
@@ -1102,7 +1127,9 @@ function update(dt) {
   if (taxi.landed) {
     jetLevel(0);
     if (taxi.landed.fuel) refuel(dt);
-    if (fuel <= 0.5 && !taxi.landed.fuel) { crash(); return; }
+    /* Tankilla kuolee myös: tyhjä tankki ja tyhjä kassa ei ratkea istumalla,
+       joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
+    if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
     if (raw.y < -0.2 && fuel > 0) taxi.landed = null;
     else { jobStep(dt); return; }
   }
@@ -1143,6 +1170,9 @@ function move(dt) {
   }
   for (const r of solids()) if (hit(b, r)) return crash();
 }
+
+/** Saako tankista vielä bensaa? Ilmainen bensa ei koskaan lopu kassan takia. */
+const canBuyFuel = () => P.price <= 0 || money > 0.01;
 
 function refuel(dt) {
   if (fuel >= FUEL_MAX || money <= 0) return;
@@ -1903,6 +1933,20 @@ function draw(v) {
 
 /* ------------------------------------------------------------ säätöpaneeli
    Paneeli on kehittäjän työkalu ja pysyy suomeksi. */
+/* Säätimet laatikoissa, koska niitä on yli kaksikymmentä eikä kukaan selaa
+   sellaista listaa. Ryhmään kuulumaton säädin päätyy "muut"-laatikkoon, joten
+   uusi säädin ei katoa näkyvistä vaikka lisääjä ei kävisi tätä listaa läpi. */
+const SLIDER_GROUPS = [
+  { name: 'lento', open: true, keys: ['grav', 'thrust', 'wind', 'stick'] },
+  { name: 'laskeutuminen', open: false,
+    keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep'] },
+  { name: 'bensa', open: true,
+    keys: ['burn', 'refuel', 'price', 'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
+  { name: 'raha ja tipit', open: false,
+    keys: ['fare', 'tip', 'tipTime',
+           'tipCalm', 'fadeCalm', 'tipRush', 'fadeRush', 'tipHold', 'fadeHold'] },
+];
+
 const SLIDERS = [
   { key: 'grav', label: 'painovoima', min: 80, max: 500, step: 10 },
   { key: 'thrust', label: 'työntö', min: 300, max: 1200, step: 20 },
@@ -1917,7 +1961,10 @@ const SLIDERS = [
   { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
   { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
-  { key: 'dryFlow', label: 'pätkintä: syöttö s', min: 0, max: 1, step: 0.01 },
+  { key: 'dryOn', label: 'pätkintä: bensaa s', min: 0, max: 1, step: 0.01 },
+  { key: 'dryOff', label: 'pätkintä: tauko s', min: 0.02, max: 2, step: 0.01 },
+  { key: 'dryJitter', label: 'pätkintä: satunnaisuus ±s', min: 0, max: 0.5, step: 0.01 },
+  { key: 'dryLife', label: 'pätkintä: kesto s', min: 0, max: 20, step: 0.5 },
   { key: 'tipCalm', label: 'tyyni: tippi ×', min: 0.5, max: 3, step: 0.05 },
   { key: 'fadeCalm', label: 'tyyni: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'tipRush', label: 'kiireinen: tippi ×', min: 0.5, max: 3, step: 0.05 },
@@ -1977,7 +2024,7 @@ function buildPanel() {
   sideRow.append(el('label', null, 'napit'), seg);
   panelEl.append(sideRow);
 
-  for (const s of SLIDERS) {
+  const sliderRow = s => {
     const row = el('div', 'row');
     const lab = el('label');
     const val = el('b', null, String(P[s.key]));
@@ -1994,8 +2041,30 @@ function buildPanel() {
       if (ta && ta !== document.activeElement) ta.value = tuneJSON();
     });
     row.append(lab, input);
-    panelEl.append(row);
+    return row;
+  };
+
+  /* <details> hoitaa auki ja kiinni itse, joten laatikoille ei tarvita omaa
+     tilaa eikä kuuntelijaa. */
+  const group = (name, open, rows) => {
+    const box = el('details', 'grp');
+    box.open = open;
+    box.append(el('summary', null, name));
+    const body = el('div', 'body');
+    for (const s of rows) body.append(sliderRow(s));
+    box.append(body);
+    return box;
+  };
+
+  const byKey = new Map(SLIDERS.map(s => [s.key, s]));
+  const used = new Set();
+  for (const g of SLIDER_GROUPS) {
+    const rows = g.keys.map(k => byKey.get(k)).filter(Boolean);
+    for (const s of rows) used.add(s.key);
+    if (rows.length) panelEl.append(group(g.name, g.open, rows));
   }
+  const rest = SLIDERS.filter(s => !used.has(s.key));
+  if (rest.length) panelEl.append(group('muut', false, rest));
 
   const foot = el('div', 'foot');
   foot.append(
