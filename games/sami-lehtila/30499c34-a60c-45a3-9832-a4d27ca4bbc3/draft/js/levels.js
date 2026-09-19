@@ -140,15 +140,16 @@ export const LEVELS = [
        kentässä liikkuu taksi.
 
        Sivutuulen suunta kääntyy sinillä: 21,2 s kierros, jonka kummassakin
-       puoliskossa on yksi puuska (nousu 2,2 s, tasainen 2,6 s, laantuminen
-       1,8 s) ajoitettuna sinin ääriarvoon. Puuska puhaltaa siis aina siihen
-       suuntaan johon tuuli on muutenkin menossa, ja puuskien väliin jää tyven
-       jossa suunta vaihtuu nollan kautta. Tyven ei kuitenkaan ole kuollut:
-       päällä käy henkäily (WIND:n breath), joka heiluttaa tuulipussia pari
-       astetta mutta on taksille olematon. Tuulipussi lukee tuulta WIND.lead
-       sekuntia etuajassa, eli se on ehtinyt nousta tiukalle ennen kuin taksiin
-       osuu mitään; nostureiden koukut ja laiturin lepuuttaja kertovat saman
-       siellä missä laskeudutaan. Puuskan alku välähtää lisäksi salamana.
+       puoliskossa on yksi puuska ajoitettuna sinin ääriarvoon. Puuska puhaltaa
+       siis aina siihen suuntaan johon tuuli on muutenkin menossa, ja puuskien
+       väliin jää tyven jossa suunta vaihtuu nollan kautta. Tyven ei kuitenkaan
+       ole kuollut: päällä käy henkäily (breath), joka heiluttaa tuulipussia
+       pari astetta mutta on taksille olematon.
+
+       Puuskan nousuaika on säätöpaneelin `tuulen nousuaika s` (P.wind), oletus
+       0,3 s. Tuulipussit, nostureiden koukut ja laiturin lepuuttaja lukevat
+       tasan saman tuulen tasan samalla hetkellä kuin taksi, eli mikään mittari
+       ei ole edellä eikä jäljessä. Puuskan alku välähtää lisäksi salamana.
 
        Huippuvoima 120 px/s² on 13 % suuttimen työnnöstä, ja vähän pitääkin
        olla: lentäessä sen korjaa huomaamatta. Oikeasti vaarallinen se on vain
@@ -517,24 +518,31 @@ const RIDES = {
    Kentän mekaniikka on yhdessä rivissä: airborne-taksiin lisätään joka ruudulla
    sivukiihtyvyyttä. Kaikki muu täällä on sitä, että pelaaja näkee sen tulevan.
 
-   Tuuli on jaksollinen, ei satunnainen — sen voi oppia. Yksi kierros on
-   tyven, nouseva puhuri, tasainen puuska ja laantuminen, ja suunta vaihtuu
-   joka kierroksella. Tuulipussi piirretään tuulella joka on WIND.lead
-   sekuntia edellä, joten se roikkuu tyvenellä suorana alas, nousee vaakaan
-   ennen puuskaa ja laskee ennen sen loppumista. */
+   Tuuli on jaksollinen, ei satunnainen — sen voi oppia. Yksi kierros on tyven,
+   nouseva puuska, tasainen huippu ja laantuminen, ja suunta kääntyy sinin
+   mukana. Kaikki mikä näyttää tuulta — tuulipussit, koukut, lepuuttaja, sade,
+   aallokko — lukee saman windAt-kutsun samalla ruudulla kuin taksin fysiikka,
+   joten kuva ja tuntuma eivät voi erota toisistaan. */
 
 const WIND = {
   swing: 21.2,                                // tuulen suunnan koko kierros
-  build: 2.2, hold: 2.6, ease: 1.8,           // yhden puuskan muoto
+  hold: 2.6,                                  // puuskan tasainen osa
   gust: 0.83,                                 // puuskan osuus huippuvoimasta
   peak: 120,                                  // px/s² kun voimakkuus on 1
-  lead: 1.4,                                  // sekuntia jotka tuulipussi on edellä
 };
 const TAU = Math.PI * 2;
 const HALF = WIND.swing / 2;                  // yksi puuska per sinin puolikas
-const GUST_PAD = (HALF - (WIND.build + WIND.hold + WIND.ease)) / 2;
-const CALM_AT = GUST_PAD + WIND.build + WIND.hold + WIND.ease;   // puuska juuri laantunut
 const smooth = x => x * x * (3 - 2 * x);
+
+/* Puuskan nousu- ja laskuaika tulee säätöpaneelista (P.wind), koska se on se
+   luku joka ratkaisee miltä kenttä tuntuu: pitkä nousu on huomaamaton, lyhyt
+   on isku. Loput kierroksesta on tyventä, eli mitä nopeampi puuska sitä
+   pidempi rauha sen ympärillä. Yläraja pitää huolen ettei puuska täytä koko
+   puolikasta. */
+const rampOf = P => Math.max(0.05, Math.min(3, (P && P.wind) || 0.3));
+const spanOf = ramp => ramp * 2 + WIND.hold;
+const padOfRamp = ramp => (HALF - spanOf(ramp)) / 2;
+const calmAt = ramp => padOfRamp(ramp) + spanOf(ramp);   // puuska juuri laantunut
 
 /* Puuskien väliin jäävä henkäily. Kaksi eri mittaista siniä, jotta kuvio ei
    toistu puuskan tahdissa: yhteensä ±0,17 eli enintään 20 px/s². Taksi ei sitä
@@ -542,20 +550,14 @@ const smooth = x => x * x * (3 - 2 * x);
    näytä kuolleelta silloinkaan kun se on rauhallinen. */
 const breath = t => 0.10 * Math.sin(t / 3.1 * TAU) + 0.07 * Math.sin(t / 5.3 * TAU + 2);
 
-/* Heilurit. Koukku on raskas: se ei seuraa tuulta vaan laahaa perässä, ohittaa
-   tasapainoasennon ja asettuu vasta parin heilahduksen jälkeen. Vaimennettu
-   heiluri antaa tämän ilmaiseksi — kiihtyvyys on painovoiman ja tuulen summa
-   kaaren suunnassa, ja kulma jää sinne minne se jää.
+/* Heilurit. Koukku kääntyy suoraan tuulen mukana ilman omaa hitautta: se on
+   kentän mittari, ja mittari joka laahaa jäljessä näyttää väärää lukemaa juuri
+   silloin kun sitä eniten tarvitaan. Painava ulkonäkö tulee siitä että kulma
+   on rajattu — täysi puuska kallistaa koukun 24 asteeseen eikä koskaan vaakaan.
 
-   HOOK.wind on koukun oma tuulikerroin eikä sama kuin taksin: köyden päässä
-   roikkuva rautakimpale kerää tuulta eri tavalla kuin lentävä auto, ja tämä
-   luku on vain sitä varten että liike näyttää oikealta. Ääriasento on
-   atan(wind/g) ≈ 23°, eli koukku ei koskaan lennä vaakaan.
-
-   Pituudet ovat tarkoituksella eri mittaisia, jotta koukut eivät heilu
-   tahdissa — sama tuuli, eri jaksonaika. Viimeinen on laiturin lepuuttaja,
-   lyhyt ja siksi vikkelämpi. */
-const HOOK = { g: 700, wind: 300, damp: 1.15 };
+   Idle on pieni oma huojunta, jottei rivi koukkuja ole täysin kuollut
+   tyvenellä; eri vaihe kullekin, jotta ne eivät heilu tahdissa. */
+const HOOK = { lean: 0.42, idle: 0.025 };
 
 /* Törmäyslaatikko on tarkoituksella vain koukun rautaosa, ei sen alle jäävä
    kärki: kuva saa olla laatikkoa isompi, koska anteeksiantavaan suuntaan
@@ -564,13 +566,13 @@ const PEND = HOOK_BOX.map((box, i) => {
   const fender = i === HOOK_BOX.length - 1;
   box.w = fender ? 26 : 20;
   box.h = fender ? 26 : 18;
-  return { box, pad: box.pad, len: [86, 74, 92, 80, 46][i], a: 0, v: 0 };
+  return { box, pad: box.pad, len: [86, 74, 92, 80, 46][i], a: 0 };
 });
 
 /* Bensalautta on kelluva ja painava: jousi vetää sitä kohti tuulen osoittamaa
    paikkaa, mutta vaimennus pitää liikkeen hitaana, joten se on aina pari
    sekuntia jäljessä. Poikkeama ±52 px mahtuu kuiluun (186…534) reilusti. */
-const BARGE = { amp: 52, stiff: 1.6, damp: 1.9, bob: 3.5 };
+const BARGE = { amp: 52, stiff: 3.0, damp: 2.6, bob: 3.5 };
 
 const storm = {
   t: 0, flash: 0, bolt: null, taxi: null,
@@ -580,12 +582,12 @@ const storm = {
 const padOf = (pads, id) => pads.find(p => p.id === id);
 
 function stormInit(api) {
-  storm.t = CALM_AT; storm.flash = 0; storm.bolt = null; storm.taxi = null;
+  storm.t = calmAt(rampOf(api.P)); storm.flash = 0; storm.bolt = null; storm.taxi = null;
   storm.barge.x = 0; storm.barge.v = 0;
   const fuel = api.pads.find(p => p.fuel);
   storm.barge.home = fuel ? fuel.x : 275;
   storm.barge.homeY = fuel ? fuel.y : 960;
-  for (const q of PEND) { q.a = 0; q.v = 0; }
+  for (const q of PEND) q.a = 0;
   placeHooks(api);
 }
 
@@ -608,17 +610,10 @@ function placeHooks(api) {
   }
 }
 
-/** Vaimennettu heiluri, kaksi puoliaskelta jotta isokin dt pysyy kasassa. */
-function stepHooks(dt, api, v) {
-  const h = dt / 2;
-  for (const q of PEND) {
-    for (let i = 0; i < 2; i++) {
-      const acc = (-HOOK.g * Math.sin(q.a) + v * HOOK.wind * Math.cos(q.a)) / q.len
-        - HOOK.damp * q.v;
-      q.v += acc * h;
-      q.a += q.v * h;
-    }
-  }
+function stepHooks(api, v) {
+  PEND.forEach((q, i) => {
+    q.a = HOOK.lean * v + Math.sin(storm.t * 1.6 + i * 2.1) * HOOK.idle;
+  });
   placeHooks(api);
 }
 
@@ -627,17 +622,20 @@ function stepHooks(dt, api, v) {
     Suunta tulee sinistä, ei laskurista: tuuli kääntyy nollan kautta ja nousee
     toisella puolella, ja puuska on ajoitettu sinin ääriarvoon. Puuska puhaltaa
     siis aina siihen suuntaan johon tuuli on muutenkin menossa, ja kahden
-    puuskan väliin jää aito tyven jossa suunta vaihtuu. */
-function windAt(time) {
+    puuskan väliin jää aito tyven jossa suunta vaihtuu.
+
+    Tämä on kentän ainoa tuulen lähde: sekä taksin sivukiihtyvyys, tuulipussit
+    että koukut lukevat saman kutsun samalla hetkellä, joten mikään ei näytä
+    eri asiaa kuin mitä ohjaimissa tuntuu. */
+function windAt(time, ramp) {
+  const pad = padOfRamp(ramp);
   const u = time - Math.floor(time / HALF) * HALF;
-  const q = u - GUST_PAD;
+  const q = u - pad;
   let env = 0;
   if (q > 0) {
-    if (q < WIND.build) env = smooth(q / WIND.build);
-    else if (q < WIND.build + WIND.hold) env = 1;
-    else if (q < WIND.build + WIND.hold + WIND.ease) {
-      env = 1 - smooth((q - WIND.build - WIND.hold) / WIND.ease);
-    }
+    if (q < ramp) env = smooth(q / ramp);
+    else if (q < ramp + WIND.hold) env = 1;
+    else if (q < spanOf(ramp)) env = 1 - smooth((q - ramp - WIND.hold) / ramp);
   }
   const v = Math.sin(time / WIND.swing * TAU) * WIND.gust * env + breath(time);
   return { dir: v < 0 ? -1 : 1, s: Math.min(1, Math.abs(v)) };
@@ -648,22 +646,23 @@ function windAt(time) {
    riittää kertomaan että luukusta tuli uusi auto. Kolarin jälkeen saa siis aina
    neljä sekuntia rauhaa ennen seuraavaa puuskaa. */
 function stormUpdate(dt, api) {
-  if (api.taxi !== storm.taxi) { storm.taxi = api.taxi; storm.t = CALM_AT; }
+  const ramp = rampOf(api.P);
+  if (api.taxi !== storm.taxi) { storm.taxi = api.taxi; storm.t = calmAt(ramp); }
   const was = storm.t;
   storm.t += dt;
 
-  const rise = Math.floor(was / HALF) * HALF + GUST_PAD;
+  const rise = Math.floor(was / HALF) * HALF + padOfRamp(ramp);
   if (was < rise && storm.t >= rise) {         // salama kun puhuri lähtee nousuun
     storm.flash = FLASH;
     storm.bolt = makeBolt(api.rand);
   }
   storm.flash = Math.max(0, storm.flash - dt);
 
-  const w = windAt(storm.t);
+  const w = windAt(storm.t, ramp);
   const v = w.dir * w.s;
   if (!api.taxi.landed) api.taxi.vx += v * WIND.peak * dt;
 
-  stepHooks(dt, api, v);
+  stepHooks(api, v);
 
   /* Lautan lepopaikka. Peli laskee alustan paikan kaavalla bx + amplitudi, ja
      amplitudi on nolla, joten bx menee sellaisenaan perille — ja koska alustalla
@@ -712,7 +711,7 @@ function animStep() {
 
 function stormBack(ctx, api) {
   const time = animStep();
-  const w = windAt(storm.t);
+  const w = windAt(storm.t, rampOf(api.P));
   ctx.save();
   lighthouse(ctx, time);
   shore(ctx);
@@ -724,8 +723,7 @@ function stormBack(ctx, api) {
     else if (p.y < 880) boom(ctx, p);          // laiturimuuri on seinä, peli piirtää sen
   }
   rain(ctx, time, w, 1, 980, 30);              // lähempi sade rakenteiden eteen
-  const sock = windAt(storm.t + WIND.lead);
-  for (const m of MASTS) windsock(ctx, sock, time, m);
+  for (const m of MASTS) windsock(ctx, w, time, m);
   if (storm.flash > 0) {
     ctx.fillStyle = `rgba(190,215,255,${Math.pow(storm.flash / FLASH, 1.6) * 0.3})`;
     ctx.fillRect(0, 0, W, H);
@@ -894,9 +892,8 @@ const MASTS = [
   { x: 452, y: 76, k: 0.40, a: 0.42, mast: 68 },
 ];
 
-/** Tuulipussi. Tämä on kentän varoitusvalo: se saa tuulen WIND.lead sekuntia
-    etuajassa, joten se on tiukalla ennen kuin ensimmäinenkään pikseli työntää.
-    Tyvenellä pussi roikkuu suorana alas, puuskassa se nousee vaakaan ja
+/** Tuulipussi. Se näyttää täsmälleen sen tuulen joka taksiin juuri nyt osuu:
+    tyvenellä pussi roikkuu suorana alas, puuskassa se nousee vaakaan ja
     osoittaa siihen suuntaan johon taksia viedään. */
 function windsock(ctx, w, time, m) {
   const k = m.k, mx = m.x, my = m.y, L = (54 + w.s * 58) * k;
