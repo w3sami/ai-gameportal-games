@@ -87,6 +87,12 @@ const DEFAULTS = {
   bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62,
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
+  /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
+     mittari laskee. Nämä ovat säätimissä, koska oikea tuntuma löytyy vain
+     ajamalla. Ks. TIPPERS. */
+  tipCalm: 1, fadeCalm: 1,
+  tipRush: 1.85, fadeRush: 2.4,
+  tipHold: 1.35, fadeHold: 1.4,
   stick: 2.05,
 };
 const DEFAULT_SIDE = 'left';
@@ -796,7 +802,7 @@ function onLanded(pad, softness) {
 
   if (job.phase === 'aboard' && pad.id === job.to) {
     const mult = softness < P.softVY ? 1 : softness < P.landVY * 0.75 ? 0.6 : 0.25;
-    const tip = Math.round(P.tip * tipper().tip * tipLeft() * mult);
+    const tip = Math.round(P.tip * tipMul() * tipLeft() * mult);
     const fare = P.fare + tip;
     const kind = job.kind;
     money += fare;
@@ -828,7 +834,7 @@ function jobStep(dt) {
   if (job.phase === 'aboard') {
     /* Kaasuprofiililla mittari seisoo niin kauan kuin suuttimet ovat päällä. */
     const pr = tipper();
-    if (!(pr.onlyIdle && thrustNow > 0.05)) job.t += dt * pr.decay;
+    if (!(pr.onlyIdle && thrustNow > 0.05)) job.t += dt * P[pr.fade];
     return;
   }
 
@@ -898,17 +904,18 @@ function stepSquish(dt) {
    valitaan samasta profiilista, joten "mene mene mene" kertoo että kaasua
    kannattaa pitää pohjassa ja "ole hyvä" että kiirettä ei ole. */
 const TIPPERS = [
-  { tip: 1.0,  decay: 1.0, onlyIdle: false, tails: ['please', 'kind'] },
-  { tip: 1.85, decay: 2.4, onlyIdle: false, tails: ['quick', 'hurry'] },
-  { tip: 1.35, decay: 1.4, onlyIdle: true,  tails: ['go', 'rush'] },
+  { mul: 'tipCalm', fade: 'fadeCalm', onlyIdle: false, tails: ['please', 'kind'] },
+  { mul: 'tipRush', fade: 'fadeRush', onlyIdle: false, tails: ['quick', 'hurry'] },
+  { mul: 'tipHold', fade: 'fadeHold', onlyIdle: true,  tails: ['go', 'rush'] },
 ];
-const tipper = () => TIPPERS[(job && job.tipper) || 0];
+const tipper = () => TIPPERS[job ? job.tipper : 0] || TIPPERS[0];
+const tipMul = () => P[tipper().mul];
 
 /* Jäljellä oleva tippi, 0…1. Sama kaava kassanäytössä ja maksussa. */
 const tipLeft = () => Math.max(0, 1 - job.t / P.tipTime);
 
 const fareNow = () => job && job.phase === 'aboard'
-  ? P.fare + Math.round(P.tip * tipper().tip * tipLeft())
+  ? P.fare + Math.round(P.tip * tipMul() * tipLeft())
   : 0;
 
 const targetId = () => {
@@ -1123,7 +1130,7 @@ function finish() {
   let paid = P.exitBonus;
   if (job && job.phase === 'aboard') {
     if (nextIndex === null) {
-      paid += P.fare + Math.round(P.tip * tipper().tip * tipLeft());
+      paid += P.fare + Math.round(P.tip * tipMul() * tipLeft());
       speakLine('thanks', job.kind);
     } else {
       carried = { kind: job.kind };
@@ -1878,6 +1885,12 @@ const SLIDERS = [
   { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
   { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
+  { key: 'tipCalm', label: 'tyyni: tippi ×', min: 0.5, max: 3, step: 0.05 },
+  { key: 'fadeCalm', label: 'tyyni: lasku ×', min: 0.2, max: 4, step: 0.1 },
+  { key: 'tipRush', label: 'kiireinen: tippi ×', min: 0.5, max: 3, step: 0.05 },
+  { key: 'fadeRush', label: 'kiireinen: lasku ×', min: 0.2, max: 4, step: 0.1 },
+  { key: 'tipHold', label: 'kaasu: tippi ×', min: 0.5, max: 3, step: 0.05 },
+  { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
 ];
 
