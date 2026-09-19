@@ -14,9 +14,11 @@
  *
  * Säätöpaneeli (ratas alakulmassa) on pelin oma, ?debug=1 avaa sen heti, ja
  * sen JSON-kenttä siirtää arvot koneelta toiselle. ?test=1 ajaa pompputestin.
+ * Luukun hehkua säädetään erillisellä sivulla gate-test.html.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
 import { liftFor } from './bounce.js';
+import { drawGateGlow } from './gate.js';
 import { mountBoard } from './leaderboard.js';
 
 const canvas = document.getElementById('c');
@@ -27,19 +29,16 @@ const panelEl = document.getElementById('panel');
 /* ------------------------------------------------------------------ kenttä */
 const W = 720, H = 1040;
 const GATE = { x: 300, w: 120 };
+const CEIL = 16;
 
 /* Luukun hehkun väri vaihtuu kentän mukaan; ensimmäinen on sininen. */
 const LEVEL = 0;
 const GLOW = ['#6fe3ff', '#7bf0a0', '#ff9ae0', '#ffd479', '#c79bff'];
 const glowColor = () => GLOW[LEVEL % GLOW.length];
-function rgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
 
 const WALLS = [
-  { x: 0, y: 0, w: GATE.x, h: 16 },                        // katto, luukun vasen puoli
-  { x: GATE.x + GATE.w, y: 0, w: W - GATE.x - GATE.w, h: 16 },
+  { x: 0, y: 0, w: GATE.x, h: CEIL },                      // katto, luukun vasen puoli
+  { x: GATE.x + GATE.w, y: 0, w: W - GATE.x - GATE.w, h: CEIL },
   { x: 0, y: H - 16, w: W, h: 16 },                        // lattia
   { x: 0, y: 0, w: 16, h: H },
   { x: W - 16, y: 0, w: 16, h: H },
@@ -47,7 +46,7 @@ const WALLS = [
   { x: 540, y: 640, w: 164, h: 20 },                       // hylly oikealla, tankkauksen korkeudella
   { x: 16, y: 800, w: 184, h: 20 },                        // hylly vasemmalla alhaalla
 ];
-const GATE_BAR = { x: GATE.x, y: 0, w: GATE.w, h: 16 };    // kiinni ollessaan tavallinen seinä
+const GATE_BAR = { x: GATE.x, y: 0, w: GATE.w, h: CEIL };  // kiinni ollessaan tavallinen seinä
 
 const PADS = [
   { id: 1, x: 250, y: 950, w: 210, h: 18, fuel: false },
@@ -62,7 +61,7 @@ const FUEL_MAX = 100;
 /* Säädettävät kertoimet yhdessä paikassa. Oletukset ovat puhelimella ajetusta
    säätösessiosta, ja paneelin "oletukset" palaa näihin.
    Pomppu: bounceFrom on osuus laskurajasta jonka jälkeen kosketus pompauttaa,
-   bounceLift nostonsuurin pikselimäärä ja bounceKeep se osa vauhdista joka
+   bounceLift noston suurin pikselimäärä ja bounceKeep se osa vauhdista joka
    jää jäljelle. Malli ja testi ovat js/bounce.js ja js/bouncetest.js. */
 const DEFAULTS = {
   grav: 250, thrust: 920,
@@ -795,54 +794,16 @@ function drawPad(p) {
   }
 }
 
-/* Luukku. Kiinni se on tavallinen seinä. Auki siitä valuu valoa kuin katossa
-   olisi lamppu: pallomainen hehku, josta näkyy alaspäin aukeava neljännes.
-   Päällä aallot, jotka kulkevat sisäänpäin kohti aukkoa — pisaran renkaat
-   takaperin. Ei reunaviivoja: mikään tässä ei ole pintaa johon voi osua. */
+/* Luukku: kiinni tavallinen seinä, auki pelkkää valoa. Hehku ja aallot ovat
+   js/gate.js:ssä, jotta gate-test.html säätää täsmälleen samaa koodia. */
 function drawGate() {
-  const g = GATE;
   if (!gateOpen) {
     drawWall(GATE_BAR);
     ctx.fillStyle = 'rgba(255,93,122,.5)';
-    for (let x = g.x + 6; x < g.x + g.w - 6; x += 18) ctx.fillRect(x, 3, 8, 10);
+    for (let x = GATE.x + 6; x < GATE.x + GATE.w - 6; x += 18) ctx.fillRect(x, 3, 8, 10);
     return;
   }
-
-  const col = glowColor();
-  const cx = g.x + g.w / 2, cy = 12;                 // valonlähde katon tasolla
-  const R = 260;                                     // pallon säde
-  const A0 = Math.PI * 0.25, A1 = Math.PI * 0.75;    // näkyvä neljännes
-  const breathe = 0.6 + Math.sin(runT * 2.2) * 0.4;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.arc(cx, cy, R, A0, A1);
-  ctx.closePath();
-  ctx.clip();
-
-  const ball = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-  ball.addColorStop(0, rgba(col, 0.42 + breathe * 0.30));
-  ball.addColorStop(0.18, rgba(col, 0.22 + breathe * 0.16));
-  ball.addColorStop(0.55, rgba(col, 0.07));
-  ball.addColorStop(1, rgba(col, 0));
-  ctx.fillStyle = ball;
-  ctx.fillRect(cx - R, cy, R * 2, R);
-
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = col;
-  ctx.shadowColor = col;
-  ctx.shadowBlur = 18;
-  for (let i = 0; i < 3; i++) {
-    const p = (runT * 0.45 + i / 3) % 1;
-    const r = 14 + (R - 14) * (1 - p);              // ulkoa sisään
-    ctx.globalAlpha = Math.sin(p * Math.PI) * 0.5;  // kirkkain puolimatkassa
-    ctx.lineWidth = 2 + 7 * (1 - p);
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, A0, A1);
-    ctx.stroke();
-  }
-  ctx.restore();
+  drawGateGlow(ctx, GATE, CEIL, glowColor(), runT);
 }
 
 /* ------------------------------------------------------------------ alienit
