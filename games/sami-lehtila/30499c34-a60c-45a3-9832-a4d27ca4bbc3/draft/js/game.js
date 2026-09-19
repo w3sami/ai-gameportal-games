@@ -92,6 +92,8 @@ const DEFAULTS = {
   /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
      mittari laskee. Nämä ovat säätimissä, koska oikea tuntuma löytyy vain
      ajamalla. Ks. TIPPERS. */
+  /* Tyhjän tankin sykäykset. Ks. dryThrust. */
+  dryHz: 8, dryPower: 1.15, drySide: 0.5,
   tipCalm: 1, fadeCalm: 1,
   tipRush: 1.85, fadeRush: 2.4,
   tipHold: 1.35, fadeHold: 1.4,
@@ -694,23 +696,37 @@ function inputVector() {
   return level.input ? level.input(v, api()) : v;
 }
 
-/* Tyhjä tankki ei sammuta suuttimia, vaan jättää pätkivän rippeen.
+/* Tyhjä tankki ei sammuta suuttimia vaan jättää pätkivän rippeen: tyhjän
+   tankin pelastus, jolla pääsee vielä bensa-asemalle.
 
-   Paikallaan pysyminen vaatii suuttimelta osuuden grav/thrust täydestä, ja
-   sykäys mitoitetaan siitä eikä kiinteästä sekuntimäärästä — niin paneelista
-   kevennetty painovoima ei tee kuivasta taksista lentokelpoista. Keskiteho on
-   aina DRY_AVG verran siitä mitä leijuminen vaatisi, eli aina liian vähän.
-   Putoamista voi silti jarruttaa ja ohjata: sivuttain jää puolet tehosta, ja
-   jatkuvana, koska pätkivä sivusuutin olisi kiusa eikä ohjaus.
+   Teho mitataan siinä mitä leijuminen vaatii, eli osuutena grav/thrust
+   täydestä. Yksikkö on tässä koko juju:
 
-   Eri asia kuin yskintä (P.sputter), joka koskee vähissä olevaa tankkia:
-   yskintä loppuu kun bensa loppuu, ja tästä se jatkuu. */
-const DRY_PERIOD = 0.55, DRY_AVG = 0.8, DRY_SIDE = 0.5;
-const dryOn = () => DRY_PERIOD * DRY_AVG * Math.min(1, P.grav / P.thrust);
+     alle 1  vauhti kasvaa, hitaammin kuin vapaassa pudotuksessa — mutta
+             jarruttaa ei voi, koska keskiteho jää painovoimaa pienemmäksi
+     1       vauhti pysyy siinä mikä se on
+     yli 1   vauhdista lähtee pois, eli laskeutumisen voi pelastaa
+
+   Ensimmäinen versio oli 0.8 eikä jarruttanut lainkaan, mikä oli koko
+   ominaisuuden pointti. Oletus on siksi 1.15.
+
+   Katkotaajuus ratkaisee tarkkuuden. Harva katko antaa yksittäisiä potkuja ja
+   niiden välissä ehtii pudota: 4 Hz:llä vauhti heiluu ±43 px/s, 8 Hz:llä
+   ±22 px/s. Puhdas lasku vaatii alle 108 px/s, joten harvalla katkolla
+   osuminen siihen ikkunaan on arpapeliä ja tiheällä hallittavaa.
+
+   Alustalta ei pääse lähtöön tälläkään, koska lähtö vaatii bensaa erikseen,
+   eikä tyhjänä tavalliselle alustalle jääminen pelasta — se on yhä kolari.
+   Pelastus on nimenomaan matka tankkaukselle.
+
+   Eri asia kuin yskintä (P.sputter), joka koskee vähissä olevaa tankkia ja
+   loppuu kun bensa loppuu. Tästä se jatkuu. */
+const dryDuty = () => clamp(P.dryPower * P.grav / P.thrust, 0, 1);
 
 function dryThrust(v) {
-  v.x *= DRY_SIDE;
-  if (runT % DRY_PERIOD >= dryOn()) v.y = 0;
+  v.x *= P.drySide;
+  const period = 1 / Math.max(1, P.dryHz);
+  if (runT % period >= period * dryDuty()) v.y = 0;
 }
 
 function activeThrust() {
@@ -1926,6 +1942,9 @@ const SLIDERS = [
   { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
   { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
+  { key: 'dryHz', label: 'kuiva: katkot / s', min: 1, max: 24, step: 0.5 },
+  { key: 'dryPower', label: 'kuiva: teho (1 = leijuu)', min: 0.3, max: 2, step: 0.05 },
+  { key: 'drySide', label: 'kuiva: sivut', min: 0, max: 1, step: 0.05 },
   { key: 'tipCalm', label: 'tyyni: tippi ×', min: 0.5, max: 3, step: 0.05 },
   { key: 'fadeCalm', label: 'tyyni: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'tipRush', label: 'kiireinen: tippi ×', min: 0.5, max: 3, step: 0.05 },
