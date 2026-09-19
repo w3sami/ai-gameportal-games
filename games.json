@@ -299,18 +299,19 @@
     "id": "7cdbb6c3-8433-4798-af75-4e2b40f51d5b",
     "slug": "ohjainkoe",
     "title": "Ohjainkoe",
-    "description": "Näyttää mitä ohjain oikeasti lähettää: napit, akselit, liipaisimet ja mappauksen. Työkalu gamepad-pluginin todentamiseen oikealla raudalla, ei peli.",
+    "description": "Toimiiko ohjaimesi? Tämä sivu näyttää kaiken mitä selain ohjaimestasi lukee: napit, sauvat, liipaisimet ja sen tunnistaman mappauksen. Jos peli ei tottele ohjainta, täältä näkee onko vika ohjaimessa, selaimessa vai pelissä. Klikkaa ruutua ja paina ohjaimen nappia — selain piilottaa ohjaimet sivulta jolla ei ole fokusta. Sivu ajaa gamepad-pluginin v1:tä, samaa jota pelit lataavat.",
     "author": "Sami Lehtilä",
     "tags": [
       "työkalu",
-      "ohjain"
+      "ohjain",
+      "gamepad"
     ],
     "status": "draft",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
-    "sizeBytes": 27801,
+    "sizeBytes": 10949,
     "createdAt": "2026-09-19T16:00:10.254Z",
-    "updatedAt": "2026-09-19T16:12:40.065Z"
+    "updatedAt": "2026-09-19T16:12:41.681Z"
   }
 ]
