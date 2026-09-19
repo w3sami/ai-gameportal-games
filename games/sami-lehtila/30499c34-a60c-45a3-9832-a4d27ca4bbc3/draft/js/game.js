@@ -98,14 +98,41 @@ const DEFAULTS = {
   tipRush: 1.85, fadeRush: 2.4,
   tipHold: 1.35, fadeHold: 1.4,
   stick: 2.05,
-  wind: 0.3,
 };
 const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
 let gearSide = DEFAULT_SIDE;
 
+/* Viritys kahdessa kerroksessa.
+ *
+ * BASE on globaali viritys: säätimet kirjoittavat siihen ja tallennus lukee
+ * sen. MUL on kentän kerroin samaan avaimeen, 1 kun kenttä ei ota kantaa.
+ * P on näiden tulo eli se mitä fysiikka lukee — ja nimenomaan sama olio kuin
+ * ennen, joten yksikään käyttökohta ei muutu eikä tiedä tästä mitään.
+ *
+ * Kerros on olemassa siksi, että painovoima ja työntö ovat eri asia eri
+ * kentässä mutta niiden suhde globaaliin viritykseen ei saa kadota: kun
+ * säätää painovoimaa, myrskykentän raskaampi painovoima seuraa mukana.
+ * Kenttä voi julkaista lähtökertoimensa (level.mul), ja säätöpaneeli antaa
+ * muuttaa niitä lennossa. */
+const BASE = Object.assign({}, DEFAULTS);
+let MUL = {};
+
+function applyMul() {
+  for (const k of Object.keys(DEFAULTS)) {
+    const m = MUL[k];
+    P[k] = BASE[k] * (typeof m === 'number' && isFinite(m) ? m : 1);
+  }
+  /* Sauvan herkkyys on ainoa arvo joka elää P:n ulkopuolella. Se pitää peilata
+     täällä, muuten kentän kerroin jäisi siihen vaikuttamatta siihen asti että
+     joku koskee säädintä. */
+  if (typeof stick !== 'undefined' && stick) stick.gain = P.stick;
+}
+
 const STORE = 'spacetaxi.tune';
-const tuneJSON = () => JSON.stringify(Object.assign({ gearSide }, P));
+/* Tallennus käsittelee pohjaa eikä tuloa. Muuten kentän kerroin kirjoittuisi
+   pohjaksi ja kerrottaisiin seuraavalla latauksella uudestaan päälle. */
+const tuneJSON = () => JSON.stringify(Object.assign({ gearSide }, BASE));
 
 function applyTune(src) {
   let raw = src;
@@ -115,10 +142,10 @@ function applyTune(src) {
   if (!raw || typeof raw !== 'object') return false;
   let n = 0;
   for (const k of Object.keys(DEFAULTS)) {
-    if (typeof raw[k] === 'number' && isFinite(raw[k])) { P[k] = raw[k]; n++; }
+    if (typeof raw[k] === 'number' && isFinite(raw[k])) { BASE[k] = raw[k]; n++; }
   }
   if (raw.gearSide === 'left' || raw.gearSide === 'right') { gearSide = raw.gearSide; layout(); n++; }
-  if (typeof stick !== 'undefined' && stick) stick.gain = P.stick;
+  applyMul();
   return n > 0;
 }
 function loadTune() { try { applyTune(localStorage.getItem(STORE) || ''); } catch (e) {} }
@@ -422,6 +449,8 @@ const api = () => ({ P, taxi, pads: PADS, walls: WALLS, t: runT, rand, say, leve
 function loadLevel(i) {
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   level = LEVELS[levelIndex];
+  MUL = Object.assign({}, level.mul);        // kentän kertoimet, säätimet muuttavat näitä
+  applyMul();
   GATE = level.gate;
   WALLS = frameWalls(GATE).concat(level.walls || []);
   PADS = (level.pads || []).map(p => Object.assign({ h: 18 }, p, { bx: p.x, by: p.y }));
@@ -1933,16 +1962,86 @@ function draw(v) {
 
 /* ------------------------------------------------------------ säätöpaneeli
    Paneeli on kehittäjän työkalu ja pysyy suomeksi. */
+
+/* Käppyrä ryhmän alimmaksi. Piirtofunktio saa tyhjän ctx:n ja mitat eikä tiedä
+   mistä sitä kutsutaan, joten kenttä voi julkaista omansa tietämättä mitään
+   paneelista. Kuva päivittyy joka ruudulla niin kauan kuin paneeli on auki —
+   siihen voi siis piirtää myös sen missä kohtaa kierrosta juuri nyt ollaan,
+   ja säätimen liikuttaminen näkyy käyrässä samalla hetkellä. */
+let graphDraws = [];
+
+function graphCanvas(draw) {
+  const c = document.createElement('canvas');
+  c.width = 560; c.height = 150;
+  Object.assign(c.style, {
+    width: '100%', height: 'auto', display: 'block',
+    margin: '2px 0 10px', borderRadius: '6px', background: 'rgba(8,16,31,.55)',
+  });
+  const g = c.getContext('2d');
+  const paint = () => {
+    g.clearRect(0, 0, c.width, c.height);
+    try { draw(g, c.width, c.height); } catch (e) {}
+  };
+  graphDraws.push(paint);
+  paint();
+  return c;
+}
+
+function paintGraphs() {
+  if (!graphDraws.length || panelEl.classList.contains('hidden')) return;
+  for (const d of graphDraws) d();
+}
+
+/* Tippikäyrä: kolme profiilia, kukin laskeva suora omalta korkeudeltaan omaan
+   nollakohtaansa. Kaasuprofiili on katkoviivalla, koska sen mittari seisoo niin
+   kauan kuin suuttimet ovat päällä — suora on sen pahin tapaus eikä toteuma,
+   ja yhtenäisenä viivana käyrä valehtelisi juuri siitä profiilista joka on
+   tehty palkitsemaan kaasun pitämisestä. */
+const TIP_COL = ['#6fe3ff', '#ff5d7a', '#ffd479'];
+const TIP_NAME = ['tyyni', 'kiireinen', 'kaasu'];
+
+function tipGraph(ctx, w, h) {
+  const L = 34, B = h - 26, T = 12, R = w - 12;
+  const zero = p => P.tipTime / Math.max(0.05, P[p.fade]);
+  const high = p => P.tip * P[p.mul];
+  const secs = Math.max(1, ...TIPPERS.map(zero)) * 1.08;
+  const top = Math.max(1, ...TIPPERS.map(high));
+
+  ctx.strokeStyle = 'rgba(120,160,255,.22)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(L, T); ctx.lineTo(L, B); ctx.lineTo(R, B);
+  ctx.stroke();
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(190,210,255,.55)';
+  ctx.textAlign = 'right';
+  ctx.fillText(Math.round(top) + ' €', L - 5, T + 11);
+  ctx.textAlign = 'center';
+  ctx.fillText(Math.round(secs) + ' s', R - 10, B + 16);
+
+  TIPPERS.forEach((p, i) => {
+    ctx.strokeStyle = TIP_COL[i] || '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash(p.onlyIdle ? [7, 5] : []);
+    ctx.beginPath();
+    ctx.moveTo(L, B - high(p) / top * (B - T));
+    ctx.lineTo(L + Math.min(1, zero(p) / secs) * (R - L), B);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = TIP_COL[i] || '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(TIP_NAME[i] + (p.onlyIdle ? ' (kaasu pohjassa)' : ''), L + 6 + i * 126, T + 13);
+  });
+}
 /* Säätimet laatikoissa, koska niitä on yli kaksikymmentä eikä kukaan selaa
    sellaista listaa. Ryhmään kuulumaton säädin päätyy "muut"-laatikkoon, joten
    uusi säädin ei katoa näkyvistä vaikka lisääjä ei kävisi tätä listaa läpi. */
 const SLIDER_GROUPS = [
-  { name: 'lento', open: true, keys: ['grav', 'thrust', 'wind', 'stick'] },
+  { name: 'lento', open: true, keys: ['grav', 'thrust', 'stick'] },
   { name: 'laskeutuminen', open: false,
     keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep'] },
   { name: 'bensa', open: true,
     keys: ['burn', 'refuel', 'price', 'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
-  { name: 'raha ja tipit', open: false,
+  { name: 'raha ja tipit', open: false, graph: tipGraph,
     keys: ['fare', 'tip', 'tipTime',
            'tipCalm', 'fadeCalm', 'tipRush', 'fadeRush', 'tipHold', 'fadeHold'] },
 ];
@@ -1972,7 +2071,6 @@ const SLIDERS = [
   { key: 'tipHold', label: 'kaasu: tippi ×', min: 0.5, max: 3, step: 0.05 },
   { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
-  { key: 'wind', label: 'tuulen nousuaika s', min: 0.05, max: 3, step: 0.05 },
 ];
 
 let panelNote = '';
@@ -1992,6 +2090,7 @@ function pbutton(cls, text, fn) {
 
 function buildPanel() {
   panelEl.replaceChildren(el('h2', null, 'säädöt'));
+  graphDraws = [];                             // vanhat kankaat irtosivat DOMista
 
   const lvlRow = el('div', 'row');
   const lvlSeg = el('div', 'seg');
@@ -2024,54 +2123,92 @@ function buildPanel() {
   sideRow.append(el('label', null, 'napit'), seg);
   panelEl.append(sideRow);
 
-  const sliderRow = s => {
+  /* Yksi säädinrivi. Arvo luetaan ja kirjoitetaan callbackeilla, joten sama
+     rivi kelpaa globaaliin viritykseen, kentän kertoimiin ja kentän omiin
+     arvoihin — paneelin ei tarvitse tietää kumpaa se milloinkin säätää. */
+  const sliderRow = (s, get, set) => {
     const row = el('div', 'row');
     const lab = el('label');
-    const val = el('b', null, String(P[s.key]));
+    const val = el('b', null, String(get()));
     lab.append(document.createTextNode(s.label), val);
     const input = el('input');
     input.type = 'range';
     input.min = s.min; input.max = s.max; input.step = s.step;
-    input.value = P[s.key];
+    input.value = get();
     input.addEventListener('input', () => {
-      P[s.key] = +input.value;
+      set(+input.value);
       val.textContent = input.value;
-      if (s.key === 'stick') stick.gain = P.stick;
-      saveTune();
-      if (ta && ta !== document.activeElement) ta.value = tuneJSON();
     });
     row.append(lab, input);
     return row;
   };
 
+  const globalRow = s => sliderRow(s, () => BASE[s.key], v => {
+    BASE[s.key] = v;
+    applyMul();
+    saveTune();
+    if (ta && ta !== document.activeElement) ta.value = tuneJSON();
+  });
+
   /* <details> hoitaa auki ja kiinni itse, joten laatikoille ei tarvita omaa
      tilaa eikä kuuntelijaa. */
-  const group = (name, open, rows) => {
+  const group = (name, open, rows, graph) => {
     const box = el('details', 'grp');
     box.open = open;
     box.append(el('summary', null, name));
     const body = el('div', 'body');
-    for (const s of rows) body.append(sliderRow(s));
+    for (const r of rows) body.append(r);
+    if (graph) body.append(graphCanvas(graph));
     box.append(body);
     return box;
   };
 
   const byKey = new Map(SLIDERS.map(s => [s.key, s]));
+
+  /* Kentän oma säätötaulu kenttänappien ja globaalien säädinten väliin. Kenttä
+     julkaisee sen itse (level.tune), joten peli ei tiedä minkään kentän
+     sisällöstä mitään — täällä on vain se miten taulu piirretään. Kahta lajia:
+
+       mul       kertoimet globaaleihin arvoihin, 1 = kenttä ei ota kantaa
+       sliders   kentän omat arvot, kirjoitetaan suoraan kentän omaan olioon
+
+     Taulu vaihtuu kenttää vaihdettaessa, koska buildPanel ajetaan uudestaan. */
+  for (const g of level.tune || []) {
+    const rows = [];
+    for (const key of g.mul || []) {
+      const base = byKey.get(key);
+      if (!base) continue;
+      rows.push(sliderRow(
+        { label: base.label + ' ×', min: 0.2, max: 3, step: 0.05 },
+        () => { const m = MUL[key]; return typeof m === 'number' ? m : 1; },
+        v => { MUL[key] = v; applyMul(); },
+      ));
+    }
+    for (const sl of g.sliders || []) {
+      if (!g.obj) continue;
+      rows.push(sliderRow(sl, () => g.obj[sl.key], v => { g.obj[sl.key] = v; }));
+    }
+    if (rows.length || g.graph) {
+      panelEl.append(group(level.name + ': ' + g.name, g.open !== false, rows, g.graph));
+    }
+  }
+
   const used = new Set();
   for (const g of SLIDER_GROUPS) {
     const rows = g.keys.map(k => byKey.get(k)).filter(Boolean);
     for (const s of rows) used.add(s.key);
-    if (rows.length) panelEl.append(group(g.name, g.open, rows));
+    if (rows.length) panelEl.append(group(g.name, g.open, rows.map(globalRow), g.graph));
   }
   const rest = SLIDERS.filter(s => !used.has(s.key));
-  if (rest.length) panelEl.append(group('muut', false, rest));
+  if (rest.length) panelEl.append(group('muut', false, rest.map(globalRow)));
 
   const foot = el('div', 'foot');
   foot.append(
     pbutton('btn sm ghost', 'oletukset', () => {
-      Object.assign(P, DEFAULTS);
+      Object.assign(BASE, DEFAULTS);
+      MUL = Object.assign({}, level.mul);
       gearSide = DEFAULT_SIDE; layout();
-      stick.gain = P.stick;
+      applyMul();
       saveTune();
       panelNote = 'oletukset palautettu';
       buildPanel();
@@ -2292,6 +2429,7 @@ function loop(now) {
   last = now;
   resize();
   padInput();
+  paintGraphs();                               // vain auki olevaan paneeliin
 
   if (state === CUT) {
     cut.update(dt);
