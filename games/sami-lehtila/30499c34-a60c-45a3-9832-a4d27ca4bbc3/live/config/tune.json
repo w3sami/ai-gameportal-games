@@ -1,13 +1,12 @@
 {
  "v": 1,
- "stamp": 1789854128018,
+ "stamp": 1789857952405,
  "gearSide": "left",
  "global": {
   "grav": 250,
   "thrust": 920,
   "landVY": 215,
   "landVX": 200,
-  "softVY": 50,
   "bounceFrom": 0.5,
   "bounceLift": 10,
   "bounceKeep": 0.62,
@@ -21,7 +20,7 @@
   "dryOn": 0.3,
   "dryOff": 0.7,
   "dryJitter": 0.08,
-  "dryLife": 3,
+  "dryLife": 7.5,
   "tipCalm": 1,
   "fadeCalm": 1,
   "tipRush": 1.85,
@@ -45,6 +44,23 @@
     "bensalautta": {
      "mass": 7,
      "air": 8
+    }
+   }
+  },
+  "Trouble Factory": {
+   "own": {
+    "häiriö": {
+     "on": 0.18,
+     "off": 0.38,
+     "jitter": 0.26,
+     "flip": 0.05
+    },
+    "koneet": {
+     "swap": 3.6,
+     "cycle": 6.5,
+     "arc": 1.7,
+     "warn": 0.9,
+     "reach": 130
     }
    }
   }
