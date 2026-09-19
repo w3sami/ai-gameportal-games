@@ -191,6 +191,14 @@
     <p style="margin:0 0 8px;display:flex;gap:6px;flex-wrap:wrap">
       <button id="w-ok" type="button">config/ohjainkoe.json</button>
       <button id="w-bad" type="button">kielletty polku</button>
+      <button id="w-fill" type="button">täytä kansio</button>
+    </p>
+    <p style="margin:0 0 8px;color:var(--muted)">
+      <b>Täytä kansio</b> kirjoittaa 60 kt tiedostoja kunnes palvelin sanoo ei.
+      Se <b>jättää tiedostot jälkeensä</b> — se on tekijän työkalu, ei pelaajan.
+      Rajat ovat 64 kt per tiedosto (<code>too-big</code>), 256 kt ja 20 tiedostoa
+      koko kansiolle (<code>config-full</code>). Jos pysähdys tulee noin
+      viidenteen tiedostoon, yhteiskoko täyttyi; jos vasta 21:een, lukumäärä.
     </p>
     <dl>
       <dt>saved</dt><dd id="w-saved">—</dd>
@@ -411,6 +419,38 @@ async function tryWrite(path) {
 $("w-ok").addEventListener("click", () => tryWrite("config/ohjainkoe.json"));
 // Proves the limit lives on the server and not only in the game's own code.
 $("w-bad").addEventListener("click", () => tryWrite("js/ohjainkoe.js"));
+
+/**
+ * The whole-folder limits, which a per-file cap cannot show.
+ *
+ * A cap on one file bounds nothing while the number of files is free, so the
+ * server counts the folder too. Seeing that means filling it, and filling it
+ * leaves files behind — there is no honest way to test a limit without
+ * reaching it. Hence the warning on the button and the koe- prefix, so what
+ * this leaves is obvious and easy to find again.
+ */
+async function fillFolder() {
+  if (!savePortalFile) return tryWrite("config/koe-1.json");
+  const chunk = JSON.stringify({ täyte: "x".repeat(60 * 1024) });
+  for (let i = 1; i <= 25; i++) {
+    const path = `config/koe-${i}.json`;
+    const { saved, reason } = await savePortalFile(path, chunk);
+    if (!saved) {
+      $("w-saved").textContent = `pysähtyi tiedostoon ${i}`;
+      $("w-saved").className = reason === "config-full" ? "" : "warn";
+      $("w-reason").textContent = reason ?? "—";
+      log(`täyttö pysähtyi ${path} -> ${reason} (${i - 1} kirjoitettu)`);
+      return;
+    }
+  }
+  // Twenty-five 60 kB files is 1.5 MB. If every one of them was accepted, the
+  // folder is not being counted at all, and that is the finding.
+  $("w-saved").textContent = "25 meni läpi";
+  $("w-saved").className = "warn";
+  $("w-reason").textContent = "yhteiskattoa ei valvota";
+  log("täyttö: 25 tiedostoa meni läpi — yhteiskattoa ei valvota");
+}
+$("w-fill").addEventListener("click", fillFolder);
 
 // A document without focus is shown no controllers at all, so say so rather
 // than leaving the page looking broken.
