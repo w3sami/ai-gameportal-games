@@ -340,7 +340,7 @@ function showMenu(){
     <div class="cols">
       <div><b>Touch</b><br>${S.buttons ? '◀ ▶ buttons to steer' : 'Left half: drag to steer'}<br>Right half: hold to thrust<br>Touching a pad lands you</div>
       <div><b>Keyboard</b><br><kbd>◀</kbd> <kbd>▶</kbd> or <kbd>A</kbd> <kbd>D</kbd> steer<br><kbd>Space</kbd> <kbd>▲</kbd> <kbd>W</kbd> thrust<br><kbd>R</kbd> restart, <kbd>Esc</kbd> pause, <kbd>F</kbd> full screen</div>
-      <div><b>Gamepad</b><br>Stick points where to fly<br>D-pad turns, <kbd>A</kbd> or a trigger thrusts<br><kbd>X</kbd> restart, <kbd>Start</kbd> pause<br>Press a button to wake it up</div>
+      <div><b>Gamepad</b><br>Stick or d-pad turns<br><kbd>A</kbd> or a trigger thrusts<br><kbd>X</kbd> restart, <kbd>Start</kbd> pause<br>Press a button to wake it up</div>
     </div>
     <h2>Level</h2>${tiles()}
     <div class="row"><button class="btn pri" data-act="start">Fly level ${li+1}</button></div>
@@ -548,18 +548,22 @@ let padGate = false;
 const padThrust = () => !!pad && !padGate && pad.held('thrust');
 const buzz = (duration, strong) => { if (pad) pad.rumble({duration, strong, weak:strong*0.6}); };
 
-// The stick points where the rocket should go, the same promise the touch stick
-// makes. The d-pad turns instead: "left" on a d-pad means left of the rocket,
-// not left of the screen. Returns null when the pad is saying nothing, so the
-// touch stick and the keys keep the last word.
+// The stick turns the rocket, the way the arrow keys do: left is left of the
+// screen, whichever way the nose happens to point. The touch stick is the other
+// thing — it points where to fly, because a thumb on glass has no keys to fall
+// back on — but a controller has a d-pad right there, and steering the rocket
+// by the perpendicular of its own heading means shoving the stick diagonally to
+// hold a turn. Analogue all the same: half a push is half the turn rate.
+//
+// The d-pad needs no branch of its own; the plugin folds it into `x` at full
+// tilt, which is exactly what an arrow key is.
+//
+// Returns null when the pad is saying nothing, so touch and keys keep the last word.
 function padSteer(){
   if (!pad || !pad.connected) return null;
-  const dp = (pad.held('Right') ? 1 : 0) - (pad.held('Left') ? 1 : 0);
-  if (dp) return dp;
-  const d = Math.min(1, Math.hypot(pad.x, pad.y));        // the plugin has already taken its dead zone out
-  if (!d) return null;
-  const proj = (pad.x*Math.cos(ship.a) + pad.y*Math.sin(ship.a))/d;   // cosine to the rocket's right-hand side
-  return Math.max(-1, Math.min(1, proj))*Math.pow(d, S.expo);
+  const x = Math.max(-1, Math.min(1, pad.x));             // the plugin has already taken its dead zone out
+  if (!x) return null;
+  return Math.sign(x)*Math.pow(Math.abs(x), S.expo);
 }
 
 // Everything in a modal is a real button, so the controller cursor is nothing
