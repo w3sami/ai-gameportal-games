@@ -362,6 +362,7 @@ const sfx = {
 const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
+let thrustNow = 0;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
     graves, squishes,
@@ -413,9 +414,11 @@ function loadLevel(i) {
     /* Edellisestä kentästä mukaan tullut asiakas: kenttä alkaa jättökeikalla
        ja mittari alkaa nollasta, koska välimatka ei ole hänen syytään. */
     const open = numbered().filter(p => !served[p.id]);
+    const ti = (Math.random() * TIPPERS.length) | 0;
     job = {
       from: null, to: pick(open.length ? open : numbered()).id,
       phase: 'aboard', wait: 0, kind: carried.kind, announce: true,
+      tipper: ti, tail: pick(TIPPERS[ti].tails),
       x: 0, t: 0, walk: 0, moving: false, shown: true, flee: null,
     };
     carried = null;
@@ -487,9 +490,11 @@ function newJob(from, to, delay) {
   if (taken(left) && !taken(right)) x = right;
   else if (taken(right) && !taken(left)) x = left;
   else x = Math.random() < 0.5 ? left : right;
+  const ti = (Math.random() * TIPPERS.length) | 0;
   job = {
     from, to, phase: 'wait', wait: delay || 0,
     kind: nextAlien(),
+    tipper: ti, tail: pick(TIPPERS[ti].tails),
     x, t: 0, walk: 0, moving: false, shown: false, flee: null,
   };
 }
@@ -619,16 +624,8 @@ const gamepad = createGamepad({
    kutsun erotus. Kutsutaan myös korttiruuduissa, jotta vuoron saa käyntiin
    ohjaimella — ja jotta ohjain ylipäätään tulee näkyviin, sillä selain
    paljastaa sen vasta kun jotain on painettu. */
-let padSeen = '', padFrames = 0;
-
 function padInput() {
   gamepad.poll();
-
-  /* pressedAny kysytään joka ruutu ja kaikissa tiloissa: se on tämän ja
-     edellisen ruudun erotus, joten väliin jäänyt kysymys hukkaa painalluksen. */
-  padFrames++;
-  const hit = gamepad.pressedAny();
-  if (hit) padSeen = hit;
 
   if (!card.classList.contains('hidden')) {
     /* Ohjaimen tila näkyviin. Selain ei paljasta ohjainta ennen kuin sen nappia
@@ -637,15 +634,7 @@ function padInput() {
        textContent eikä innerHTML: id tulee laitteelta, ei meiltä. */
     const el = card.querySelector('#padstate');
     if (el) {
-      const want = gamepad.connected
-        ? t('pad.on', {
-            id: gamepad.id,
-            map: gamepad.mapping || '(ei tunnistettu)',
-            x: gamepad.x.toFixed(2), y: gamepad.y.toFixed(2),
-            btn: padSeen || '(ei mitään)',
-            n: padFrames,
-          })
-        : t('pad.none');
+      const want = gamepad.connected ? t('pad.on', { id: gamepad.id }) : t('pad.none');
       if (el.textContent !== want) el.textContent = want;
     }
 
@@ -684,11 +673,30 @@ function inputVector() {
   return level.input ? level.input(v, api()) : v;
 }
 
+/* Tyhjä tankki ei enää sammuta suuttimia kokonaan, vaan jättää pätkivän rippeen.
+
+   Nousuun jää lyhyitä sykäyksiä: suutin palaa DRY_ON sekuntia joka DRY_PERIOD.
+   Sykäysten osuus ajasta on 0.12/0.55 = 0.22, ja paikallaan pysyminen vaatii
+   painovoiman verran eli grav/thrust = 0.27, joten keskiteho jää alle sen ja
+   taksi vajoaa sykäyksistä huolimatta. Nousu ei siis onnistu, mutta putoamisen
+   voi jarruttaa ja sitä voi vielä ohjata: sivuttain jää puolet tehosta, ja
+   jatkuvana, koska pätkivä sivusuutin olisi pelkkä kiusa eikä ohjaus.
+
+   Alustalta ei silti pääse lähtöön — lähtö vaatii bensaa erikseen — joten
+   tyhjällä tankilla alustalle jääminen päättyy yhä kolariin. */
+const DRY_PERIOD = 0.55, DRY_ON = 0.12, DRY_SIDE = 0.5;
+
+function dryThrust(v) {
+  v.x *= DRY_SIDE;
+  if (runT % DRY_PERIOD >= DRY_ON) v.y = 0;
+}
+
 function activeThrust() {
-  if (state !== PLAY || dead || fuel <= 0) return { x: 0, y: 0 };
+  if (state !== PLAY || dead) return { x: 0, y: 0 };
   const v = inputVector();
   if (taxi.gear > 0.35) v.x = 0;
   if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
+  if (fuel <= 0) dryThrust(v);
   return v;
 }
 
@@ -773,7 +781,7 @@ function askForPad() {
   if (!job) return;
   job.announce = false;
   say(t('msg.toPad', { n: job.to }), 2.4);
-  speakLine('toPad', job.kind, { n: job.to });
+  speakLine('toPad', job.kind, { n: job.to, tail: t('say.tail.' + job.tail) });
   sfx.pickup();
 }
 
@@ -782,7 +790,7 @@ function onLanded(pad, softness) {
 
   if (job.phase === 'aboard' && pad.id === job.to) {
     const mult = softness < P.softVY ? 1 : softness < P.landVY * 0.75 ? 0.6 : 0.25;
-    const tip = Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime) * mult);
+    const tip = Math.round(P.tip * tipper().tip * tipLeft() * mult);
     const fare = P.fare + tip;
     const kind = job.kind;
     money += fare;
@@ -811,7 +819,12 @@ function onLanded(pad, softness) {
 
 function jobStep(dt) {
   if (!job) return;
-  if (job.phase === 'aboard') { job.t += dt; return; }
+  if (job.phase === 'aboard') {
+    /* Kaasuprofiililla mittari seisoo niin kauan kuin suuttimet ovat päällä. */
+    const pr = tipper();
+    if (!(pr.onlyIdle && thrustNow > 0.05)) job.t += dt * pr.decay;
+    return;
+  }
 
   if (job.wait > 0) { job.wait -= dt; return; }
   if (!job.shown) {
@@ -842,7 +855,7 @@ function jobStep(dt) {
       if (job.to === 'up') {
         gateOpen = true;
         say(t('msg.up'), 3);
-        speakLine('up', job.kind);
+        speakLine('up', job.kind, { tail: t('say.tail.' + job.tail) });
         sfx.gate();
       } else askForPad();
       return;
@@ -867,8 +880,29 @@ function stepSquish(dt) {
   }
 }
 
+/* Asiakkaat eroavat siinä mistä tippi on kiinni. Kolme profiilia:
+
+     tyyni     perustippi, mittari laskee tasaisesti
+     kiireinen maksaa lähes kaksinkertaisen tipin mutta mittari laskee yli
+               kaksi kertaa nopeammin — pitkä keikka ei kannata
+     kaasu     mittari seisoo niin kauan kuin suuttimet ovat päällä, ja lähtee
+               laskemaan vasta kun ajaja lopettaa painamisen
+
+   Profiili kuullaan ennen kuin se näkyy kassassa: pyyntörepliikin häntä
+   valitaan samasta profiilista, joten "mene mene mene" kertoo että kaasua
+   kannattaa pitää pohjassa ja "ole hyvä" että kiirettä ei ole. */
+const TIPPERS = [
+  { tip: 1.0,  decay: 1.0, onlyIdle: false, tails: ['please', 'kind'] },
+  { tip: 1.85, decay: 2.4, onlyIdle: false, tails: ['quick', 'hurry'] },
+  { tip: 1.35, decay: 1.4, onlyIdle: true,  tails: ['go', 'rush'] },
+];
+const tipper = () => TIPPERS[(job && job.tipper) || 0];
+
+/* Jäljellä oleva tippi, 0…1. Sama kaava kassanäytössä ja maksussa. */
+const tipLeft = () => Math.max(0, 1 - job.t / P.tipTime);
+
 const fareNow = () => job && job.phase === 'aboard'
-  ? P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime))
+  ? P.fare + Math.round(P.tip * tipper().tip * tipLeft())
   : 0;
 
 const targetId = () => {
@@ -1019,6 +1053,7 @@ function update(dt) {
   warnings(dt);                              // piippaukset myös alustalla
 
   const v = activeThrust();
+  thrustNow = Math.min(1, Math.hypot(v.x, v.y));   // kaasuprofiili kysyy tätä
   const raw = inputVector();
 
   if (taxi.landed) {
@@ -1082,7 +1117,7 @@ function finish() {
   let paid = P.exitBonus;
   if (job && job.phase === 'aboard') {
     if (nextIndex === null) {
-      paid += P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime));
+      paid += P.fare + Math.round(P.tip * tipper().tip * tipLeft());
       speakLine('thanks', job.kind);
     } else {
       carried = { kind: job.kind };
