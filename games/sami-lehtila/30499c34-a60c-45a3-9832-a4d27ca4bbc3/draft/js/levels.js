@@ -31,6 +31,14 @@
  *   drawFront(ctx, api)       kaiken päälle, HUDin alle
  */
 
+/* Kentän mitat samoina kuin game.js:ssä, joka ei vie niitä ulos. HATCH menee
+   sekä kentän gate-kenttään että huvipuiston taustamaalaukseen, joka leikkaa
+   markiisiin reiän samaan kohtaan — muuten luukusta näkyisi kangasta eikä
+   taivasta. Nämä ovat ennen LEVELSiä, koska const ei nouse niin kuin function. */
+const W = 720, H = 1040;
+const CEIL = 16;                            // katon paksuus
+const HATCH = { x: 300, w: 120 };           // luukku katossa
+
 export const LEVELS = [
   {
     name: 'Intro',
@@ -98,7 +106,7 @@ export const LEVELS = [
        kentän yli, joten taivas jäisi kuitenkin piiloon. */
     name: 'Funfair',
     glow: '#ff5d7a',
-    gate: { x: 300, w: 120 },
+    gate: HATCH,
     start: 2,
     firstFrom: 5,
     pads: [
@@ -127,15 +135,17 @@ export const LEVELS = [
    alustan alareunasta, joten alusta näyttää hahmon selältä; kaikki piirretään
    pää vasemmalle, ja oikean sarakkeen alustat peilataan katsomaan ulospäin. */
 
-const W = 720, H = 1040;                      // sama kuin game.js:n kenttä
 const STRIPE_W = 72;                          // 10 raitaa kentän leveydelle
 const AWNING_RED = '#c8324a', AWNING_PALE = '#f2e5d4';
 const BULB_COLORS = ['#ffd479', '#ff8fb8', '#6fe3ff', '#7bf0a0'];
 
 function funfairBack(ctx, api) {
   ctx.save();
+  ctx.save();
+  cutout(ctx, HATCH.x, 0, HATCH.w, CEIL);
   awning(ctx);
   ferrisWheel(ctx, api.t);
+  ctx.restore();
   valance(ctx, api.t);
   lightChain(ctx, api.t, 944, 26);
   for (const p of api.pads) {
@@ -148,6 +158,14 @@ function funfairBack(ctx, api) {
     ctx.restore();
   }
   ctx.restore();
+}
+
+/** Rajaa piirtämisen kaikkialle paitsi annettuun suorakulmioon. */
+function cutout(ctx, x, y, w, h) {
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H);
+  ctx.rect(x, y, w, h);
+  ctx.clip('evenodd');
 }
 
 /** Telttakangas: raidat, laskosten varjot ja harso päälle. */
@@ -168,10 +186,17 @@ function awning(ctx) {
   ctx.fillRect(0, 0, W, H);
 }
 
-/** Markiisin kaarreliepe katon alla, lamppu joka kaaren pohjalla. */
+/** Markiisin kaarreliepe katon alla, lamppu joka kaaren pohjalla.
+
+    Luukun kohdalta jätetään kaaret pois kokonaan, ei puolikkaita: lovi lasketaan
+    kaarijakoon pyöristäen, jolloin sen reunat osuvat kaarten väliin ja lovi
+    näyttää tehdyltä eikä katkaistulta. Taksi tulee sisään lovesta. */
 function valance(ctx, t) {
   const TOP = 30, DEPTH = 26, R = STRIPE_W / 2;
+  const nx = Math.floor(HATCH.x / STRIPE_W) * STRIPE_W;
+  const nw = Math.ceil((HATCH.x + HATCH.w) / STRIPE_W) * STRIPE_W - nx;
   ctx.save();
+  cutout(ctx, nx, 0, nw, TOP + DEPTH * 2);
   ctx.beginPath();
   ctx.moveTo(0, 0); ctx.lineTo(W, 0); ctx.lineTo(W, TOP);
   for (let x = W; x > 0; x -= STRIPE_W) {
@@ -187,7 +212,10 @@ function valance(ctx, t) {
   ctx.fillRect(0, 0, W, 8);
   ctx.restore();
 
-  for (let i = 0, x = R; x < W; i++, x += STRIPE_W) bulb(ctx, x, TOP + DEPTH + 4, t, i);
+  for (let i = 0, x = R; x < W; i++, x += STRIPE_W) {
+    if (x > nx && x < nx + nw) continue;    // loven kohdalla ei ole kaarta eikä lamppua
+    bulb(ctx, x, TOP + DEPTH + 4, t, i);
+  }
 }
 
 /** Valoketju alarivin alla, missä alustat eivät käy. */
