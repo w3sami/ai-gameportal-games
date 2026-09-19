@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ohjainkoe</title>
+<style>
+  :root {
+    --bg: #0e1116; --fg: #e6edf3; --muted: #8b949e; --line: #262c36;
+    --panel: #161b22; --on: #3fb950; --warn: #d29922; --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 12px; background: var(--bg); color: var(--fg);
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  h1 { margin: 0 0 2px; font-size: 15px; letter-spacing: 0.04em; }
+  h2 {
+    margin: 0 0 8px; font-size: 11px; font-weight: 600; color: var(--muted);
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .status {
+    margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--panel);
+  }
+  .status.waiting { border-color: var(--warn); color: var(--warn); }
+  .status.live { border-color: var(--on); }
+  .grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  }
+  section {
+    padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); min-width: 0;
+  }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  .pads { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .pad {
+    padding: 4px 2px; text-align: center; border: 1px solid var(--line);
+    border-radius: 5px; font-size: 11px; color: var(--muted);
+    background: #0d1117; transition: none;
+  }
+  .pad.down { background: var(--on); border-color: var(--on); color: #05130a; font-weight: 700; }
+  .bar { height: 7px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); }
+  .sticks { display: flex; gap: 12px; justify-content: center; }
+  figure { margin: 0; text-align: center; }
+  figcaption { color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .field {
+    position: relative; width: 104px; height: 104px; border: 1px solid var(--line);
+    border-radius: 50%; background:
+      linear-gradient(var(--line), var(--line)) center/1px 100% no-repeat,
+      linear-gradient(var(--line), var(--line)) center/100% 1px no-repeat;
+  }
+  .dot {
+    position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px;
+    border-radius: 50%; background: var(--accent); left: 50%; top: 50%;
+  }
+  .dot.raw { background: #6e7681; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; }
+  button {
+    font: inherit; color: var(--fg); background: #21262d; border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  ol { margin: 0; padding-left: 18px; max-height: 120px; overflow: auto; }
+  ol:empty::after { content: "—"; color: var(--muted); margin-left: -18px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .warn { color: var(--warn); }
+</style>
+</head>
+<body>
+
+<h1>Ohjainkoe</h1>
+<p id="status" class="status waiting">Paina ohjaimen nappia.</p>
+
+<div class="grid">
+
+  <section>
+    <h2>Laite</h2>
+    <dl>
+      <dt>id</dt><dd id="d-id">—</dd>
+      <dt>mapping</dt><dd id="d-mapping">—</dd>
+      <dt>paikka</dt><dd id="d-index" class="num">—</dd>
+      <dt>nappeja</dt><dd id="d-nbuttons" class="num">—</dd>
+      <dt>akseleita</dt><dd id="d-naxes" class="num">—</dd>
+      <dt>moottorit</dt><dd id="d-rumble">—</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Sauvat</h2>
+    <div class="sticks">
+      <figure>
+        <div class="field"><i id="l-raw" class="dot raw"></i><i id="l-dot" class="dot"></i></div>
+        <figcaption>vasen</figcaption>
+      </figure>
+      <figure>
+        <div class="field"><i id="r-raw" class="dot raw"></i><i id="r-dot" class="dot"></i></div>
+        <figcaption>oikea</figcaption>
+      </figure>
+    </div>
+    <dl style="margin-top:8px">
+      <dt>x, y</dt><dd id="d-xy" class="num">0.000, 0.000</dd>
+      <dt>pituus</dt><dd id="d-len" class="num">0.000</dd>
+      <dt>raaka</dt><dd id="d-axes" class="num">—</dd>
+      <dt>lepo</dt><dd id="d-rest" class="num">—</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Liipaisimet</h2>
+    <dl>
+      <dt>LT</dt><dd><div class="bar"><i id="t-l"></i></div></dd>
+      <dt></dt><dd id="d-lt" class="num">0.00</dd>
+      <dt>RT</dt><dd><div class="bar"><i id="t-r"></i></div></dd>
+      <dt></dt><dd id="d-rt" class="num">0.00</dd>
+    </dl>
+    <p id="d-analog" style="margin:8px 0 0;color:var(--muted)">
+      Purista hitaasti: jos luku hyppää 0:sta 1:een, liipaisin on digitaalinen.
+    </p>
+  </section>
+
+  <section style="grid-column: 1 / -1">
+    <h2>Napit</h2>
+    <div id="pads" class="pads"></div>
+  </section>
+
+  <section>
+    <h2>Reunat</h2>
+    <dl>
+      <dt>pressed</dt><dd id="d-press" class="num">0</dd>
+      <dt>released</dt><dd id="d-release" class="num">0</dd>
+      <dt>viimeisin</dt><dd id="d-last">—</dd>
+      <dt>ruutuja</dt><dd id="d-frames" class="num">0</dd>
+    </dl>
+    <p style="margin:8px 0 0;color:var(--muted)">
+      Yksi painallus = yksi pressed ja yksi released. Jos luvut juoksevat,
+      reunantunnistus on rikki.
+    </p>
+  </section>
+
+  <section>
+    <h2>Tärinä</h2>
+    <p style="margin:0 0 8px;color:var(--muted)">
+      Tai paina ohjaimesta <b>A</b>.
+    </p>
+    <button id="buzz" type="button">Tärise</button>
+    <p id="d-buzz" style="margin:8px 0 0">—</p>
+  </section>
+
+  <section>
+    <h2>Loki</h2>
+    <ol id="log" reversed></ol>
+  </section>
+
+</div>
+
+<script type="module">
+import { createGamepad, BUTTONS } from "./gamepad.js";
+
+const $ = (id) => document.getElementById(id);
+const fixed = (v, n = 3) => v.toFixed(n);
+
+const log = (text) => {
+  const li = document.createElement("li");
+  li.textContent = `${new Date().toLocaleTimeString("fi-FI")} ${text}`;
+  $("log").prepend(li);
+  while ($("log").children.length > 30) $("log").lastElementChild.remove();
+};
+
+// One cell per standard button, plus whatever an odd controller adds beyond
+// them — those show up as B17, B18 and so on, which is the point of this page.
+const cells = new Map();
+function cellFor(name) {
+  let cell = cells.get(name);
+  if (!cell) {
+    cell = document.createElement("div");
+    cell.className = "pad";
+    cell.textContent = name;
+    cells.set(name, cell);
+    $("pads").append(cell);
+  }
+  return cell;
+}
+for (const name of BUTTONS) cellFor(name);
+
+const pad = createGamepad({
+  onConnect: (p) => {
+    log(`kytketty: ${p.id || "(nimetön)"} — mapping "${p.mapping || "(ei mitään)"}"`);
+    if (p.mapping !== "standard") log("varoitus: tuntematon mappaus, napit ovat arvausta");
+  },
+  onDisconnect: () => log("irrotettu"),
+});
+
+let presses = 0;
+let releases = 0;
+let frames = 0;
+// The resting reading of an untouched stick, which is what a dead zone is for.
+let rest = 0;
+
+function buzz() {
+  const ok = pad.rumble({ duration: 200, strong: 0.7, weak: 0.3 });
+  $("d-buzz").textContent = ok
+    ? "lähetetty — tuntuiko?"
+    : "ei moottoreita tässä ohjaimessa tai selaimessa";
+  $("d-buzz").className = ok ? "" : "warn";
+}
+$("buzz").addEventListener("click", buzz);
+
+function place(dot, x, y) {
+  dot.style.left = `${50 + x * 46}%`;
+  dot.style.top = `${50 + y * 46}%`;
+}
+
+function frame() {
+  pad.poll();
+  frames++;
+
+  const raw = navigator.getGamepads?.() ?? [];
+  const live = Array.from(raw).filter(Boolean).find((g) => g.index === pad.index) ?? null;
+
+  const status = $("status");
+  if (!pad.connected) {
+    status.textContent = "Paina ohjaimen nappia.";
+    status.className = "status waiting";
+  } else {
+    status.textContent = `Yhteydessä — ${pad.id || "(nimetön)"}`;
+    status.className = "status live";
+  }
+
+  $("d-id").textContent = pad.id || "—";
+  $("d-mapping").textContent = pad.mapping || (pad.connected ? "(ei mitään)" : "—");
+  $("d-mapping").className = pad.connected && pad.mapping !== "standard" ? "warn" : "";
+  $("d-index").textContent = pad.connected ? pad.index : "—";
+  $("d-nbuttons").textContent = live ? live.buttons.length : "—";
+  $("d-naxes").textContent = live ? live.axes.length : "—";
+  $("d-rumble").textContent = live
+    ? (live.vibrationActuator ? "kyllä" : "ei")
+    : "—";
+
+  const axes = live?.axes ?? [];
+  place($("l-dot"), pad.x, pad.y);
+  place($("r-dot"), pad.rx, pad.ry);
+  place($("l-raw"), axes[0] ?? 0, axes[1] ?? 0);
+  place($("r-raw"), axes[2] ?? 0, axes[3] ?? 0);
+
+  $("d-xy").textContent = `${fixed(pad.x)}, ${fixed(pad.y)}`;
+  const len = Math.hypot(pad.x, pad.y);
+  $("d-len").textContent = fixed(len);
+  $("d-len").className = len > 1.0001 ? "num warn" : "num";
+  $("d-axes").textContent = axes.length
+    ? Array.from(axes, (a) => fixed(a, 2)).join("  ")
+    : "—";
+
+  // Worth seeing: a stick nobody is touching rarely reads exactly zero, and how
+  // far off it sits is the number the dead zone has to cover.
+  if (pad.connected && !pad.held("LS") && axes.length >= 2) {
+    const idle = Math.hypot(axes[0] ?? 0, axes[1] ?? 0);
+    if (idle < 0.35 && idle > rest) rest = idle;
+  }
+  $("d-rest").textContent = pad.connected ? `${fixed(rest)} (suurin havaittu)` : "—";
+
+  $("t-l").style.width = `${pad.trigger.left * 100}%`;
+  $("t-r").style.width = `${pad.trigger.right * 100}%`;
+  $("d-lt").textContent = fixed(pad.trigger.left, 2);
+  $("d-rt").textContent = fixed(pad.trigger.right, 2);
+
+  const names = live
+    ? live.buttons.map((_, i) => BUTTONS[i] ?? `B${i}`)
+    : BUTTONS;
+  for (const name of names) {
+    cellFor(name).classList.toggle("down", pad.held(name));
+  }
+
+  for (const name of names) {
+    if (pad.pressed(name)) {
+      presses++;
+      $("d-last").textContent = name;
+      if (name === "A") buzz();
+    }
+    if (pad.released(name)) releases++;
+  }
+  $("d-press").textContent = presses;
+  $("d-release").textContent = releases;
+  $("d-frames").textContent = frames;
+
+  requestAnimationFrame(frame);
+}
+
+// A document without focus is shown no controllers at all, so say so rather
+// than leaving the page looking broken.
+window.addEventListener("blur", () => log("fokus meni — ohjain katoaa kunnes klikkaat takaisin"));
+window.addEventListener("focus", () => log("fokus palasi"));
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
