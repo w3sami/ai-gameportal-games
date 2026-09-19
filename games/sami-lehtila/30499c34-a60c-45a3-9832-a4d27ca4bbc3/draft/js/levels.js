@@ -213,12 +213,17 @@ function ferrisWheel(ctx, t) {
   ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.3); ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, R - 24, 0, 6.3); ctx.stroke();
+  ctx.lineWidth = 2;
   for (let i = 0; i < 12; i++) {
     const a = t * 0.09 + i / 12 * 6.283;
     const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+    ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
-    ctx.fillStyle = '#ffd9c2';
-    ctx.beginPath(); ctx.roundRect(x - 13, y + 5, 26, 18, 5); ctx.fill();
+    /* Gondoli riippuu kehästä: ripustin ja ääriviiva, ei umpinaista laatikkoa,
+       jottei se irtoa pyörästä omaksi harmaaksi palikakseen. */
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 9); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(x - 11, y + 9, 22, 14, 4); ctx.stroke();
   }
   ctx.restore();
 }
@@ -276,13 +281,21 @@ function drawElephant(ctx) {
   blob(ctx, -22, 50, 16, 13, dark); blob(ctx, 30, 50, 16, 13, dark);
   blob(ctx, 6, 26, 66, 27, body);
   blob(ctx, -58, 22, 34, 29, body);
-  limb(ctx, body, 15, -84, 26, -98, 44, -84, 58);
+  /* Kärsä ja korva tummempana ja vaaleampana kuin pää, muuten koko elefantti
+     on yhtä harmaata möykkyä. */
+  limb(ctx, dark, 16, -82, 24, -100, 44, -82, 60);
+  ctx.strokeStyle = 'rgba(30,36,50,.35)'; ctx.lineWidth = 2;
+  for (const [x0, y0, x1, y1] of [[-92, 32, -80, 34], [-95, 42, -84, 45], [-91, 52, -80, 54]]) {
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
   ctx.fillStyle = '#f2ece0';
   ctx.beginPath();
-  ctx.moveTo(-78, 34); ctx.quadraticCurveTo(-90, 42, -95, 51);
-  ctx.quadraticCurveTo(-85, 43, -74, 38); ctx.fill();
-  blob(ctx, -44, 22, 20, 24, lit);
-  eye(ctx, -74, 14, 5.5);
+  ctx.moveTo(-76, 34); ctx.quadraticCurveTo(-88, 44, -92, 54);
+  ctx.quadraticCurveTo(-82, 45, -71, 39); ctx.fill();
+  blob(ctx, -40, 24, 19, 23, lit);
+  ctx.fillStyle = 'rgba(60,68,88,.5)';
+  ctx.beginPath(); ctx.ellipse(-40, 24, 11, 14, 0, 0, 6.3); ctx.fill();
+  eye(ctx, -70, 12, 5.5);
 }
 
 function drawDriftwood(ctx) {
