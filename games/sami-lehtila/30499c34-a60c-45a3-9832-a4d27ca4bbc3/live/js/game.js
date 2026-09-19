@@ -4,18 +4,20 @@
  * suuntasuuttimet kiihdyttävät, ja laskutelineen pitää olla alhaalla ennen
  * kosketusta. Teline alhaalla sivusuuttimet eivät toimi. Asiakas ilmestyy
  * alustan reunaan, huutaa taksin, kertoo minne haluaa ja maksaa perillä sitä
- * enemmän mitä nopeammin ja pehmeämmin keikka meni. Kun jokaiselle alustalle
- * on toimitettu, viimeinen asiakas pyytää ylös — ja vasta hänen kyydissään
- * luukku on auki.
+ * enemmän mitä nopeammin ja pehmeämmin keikka meni.
+ *
+ * Alusta on käyty kun siellä on pysähdytty: sekä nouto että jättö merkkaa
+ * paikan. Määränpää arvotaan täysin vapaasti lähtöalustaa lukuun ottamatta,
+ * joten hyvällä tuurilla viisi alustaa hoituu kolmella keikalla ja huonolla
+ * menee viisi. Kun jokainen alusta on käyty, seuraava asiakas pyytää ylös —
+ * ja vasta hänen kyydissään luukku on auki.
  *
  * Kentän tilanne elää vain kentän vaihtuessa: kolari tai ostettu uusi taksi ei
- * nollaa käytyjä alustoja, hautakiviä eikä odottavaa asiakasta. Vain kyydissä
- * ollut asiakas menetetään, ja hänen tilalleen arvotaan uusi.
+ * nollaa käytyjä alustoja, hautakiviä eikä odottavaa asiakasta.
  *
  * Kenttä alkaa aina ilmasta: taksi tulee katon luukusta, jarruttaa paikalleen
  * ja peli käynnistyy READY–GO:lla. Kenttien välissä on kaksivaiheinen
- * välianimaatio (js/cutscene.js), jossa näkyy kentän tilinpäätös: kolarit ja
- * yliajot omine kuvakkeineen, ja kummastakin nollasta 100 euron bonus.
+ * välianimaatio (js/cutscene.js), jossa näkyy kentän tilinpäätös.
  *
  * Tämä tiedosto on moottori: fysiikka, keikat, piirto ja HUD. Kentät ovat
  * js/levels.js:ssä dataa ja valinnaisia koukkuja, luukun ulkoasu js/gate.js,
@@ -41,6 +43,7 @@ const W = 720, H = 1040;
 const CEIL = 16;
 const TW = 54, TH = 28, GEAR = 14;
 const FUEL_MAX = 100;
+const FUEL_LOW = 35;                                       // mistä piippaus alkaa
 const TAXI_PRICE = 500;                                    // yksi uusi taksi
 const FLEET_COUNT = 3, FLEET_PRICE = 1000;                 // kolmen auton erä
 const CLEAN_BONUS = 100;                                   // nolla kolaria / nolla yliajoa
@@ -299,7 +302,11 @@ const sfx = {
     tone(260, 0.45, { type: 'square', gain: 0.13, to: 70 });
   },
   pump() { tone(90, 0.06, { type: 'square', gain: 0.04 }); },
-  warn() { tone(320, 0.11, { type: 'square', gain: 0.05 }); },
+  /** Bensavaroitus: matala ja rauhallinen, tiivistyy tankin tyhjetessä. */
+  warn() { tone(196, 0.10, { type: 'square', gain: 0.06, to: 165 }); },
+  /** Lähestymisvaroitus: korkea ja tiheä, kun teline on alhaalla ja vauhti
+      riittäisi rikkomaan taksin. */
+  fast() { tone(1175, 0.05, { type: 'square', gain: 0.05 }); },
   buy() {
     tone(330, 0.10, { type: 'square', gain: 0.12 });
     tone(494, 0.12, { type: 'triangle', gain: 0.14, delay: 0.09 });
@@ -339,8 +346,8 @@ const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, graves, squishes, wreck, bounces, titleT, cut,
-    enterT, goT, levelMoney0, hornFx, levelDeaths;
+    msg, msgT, bits, lowWarn, fastWarn, graves, squishes, wreck, bounces,
+    titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths;
 
 const stars = [];
 for (let i = 0; i < 70; i++) {
@@ -376,13 +383,14 @@ function loadLevel(i) {
   gateOpen = false;
   graves = []; squishes = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
   msg = ''; msgT = 0; titleT = 0; goT = 0;
+  lowWarn = 0; fastWarn = 0;
   job = null;
   levelMoney0 = money;
   levelDeaths = 0;
   resetTaxi();
   if (level.init) level.init(api());
   const from = level.firstFrom !== undefined ? level.firstFrom : pick(numbered()).id;
-  newJob(from, pickTarget(from), 1.2);
+  newJob(from, randomTarget(from), 1.2);
 }
 
 function beginEntry(showTitle) {
@@ -394,6 +402,7 @@ function beginEntry(showTitle) {
   dead = false; deadT = 0; wreck = null; bounces = 0;
   gateOpen = true;
   enterT = 0; goT = 0;
+  lowWarn = 0; fastWarn = 0;
   titleT = showTitle ? 2.0 : 0;
   state = ENTER;
   sfx.levelStart();
@@ -422,29 +431,23 @@ function resetTaxi() {
   dead = false; deadT = 0; wreck = null; bounces = 0;
 }
 
-function pickTarget(fromId) {
-  const open = numbered().filter(p => p.id !== fromId && !served[p.id]);
-  const pool = open.length ? open : numbered().filter(p => p.id !== fromId);
+/** Määränpää on puhdas arpa: mikä tahansa muu kuin lähtöalusta. */
+function randomTarget(fromId) {
+  const pool = numbered().filter(p => p.id !== fromId);
   return pool.length ? pick(pool).id : fromId;
 }
 
-/* Seuraava keikka toimituksen jälkeen. Asiakas haetaan mieluiten muualta kuin
-   siltä alustalta jolle juuri laskeuduttiin. Samalta alustalta lähdetään vain
-   kun jäljellä on enää yksi käymätön alusta. */
+/* Seuraava keikka toimituksen jälkeen. Nouto suositaan käymättömiin alustoihin
+   — muuten kenttä voisi venyä loputtomiin — mutta ei sille alustalle jolla
+   juuri seistään. Määränpää arvotaan vapaasti, joten onnekas arpa hoitaa kaksi
+   uutta alustaa yhdellä keikalla. */
 function nextJobAfter(deliveredId) {
-  const all = numbered().every(p => served[p.id]);
-  if (all) return newJob(deliveredId, 'up', 1.6);
+  if (numbered().every(p => served[p.id])) return newJob(deliveredId, 'up', 1.6);
 
-  const unserved = numbered().filter(p => !served[p.id]);
-  const froms = numbered().filter(
-    p => p.id !== deliveredId && unserved.some(u => u.id !== p.id)
-  );
-  if (froms.length) {
-    const from = pick(froms).id;
-    const to = pick(unserved.filter(u => u.id !== from)).id;
-    return newJob(from, to, 1.6);
-  }
-  return newJob(deliveredId, unserved[0].id, 1.6);
+  const others = numbered().filter(p => p.id !== deliveredId);
+  const fresh = others.filter(p => !served[p.id]);
+  const from = pick(fresh.length ? fresh : others).id;
+  newJob(from, randomTarget(from), 1.6);
 }
 
 function newJob(from, to, delay) {
@@ -586,6 +589,9 @@ function solids() {
   return list;
 }
 
+/** Kuinka lähellä laskurajaa ollaan: yli 1 hajottaa taksin. */
+const landRatio = () => Math.max(taxi.vy / P.landVY, Math.abs(taxi.vx) / P.landVX);
+
 /* Kolari vie taksin ja kyydissä olleen asiakkaan. Kaikki muu kentän tilanne —
    käydyt alustat, hautakivet, odottava asiakas — jää koskematta. */
 function crash(reason) {
@@ -612,7 +618,7 @@ function crash(reason) {
 
 function touchdown(pad, b) {
   const t = taxi;
-  const ratio = Math.max(t.vy / P.landVY, Math.abs(t.vx) / P.landVX);
+  const ratio = landRatio();
 
   if (t.gear < 0.85) return crash('Laskuteline ylhäällä');
   if (b.x < pad.x - 2 || b.x + b.w > pad.x + pad.w + 2) return crash('Jalka ilmassa');
@@ -647,7 +653,7 @@ function onLanded(pad, softness) {
     const fare = P.fare + tip;
     const kind = job.kind;
     money += fare;
-    served[pad.id] = true;                  // ✓ vasta maksetusta toimituksesta
+    served[pad.id] = true;                  // jättö merkkaa alustan käydyksi
     say(`Kiitos! ${fare} € (tippi ${tip} €)`, 2.6);
     burst(taxi.x, taxi.y - 20, '#6fe3ff', 16, 160);
     sfx.pay();
@@ -699,6 +705,7 @@ function jobStep(dt) {
     const d = target - job.x;
     if (Math.abs(d) < 3) {
       job.phase = 'aboard'; job.t = 0;
+      served[job.from] = true;              // nouto merkkaa alustan käydyksi
       if (job.to === 'up') {
         gateOpen = true;
         say('Ylös, kiitos!', 3);
@@ -718,8 +725,7 @@ function jobStep(dt) {
 }
 
 /* Yliajo etenee omassa tahdissaan: tyyppi litistyy jalkoihinsa kuin kaatuva
-   pahvikuva, häipyy, ja sitten hautakivi nousee maasta. Kivi kirjataan
-   pysyväksi vasta kun animaatio on ohi. */
+   pahvikuva, häipyy, ja sitten hautakivi nousee maasta. */
 function stepSquish(dt) {
   for (let i = squishes.length - 1; i >= 0; i--) {
     const s = squishes[i];
@@ -757,6 +763,22 @@ function movePads() {
     for (const g of graves) if (g.pad === p.id) g.x += dx;
     for (const s of squishes) if (s.pad === p.id) s.x += dx;
   }
+}
+
+/* ------------------------------------------------------------ varoitukset
+   Matala piippaus kertoo vähistä bensoista ja tihenee tankin tyhjetessä.
+   Korkea ja tiheä piippaus tarkoittaa että teline on alhaalla mutta vauhti
+   riittäisi hajottamaan taksin — kaksi eri hätää, kaksi eri ääntä. */
+function warnings(dt) {
+  if (fuel < FUEL_LOW && fuel > 0 && !dead) {
+    lowWarn -= dt;
+    if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.25 + fuel / 45; }
+  } else lowWarn = 0;
+
+  if (!dead && taxi && !taxi.landed && taxi.gear > 0.5 && landRatio() > 1) {
+    fastWarn -= dt;
+    if (fastWarn <= 0) { sfx.fast(); fastWarn = 0.13; }
+  } else fastWarn = 0;
 }
 
 /* ------------------------------------------------------------ sisääntulo */
@@ -799,6 +821,7 @@ function update(dt) {
   if (dead) {
     deadT += dt;
     jetLevel(0);
+    lowWarn = 0; fastWarn = 0;
     if (wreck) {
       wreck.vy += 640 * dt;
       wreck.x += wreck.vx * dt;
@@ -825,6 +848,8 @@ function update(dt) {
   taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * 4, dt * 4);
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
 
+  warnings(dt);                              // piippaukset myös alustalla
+
   const v = activeThrust();
   const raw = inputVector();
 
@@ -843,11 +868,6 @@ function update(dt) {
     if (had > 0 && fuel <= 0) say('Tankki kuiva!', 3);
   }
   jetLevel(throttle);
-
-  if (fuel < 20 && fuel > 0) {
-    lowWarn -= dt;
-    if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.35 + fuel / 60; }
-  } else lowWarn = 0;
 
   taxi.vx += v.x * P.thrust * dt;
   taxi.vy += v.y * P.thrust * dt + P.grav * dt;
@@ -939,8 +959,7 @@ function stepBits(dt) {
 }
 
 /* Kentän tilinpäätös ja välianimaatio. Kolarit ja yliajot ovat kentän omat
-   mittarit, ja kummastakin nollasta maksetaan bonus — puhdas ajo on siis
-   rahanarvoista eikä pelkkä tilasto. */
+   mittarit, ja kummastakin nollasta maksetaan bonus. */
 function startCut(nextIndex) {
   const nxt = LEVELS[nextIndex];
   const earned = Math.round(money - levelMoney0);
@@ -958,7 +977,7 @@ function startCut(nextIndex) {
     name: nxt.name, index: nextIndex, total: LEVELS.length,
     stats: [
       { text: `${level.name.toUpperCase()} SELVÄ`, head: true },
-      { text: `keikat ${numbered().length}` },
+      { text: `alustat ${numbered().length}` },
       { text: `kentästä ${earned} €` },
       {
         icon: 'wreck', good: cleanDrive,
@@ -996,10 +1015,12 @@ function drawWall(r) {
   }
 }
 
-/* Alustan väri kertoo kohteen, tunnus kertoo tilan: numero kunnes alustalle on
-   toimitettu, sen jälkeen ✓. */
+/* Alustan väri kertoo kohteen, tunnus kertoo tilan. Käyty alusta on aina
+   vihreä pallo väkäsineen — sama merkki riippumatta siitä onko alusta juuri
+   nyt kohde vai ei. */
 function drawPad(p) {
   const isTarget = !p.fuel && p.id === targetId();
+  const done = !p.fuel && served[p.id];
   const col = p.fuel ? '#ffd479' : (isTarget ? '#6fe3ff' : '#ff5d7a');
 
   ctx.fillStyle = p.fuel ? '#3a3320' : (isTarget ? '#20394a' : '#3a2230');
@@ -1015,24 +1036,37 @@ function drawPad(p) {
   ctx.fillRect(p.x + p.w - 20, p.y + p.h, 8, 14);
 
   const bx = p.x + p.w / 2, by = p.y + p.h + 22;
+  ctx.textAlign = 'center';
+
+  if (done) {                                   // vihreä pallo ja väkänen
+    ctx.fillStyle = '#7bf0a0';
+    ctx.shadowColor = '#7bf0a0'; ctx.shadowBlur = isTarget ? 18 : 10;
+    ctx.beginPath(); ctx.arc(bx, by, 12, 0, 6.3); ctx.fill();
+    ctx.shadowBlur = 0;
+    if (isTarget) {
+      ctx.strokeStyle = '#6fe3ff'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(bx, by, 15, 0, 6.3); ctx.stroke();
+    }
+    ctx.strokeStyle = '#08111e'; ctx.lineWidth = 3;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx - 5.5, by);
+    ctx.lineTo(bx - 1.5, by + 4.5);
+    ctx.lineTo(bx + 5.5, by - 4.5);
+    ctx.stroke();
+    return;
+  }
+
   ctx.beginPath(); ctx.arc(bx, by, 13, 0, 6.3);
   ctx.fillStyle = 'rgba(8,13,30,.75)'; ctx.fill();
   ctx.strokeStyle = col; ctx.lineWidth = isTarget ? 2.5 : 1.6; ctx.stroke();
   ctx.fillStyle = col;
-  ctx.textAlign = 'center';
   if (p.fuel) {
     ctx.beginPath();
     ctx.moveTo(bx, by - 7);
     ctx.quadraticCurveTo(bx + 6, by + 1, bx, by + 6);
     ctx.quadraticCurveTo(bx - 6, by + 1, bx, by - 7);
     ctx.fill();
-  } else if (served[p.id]) {
-    ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(bx - 6, by);
-    ctx.lineTo(bx - 1.5, by + 5);
-    ctx.lineTo(bx + 6.5, by - 5);
-    ctx.stroke();
   } else {
     ctx.font = '700 15px system-ui, sans-serif';
     ctx.fillText(String(p.id), bx, by + 5);
@@ -1181,7 +1215,6 @@ function drawSquish(s) {
     drawAlien(s.kind, 0, 0, s.walk, false, false, alpha);
     ctx.restore();
     if (s.t < SQ_FALL) return;
-    // litistynyt jäänne haipuu pinnalle
     ctx.save();
     ctx.globalAlpha = alpha * 0.8;
     ctx.fillStyle = ALIENS[s.kind % ALIENS.length].c;
@@ -1346,7 +1379,11 @@ function drawHud() {
   ctx.fillText(Math.floor(money) + ' €', 26, 56);
 
   const f = clamp(fuel / FUEL_MAX, 0, 1);
+  const low = fuel < FUEL_LOW;
+  const blink = low ? 0.55 + Math.sin(runT * 9) * 0.45 : 1;
+  ctx.globalAlpha = blink;
   bar(26, 74, 200, 11, f, f > 0.45 ? '#7bf0a0' : f > 0.2 ? '#ffd479' : '#ff5d7a', 'POLTTOAINE');
+  ctx.globalAlpha = 1;
 
   drawLives();
 
@@ -1355,7 +1392,7 @@ function drawHud() {
   ctx.textAlign = 'right';
   ctx.fillStyle = '#8a97be';
   ctx.font = '600 15px system-ui, sans-serif';
-  ctx.fillText(gateOpen && state === PLAY ? 'ulos ylhäältä' : `keikat ${done}/${total}`, W - 26, 74);
+  ctx.fillText(gateOpen && state === PLAY ? 'ulos ylhäältä' : `alustat ${done}/${total}`, W - 26, 74);
   ctx.fillStyle = 'rgba(233,237,255,.35)';
   ctx.font = '600 11px system-ui, sans-serif';
   ctx.fillText(`${levelIndex + 1}/${LEVELS.length} · ${level.name.toUpperCase()}`, W - 26, 92);
@@ -1416,15 +1453,16 @@ function smallBox(b, draw) {
 
 function drawButtons() {
   const b = GEAR_BOX, down = taxi && taxi.gear > 0.5;
+  const hot = fastWarn > 0;                    // vauhti liian kova laskuun
   ctx.save();
   ctx.globalAlpha = 0.82;
-  ctx.fillStyle = down ? 'rgba(111,227,255,.18)' : 'rgba(255,255,255,.07)';
-  ctx.strokeStyle = down ? 'rgba(111,227,255,.8)' : 'rgba(233,237,255,.3)';
+  ctx.fillStyle = hot ? 'rgba(255,93,122,.2)' : down ? 'rgba(111,227,255,.18)' : 'rgba(255,255,255,.07)';
+  ctx.strokeStyle = hot ? 'rgba(255,93,122,.9)' : down ? 'rgba(111,227,255,.8)' : 'rgba(233,237,255,.3)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 16); ctx.fill(); ctx.stroke();
 
   const cx = b.x + b.w / 2, cy = b.y + 38;
-  ctx.strokeStyle = down ? '#6fe3ff' : '#9fb0d8';
+  ctx.strokeStyle = hot ? '#ff5d7a' : down ? '#6fe3ff' : '#9fb0d8';
   ctx.lineWidth = 3; ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(cx - 18, cy - 12); ctx.lineTo(cx + 18, cy - 12);
@@ -1439,10 +1477,10 @@ function drawButtons() {
   }
   ctx.stroke();
 
-  ctx.fillStyle = down ? '#6fe3ff' : '#9fb0d8';
+  ctx.fillStyle = hot ? '#ff5d7a' : down ? '#6fe3ff' : '#9fb0d8';
   ctx.font = '700 12px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(down ? 'TELINE ALHAALLA' : 'TELINE YLHÄÄLLÄ', cx, b.y + b.h - 14);
+  ctx.fillText(hot ? 'LIIAN KOVAA' : down ? 'TELINE ALHAALLA' : 'TELINE YLHÄÄLLÄ', cx, b.y + b.h - 14);
   ctx.restore();
 
   // töötti
@@ -1742,17 +1780,18 @@ const buttons = `
 const menuCard = () => `
   <h1>Space <span>Taxi</span></h1>
   <p>Nosta alien kyytiin ja vie hänet pyydetylle alustalle. Syaani alusta on
-     kohde, punaiset eivät, ja ✓ kertoo että siellä on jo käyty. Mitä nopeammin
-     ja pehmeämmin, sitä isompi tippi — ja laskeudu viereen, älä päälle.</p>
+     kohde, punaiset eivät, ja vihreä pallo kertoo että siellä on jo käyty —
+     sekä nouto että jättö merkkaa alustan. Mitä nopeammin ja pehmeämmin, sitä
+     isompi tippi, ja laskeudu viereen, älä päälle.</p>
   <p><b>Laskuteline pitää laskea ennen kosketusta</b> — ja alhaalla se sammuttaa
-     sivusuuttimet, joten nosta se heti lähdössä. Vauhdikas kosketus pompauttaa,
-     liian kova hajottaa.</p>
+     sivusuuttimet, joten nosta se heti lähdössä. Matala piippaus varoittaa
+     bensasta, korkea ja tiheä siitä että teline on alhaalla mutta vauhti
+     hajottaisi taksin.</p>
   <p>Töötti kuuluu lähelle: jos asiakas kuulee sen, hän siirtyy alustan toiseen
      laitaan. Keltainen alusta on tankkaus, ja bensa maksaa omasta kassasta.
-     Kentästä jossa ei tullut yhtään kolaria tai yhtään yliajoa maksetaan
-     ${CLEAN_BONUS} euron bonus kummastakin. ${LEVELS.length} kenttää, raha ja
-     taksit kulkevat mukana, ja varikolta saa uuden taksin ${TAXI_PRICE}
-     eurolla tai kolme ${FLEET_PRICE} eurolla.</p>
+     Kentästä ilman kolareita tai ilman yliajoja maksetaan ${CLEAN_BONUS} euron
+     bonus kummastakin. ${LEVELS.length} kenttää, ja varikolta saa uuden taksin
+     ${TAXI_PRICE} eurolla tai kolme ${FLEET_PRICE} eurolla.</p>
   <p class="hint">Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>
      Isot napit: teline ja töötti. Ratas avaa säädöt, nuoli koko ruudun.<br>
      Näppäimillä <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot;
