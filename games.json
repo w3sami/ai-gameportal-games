@@ -276,7 +276,7 @@
     "id": "30499c34-a60c-45a3-9832-a4d27ca4bbc3",
     "slug": "space-taxi",
     "title": "Space Taxi",
-    "description": "Lentävä taksi, kaksi alustaa ja tankkauslautanen. Nosta tyyppi kyytiin, vie hänet perille nopeasti ja pehmeästi — mitä nopeammin, sitä isompi tippi. Laskuteline pitää laskea ennen kosketusta, ja telineen ollessa alhaalla sivusuuttimet eivät toimi. Polttoaine maksaa, keikka tuottaa, ja jos kuolet lasti kyydissä, keikka menee. Kun molemmilla alustoilla on käyty, katon luukku aukeaa. Kunnianosoitus Muse Softwaren vuoden 1984 C64-klassikolle. Yksi vuoro, portaalin ohjaussauva ja yhteinen tulostaulu.",
+    "description": "Lentävä taksi, laskeutumisalustoja ja bensa-asema. Nosta tyyppi kyytiin, vie hänet perille nopeasti ja pehmeästi — mitä nopeammin, sitä isompi tippi. Laskuteline pitää laskea ennen kosketusta, ja telineen ollessa alhaalla sivusuuttimet eivät toimi. Polttoaine maksaa, keikka tuottaa, ja jos kuolet lasti kyydissä, keikka menee. Kun kaikilla alustoilla on käyty, saat jatkaa seuraavaan tasoon. Kunnianosoitus Muse Softwaren vuoden 1984 C64-klassikolle. Yksi vuoro, portaalin ohjaussauva ja yhteinen tulostaulu.",
     "author": "Sami Lehtilä",
     "tags": [
       "arcade",
@@ -293,7 +293,7 @@
     "entryFile": "index.html",
     "sizeBytes": 137186,
     "createdAt": "2026-09-19T05:37:55.593Z",
-    "updatedAt": "2026-09-19T15:59:28.967Z"
+    "updatedAt": "2026-09-19T16:15:40.403Z"
   },
   {
     "id": "7cdbb6c3-8433-4798-af75-4e2b40f51d5b",
