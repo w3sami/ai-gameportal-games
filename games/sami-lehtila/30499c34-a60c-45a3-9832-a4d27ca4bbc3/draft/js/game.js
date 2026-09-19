@@ -30,6 +30,8 @@
  * kielen, gate-test.html on luukun oma säätösivu.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
+import { portal, onPortal, setPortal }
+  from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
 import { liftFor, bounceNorm } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
@@ -87,7 +89,6 @@ const DEFAULTS = {
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
   stick: 2.05,
-  wind: 0.3,
 };
 const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
@@ -1761,7 +1762,6 @@ const SLIDERS = [
   { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
-  { key: 'wind', label: 'tuulen nousuaika s', min: 0.05, max: 3, step: 0.05 },
 ];
 
 let panelNote = '';
@@ -1796,9 +1796,9 @@ function buildPanel() {
   const langRow = el('div', 'row');
   const langSeg = el('div', 'seg');
   const lang = (code, text) => pbutton(LANG === code ? 'on' : null, text, () => {
-    setLang(code);
-    if (state === MENU) showCard(menuCard(), 0, null);
-    buildPanel();
+    applyLang(code);
+    /* Ja portaalille, jotta liput ylhäällä eivät jää eri mielelle. */
+    setPortal('lang', code);
   });
   langSeg.append(lang('fi', 'suomi'), lang('en', 'english'));
   langRow.append(el('label', null, 'kieli'), langSeg);
@@ -1889,9 +1889,23 @@ function buildPanel() {
   panelEl.append(io);
 }
 
-function togglePanel() {
-  if (panelEl.classList.contains('hidden')) { buildPanel(); panelEl.classList.remove('hidden'); }
+function panelOpen() {
+  return !panelEl.classList.contains('hidden');
+}
+
+/* Asetettuun tilaan, ei vastakkaiseen. Portaalin kytkin tietää mihin asentoon
+   se on menossa, ja pelkkä toggle menisi sen kanssa ristiin heti kun paneeli on
+   avattu täältä rattaasta. */
+function setPanel(on) {
+  if (on === panelOpen()) return;
+  if (on) { buildPanel(); panelEl.classList.remove('hidden'); }
   else panelEl.classList.add('hidden');
+  /* Ja portaalille, jotta sen kytkin näyttää sen mikä on auki. */
+  setPortal('debug', on);
+}
+
+function togglePanel() {
+  setPanel(!panelOpen());
 }
 
 /* ------------------------------------------------------------------ kortti */
@@ -1993,6 +2007,37 @@ function startLevel(i) {
 
 newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
+
+/* Kieli, kummasta päästä tahansa.
+ *
+ * Portaali on sivu pelin ympärillä ja sillä on omat lippunsa. Ilman tätä ne ja
+ * säätöpaneelin kielivalinta ovat kaksi kytkintä samalle asialle, ja kaksi
+ * kytkintä on kaksi paikkaa jotka ennen pitkää ovat eri mieltä.
+ *
+ * Kehyksettömänä ei kuunnella lainkaan: silloin portal.lang on selaimen kielestä
+ * tehty arvaus, ja i18n.js:n oma päättely tietää enemmän — se muistaa mitä
+ * pelaaja on aiemmin valinnut. Kehyksessä portaali tietää enemmän kuin kumpikaan,
+ * koska se on se kieli jolla ihminen juuri katsoo sivua. Se on sama paikka jonka
+ * i18n.js:n kommentti varasi ?lang-parametrille. */
+function applyLang(code) {
+  if (code === LANG) return;
+  setLang(code);
+  if (state === MENU) showCard(menuCard(), 0, null);
+  if (!panelEl.classList.contains('hidden')) buildPanel();
+}
+
+if (portal.embedded) {
+  /* Vasta vastauksen jälkeen: ennen sitä portal.lang on arvaus, ja arvaus ei saa
+     jyrätä pelaajan aiempaa valintaa. onPortal ajaa käsittelijän heti nykyisellä
+     arvolla, joten tilaaminen tässä riittää eikä erillistä lukua tarvita. */
+  portal.ready.then(() => {
+    onPortal('lang', applyLang);
+    /* Säädöt ovat tämän pelin dev-näkymä — kenttähyppy, viritys, kieli — ja
+       portaalin kytkin avaa sen samoin kuin P. Kehyksessä P vaatii että fokus on
+       pelissä, kytkin ei vaadi mitään. */
+    onPortal('debug', setPanel);
+  });
+}
 
 /* Liput osoitteesta: ?debug=1 säätöpaneeli, ?test=1 pompputesti, ?lang=fi|en. */
 try {
