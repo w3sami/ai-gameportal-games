@@ -17,15 +17,16 @@ const D2R = Math.PI / 180;
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const clampSpread = s => Math.min(80, Math.max(5, s));
 
+/* Arvot luukkutestistä (gate-test.html). Sieltä kopioitu JSON menee tähän. */
 export const GATE_LOOK = {
-  radius: 300,        // kuinka kauas valo kantaa aukosta alaspäin
-  spread: 45,         // puolikulma asteina — 45 on neljännes pallosta
-  glow: 1,            // hehkun voimakkuuden kerroin
+  radius: 35,         // kuinka kauas valo kantaa aukosta alaspäin
+  spread: 50,         // puolikulma asteina
+  glow: 1.55,         // hehkun voimakkuuden kerroin
   ripples: 3,         // montako aaltoa kerrallaan
-  rippleWidth: 54,    // aallon paksuus pikseleinä
-  rippleAlpha: 0.26,  // aallon kirkkain kohta
-  rippleSpeed: 0.4,   // kierrosta sekunnissa
-  breathe: 2.2,       // hehkun hengityksen taajuus
+  rippleWidth: 40,    // aallon paksuus pikseleinä
+  rippleAlpha: 0.28,  // aallon kirkkain kohta
+  rippleSpeed: 0.25,  // kierrosta sekunnissa
+  breathe: 3.4,       // hehkun hengityksen taajuus
 };
 
 export function rgba(hex, a) {
@@ -45,7 +46,7 @@ export function drawGateGlow(ctx, gate, ceilY, color, t, look) {
   const cx = gate.x + halfW;
   const cy = apexY(halfW, ceilY, spread);
   const rMin = ceilY - cy;                       // kärjestä aukon tasolle
-  const R = rMin + L.radius;
+  const R = rMin + Math.max(4, L.radius);
   const a0 = Math.PI / 2 - spread * D2R;
   const a1 = Math.PI / 2 + spread * D2R;
   const breathe = 0.6 + Math.sin(t * L.breathe) * 0.4;
@@ -65,7 +66,7 @@ export function drawGateGlow(ctx, gate, ceilY, color, t, look) {
   const ball = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
   ball.addColorStop(0, rgba(color, clamp01((0.46 + breathe * 0.30) * L.glow)));
   ball.addColorStop(edge, rgba(color, clamp01((0.34 + breathe * 0.22) * L.glow)));
-  ball.addColorStop(clamp01(edge + 0.30), rgba(color, clamp01(0.11 * L.glow)));
+  ball.addColorStop(clamp01(edge + (1 - edge) * 0.55), rgba(color, clamp01(0.11 * L.glow)));
   ball.addColorStop(1, rgba(color, 0));
   ctx.fillStyle = ball;
   ctx.fillRect(bx, by, bw, bh);

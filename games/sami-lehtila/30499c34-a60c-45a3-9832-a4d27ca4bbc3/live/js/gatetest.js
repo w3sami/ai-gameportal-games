@@ -112,11 +112,11 @@ function draw(t) {
 
 /* ---------------------------------------------------------------- paneeli */
 const SLIDERS = [
-  { key: 'radius', label: 'kantama px', min: 80, max: 600, step: 10 },
+  { key: 'radius', label: 'kantama px', min: 5, max: 600, step: 5 },
   { key: 'spread', label: 'puolikulma °', min: 10, max: 80, step: 1 },
   { key: 'glow', label: 'hehku', min: 0, max: 2, step: 0.05 },
   { key: 'ripples', label: 'aaltoja', min: 0, max: 6, step: 1 },
-  { key: 'rippleWidth', label: 'aallon paksuus px', min: 4, max: 200, step: 2 },
+  { key: 'rippleWidth', label: 'aallon paksuus px', min: 2, max: 200, step: 2 },
   { key: 'rippleAlpha', label: 'aallon kirkkaus', min: 0, max: 0.8, step: 0.02 },
   { key: 'rippleSpeed', label: 'aallon nopeus', min: 0, max: 1.5, step: 0.05 },
   { key: 'breathe', label: 'hengitys', min: 0, max: 6, step: 0.1 },
