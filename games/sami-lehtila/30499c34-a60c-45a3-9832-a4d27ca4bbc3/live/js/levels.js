@@ -7,7 +7,7 @@
  * pakollinen.
  *
  * Kentän kentät:
- *   name        näkyy HUDissa ja kenttien välissä
+ *   name        näkyy HUDissa, aloituksessa ja välianimaatiossa
  *   glow        luukun hehkun väri
  *   gate        {x, w} aukko katossa; kehäseinät peli lisää itse
  *   walls       sisäseinät: {x, y, w, h, win?} — win piirtää ikkunarivit
@@ -46,26 +46,25 @@ export const LEVELS = [
   },
 
   {
-    /* Kaksi tornitaloa reunoilla, parvekkeet alustoina. Vasemmalla kaksi
-       parveketta ja tankkaus, oikealla kolme. Väli on 128 px leveä siellä
-       missä parvekkeet ovat vastakkain, eli taksi mahtuu mutta ei paljon
-       enempää — kenttä ajetaan pystysuoraa käytävää pitkin. */
+    /* Kaksi tornitaloa aivan reunoissa, parvekkeet alustoina. Vasemmalla kaksi
+       parveketta ja tankkaus, oikealla kolme. Parvekkeiden väliin jää 248 px
+       lentotilaa, eli käytävässä on varaa korjata mutta ei harhailla. */
     name: 'Highrise',
     glow: '#7bf0a0',
     gate: { x: 300, w: 120 },
     start: 1,
     firstFrom: 3,
     walls: [
-      { x: 16, y: 200, w: 150, h: 824, win: true },    // vasen torni
-      { x: 554, y: 150, w: 150, h: 874, win: true },   // oikea torni
+      { x: 16, y: 200, w: 110, h: 824, win: true },    // vasen torni
+      { x: 594, y: 150, w: 110, h: 874, win: true },   // oikea torni
     ],
     pads: [
-      { id: 1, x: 166, y: 880, w: 130, h: 16 },
-      { id: 2, x: 166, y: 600, w: 130, h: 16 },
-      { id: 0, x: 166, y: 340, w: 130, h: 16, fuel: true },
-      { id: 3, x: 424, y: 790, w: 130, h: 16 },
-      { id: 4, x: 424, y: 520, w: 130, h: 16 },
-      { id: 5, x: 424, y: 250, w: 130, h: 16 },
+      { id: 1, x: 126, y: 880, w: 110, h: 16 },
+      { id: 2, x: 126, y: 600, w: 110, h: 16 },
+      { id: 0, x: 126, y: 340, w: 110, h: 16, fuel: true },
+      { id: 3, x: 484, y: 790, w: 110, h: 16 },
+      { id: 4, x: 484, y: 520, w: 110, h: 16 },
+      { id: 5, x: 484, y: 250, w: 110, h: 16 },
     ],
   },
 ];
