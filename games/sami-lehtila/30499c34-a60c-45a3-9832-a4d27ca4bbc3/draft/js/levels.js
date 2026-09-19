@@ -45,5 +45,6 @@ import { intro } from './levels/intro.js';
 import { highrise } from './levels/highrise.js';
 import { funfair } from './levels/funfair.js';
 import { stormport } from './levels/stormport.js';
+import { troublefactory } from './levels/troublefactory.js';
 
-export const LEVELS = [intro, highrise, funfair, stormport];
+export const LEVELS = [intro, highrise, funfair, stormport, troublefactory];
