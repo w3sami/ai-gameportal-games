@@ -8,6 +8,10 @@
  * on toimitettu, viimeinen asiakas pyytää ylös — ja vasta hänen kyydissään
  * luukku on auki.
  *
+ * Kentän tilanne elää vain kentän vaihtuessa: kolari tai ostettu uusi taksi ei
+ * nollaa käytyjä alustoja, hautakiviä eikä odottavaa asiakasta. Vain kyydissä
+ * ollut asiakas menetetään, ja hänen tilalleen arvotaan uusi.
+ *
  * Kenttä alkaa aina ilmasta: taksi tulee katon luukusta, jarruttaa paikalleen
  * ja peli käynnistyy READY–GO:lla. Kenttien välissä on kaksivaiheinen
  * välianimaatio (js/cutscene.js).
@@ -340,6 +344,7 @@ function nextAlien() {
 
 const api = () => ({ P, taxi, pads: PADS, walls: WALLS, t: runT, rand, say, level: levelIndex });
 
+/** Kentän tilanne nollataan vain tässä — ei koskaan kolarissa. */
 function loadLevel(i) {
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   level = LEVELS[levelIndex];
@@ -467,8 +472,7 @@ function toggleGear() {
 }
 
 /* Töötti kuuluu 300 pikselin päähän. Jos odottava asiakas kuulee sen, hän
-   säikähtää ja kipittää alustan toiseen laitaan — kätevää kun kaveri seisoo
-   juuri siinä mihin pitäisi laskeutua, ja kiusallista jos ajoitus on väärä. */
+   säikähtää ja kipittää alustan toiseen laitaan. */
 function honk() {
   if (state !== PLAY || dead) return;
   sfx.horn();
@@ -557,14 +561,15 @@ function solids() {
   return list;
 }
 
+/* Kolari vie taksin ja kyydissä olleen asiakkaan. Kaikki muu kentän tilanne —
+   käydyt alustat, hautakivet, odottava asiakas — jää koskematta. */
 function crash(reason) {
   if (dead) return;
   dead = true; deadT = 0;
   lives--;
   if (job && job.phase === 'aboard') {
-    // Kesken keikan kuolema: kyyti palaa lähtöalustalle eikä kohde saa ✓:ta.
     if (job.to === 'up') gateOpen = false;
-    newJob(job.from, job.to, 1.2);
+    newJob(job.from, job.to, 1.2);           // menetetty kyyti, uusi tyyppi tilalle
     say('Keikka meni — ' + reason, 3);
   } else say(reason, 3);
   wreck = {
@@ -760,7 +765,7 @@ function update(dt) {
     const gone = wreck && wreck.y > H + 160;
     if (gone || deadT > 3.2) {
       if (lives <= 0) return taxiLost();
-      resetTaxi();
+      resetTaxi();                           // uusi taksi, kenttä ennallaan
     }
     return;
   }
@@ -851,11 +856,14 @@ function taxiLost() {
   } else gameOver(false);
 }
 
+/* Ostettu taksi jatkaa samaa kenttää: käydyt alustat, hautakivet ja odottava
+   asiakas säilyvät, uusi auto vain tulee sisään katon luukusta. */
 function buyTaxi() {
   money -= TAXI_PRICE;
   lives = 1;
   sfx.buy();
-  beginLevel(levelIndex, true);
+  beginEntry(false);
+  card.classList.add('hidden');
 }
 
 function gameOver(won) {
@@ -921,7 +929,7 @@ function drawWall(r) {
 }
 
 /* Alustan väri kertoo kohteen, tunnus kertoo tilan: numero kunnes alustalle on
-   toimitettu, sen jälkeen ✓. Numeroa ei enää tarvita, koska sinne ei ohjata. */
+   toimitettu, sen jälkeen ✓. */
 function drawPad(p) {
   const isTarget = !p.fuel && p.id === targetId();
   const col = p.fuel ? '#ffd479' : (isTarget ? '#6fe3ff' : '#ff5d7a');
@@ -1345,7 +1353,7 @@ function drawButtons() {
   ctx.strokeStyle = honking ? '#ffd479' : '#9fb0d8';
   ctx.fillStyle = honking ? '#ffd479' : '#9fb0d8';
   ctx.lineWidth = 2.6; ctx.lineCap = 'round';
-  ctx.beginPath();                                   // torvi
+  ctx.beginPath();
   ctx.moveTo(hx - 12, hy - 5); ctx.lineTo(hx - 4, hy - 5);
   ctx.lineTo(hx + 8, hy - 13); ctx.lineTo(hx + 8, hy + 13);
   ctx.lineTo(hx - 4, hy + 5); ctx.lineTo(hx - 12, hy + 5);
@@ -1645,8 +1653,8 @@ const menuCard = () => `
 const buyCard = () => `
   <h1>Taksi <span>hajosi</span></h1>
   <div class="big">${Math.floor(money)} €</div>
-  <p>Varikolta saa uuden ${TAXI_PRICE} eurolla. Kenttä ${levelIndex + 1}
-     (${level.name}) alkaa silloin alusta, raha jää kassaan.</p>
+  <p>Varikolta saa uuden ${TAXI_PRICE} eurolla. Kenttä jatkuu siitä mihin jäit:
+     käydyt alustat ja odottava asiakas säilyvät.</p>
   <button id="buy" class="btn">Osta uusi taksi (${TAXI_PRICE} €)</button>
   <button id="end" class="btn ghost">Lopeta vuoro</button>`;
 
