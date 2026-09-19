@@ -77,27 +77,37 @@ export const LEVELS = [
   },
 
   {
-    /* Huvipuisto. Kuusi alustaa kolmessa rivissä, kaksi rivissä: rivi heiluu
-       blokkina (sama x, secs ja phase), joten saman rivin alustat eivät voi
-       mennä päällekkäin. Ylä- ja alarivi ovat samassa vaiheessa, keskirivi
-       vastakkaisessa — aukot menevät vuorotellen ristiin ja kohdakkain, ja
-       läpimeno pitää ajoittaa. Alusta on 172 px ja lepoaukot 125/126/125, eli
-       100 pikselin amplitudi vie alustan käytännössä seinään asti (9 px jää).
-       Tankkaus on ylärivin vasen — lohikäärme, joka puhaltaa liekin.
-       Taustaa ei anneta sky-kentällä: drawBack maalaa markiisin koko kentän
-       yli, joten taivas jäisi kuitenkin piiloon. */
+    /* Huvipuisto. Kuusi alustaa kolmessa rivissä, kaksi rivissä; alusta on
+       172 px ja lepoaukot 125/126/125.
+
+       Ylä- ja alarivi liikkuvat blokkina: saman rivin molemmilla sama x, secs
+       ja phase, joten ne eivät voi mennä päällekkäin. 100 pikselin amplitudi
+       vie ne käytännössä seinään asti (9 px jää). Blokkirivin keskiaukko on
+       aina 126 px, mutta se liukuu puolelta toiselle, eli reitti on koko ajan
+       olemassa ja se pitää seurata.
+
+       Keskirivi on saksi: alustat ovat toistensa peilikuvia (phase 0 ja 0.5),
+       jolloin keskiaukko pysyy paikallaan x = 360:ssä mutta aukeaa ja sulkeutuu.
+       Amplitudi 63 on sen tarkka maksimi — keskiaukko käy nollassa juuri ennen
+       kuin alustat menisivät päällekkäin. Samalla reunat tekevät vastakkaista:
+       keskiaukko 0 ↔ 252, reuna-aukot 172 ↔ 46. Taksi on 54 px leveä, joten
+       46 px on umpi: joko keskeltä tai reunoilta, ei koskaan molemmista.
+
+       Tankkaus on alarivin oikea — banaani, joka on jo valmiiksi tankkauksen
+       keltainen. Taustaa ei anneta sky-kentällä: drawBack maalaa markiisin koko
+       kentän yli, joten taivas jäisi kuitenkin piiloon. */
     name: 'Funfair',
     glow: '#ff5d7a',
     gate: { x: 300, w: 120 },
-    start: 1,
+    start: 2,
     firstFrom: 5,
     pads: [
-      { id: 0, x: 125, y: 260, w: 172, h: 18, fuel: true, move: { x: 100, secs: 12, phase: 0 } },
-      { id: 1, x: 423, y: 260, w: 172, h: 18, move: { x: 100, secs: 12, phase: 0 } },
-      { id: 2, x: 125, y: 520, w: 172, h: 18, move: { x: 100, secs: 12, phase: 0.5 } },
-      { id: 3, x: 423, y: 520, w: 172, h: 18, move: { x: 100, secs: 12, phase: 0.5 } },
-      { id: 4, x: 125, y: 780, w: 172, h: 18, move: { x: 100, secs: 12, phase: 0 } },
-      { id: 5, x: 423, y: 780, w: 172, h: 18, move: { x: 100, secs: 12, phase: 0 } },
+      { id: 1, x: 125, y: 260, w: 172, h: 18, move: { x: 100, secs: 12, phase: 0 } },
+      { id: 2, x: 423, y: 260, w: 172, h: 18, move: { x: 100, secs: 12, phase: 0 } },
+      { id: 3, x: 125, y: 520, w: 172, h: 18, move: { x: 63, secs: 12, phase: 0 } },
+      { id: 4, x: 423, y: 520, w: 172, h: 18, move: { x: 63, secs: 12, phase: 0.5 } },
+      { id: 5, x: 125, y: 780, w: 172, h: 18, move: { x: 100, secs: 12, phase: 0 } },
+      { id: 0, x: 423, y: 780, w: 172, h: 18, fuel: true, move: { x: 100, secs: 12, phase: 0 } },
     ],
     drawBack: funfairBack,
   },
@@ -267,13 +277,12 @@ function drawDragon(ctx) {
   ctx.fillStyle = dark;
   ctx.beginPath(); ctx.arc(-100, 17, 2.5, 0, 6.3); ctx.fill();
 
-  /* Liekki kertoo ilman numeroa että tästä saa bensaa. */
-  const f = ctx.createRadialGradient(-110, 22, 0, -110, 22, 20);
-  f.addColorStop(0, 'rgba(255,241,186,.95)');
-  f.addColorStop(0.45, 'rgba(255,150,60,.72)');
-  f.addColorStop(1, 'rgba(255,80,40,0)');
-  ctx.fillStyle = f;
-  ctx.beginPath(); ctx.ellipse(-110, 22, 20, 13, 0, 0, 6.3); ctx.fill();
+  /* Höyryä eikä liekkiä: oranssi liekki veisi katseen väärälle alustalle nyt
+     kun tankkaus on banaanilla. */
+  ctx.fillStyle = 'rgba(226,232,244,.30)';
+  for (const [x, y, r] of [[-107, 20, 9], [-119, 25, 6.5], [-129, 21, 4.5]]) {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.3); ctx.fill();
+  }
 }
 
 function drawElephant(ctx) {
@@ -392,12 +401,13 @@ function drawBanana(ctx) {
 }
 
 /* Rivit vasemmalta oikealle: lohikäärme ja elefantti, ajopuu ja krokotiili,
-   kukkalava ja banaani. Oikean sarakkeen hahmot peilataan katsomaan ulospäin. */
+   kukkalava ja banaani. Oikean sarakkeen hahmot peilataan katsomaan ulospäin.
+   Banaani on alustana 0 eli tankkaus, joten numerot juoksevat 1–5 ylhäältä. */
 const RIDES = {
-  0: { draw: drawDragon,     flip: false },
-  1: { draw: drawElephant,   flip: true },
-  2: { draw: drawDriftwood,  flip: false },
-  3: { draw: drawCrocodile,  flip: true },
-  4: { draw: drawFlowerBed,  flip: false },
-  5: { draw: drawBanana,     flip: true },
+  1: { draw: drawDragon,     flip: false },
+  2: { draw: drawElephant,   flip: true },
+  3: { draw: drawDriftwood,  flip: false },
+  4: { draw: drawCrocodile,  flip: true },
+  5: { draw: drawFlowerBed,  flip: false },
+  0: { draw: drawBanana,     flip: true },
 };
