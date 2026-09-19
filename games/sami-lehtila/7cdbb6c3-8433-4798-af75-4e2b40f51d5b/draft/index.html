@@ -19,6 +19,10 @@
     margin: 0 0 8px; font-size: 11px; font-weight: 600; color: var(--muted);
     letter-spacing: 0.1em; text-transform: uppercase;
   }
+  .lede {
+    margin: 0 0 12px; max-width: 78ch; color: var(--muted);
+  }
+  .lede b { color: var(--fg); font-weight: 600; }
   .status {
     margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--line);
     border-radius: 8px; background: var(--panel);
@@ -73,6 +77,13 @@
 <body>
 
 <h1>Ohjainkoe</h1>
+<p class="lede">
+  Näkeekö selain ohjaimesi? Tämä sivu näyttää kaiken mitä se siitä lukee, joten
+  jos peli ei tottele, täältä näkee onko vika ohjaimessa, selaimessa vai pelissä.
+  <b>Klikkaa ensin tätä ruutua ja paina sitten ohjaimen nappia</b> — selain
+  piilottaa ohjaimet sivulta jolla ei ole fokusta, eikä näytä niitä ennen kuin
+  jotain on painettu.
+</p>
 <p id="status" class="status waiting">Paina ohjaimen nappia.</p>
 
 <div class="grid">
@@ -86,6 +97,7 @@
       <dt>nappeja</dt><dd id="d-nbuttons" class="num">—</dd>
       <dt>akseleita</dt><dd id="d-naxes" class="num">—</dd>
       <dt>moottorit</dt><dd id="d-rumble">—</dd>
+      <dt>plugin</dt><dd id="d-plugin">gamepad v1</dd>
     </dl>
   </section>
 
@@ -158,7 +170,8 @@
 </div>
 
 <script type="module">
-import { createGamepad, BUTTONS } from "./gamepad.js";
+import { createGamepad, BUTTONS }
+  from "https://plugins.game.bigbools.fi/gamepad/v1/index.js";
 
 const $ = (id) => document.getElementById(id);
 const fixed = (v, n = 3) => v.toFixed(n);
