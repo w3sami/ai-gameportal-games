@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1789847580060,
+ "stamp": 1789854128018,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -11,7 +11,7 @@
   "bounceFrom": 0.5,
   "bounceLift": 10,
   "bounceKeep": 0.62,
-  "burn": 2,
+  "burn": 12,
   "refuel": 63,
   "price": 0.9,
   "fare": 100,
@@ -41,6 +41,10 @@
      "ramp": 1.2,
      "lag": 0.9,
      "rand": 0.35
+    },
+    "bensalautta": {
+     "mass": 7,
+     "air": 8
     }
    }
   }
