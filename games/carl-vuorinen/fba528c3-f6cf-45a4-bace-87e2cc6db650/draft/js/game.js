@@ -62,7 +62,7 @@ document.addEventListener('webkitfullscreenchange', onFsChange);
 
 // ---- Audio: everything synthesised, no files ----
 const Snd = (() => {
-  let ac = null, noise = null, thrGain = null, thrFilt = null;
+  let ac = null, noise = null, thrGain = null, thrFilt = null, wetGain = null;
   function init(){
     if (ac) return;
     try { ac = new (window.AudioContext||window.webkitAudioContext)(); } catch (e) { return; }
@@ -72,8 +72,12 @@ const Snd = (() => {
     thrFilt = ac.createBiquadFilter(); thrFilt.type = 'lowpass'; thrFilt.frequency.value = 500;
     thrGain = ac.createGain(); thrGain.gain.value = 0;
     src.connect(thrFilt).connect(thrGain).connect(ac.destination); src.start();
+    const ws = ac.createBufferSource(); ws.buffer = noise; ws.loop = true;                          // waterfall hush: the same noise, brighter
+    const wf = ac.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 1400; wf.Q.value = 0.5;
+    wetGain = ac.createGain(); wetGain.gain.value = 0; ws.connect(wf).connect(wetGain).connect(ac.destination); ws.start();
   }
   function resume(){ if (ac && ac.state === 'suspended') ac.resume(); }
+  function water(on){ if (!ac) return; wetGain.gain.setTargetAtTime((on && S.sound) ? 0.5 : 0, ac.currentTime, on ? 0.05 : 0.2); }
   function thrust(on){ if (!ac) return; const g = (on && S.sound) ? 0.45 : 0; thrGain.gain.setTargetAtTime(g, ac.currentTime, on ? 0.04 : 0.1); thrFilt.frequency.setTargetAtTime(on ? 900 : 400, ac.currentTime, 0.1); }
   function burst(dur, f0, f1, vol){
     if (!ac || !S.sound) return; const t = ac.currentTime, src = ac.createBufferSource(); src.buffer = noise;
@@ -87,7 +91,7 @@ const Snd = (() => {
     o.connect(g).connect(ac.destination); o.start(t); o.stop(t+dur+0.05);
   }
   return {
-    init, resume, thrust,
+    init, resume, thrust, water,
     explode(){ burst(1.1, 2600, 90, 1.2); tone(70, 0.5, 0.6, 'sine'); },
     land(sp){ const v = Math.min(0.7, 0.15+sp/500); burst(0.18, 700, 120, v); tone(55, 0.25, v*0.8, 'sine'); },
     finish(){ tone(523, 0.18, 0.25, 'triangle'); tone(784, 0.22, 0.25, 'triangle', 0.14); tone(1046, 0.4, 0.22, 'triangle', 0.28); },
@@ -99,7 +103,7 @@ const Snd = (() => {
 
 // ---- Game state ----
 let ship, ghost = null, best = null, particles = [], ticks = 0, gTick = 0, running = false, inputs = [], deadT = 0, shake = 0, doneT = 0;
-let mode = 'menu';                                           // menu | play | paused | complete
+let mode = 'menu', wet = false;                              // menu | play | paused | complete; wet: rocket inside a waterfall
 const cam = {x:0,y:0};
 const keys = {thrust:false,left:false,right:false};
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -109,23 +113,45 @@ const fmt = t => { const s = t/120, m = Math.floor(s/60); return `${m}:${(s-m*60
 function spawn(){ const p = L.pads.start; return {x:p.x+p.w/2, y:p.y-11, vx:0, vy:0, a:0, state:'idle', flame:0}; }
 function reset(){
   ship = spawn(); best = store.bests[li] || null; ghost = best ? spawn() : null;
-  ticks = 0; gTick = 0; running = false; inputs = []; particles.length = 0; deadT = 0; doneT = 0; setMsg('',''); hazardReset();
+  ticks = 0; gTick = 0; running = false; inputs = []; particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
   cam.x = ship.x - vw/(2*Z); cam.y = ship.y - vh/(2*Z);
   hud();
 }
 function loadLevel(i){
-  li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; save();
+  li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; menuCh = chapterOf(li); save();
   setGeom(); applyTheme(); buildMain(); buildHazards(); resize(); reset();
 }
 
+// ---- Forces: regions that push the rocket (waterfalls, wind, vents, magnets). Level data `forces`:
+//   rect   {kind, x,y,w,h, ax,ay, drag?}       constant acceleration inside, optional velocity drag per second
+//   circle {kind, cx,cy,r, strength}           radial, linear falloff to the edge; positive pulls in, negative pushes out
+//   either may add {period, duty, phase} in seconds to cycle on and off. Timing runs on sim ticks, so replays stay exact.
+//   water adds {pool:{x,w,h}} for the pool it lands in. kind ∈ water | wind | gas, which only changes how it is drawn.
+const forceOn = (f, tick) => !f.period || (((tick*DT + (f.phase||0)) % f.period) / f.period) < (f.duty === undefined ? 1 : f.duty);
+const inRect = (f, x, y) => x >= f.x && x <= f.x+f.w && y >= f.y && y <= f.y+f.h;
+function applyForces(s, tick){
+  for (const f of L.forces||[]){
+    if (!forceOn(f, tick)) continue;
+    if (f.r !== undefined){
+      const dx = f.cx-s.x, dy = f.cy-s.y, d = Math.hypot(dx,dy); if (d > f.r || d < 1) continue;
+      const a = (f.strength||0)*(1-d/f.r)/d; s.vx += dx*a*DT; s.vy += dy*a*DT;
+    } else if (inRect(f, s.x, s.y)){
+      s.vx += (f.ax||0)*DT; s.vy += (f.ay||0)*DT;
+      if (f.drag){ const k = Math.exp(-f.drag*DT); s.vx *= k; s.vy *= k; }
+    }
+  }
+}
+const inWater = s => (L.forces||[]).some(f => f.kind === 'water' && f.r === undefined && inRect(f, s.x, s.y));
+
 // One physics tick. Deterministic: same inputs → same run, which is what makes the ghost replay possible.
-function stepShip(s, inp){
+function stepShip(s, inp, tick){
   if (s.state === 'idle' || s.state === 'landed'){ if (!inp.thrust) return null; s.state = 'flying'; }
   if (s.state !== 'flying') return null;
   s.a = normAng(s.a + inp.steer*P.turnRate*DEG*DT);
   const th = inp.thrust ? P.thrust : 0;
   s.vx += Math.sin(s.a)*th*DT;
   s.vy += (-Math.cos(s.a)*th + P.gravity)*DT;
+  applyForces(s, tick);
   s.flame = inp.thrust ? 1 : 0;
   const sp = Math.hypot(s.vx,s.vy), n = Math.ceil(sp*DT/2) || 1;    // substep so nothing tunnels through a wall
   for (let i=0;i<n;i++){ s.x += s.vx*DT/n; s.y += s.vy*DT/n; const hit = collide(s); if (hit) return hit; }
@@ -158,7 +184,7 @@ function tick(){
     if (!running && ship.state === 'idle' && inp.thrust) running = true;
     if (running){
       ticks++; inputs.push(encode(inp));
-      const hit = stepShip(ship, inp);
+      const hit = stepShip(ship, inp, ticks-1);
       if (hit){
         if (hit.type === 'land'){
           if (hit.sp > 120) puff(hit.px, hit.py, hit.sp); Snd.land(hit.sp); settle(ship, hit.z);
@@ -169,11 +195,13 @@ function tick(){
         if (hz){ ship.state = 'dead'; deadT = 1.4; explode(hz.px, hz.py); shake = 1; Snd.explode(); setMsg('Crashed', hz.kind === 'branch' ? 'Branch' : 'Stalactite'); }
       }
       if (ship.state === 'flying' && ship.flame) emitThrust(ship);
+      wet = ship.state === 'flying' && inWater(ship);
+      if (wet && ticks % 3 === 0) spray(ship);
     }
   }
   if (ghost && running && ghost.state !== 'dead'){
     const code = best.inputs[gTick++];
-    if (code !== undefined){ const gh = stepShip(ghost, decode(code)); if (gh){ if (gh.type === 'land') settle(ghost, gh.z); else ghost.state = 'dead'; } }
+    if (code !== undefined){ const gh = stepShip(ghost, decode(code), gTick-1); if (gh){ if (gh.type === 'land') settle(ghost, gh.z); else ghost.state = 'dead'; } }
   }
   updateParticles();
 }
@@ -246,6 +274,10 @@ function crumbs(px,py,n,col){
 function shatter(px,py,v,col){
   for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); particles.push({x:px+(Math.random()-0.5)*20,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.7,max:1.2,sz:2+Math.random()*4,kind:1,col}); }
 }
+function spray(s){
+  const a = Math.random()*6.283, v = 40+Math.random()*120;
+  particles.push({x:s.x+(Math.random()-0.5)*16,y:s.y+(Math.random()-0.5)*16,vx:Math.cos(a)*v+s.vx*0.3,vy:Math.sin(a)*v-40,life:0.3+Math.random()*0.3,max:0.6,sz:1.5+Math.random()*2,kind:1,col:'200,228,255'});
+}
 function puff(px,py,sp){
   for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v*0.4,life:0.3+Math.random()*0.4,max:0.7,sz:2+Math.random()*3,kind:1}); }
 }
@@ -287,6 +319,42 @@ function drawParticles(){
   }
 }
 
+// Force fields. Pools go under the terrain (so the floor clips them), the curtains over the rocket (a waterfall half-hides what is inside it). Animation is
+// visual only and runs on wall time; the force itself runs on sim ticks. Everything drawn is a rect, in keeping with the level art.
+function drawForces(t, over){
+  const vx0 = cam.x-100, vy0 = cam.y-100, vx1 = cam.x+vw/Z+100, vy1 = cam.y+vh/Z+100;
+  for (const f of L.forces||[]){
+    if (f.r !== undefined){ if (over) drawRadial(f, t); continue; }
+    if (f.x > vx1 || f.x+f.w < vx0 || f.y > vy1 || f.y+f.h < vy0) continue;
+    if (f.kind === 'water'){
+      if (!over){ if (f.pool){ const p = f.pool, py = f.y+f.h-p.h; ctx.fillStyle = 'rgba(70,130,210,.6)'; ctx.fillRect(p.x, py, p.w, p.h);
+        ctx.fillStyle = 'rgba(210,235,255,.45)'; for (let i=0;i<5;i++){ const rx = p.x + ((t*70 + i*p.w/5) % p.w); ctx.fillRect(rx, py+2, Math.min(22, p.x+p.w-rx), 2); } } continue; }
+      ctx.fillStyle = 'rgba(110,165,235,.26)'; ctx.fillRect(f.x, f.y, f.w, f.h);
+      const n = Math.floor(f.w/9);                                                                   // strands of varying weight, each with highlights rolling down every ~220 px
+      for (let i=0;i<n;i++){ const hx = ((i*7919)%97)/97, cx = f.x+4.5+i*9, sw = 3+hx*5;
+        ctx.fillStyle = `rgba(150,200,250,${0.10+hx*0.16})`; ctx.fillRect(cx-sw/2, f.y, sw, f.h);
+        const len = 50+hx*90, step = 220+hx*80; ctx.fillStyle = `rgba(225,242,255,${0.28+hx*0.2})`;
+        for (let yy = ((t*(800+hx*250) + hx*step) % step) - len; yy < f.h; yy += step){ const y0 = Math.max(f.y, f.y+yy), y1 = Math.min(f.y+f.h, f.y+yy+len); if (y1 > y0) ctx.fillRect(cx-1.5, y0, 3, y1-y0); } }
+      ctx.fillStyle = 'rgba(235,245,255,.4)'; ctx.fillRect(f.x-6, f.y, f.w+12, 10);                    // the lip
+      ctx.fillStyle = 'rgba(225,240,255,.28)';                                                          // mist at the foot
+      for (let i=0;i<6;i++){ const ph = (t*0.6 + i*0.17) % 1, mx = f.x+f.w/2+(i-2.5)*f.w*0.35, my = f.y+f.h-ph*70, ms = 26*(1-ph)+6; ctx.fillRect(mx-ms/2, my-ms*0.3, ms, ms*0.6); }
+    } else if (over){                                                                                   // wind, gas: streaks along the push, faint when off
+      const on = forceOn(f, ticks), len = Math.hypot(f.ax||0, f.ay||0) || 1, ux = (f.ax||0)/len, uy = (f.ay||0)/len, span = Math.abs(ux)*f.w + Math.abs(uy)*f.h;
+      ctx.strokeStyle = f.kind === 'gas' ? `rgba(170,225,130,${on?.4:.08})` : `rgba(225,232,240,${on?.35:.07})`; ctx.lineWidth = 2; ctx.beginPath();
+      const n = Math.floor(f.w*f.h/9000);
+      for (let i=0;i<n;i++){ const hx = ((i*7919)%1000)/1000, hy = ((i*104729)%1000)/1000, d = ((t*(on?420:60) + hx*span*3) % span), sl = 30+hy*40;
+        let px = f.x + (ux < 0 ? f.w : 0) + (uy !== 0 ? hx*f.w : 0) + ux*d, py = f.y + (uy < 0 ? f.h : 0) + (ux !== 0 ? hy*f.h : 0) + uy*d;
+        if (!inRect(f, px, py)) continue; const qx = Math.max(f.x, Math.min(f.x+f.w, px+ux*sl)), qy = Math.max(f.y, Math.min(f.y+f.h, py+uy*sl)); ctx.moveTo(px,py); ctx.lineTo(qx,qy); }
+      ctx.stroke();
+    }
+  }
+}
+function drawRadial(f, t){                                                                             // a magnet: sparks converging (pull) or leaving (push)
+  const on = forceOn(f, ticks); ctx.strokeStyle = `rgba(255,200,120,${on?.45:.08})`; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i=0;i<14;i++){ const a = i/14*6.283 + t*0.3, ph = ((t*0.8 + i*0.13) % 1), d = (f.strength >= 0 ? 1-ph : ph)*f.r, d2 = Math.max(0, d-18); ctx.moveTo(f.cx+Math.cos(a)*d, f.cy+Math.sin(a)*d); ctx.lineTo(f.cx+Math.cos(a)*d2, f.cy+Math.sin(a)*d2); }
+  ctx.stroke();
+}
+
 let last = performance.now(), acc = 0;
 function frame(now){
   let dt = (now-last)/1000; last = now; if (dt > 0.1) dt = 0.1;
@@ -320,17 +388,21 @@ function render(dt){
       ctx.save(); ctx.translate(h.x, h.y+z.dy); ctx.rotate(z.a); ctx.drawImage(sp.c, sp.ox-h.x, sp.oy-h.y); ctx.restore(); }
     ctx.restore();
   }
+  const tsec = performance.now()/1000;
+  ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z); drawForces(tsec, false); ctx.restore();   // pools, under the terrain
   ctx.drawImage(mainC, -cam.x*Z+sx, -cam.y*Z+sy, L.w*Z, L.h*Z);
 
   ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
   drawParticles();
   if (ghost) drawShip(ghost, true);
   if (ship.state !== 'dead') drawShip(ship, false);
+  drawForces(tsec, true);
   ctx.restore();
   const mf = 1.3; ctx.fillStyle = STYLE.bg.mote || 'rgba(217,211,199,.16)';
   for (const m of motes){ if (mode === 'play'){ m.y -= m.v*dt; if (m.y < 0) m.y += L.h; } const mx = (m.x-cam.x)*Z*mf + vw/2*(1-mf) + sx*mf, my = (m.y-cam.y)*Z*mf + vh/2*(1-mf) + sy*mf; if (mx>-4 && mx<vw+4 && my>-4 && my<vh+4) ctx.fillRect(mx, my, m.s, m.s); }
 
   Snd.thrust(mode === 'play' && ship.state === 'flying' && ship.flame);
+  Snd.water(mode === 'play' && wet);
   timerEl.textContent = fmt(ticks);
   if (!S.buttons) hdgEl.style.transform = `rotate(${ship.a}rad) translateY(${-S.radius+4}px)`;
 }
@@ -347,9 +419,15 @@ function hud(){
 const modal = $('modal'), box = $('box');
 function openModal(html){ box.innerHTML = html; modal.classList.add('open'); document.body.classList.remove('play'); }
 function closeModal(){ modal.classList.remove('open'); }
+// Levels are grouped into chapters (CHAPTERS in levels.js). The menu shows one chapter at a time, with arrows to move between them.
+const chapterOf = i => { let c = 0; for (let k=0;k<CHAPTERS.length;k++) if (i >= CHAPTERS[k].start) c = k; return c; };
+const chapterRange = c => [CHAPTERS[c].start, c+1 < CHAPTERS.length ? CHAPTERS[c+1].start : LEVELS.length];
+let menuCh = 0;
 function tiles(){
-  return `<div class="grid">` + LEVELS.map((l,i) => { const b = store.bests[i], locked = i > store.unlocked;
-    return `<button class="tile${i===li?' sel':''}" data-l="${i}" ${locked?'disabled':''}><b>${i+1}</b><small>${l.name}</small><em>${locked ? 'locked' : b ? fmt(b.ticks) : '—'}</em></button>`; }).join('') + `</div>`;
+  const [a,b] = chapterRange(menuCh), ch = CHAPTERS[menuCh];
+  return `<div class="chap"><button class="nav" data-ch="-1" ${menuCh===0?'disabled':''} aria-label="Previous chapter">◀</button><h2>Chapter ${menuCh+1}: ${ch.name}</h2><button class="nav" data-ch="1" ${menuCh===CHAPTERS.length-1?'disabled':''} aria-label="Next chapter">▶</button></div>` +
+    `<div class="grid">` + LEVELS.slice(a,b).map((l,k) => { const i = a+k, bst = store.bests[i], locked = i > store.unlocked;
+    return `<button class="tile${i===li?' sel':''}" data-l="${i}" ${locked?'disabled':''}><b>${i+1}</b><small>${l.name}</small><em>${locked ? 'locked' : bst ? fmt(bst.ticks) : '—'}</em></button>`; }).join('') + `</div>`;
 }
 function settingsRow(){
   return `<div class="settings"><div class="row">
@@ -366,7 +444,7 @@ function showMenu(){
       <div><b>Touch</b><br>${S.buttons ? '◀ ▶ buttons to steer' : 'Left half: drag to steer'}<br>Right half: hold to thrust<br>Touching a pad lands you</div>
       <div><b>Keyboard</b><br><kbd>◀</kbd> <kbd>▶</kbd> or <kbd>A</kbd> <kbd>D</kbd> steer<br><kbd>Space</kbd> <kbd>▲</kbd> <kbd>W</kbd> thrust<br><kbd>R</kbd> restart, <kbd>Esc</kbd> pause, <kbd>F</kbd> full screen</div>
     </div>
-    <h2>Level</h2>${tiles()}
+    ${tiles()}
     <div class="row"><button class="btn pri" data-act="start">Fly level ${li+1}</button></div>${settingsRow()}`);
 }
 function showPause(){
@@ -375,13 +453,14 @@ function showPause(){
     <div class="row"><button class="btn pri" data-act="resume">Resume</button><button class="btn" data-act="restart">Restart level</button><button class="btn" data-act="menu">Levels</button></div>${settingsRow()}`);
 }
 function showComplete(){
-  mode = 'complete'; const r = lastResult, lastLevel = li === LEVELS.length-1;
+  mode = 'complete'; const r = lastResult, lastLevel = li === LEVELS.length-1, chEnd = !lastLevel && chapterOf(li+1) !== chapterOf(li);
   const sub = r.isBest ? (r.prev ? `New best, ${((r.prev-r.ticks)/120).toFixed(2)}s faster` : 'First landing here') : `Best ${fmt(r.prev)}`;
   let extra = '';
   if (lastLevel && Object.keys(store.bests).length === LEVELS.length){
     const total = LEVELS.reduce((a,_,i) => a+store.bests[i].ticks, 0);
     extra = `<p>All ${LEVELS.length} levels flown. Sum of your best times: <b>${fmt(total)}</b>.</p>`;
   }
+  if (chEnd) extra += `<p>Chapter ${chapterOf(li)+1}: ${CHAPTERS[chapterOf(li)].name} complete. Next up: ${CHAPTERS[chapterOf(li+1)].name}.</p>`;
   openModal(`<h2>${lastLevel ? 'Final level complete' : `Level ${li+1} complete`}</h2><div class="big">${fmt(r.ticks)}</div><div class="sub${r.isBest?' good':''}">${sub}</div>${extra}
     <div class="row">${lastLevel ? `<button class="btn pri" data-act="menu">Levels</button>` : `<button class="btn pri" data-act="next">Next level</button>`}<button class="btn" data-act="restart">Fly again</button>${lastLevel ? '' : `<button class="btn" data-act="menu">Levels</button>`}</div>`);
 }
@@ -389,6 +468,7 @@ function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'
 box.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return; Snd.init(); Snd.click();
   if (t.dataset.l !== undefined){ loadLevel(+t.dataset.l); showMenu(); return; }
+  if (t.dataset.ch){ menuCh = Math.max(0, Math.min(CHAPTERS.length-1, menuCh + +t.dataset.ch)); showMenu(); return; }
   if (t.dataset.fs){ toggleFS(); return; }                      // the label is refreshed by onFsChange
   if (t.dataset.set){
     const k = t.dataset.set;
@@ -529,5 +609,5 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false; });
 
 // ---- Go ----
-li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; setGeom(); applyTheme();
+li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; menuCh = chapterOf(li); setGeom(); applyTheme();
 resize(); buildMain(); buildHazards(); reset(); showMenu(); requestAnimationFrame(frame);
