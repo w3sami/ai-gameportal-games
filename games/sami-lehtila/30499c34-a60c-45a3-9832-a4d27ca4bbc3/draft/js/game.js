@@ -2094,6 +2094,7 @@ const SAVE_FAIL = {
   'bad-path': 'tiedostonimi ei kelpaa',
   'bad-json': 'arvot eivät ole kelvollista JSONia',
   'too-big': 'tiedosto on liian iso',
+  'config-full': 'asetuskansio on täynnä',
   quota: 'pelin tila on täynnä',
   timeout: 'portaali ei vastannut',
   refused: 'portaali kieltäytyi',
