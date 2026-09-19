@@ -1,0 +1,197 @@
+/* Kortti ja säätöpaneeli ovat ainoat DOM-osat pelin päällä: kaikki muu
+   piirretään kankaalle. #hud ei ota osumia, jotta ohjaussauva saa kosketukset
+   kortin ja paneelin ulkopuolelta. */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: #04060d;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #e9edff;
+  touch-action: none;
+  -webkit-user-select: none; user-select: none;
+}
+
+#wrap { position: fixed; inset: 0; display: grid; place-items: center; }
+canvas { display: block; touch-action: none; cursor: none; }
+
+#hud {
+  position: fixed; inset: 0; pointer-events: none;
+  display: grid; place-items: center; padding: 14px;
+}
+
+#card {
+  pointer-events: auto;
+  background: rgba(8, 13, 30, .9);
+  border: 1px solid rgba(120, 160, 255, .26);
+  border-radius: 18px;
+  padding: 22px 24px 20px;
+  width: min(420px, 100%);
+  max-height: 94%;
+  overflow: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .6);
+}
+#card.hidden { display: none; }
+
+h1 { margin: 0 0 4px; font-size: clamp(22px, 7vmin, 30px); letter-spacing: .04em; }
+h1 span { color: #ffd479; }
+p { margin: 7px 0; font-size: clamp(12px, 3.3vmin, 13.5px); line-height: 1.6; color: #a9b6dd; }
+.big { font-size: clamp(30px, 10vmin, 40px); font-weight: 700; color: #ffd479; margin: 8px 0 0; }
+.hint { color: #7f8cb5; }
+.good { color: #6fe3ff; }
+
+kbd {
+  background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.16);
+  border-radius: 5px; padding: 1px 6px; font-size: .85em; font-family: inherit;
+}
+
+.btn {
+  font: inherit; font-weight: 600;
+  margin-top: 14px; padding: 11px 26px;
+  color: #08101f; background: #ffd479;
+  border: 0; border-radius: 11px; cursor: pointer;
+}
+.btn:active { transform: translateY(1px); }
+.btn.sm { margin: 0; padding: 8px 14px; font-size: 13px; }
+.btn.ghost {
+  color: #e9edff; background: rgba(255,255,255,.07);
+  border: 1px solid rgba(120,160,255,.3);
+}
+.btn:disabled { opacity: .5; cursor: default; }
+
+.lnk {
+  font: inherit; font-size: inherit; color: #6fe3ff;
+  background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer;
+}
+
+/* ---- säätöpaneeli: pelin oma, ei riipu debug-pluginista ----
+   Oikeaan reunaan jätetään vapaa kaista, josta paneelin saa rullattua ilman
+   että sormi osuu liukuriin. Liukurit itse ottavat kosketuksen kokonaan
+   (touch-action: none), joten veto niiden päällä säätää eikä vieritä. */
+#panel {
+  pointer-events: auto;
+  position: fixed; top: 10px; right: 10px;
+  width: min(296px, calc(100vw - 20px));
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 40px 16px 16px;
+  border-radius: 14px;
+  background: rgba(8, 13, 30, .94);
+  border: 1px solid rgba(120, 160, 255, .28);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
+  font-size: 12px;
+}
+#panel.hidden { display: none; }
+
+/* vierityskaistan merkki: pisteviiva oikeassa reunassa, ei ota osumia */
+#panel::after {
+  content: '';
+  position: absolute; top: 12px; right: 15px; bottom: 12px; width: 7px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(120,160,255,.38) 0 5px,
+    rgba(120,160,255,0) 5px 12px
+  );
+  pointer-events: none;
+}
+
+#panel h2 {
+  margin: 0 0 10px; font-size: 12px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase; color: #8a97be;
+}
+#panel .row { margin-bottom: 11px; }
+#panel .row label {
+  display: flex; justify-content: space-between; gap: 8px;
+  color: #a9b6dd; margin-bottom: 4px;
+}
+#panel .row label b { color: #ffd479; font-variant-numeric: tabular-nums; }
+#panel input[type=range] {
+  width: 100%; accent-color: #ffd479; margin: 0;
+  touch-action: none;                 /* veto liukurilla säätää, ei vieritä */
+}
+#panel .seg { display: flex; gap: 6px; }
+#panel .seg button {
+  flex: 1; font: inherit; font-size: 12px; padding: 8px 0;
+  color: #a9b6dd; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(120,160,255,.26); border-radius: 9px; cursor: pointer;
+}
+#panel .seg button.on { color: #08101f; background: #6fe3ff; border-color: #6fe3ff; font-weight: 600; }
+/* Säätöryhmät. <details> hoitaa auki ja kiinni ilman omaa koodia. */
+#panel .grp { margin-bottom: 9px; border: 1px solid rgba(120,160,255,.18); border-radius: 10px; }
+#panel .grp > summary {
+  cursor: pointer; list-style: none; padding: 8px 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: #8a97be; user-select: none;
+}
+#panel .grp > summary::-webkit-details-marker { display: none; }
+#panel .grp > summary::before { content: '\25b8  '; color: #6fe3ff; }
+#panel .grp[open] > summary::before { content: '\25be  '; }
+#panel .grp[open] > summary { border-bottom: 1px solid rgba(120,160,255,.14); }
+#panel .grp .body { padding: 10px 10px 0; }
+#panel .grp .row:last-child { margin-bottom: 10px; }
+
+#panel .foot { display: flex; gap: 6px; margin-top: 12px; }
+#panel .foot button { flex: 1; margin: 0; }
+
+#panel .io { border-top: 1px solid rgba(120,160,255,.18); padding-top: 12px; margin-top: 4px; }
+#panel textarea {
+  width: 100%; height: 84px;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #e9edff; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(120,160,255,.28); border-radius: 9px;
+  padding: 8px; resize: vertical;
+  touch-action: auto;
+  -webkit-user-select: text; user-select: text;
+}
+#panel textarea:focus { outline: none; border-color: rgba(111,227,255,.6); }
+#panel .note { min-height: 14px; margin: 6px 0 0; font-size: 11px; color: #6fe3ff; }
+
+/* ---- tulostaulu ---- */
+.lb {
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid rgba(120,160,255,.18);
+  text-align: left;
+}
+.lb-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.lb-h b { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #a9b6dd; }
+.lb-sub { font-size: 11.5px; color: #6c789e; }
+.lb-note { margin: 8px 0 0; font-size: 12px; color: #7f8cb5; }
+.lb-note.good { color: #6fe3ff; }
+.lb-foot { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; font-size: 12px; color: #8a97be; }
+
+.lbrows { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.lbrow {
+  display: grid; grid-template-columns: 24px 1fr auto;
+  align-items: center; gap: 8px;
+  padding: 6px 9px; border-radius: 8px;
+  background: rgba(255,255,255,.045);
+  border: 1px solid transparent;
+  font-size: 13px;
+}
+.lbrow.top { background: rgba(255,212,121,.1); border-color: rgba(255,212,121,.3); }
+.lbrow.me { border-color: rgba(111,227,255,.55); }
+.lbrow .r { color: #6c789e; font-variant-numeric: tabular-nums; }
+.lbrow .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lbrow .t { font-weight: 600; color: #ffd479; font-variant-numeric: tabular-nums; }
+.lbrow .t .cl { color: #6fe3ff; font-weight: 400; margin-left: 5px; }
+
+.lb-form { display: flex; gap: 8px; }
+.lb-form input {
+  flex: 1; min-width: 0;
+  font: inherit; font-size: 13px;
+  padding: 8px 10px; border-radius: 9px;
+  color: #e9edff; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(120,160,255,.28);
+  touch-action: auto;
+  -webkit-user-select: text; user-select: text;
+}
+.lb-form input:focus { outline: none; border-color: rgba(111,227,255,.6); }
