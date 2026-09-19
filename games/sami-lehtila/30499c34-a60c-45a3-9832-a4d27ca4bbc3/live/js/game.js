@@ -46,6 +46,9 @@ const FLEET_COUNT = 3, FLEET_PRICE = 1000;                 // kolmen auton erä
 const CLEAN_BONUS = 100;                                   // nolla kolaria / nolla yliajoa
 const ENTER_Y = H * 0.15;                                  // mihin sisääntulo pysähtyy
 const HORN_R = 150;                                        // kuinka kauas tööttäys kuuluu
+const SQ_FALL = 0.4, SQ_WAIT = 0.3, SQ_RISE = 0.7;         // yliajon vaiheet
+const SQ_DUR = SQ_FALL + SQ_WAIT + SQ_RISE;
+const GRAVE_MAX = 10;
 
 let levelIndex = 0, level = LEVELS[0];
 let GATE = level.gate, WALLS = [], PADS = [];
@@ -196,7 +199,7 @@ function tone(freq, dur, opts) {
   o.start(t0); o.stop(t0 + dur + 0.02);
 }
 
-function noise(dur, gain, from, to) {
+function noise(dur, gain, from, to, delay) {
   const a = audio(); if (!a) return;
   const n = Math.floor(a.sampleRate * dur);
   const buf = a.createBuffer(1, n, a.sampleRate);
@@ -204,7 +207,7 @@ function noise(dur, gain, from, to) {
   for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
   const src = a.createBufferSource(); src.buffer = buf;
   const f = a.createBiquadFilter(); f.type = 'lowpass';
-  const t0 = a.currentTime;
+  const t0 = a.currentTime + (delay || 0);
   f.frequency.setValueAtTime(from, t0);
   f.frequency.exponentialRampToValueAtTime(to, t0 + dur);
   const g = a.createGain(); g.gain.setValueAtTime(gain, t0);
@@ -273,9 +276,17 @@ const sfx = {
     tone(494, 0.26, { type: 'square', gain: 0.08 });
     tone(330, 0.20, { type: 'square', gain: 0.07, delay: 0.24 });
   },
+  /** Yliajo: nujahdus ja pahvinen läsähdys lattiaan. */
   squish() {
-    tone(150, 0.22, { type: 'sine', gain: 0.16, to: 55 });
-    noise(0.2, 0.18, 900, 120);
+    tone(150, 0.20, { type: 'sine', gain: 0.16, to: 55 });
+    noise(0.18, 0.18, 900, 120);
+    tone(95, 0.14, { type: 'square', gain: 0.09, to: 42, delay: 0.16 });
+    noise(0.12, 0.12, 400, 90, 0.16);
+  },
+  /** Hautakivi nousee maasta: kivi raapii ja jyrisee. */
+  stone() {
+    noise(0.55, 0.09, 260, 80);
+    tone(62, 0.6, { type: 'sine', gain: 0.09, to: 120 });
   },
   pay() {
     tone(660, 0.10, { type: 'triangle', gain: 0.16 });
@@ -328,7 +339,7 @@ const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, graves, wreck, bounces, titleT, cut,
+    msg, msgT, bits, lowWarn, graves, squishes, wreck, bounces, titleT, cut,
     enterT, goT, levelMoney0, hornFx, levelDeaths;
 
 const stars = [];
@@ -363,7 +374,7 @@ function loadLevel(i) {
   served = {};
   for (const p of numbered()) served[p.id] = false;
   gateOpen = false;
-  graves = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
+  graves = []; squishes = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
   msg = ''; msgT = 0; titleT = 0; goT = 0;
   job = null;
   levelMoney0 = money;
@@ -439,7 +450,10 @@ function nextJobAfter(deliveredId) {
 function newJob(from, to, delay) {
   const p = padById(from);
   const left = p.x + 20, right = p.x + p.w - 20;
-  const taken = e => graves.some(g => g.pad === from && Math.abs(g.x - e) < 26);
+  // kesken oleva yliajo varaa paikkansa jo ennen kuin kivi on pystyssä
+  const taken = e =>
+    graves.some(g => g.pad === from && Math.abs(g.x - e) < 26) ||
+    squishes.some(s => s.pad === from && Math.abs(s.x - e) < 26);
   let x;
   if (taken(left) && !taken(right)) x = right;
   else if (taken(right) && !taken(left)) x = left;
@@ -646,10 +660,12 @@ function onLanded(pad, softness) {
   if (job.phase === 'wait' && pad.id === job.from && job.shown) {
     const b = taxiBox(taxi);
     if (job.x > b.x - 6 && job.x < b.x + b.w + 6) {
-      if (graves.length < 10) graves.push({ pad: pad.id, x: job.x, kind: job.kind });
+      if (graves.length + squishes.length < GRAVE_MAX) {
+        squishes.push({ pad: pad.id, x: job.x, kind: job.kind, walk: job.walk, t: 0, rang: false });
+      }
       say('Hups.', 1.8);
       sfx.squish();
-      newJob(job.from, job.to, 1.8);
+      newJob(job.from, job.to, SQ_DUR + 0.4);
     }
   }
 }
@@ -701,6 +717,21 @@ function jobStep(dt) {
   job.walk += dt * (job.moving ? 9 : 3);
 }
 
+/* Yliajo etenee omassa tahdissaan: tyyppi litistyy jalkoihinsa kuin kaatuva
+   pahvikuva, häipyy, ja sitten hautakivi nousee maasta. Kivi kirjataan
+   pysyväksi vasta kun animaatio on ohi. */
+function stepSquish(dt) {
+  for (let i = squishes.length - 1; i >= 0; i--) {
+    const s = squishes[i];
+    s.t += dt;
+    if (!s.rang && s.t >= SQ_FALL + SQ_WAIT) { s.rang = true; sfx.stone(); }
+    if (s.t >= SQ_DUR) {
+      graves.push({ pad: s.pad, x: s.x, kind: s.kind });
+      squishes.splice(i, 1);
+    }
+  }
+}
+
 const fareNow = () => job && job.phase === 'aboard'
   ? P.fare + Math.round(P.tip * Math.max(0, 1 - job.t / P.tipTime))
   : 0;
@@ -724,6 +755,7 @@ function movePads() {
     if (taxi.landed === p) { taxi.x += dx; taxi.y += dy; }
     if (job && job.from === p.id && job.phase === 'wait') job.x += dx;
     for (const g of graves) if (g.pad === p.id) g.x += dx;
+    for (const s of squishes) if (s.pad === p.id) s.x += dx;
   }
 }
 
@@ -734,6 +766,7 @@ function updateEnter(dt) {
   if (titleT > 0) titleT -= dt;
   if (hornFx > 0) hornFx -= dt;
   stepBits(dt);
+  stepSquish(dt);
   movePads();
 
   const d = ENTER_Y - taxi.y;
@@ -759,6 +792,7 @@ function update(dt) {
   if (goT > 0) goT -= dt;
   if (hornFx > 0) hornFx -= dt;
   stepBits(dt);
+  stepSquish(dt);
   movePads();
   if (level.update) level.update(dt, api());
 
@@ -910,7 +944,7 @@ function stepBits(dt) {
 function startCut(nextIndex) {
   const nxt = LEVELS[nextIndex];
   const earned = Math.round(money - levelMoney0);
-  const runs = graves.length;
+  const runs = graves.length + squishes.length;
   const cleanDrive = levelDeaths === 0, cleanPads = runs === 0;
   const bonus = (cleanDrive ? CLEAN_BONUS : 0) + (cleanPads ? CLEAN_BONUS : 0);
   money += bonus;
@@ -1103,11 +1137,9 @@ function drawAlien(kind, x, groundY, phase, walking, waving, alpha) {
   ctx.restore();
 }
 
-function drawGrave(g) {
-  const p = padById(g.pad);
-  if (!p) return;
+function drawGraveAt(x, y, kind) {
   ctx.save();
-  ctx.translate(g.x, p.y);
+  ctx.translate(x, y);
   ctx.fillStyle = '#6b7488';
   ctx.beginPath();
   ctx.moveTo(-9, 0);
@@ -1121,9 +1153,48 @@ function drawGrave(g) {
   ctx.moveTo(0, -17); ctx.lineTo(0, -6);
   ctx.moveTo(-4.5, -13); ctx.lineTo(4.5, -13);
   ctx.stroke();
-  ctx.fillStyle = ALIENS[g.kind % ALIENS.length].c;
+  ctx.fillStyle = ALIENS[kind % ALIENS.length].c;
   ctx.globalAlpha = 0.7;
   ctx.beginPath(); ctx.arc(11, -3, 2.6, 0, 6.3); ctx.fill();
+  ctx.restore();
+}
+
+function drawGrave(g) {
+  const p = padById(g.pad);
+  if (p) drawGraveAt(g.x, p.y, g.kind);
+}
+
+/* Yliajon kolme vaihetta: litistyminen jalkoihin, häipyminen, kiven nousu.
+   Kivi liukuu ylös alustan pinnan takaa, joten clip pitää maanalaisen osan
+   piilossa. */
+function drawSquish(s) {
+  const p = padById(s.pad);
+  if (!p) return;
+
+  if (s.t < SQ_FALL + SQ_WAIT) {
+    const f = clamp(s.t / SQ_FALL, 0, 1);
+    const e = 1 - Math.pow(1 - f, 3);
+    const alpha = s.t > SQ_FALL ? clamp(1 - (s.t - SQ_FALL) / SQ_WAIT, 0, 1) : 1;
+    ctx.save();
+    ctx.translate(s.x, p.y);
+    ctx.scale(1 + e * 0.55, 1 - e * 0.94);
+    drawAlien(s.kind, 0, 0, s.walk, false, false, alpha);
+    ctx.restore();
+    if (s.t < SQ_FALL) return;
+    // litistynyt jäänne haipuu pinnalle
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.8;
+    ctx.fillStyle = ALIENS[s.kind % ALIENS.length].c;
+    ctx.beginPath(); ctx.ellipse(s.x, p.y - 2, 16, 3, 0, 0, 6.3); ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  const r = clamp((s.t - SQ_FALL - SQ_WAIT) / SQ_RISE, 0, 1);
+  const e = 1 - Math.pow(1 - r, 2);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(s.x - 20, p.y - 46, 40, 46); ctx.clip();
+  drawGraveAt(s.x, p.y + (1 - e) * 26, s.kind);
   ctx.restore();
 }
 
@@ -1486,6 +1557,7 @@ function draw(v) {
   drawGate();
   for (const p of PADS) drawPad(p);
   for (const gr of graves) drawGrave(gr);
+  for (const s of squishes) drawSquish(s);
   drawPassenger();
   drawTaxi(v);
   drawHorn();
