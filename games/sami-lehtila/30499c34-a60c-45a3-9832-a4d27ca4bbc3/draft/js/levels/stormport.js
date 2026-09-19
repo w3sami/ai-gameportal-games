@@ -73,6 +73,15 @@ function shape() {
    kolarin jälkeen kasvoille osuisi edellisen puuskan häntä. */
 const calmAt = () => { const f = shape(); return f.pad + f.span + WIND.lag; };
 
+/* Suuntasinin vaihe. Puuska osuu aina oman aikaikkunansa keskelle, ja uusi
+   taksi aloittaa ensimmäisen ikkunan jälkeen — sini käännetään niin että juuri
+   se puuska osuu kierroksen pohjalle. Ensimmäinen puuska puhaltaa siis aina
+   täysillä vasemmalle, ja koska vasemmalla on avovettä, bensalautta lähtee heti
+   liikkeelle sinne missä sille on tilaa. Oletusarvoilla (kaksi puuskaa
+   kierrokselle) vaihe on nolla eikä kuvio muutu lainkaan; vasta puuskien
+   lukumäärän säätäminen kääntäisi ilman tätä ensimmäisen puuskan oikealle. */
+const phaseOf = f => WIND.swing * 0.75 - f.slot * 1.5;
+
 /* Puuskien väliin jäävä henkäily. Kaksi eri mittaista siniä, jotta kuvio ei
    toistu puuskan tahdissa: yhteensä ±0,17. Taksi ei sitä juuri tunne, mutta
    tuulipussi ja koukut heiluvat, joten kenttä ei näytä kuolleelta silloinkaan
@@ -101,7 +110,7 @@ function windAt(time) {
     else if (q < f.ramp + f.hold) env = 1;
     else if (q < f.span) env = 1 - smooth((q - f.ramp - f.hold) / f.ramp);
   }
-  const v = Math.sin(time / WIND.swing * TAU) * GUST * env * amp + breath(time);
+  const v = Math.sin((time + phaseOf(f)) / WIND.swing * TAU) * GUST * env * amp + breath(time);
   return { dir: v < 0 ? -1 : 1, s: Math.min(1, Math.abs(v)) };
 }
 
@@ -133,8 +142,16 @@ const PEND = HOOK_BOX.map((box, i) => {
 
 /* Bensalautta on kelluva ja painava: jousi vetää sitä kohti tuulen osoittamaa
    paikkaa, mutta vaimennus pitää liikkeen hitaana, joten se on aina pari
-   sekuntia jäljessä. Poikkeama ±52 px mahtuu kuiluun (186…534) reilusti. */
-const BARGE = { amp: 52, stiff: 3.0, damp: 2.6, bob: 3.5 };
+   sekuntia jäljessä.
+
+   Matka on eri mittainen eri suuntiin, koska kuilukin on: oikealla laituri
+   (QUAY alkaa 534) pysäyttää lautan, vasemmalla on avovettä ruudun reunaan
+   asti. Vasemmalle saa siis ajautua yli kaksinkertaisesti — mutta ei tööttiä ja
+   laskutelinettä ohjaavien nappien alle (x 30…158), joten siellä on kova raja
+   105 px, jolloin lautan keula pysähtyy 162:een. Jousi jää muutenkin noin 83 %
+   tavoitteesta, joten rajat eivät normaaliarvoilla tule vastaan — ne ovat
+   varmistus sen varalle että tuulen säätimet vedetään ääriasentoihin. */
+const BARGE = { left: 120, right: 52, min: -105, max: 80, stiff: 3.0, damp: 2.6, bob: 3.5 };
 
 const storm = {
   t: 0, seen: 0, flash: 0, bolt: null, taxi: null,
@@ -214,8 +231,11 @@ function stormUpdate(dt, api) {
      amplitudi on nolla, joten bx menee sellaisenaan perille — ja koska alustalla
      on move-kenttä, movePads siirtää taksin ja asiakkaan mukana. */
   const b = storm.barge;
-  b.v += ((vSeen * BARGE.amp - b.x) * BARGE.stiff - b.v * BARGE.damp) * dt;
+  const reach = vSeen < 0 ? BARGE.left : BARGE.right;
+  b.v += ((vSeen * reach - b.x) * BARGE.stiff - b.v * BARGE.damp) * dt;
   b.x += b.v * dt;
+  if (b.x < BARGE.min) { b.x = BARGE.min; if (b.v < 0) b.v = 0; }
+  else if (b.x > BARGE.max) { b.x = BARGE.max; if (b.v > 0) b.v = 0; }
   const fuel = api.pads.find(p => p.fuel);
   if (fuel) {
     fuel.bx = b.home + b.x;
