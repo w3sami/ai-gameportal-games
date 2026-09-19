@@ -9,16 +9,19 @@
  * on käyty, katon luukku aukeaa.
  *
  * Kenttä on kiinteä 720x1040 ja kangas sovitetaan siihen (contain), joten
- * geometria on sama joka näytöllä. Ohjaussauva ja debug-paneeli tulevat
- * portaalin plugineista vN-aliaksella.
+ * geometria on sama joka näytöllä. Ohjaussauva tulee portaalin pluginista.
+ *
+ * Säätöpaneeli (ratas alakulmassa) on pelin oma eikä debug-pluginin: se on
+ * auki kenellä tahansa ja arvot jäävät selaimen muistiin, jotta mekaniikkoja
+ * voi hioa puhelimella ilman että kentän läpi joutuu ajamaan uusiksi.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
-import { createDebugPanel } from 'https://plugins.game.bigbools.fi/debug-panel/v1/index.js';
 import { mountBoard } from './leaderboard.js';
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const card = document.getElementById('card');
+const panelEl = document.getElementById('panel');
 
 /* ------------------------------------------------------------------ kenttä */
 const W = 720, H = 1040;
@@ -46,17 +49,48 @@ const padById = id => PADS.find(p => p.id === id);
 const TW = 54, TH = 28, GEAR = 14;                         // taksin runko ja telineen pituus
 const FUEL_MAX = 100;
 
-/* Säädettävät kertoimet yhdessä paikassa, jotta debug-paneeli pääsee niihin
-   kiinni. Nämä ovat ne numerot joita vuoro 1 on olemassa hiomaan. */
-const P = {
+/* Säädettävät kertoimet yhdessä paikassa. Oletukset pidetään erikseen, jotta
+   paneelin "oletukset" osaa palata niihin. */
+const DEFAULTS = {
   grav: 250, thrust: 680,
   landVY: 135, landVX: 75, softVY: 50,
   burn: 12, refuel: 36, price: 0.9,
   fare: 45, tip: 55, tipTime: 22, exitBonus: 40,
+  stick: 1,
 };
+const P = Object.assign({}, DEFAULTS);
+let gearSide = 'right';                                    // kummalla puolella telinenappi on
 
-const GEAR_BOX = { x: W - 158, y: H - 172, w: 128, h: 96 };
-const MUTE_BOX = { x: 24, y: H - 74, w: 46, h: 46 };
+const STORE = 'spacetaxi.tune';
+function loadTune() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (!raw) return;
+    for (const k of Object.keys(DEFAULTS)) if (typeof raw[k] === 'number') P[k] = raw[k];
+    if (raw.gearSide === 'left' || raw.gearSide === 'right') gearSide = raw.gearSide;
+  } catch (e) {}
+}
+function saveTune() {
+  try {
+    const out = { gearSide };
+    for (const k of Object.keys(DEFAULTS)) out[k] = P[k];
+    localStorage.setItem(STORE, JSON.stringify(out));
+  } catch (e) {}
+}
+loadTune();
+
+/* Napit: iso telinenappi valitulla puolella, pikkunapit vastakkaisessa
+   alakulmassa. Ohjaussauva jättää nämä kaikki rauhaan. */
+let GEAR_BOX, MUTE_BOX, COG_BOX;
+function layout() {
+  const right = gearSide === 'right';
+  GEAR_BOX = { x: right ? W - 158 : 30, y: H - 172, w: 128, h: 96 };
+  const bx = right ? 24 : W - 70;
+  const cx = right ? 78 : W - 124;
+  MUTE_BOX = { x: bx, y: H - 74, w: 46, h: 46 };
+  COG_BOX = { x: cx, y: H - 74, w: 46, h: 46 };
+}
+layout();
 
 /* ------------------------------------------------------------------ kangas */
 let scale = 1, dpr = 1, lastVW = -1, lastVH = -1;
@@ -258,7 +292,7 @@ function toLogical(clientX, clientY) {
   return { x: (clientX - r.left) / r.width * W, y: (clientY - r.top) / r.height * H };
 }
 const inBox = (p, b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
-const onButtons = p => inBox(p, GEAR_BOX) || inBox(p, MUTE_BOX);
+const onButtons = p => inBox(p, GEAR_BOX) || inBox(p, MUTE_BOX) || inBox(p, COG_BOX);
 
 function toggleGear() {
   if (state !== PLAY || dead) return;
@@ -277,7 +311,8 @@ function toggleMute() {
 canvas.addEventListener('pointerdown', e => {
   const p = toLogical(e.clientX, e.clientY);
   if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
-  if (inBox(p, MUTE_BOX)) toggleMute();
+  if (inBox(p, MUTE_BOX)) { toggleMute(); return; }
+  if (inBox(p, COG_BOX)) togglePanel();
 });
 
 addEventListener('keydown', e => {
@@ -295,6 +330,7 @@ const stick = createJoystick({
   radius: 96,
   ignore: onButtons,
 });
+stick.gain = P.stick;
 
 /** Ohjausvektori: näppäimet voittavat kun ne ovat pohjassa, muuten sauva. */
 function inputVector() {
@@ -729,6 +765,15 @@ function drawHud() {
   }
 }
 
+function smallBox(b, draw) {
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = '#9fb0d8'; ctx.fillStyle = '#9fb0d8';
+  ctx.lineWidth = 2; ctx.lineCap = 'round';
+  draw(b.x + b.w / 2, b.y + b.h / 2);
+  ctx.restore();
+}
+
 function drawButtons() {
   const b = GEAR_BOX, down = taxi && taxi.gear > 0.5;
   ctx.save();
@@ -760,25 +805,33 @@ function drawButtons() {
   ctx.fillText(down ? 'TELINE ALHAALLA' : 'TELINE YLHÄÄLLÄ', cx, b.y + b.h - 14);
   ctx.restore();
 
-  const m = MUTE_BOX, mx = m.x + m.w / 2, my = m.y + m.h / 2;
-  ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.strokeStyle = '#9fb0d8'; ctx.fillStyle = '#9fb0d8';
-  ctx.lineWidth = 2; ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(mx - 9, my - 4); ctx.lineTo(mx - 5, my - 4); ctx.lineTo(mx - 1, my - 8);
-  ctx.lineTo(mx - 1, my + 8); ctx.lineTo(mx - 5, my + 4); ctx.lineTo(mx - 9, my + 4);
-  ctx.closePath(); ctx.fill();
-  if (muted) {
+  smallBox(MUTE_BOX, (mx, my) => {
     ctx.beginPath();
-    ctx.moveTo(mx + 3, my - 5); ctx.lineTo(mx + 11, my + 5);
-    ctx.moveTo(mx + 11, my - 5); ctx.lineTo(mx + 3, my + 5);
-    ctx.stroke();
-  } else {
-    ctx.beginPath(); ctx.arc(mx - 1, my, 7, -0.9, 0.9); ctx.stroke();
-    ctx.beginPath(); ctx.arc(mx - 1, my, 12, -0.8, 0.8); ctx.stroke();
-  }
-  ctx.restore();
+    ctx.moveTo(mx - 9, my - 4); ctx.lineTo(mx - 5, my - 4); ctx.lineTo(mx - 1, my - 8);
+    ctx.lineTo(mx - 1, my + 8); ctx.lineTo(mx - 5, my + 4); ctx.lineTo(mx - 9, my + 4);
+    ctx.closePath(); ctx.fill();
+    if (muted) {
+      ctx.beginPath();
+      ctx.moveTo(mx + 3, my - 5); ctx.lineTo(mx + 11, my + 5);
+      ctx.moveTo(mx + 11, my - 5); ctx.lineTo(mx + 3, my + 5);
+      ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(mx - 1, my, 7, -0.9, 0.9); ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx - 1, my, 12, -0.8, 0.8); ctx.stroke();
+    }
+  });
+
+  // ratas: avaa säätöpaneelin
+  smallBox(COG_BOX, (mx, my) => {
+    ctx.beginPath(); ctx.arc(mx, my, 6, 0, 6.3); ctx.stroke();
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(mx + Math.cos(a) * 8, my + Math.sin(a) * 8);
+      ctx.lineTo(mx + Math.cos(a) * 12, my + Math.sin(a) * 12);
+      ctx.stroke();
+    }
+  });
 }
 
 function draw(v) {
@@ -820,6 +873,90 @@ function draw(v) {
   drawButtons();
 }
 
+/* ------------------------------------------------------------ säätöpaneeli
+   Pelin oma, ei debug-pluginin: auki rattaasta, arvot jäävät selaimeen. */
+const SLIDERS = [
+  { key: 'grav', label: 'painovoima', min: 80, max: 500, step: 10 },
+  { key: 'thrust', label: 'työntö', min: 300, max: 1200, step: 20 },
+  { key: 'landVY', label: 'lasku vy max', min: 40, max: 300, step: 5 },
+  { key: 'landVX', label: 'lasku vx max', min: 10, max: 200, step: 5 },
+  { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
+  { key: 'refuel', label: 'tankkaus / s', min: 5, max: 80, step: 1 },
+  { key: 'price', label: 'bensan hinta', min: 0, max: 3, step: 0.1 },
+  { key: 'fare', label: 'perusmaksu', min: 0, max: 150, step: 5 },
+  { key: 'tip', label: 'tippi max', min: 0, max: 150, step: 5 },
+  { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
+  { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
+];
+
+function buildPanel() {
+  panelEl.replaceChildren();
+  const h = document.createElement('h2');
+  h.textContent = 'säädöt';
+  panelEl.append(h);
+
+  // telinenapin puoli
+  const sideRow = document.createElement('div');
+  sideRow.className = 'row';
+  const sideLab = document.createElement('label');
+  sideLab.append(document.createTextNode('telinenappi'));
+  const seg = document.createElement('div');
+  seg.className = 'seg';
+  const mk = (side, text) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = text;
+    if (gearSide === side) b.className = 'on';
+    b.addEventListener('click', () => {
+      gearSide = side; layout(); saveTune(); buildPanel();
+    });
+    return b;
+  };
+  seg.append(mk('left', 'vasen'), mk('right', 'oikea'));
+  sideRow.append(sideLab, seg);
+  panelEl.append(sideRow);
+
+  for (const s of SLIDERS) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const lab = document.createElement('label');
+    const val = document.createElement('b');
+    val.textContent = P[s.key];
+    lab.append(document.createTextNode(s.label), val);
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = s.min; input.max = s.max; input.step = s.step;
+    input.value = P[s.key];
+    input.addEventListener('input', () => {
+      P[s.key] = +input.value;
+      val.textContent = input.value;
+      if (s.key === 'stick') stick.gain = P.stick;
+      saveTune();
+    });
+    row.append(lab, input);
+    panelEl.append(row);
+  }
+
+  const foot = document.createElement('div');
+  foot.className = 'foot';
+  const reset = document.createElement('button');
+  reset.type = 'button'; reset.className = 'btn sm ghost'; reset.textContent = 'oletukset';
+  reset.addEventListener('click', () => {
+    Object.assign(P, DEFAULTS);
+    stick.gain = P.stick;
+    saveTune(); buildPanel();
+  });
+  const close = document.createElement('button');
+  close.type = 'button'; close.className = 'btn sm'; close.textContent = 'sulje';
+  close.addEventListener('click', togglePanel);
+  foot.append(reset, close);
+  panelEl.append(foot);
+}
+
+function togglePanel() {
+  if (panelEl.classList.contains('hidden')) { buildPanel(); panelEl.classList.remove('hidden'); }
+  else panelEl.classList.add('hidden');
+}
+
 /* ------------------------------------------------------------------ kortti */
 function showCard(html, pending, meta) {
   card.classList.remove('hidden');
@@ -828,6 +965,8 @@ function showCard(html, pending, meta) {
   if (lb) mountBoard(lb, pending || 0, meta);
   const go = card.querySelector('#go');
   if (go) go.addEventListener('click', start);
+  const set = card.querySelector('#set');
+  if (set) set.addEventListener('click', togglePanel);
 }
 
 const menuCard = () => `
@@ -839,10 +978,11 @@ const menuCard = () => `
   <p>Keskellä tankataan omalla rahalla. Kun molemmilla alustoilla on käyty,
      katon luukku aukeaa.</p>
   <p class="hint">Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>
-     Nappi oikeassa alakulmassa laskee telineen.<br>
+     Iso nappi laskee telineen, ratas avaa säädöt (myös kesken pelin).<br>
      Näppäimillä <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot; äänet <kbd>M</kbd></p>
   <div id="lb"></div>
-  <button id="go" class="btn">Aja vuoro</button>`;
+  <button id="go" class="btn">Aja vuoro</button>
+  <button id="set" class="btn ghost">Säädöt</button>`;
 
 const overWon = () => `
   <h1>Vuoro <span>selvä</span></h1>
@@ -850,7 +990,8 @@ const overWon = () => `
   <p>Molemmat keikat ajettu ja ulos katosta — ${Math.round(runT)} sekuntia,
      ${Math.max(0, lives)} taksia ehjänä.</p>
   <div id="lb"></div>
-  <button id="go" class="btn">Uusi vuoro</button>`;
+  <button id="go" class="btn">Uusi vuoro</button>
+  <button id="set" class="btn ghost">Säädöt</button>`;
 
 const overLost = () => `
   <h1>Taksit <span>loppu</span></h1>
@@ -859,7 +1000,8 @@ const overLost = () => `
      Keikkoja tehtynä ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2.</p>
   <p class="hint">Pehmeä lasku maksaa itsensä takaisin tippinä.</p>
   <div id="lb"></div>
-  <button id="go" class="btn">Uusi vuoro</button>`;
+  <button id="go" class="btn">Uusi vuoro</button>
+  <button id="set" class="btn ghost">Säädöt</button>`;
 
 function start() {
   newRun();
@@ -869,24 +1011,6 @@ function start() {
 
 newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
-
-/* ------------------------------------------------------------ debug-paneeli */
-createDebugPanel({ title: 'space taxi' })
-  .slider({ label: 'painovoima', min: 80, max: 500, step: 10, value: P.grav, onInput: v => { P.grav = v; } })
-  .slider({ label: 'työntö', min: 300, max: 1200, step: 20, value: P.thrust, onInput: v => { P.thrust = v; } })
-  .slider({ label: 'lasku vy max', min: 40, max: 300, step: 5, value: P.landVY, onInput: v => { P.landVY = v; } })
-  .slider({ label: 'lasku vx max', min: 10, max: 200, step: 5, value: P.landVX, onInput: v => { P.landVX = v; } })
-  .slider({ label: 'kulutus/s', min: 0, max: 40, step: 1, value: P.burn, onInput: v => { P.burn = v; } })
-  .slider({ label: 'tipin kesto s', min: 5, max: 60, step: 1, value: P.tipTime, onInput: v => { P.tipTime = v; } })
-  .slider({ label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05, value: stick.gain, onInput: v => { stick.gain = v; } })
-  .readout('vx / vy', () => taxi ? Math.round(taxi.vx) + ' / ' + Math.round(taxi.vy) : '–')
-  .readout('teline', () => taxi ? taxi.gear.toFixed(2) : '–')
-  .readout('alusta', () => taxi && taxi.landed ? (taxi.landed.fuel ? 'tankki' : taxi.landed.id) : 'ilmassa')
-  .readout('polttoaine', () => Math.round(fuel))
-  .readout('saldo', () => Math.round(money) + ' €')
-  .readout('keikka', () => job ? job.phase + ' ' + job.from + '→' + job.to : '–')
-  .button('tankki täyteen', () => { fuel = FUEL_MAX; })
-  .button('avaa luukku', () => { served[1] = served[2] = true; gateOpen = true; });
 
 /* -------------------------------------------------------------------- loop */
 let last = performance.now();
