@@ -17,10 +17,14 @@
 
 const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
 
+/** Missä kohtaa pompun ja kolarin väliä ollaan: 0 pompun alussa, 1 rajalla. */
+export function bounceNorm(ratio, P) {
+  return clamp01((ratio - P.bounceFrom) / Math.max(0.01, 1 - P.bounceFrom));
+}
+
 /** Kuinka monta pikseliä taksi nostetaan tällä osumalla. */
 export function liftFor(ratio, P) {
-  const norm = clamp01((ratio - P.bounceFrom) / Math.max(0.01, 1 - P.bounceFrom));
-  return P.bounceLift * (0.5 + 0.5 * norm);
+  return P.bounceLift * (0.5 + 0.5 * bounceNorm(ratio, P));
 }
 
 /** Seuraavan osuman nopeus: jäljelle jäänyt vauhti + pudotus nostosta. */
