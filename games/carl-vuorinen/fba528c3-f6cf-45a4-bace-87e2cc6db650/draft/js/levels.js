@@ -190,7 +190,7 @@ const LEVELS = [
    foliage:[{x:1900,y:1950,r:300,ry:110,seed:450,tone:1}, {x:3900,y:1930,r:320,ry:110,seed:451,tone:0}, {x:2800,y:770,r:350,ry:120,seed:452,tone:1}, {x:4700,y:780,r:300,ry:110,seed:453,tone:2}, {x:1100,y:220,r:420,ry:120,seed:454,tone:0}],
    hazards:[{x:2000,y:1950,tx:2005,ty:2190,w:60,seed:455,kind:'branch'}, {x:3000,y:1950,tx:3005,ty:2200,w:60,seed:456,kind:'branch'}, {x:4000,y:1950,tx:4005,ty:2190,w:60,seed:457,kind:'branch'}, {x:3800,y:800,tx:3805,ty:1060,w:60,seed:458,kind:'branch'}, {x:2700,y:800,tx:2705,ty:1050,w:60,seed:459,kind:'branch'}, {x:1600,y:800,tx:1605,ty:1040,w:60,seed:460,kind:'branch'}],
    walls:[],
-   pads:{start:{x:560,y:2840,w:120,h:100},target:{x:1040,y:610,w:120,h:100}}},
+   pads:{start:{x:560,y:2840,w:120,h:100},target:{x:1040,y:610,w:120,h:100,base:'bark'}}},
   {name:'Rockface', theme:'jungle', w:5400, h:2600, groundY:1900, canopyY:900,
    rockZones:[{x:2750,y:1400,r:1000,ry:1500,seed:465}],
    rooms:[{x:900,y:1500,rx:800,ry:700,wob:0.08,seed:461}, {x:2450,y:1250,rx:460,ry:340,wob:0.1,seed:462}, {x:3150,y:1750,rx:440,ry:340,wob:0.1,seed:463}, {x:4600,y:1500,rx:750,ry:700,wob:0.08,seed:464}],
@@ -212,14 +212,14 @@ const LEVELS = [
    hazards:[{x:600,y:480,tx:605,ty:740,w:60,seed:494,kind:'branch'}, {x:2400,y:2360,tx:2405,ty:2620,w:60,seed:495,kind:'branch'}],
    walls:[],
    pads:{start:{x:500,y:1490,w:120,h:100},target:{x:4040,y:1240,w:120,h:100}}},
-  {name:'Windfall', theme:'jungle', w:6400, h:2000, groundY:1400, canopyY:600,
+  {name:'Windfall', theme:'jungle', w:6400, h:2000, groundY:1150, canopyY:900,
    rooms:[{x:500,y:1100,rx:450,ry:400,wob:0.08,seed:501}, {x:6000,y:1100,rx:400,ry:400,wob:0.08,seed:502}, {x:3200,y:1050,rx:520,ry:480,wob:0.08,seed:505}],
    corridors:[{pts:[[900, 1000], [1600, 850], [2400, 1050], [2800, 950]],w:330}, {pts:[[3600, 950], [4000, 1000], [4800, 800], [5600, 1000]],w:330}],
    rocks:[],
    spikes:[],
    trunks:[{x:-70,y:4000,tx:-70,ty:-200,w:300,taper:0,seed:-690}, {x:210,y:4000,tx:210,ty:-200,w:260,taper:0,seed:1270}, {x:6470,y:4000,tx:6470,ty:-200,w:300,taper:0,seed:45090}, {x:6190,y:4000,tx:6190,ty:-200,w:260,taper:0,seed:43130}, {x:3200,y:1600,tx:3200,ty:900,w:260,taper:0.15,seed:503,broken:true}, {x:2000,y:1500,tx:2000,ty:1220,w:120,taper:0.2,seed:506,broken:true}, {x:4400,y:1450,tx:4400,ty:1180,w:120,taper:0.2,seed:504,broken:true}],
    foliage:[{x:3200,y:560,r:400,ry:110,seed:507,tone:0}],
-   hazards:[{x:900,y:835,tx:905,ty:945,w:50,seed:600,kind:'branch'}, {x:1076,y:797,tx:1081,ty:907,w:50,seed:601,kind:'branch'}, {x:1252,y:759,tx:1257,ty:869,w:50,seed:602,kind:'branch'}, {x:1428,y:721,tx:1433,ty:831,w:50,seed:603,kind:'branch'}, {x:1603,y:685,tx:1608,ty:824,w:50,seed:604,kind:'branch'}, {x:1778,y:729,tx:1783,ty:868,w:50,seed:605,kind:'branch'}, {x:1953,y:773,tx:1958,ty:912,w:50,seed:606,kind:'branch'}, {x:2127,y:816,tx:2132,ty:955,w:50,seed:607,kind:'branch'}, {x:2302,y:860,tx:2307,ty:999,w:50,seed:608,kind:'branch'}, {x:2477,y:865,tx:2482,ty:991,w:50,seed:609,kind:'branch'}, {x:2651,y:822,tx:2656,ty:948,w:50,seed:610,kind:'branch'}, {x:2823,y:770,tx:2828,ty:890,w:50,seed:611,kind:'branch'}, {x:2975,y:675,tx:2980,ty:795,w:50,seed:612,kind:'branch'}, {x:3128,y:579,tx:3133,ty:699,w:50,seed:613,kind:'branch'}, {x:3280,y:585,tx:3285,ty:703,w:50,seed:614,kind:'branch'}, {x:3433,y:681,tx:3438,ty:799,w:50,seed:615,kind:'branch'}, {x:3586,y:776,tx:3591,ty:894,w:50,seed:616,kind:'branch'}, {x:3762,y:805,tx:3767,ty:921,w:50,seed:617,kind:'branch'}, {x:3941,y:827,tx:3946,ty:943,w:50,seed:618,kind:'branch'}, {x:4117,y:805,tx:4122,ty:920,w:50,seed:619,kind:'branch'}, {x:4291,y:762,tx:4296,ty:877,w:50,seed:620,kind:'branch'}, {x:4466,y:718,tx:4471,ty:833,w:50,seed:621,kind:'branch'}, {x:4640,y:674,tx:4645,ty:789,w:50,seed:622,kind:'branch'}, {x:4815,y:638,tx:4820,ty:800,w:50,seed:623,kind:'branch'}, {x:4990,y:682,tx:4995,ty:844,w:50,seed:624,kind:'branch'}, {x:5164,y:726,tx:5169,ty:888,w:50,seed:625,kind:'branch'}, {x:5339,y:769,tx:5344,ty:931,w:50,seed:626,kind:'branch'}, {x:5514,y:813,tx:5519,ty:975,w:50,seed:627,kind:'branch'}],
+   hazards:[{x:900,y:785,tx:905,ty:945,w:50,seed:600,kind:'branch'}, {x:1076,y:747,tx:1081,ty:907,w:50,seed:601,kind:'branch'}, {x:1252,y:709,tx:1257,ty:869,w:50,seed:602,kind:'branch'}, {x:1428,y:671,tx:1433,ty:831,w:50,seed:603,kind:'branch'}, {x:1603,y:635,tx:1608,ty:824,w:50,seed:604,kind:'branch'}, {x:1778,y:679,tx:1783,ty:868,w:50,seed:605,kind:'branch'}, {x:1953,y:723,tx:1958,ty:912,w:50,seed:606,kind:'branch'}, {x:2127,y:766,tx:2132,ty:955,w:50,seed:607,kind:'branch'}, {x:2302,y:810,tx:2307,ty:999,w:50,seed:608,kind:'branch'}, {x:2477,y:815,tx:2482,ty:991,w:50,seed:609,kind:'branch'}, {x:2651,y:772,tx:2656,ty:948,w:50,seed:610,kind:'branch'}, {x:2823,y:659,tx:2828,ty:890,w:50,seed:611,kind:'branch'}, {x:2975,y:557,tx:2980,ty:795,w:50,seed:612,kind:'branch'}, {x:3128,y:514,tx:3133,ty:699,w:50,seed:613,kind:'branch'}, {x:3280,y:515,tx:3285,ty:703,w:50,seed:614,kind:'branch'}, {x:3433,y:560,tx:3438,ty:799,w:50,seed:615,kind:'branch'}, {x:3586,y:668,tx:3591,ty:894,w:50,seed:616,kind:'branch'}, {x:3762,y:755,tx:3767,ty:921,w:50,seed:617,kind:'branch'}, {x:3941,y:777,tx:3946,ty:943,w:50,seed:618,kind:'branch'}, {x:4117,y:755,tx:4122,ty:920,w:50,seed:619,kind:'branch'}, {x:4291,y:712,tx:4296,ty:877,w:50,seed:620,kind:'branch'}, {x:4466,y:668,tx:4471,ty:833,w:50,seed:621,kind:'branch'}, {x:4640,y:624,tx:4645,ty:789,w:50,seed:622,kind:'branch'}, {x:4815,y:588,tx:4820,ty:800,w:50,seed:623,kind:'branch'}, {x:4990,y:632,tx:4995,ty:844,w:50,seed:624,kind:'branch'}, {x:5164,y:676,tx:5169,ty:888,w:50,seed:625,kind:'branch'}, {x:5339,y:719,tx:5344,ty:931,w:50,seed:626,kind:'branch'}, {x:5514,y:763,tx:5519,ty:975,w:50,seed:627,kind:'branch'}],
    walls:[],
    pads:{start:{x:440,y:1440,w:120,h:100},target:{x:5850,y:1440,w:120,h:100}}},
   {name:'Bluff', theme:'jungle', w:6000, h:3600, groundY:3000, canopyY:2100,
@@ -285,18 +285,34 @@ function trunkPts(t){
   if (t.broken){ const hw = t.w/2*(1-taper), jut = t.broken === true ? 1 : t.broken; for (let k=1;k<4;k++){ const o = hw*(1-k/2), j = (r()*0.5+0.1)*t.w*(k%2 ? 0.6 : 0.15)*jut; cap.push([bx+nx*o+ux*j, by+ny*o+uy*j]); } }
   return {pts:a.concat(cap, b.reverse()), ax, ay, bx, by, w:t.w, taper};
 }
+// Branches: like spikes but wooden. The axis kinks at every joint, the width tapers only a little and the end is blunt,
+// so a branch reads as a limb rather than a dripstone. Used for spikes and hazards with kind:'branch'.
+function branchPts(s){
+  const r = rng(s.seed*4409+11), dx = s.tx-s.x, dy = s.ty-s.y, len = Math.hypot(dx,dy), ux = dx/len, uy = dy/len, nx = -uy, ny = ux;
+  const n = 2+Math.floor(len/120), a = [], b = []; let off = 0;
+  for (let i=0;i<=n;i++){
+    const t = i/n; if (i > 0 && i < n) off += (r()-0.5)*s.w*0.9;                       // the kink: each joint shifts the axis sideways
+    const hw = s.w/2*(1-t*0.35)*(0.86+r()*0.28), px = s.x+ux*len*t+nx*off, py = s.y+uy*len*t+ny*off;
+    a.push([px+nx*hw, py+ny*hw]); b.push([px-nx*hw, py-ny*hw]);
+  }
+  const ex = s.tx+nx*off, ey = s.ty+ny*off, hw = s.w/2*0.65, j = s.w*0.18;             // blunt, slightly splintered end
+  return a.concat([[ex+nx*hw*0.5+ux*j, ey+ny*hw*0.5+uy*j], [ex-nx*hw*0.3+ux*j*0.5, ey-ny*hw*0.3+uy*j*0.5]], b.reverse());
+}
 function setGeom(){
   PADS = Object.values(L.pads);
   const rooms = L.rooms.map(r => polyPts(r.x,r.y,r.rx,r.ry,r.wob,r.seed));
+  // jungle pads get a pocket of open space around them, so the clearance rect never carves a notch into a wall.
+  // The pocket bottoms out at the pad's top, so nothing dips beside the block. (Cave levels keep their geometry as is.)
+  const padPockets = L.theme === 'jungle' ? PADS.map((p,i) => polyPts(p.x+p.w/2, p.y-160, p.w/2+150, 160, 0.05, 977+i)) : [];
   G = {
     rooms,
-    caves: rooms.concat(...L.corridors.map(corridorBlobs)),
+    caves: rooms.concat(...L.corridors.map(corridorBlobs), padPockets),
     rocks: L.rocks.map(r => ({cx:r.x,cy:r.y,r:r.r,pts:polyPts(r.x,r.y,r.r,r.ry||r.r,r.wob||0.18,r.seed)})).concat((L.spikes||[]).filter(sp => sp.kind !== 'branch').map(sp => ({pts:spikePts(sp)}))),
     trunks: (L.trunks||[]).map(trunkPts),
-    branches: (L.spikes||[]).filter(sp => sp.kind === 'branch').map(sp => ({pts:spikePts(sp), ax:sp.x, ay:sp.y, bx:sp.tx, by:sp.ty, w:sp.w, taper:0.85})),
+    branches: (L.spikes||[]).filter(sp => sp.kind === 'branch').map(sp => ({pts:branchPts(sp), ax:sp.x, ay:sp.y, bx:sp.tx, by:sp.ty, w:sp.w, taper:0.35})),
     foliage: (L.foliage||[]).map(f => ({x:f.x, y:f.y, r:f.r, ry:f.ry||f.r, tone:f.tone||0, seed:f.seed, pts:polyPts(f.x,f.y,f.r,f.ry||f.r,0.22,f.seed)})),
     clear: PADS.map(p => [p.x-34, p.y-190, p.w+68, 190]),
-    blocks: PADS.map(p => [p.x-14, p.y, p.w+28, p.h||100]),
+    blocks: PADS.map(p => [p.x-14, p.y, p.w+28, p.h||100]), blockKinds: PADS.map(p => p.base||'rock'),   // pad.base: 'rock' (default) | 'bark' | 'leaf'
   };
   ZONES = Object.entries(L.pads).map(([key,p]) => ({key, x:p.x-14, w:p.w+28, y:p.y}));   // landing zones span the whole block top
 }
