@@ -217,14 +217,26 @@ const STORE = 'spacetaxi.tune';
 const TUNE_FILE = 'config/tune.json';
 let localStamp = 0;                            // milloin selaimen kopio tallennettiin
 
-const tuneJSON = () => JSON.stringify(tuneAll(localStamp), null, 1);
+/* Yksi askel kumottavaa: viritys sellaisena kuin se oli ennen viimeisintä
+   muutosta. Kuva otetaan säätimeen tartuttaessa eikä jokaisesta input-
+   tapahtumasta, joten kumoa peruu koko raahauksen eikä yhtä pikseliä siitä.
 
-function applyTune(src) {
-  let raw = src;
-  if (typeof src === 'string') {
-    try { raw = JSON.parse(src); } catch (e) { return false; }
-  }
-  return applyAll(raw);
+   savedBody on se mikä peliin on viimeksi viety. Näiden ero kertoo onko
+   tallennettavaa, ja siitä tallenna-nappi tietää milloin se on päällä: nappi
+   joka on aina päällä ei kerro mitään. Aikaleima jätetään pois, koska se
+   muuttuu joka kerta eikä kerro muutoksesta mitään. */
+let undoSnap = null;
+let savedBody = '';
+const tuneBody = () => JSON.stringify(tuneAll(1));
+const tuneDirty = () => tuneBody() !== savedBody;
+function snapUndo() { undoSnap = tuneBody(); }
+
+/** Palauttaa virityksen tasan kuvan mukaiseksi. Kertoimet tyhjennetään ensin,
+    koska applyAll kirjoittaa vain ne jotka kuvassa ovat — ilman tätä kumoaminen
+    jättäisi juuri lisätyn kertoimen henkiin. */
+function applyBody(body) {
+  for (const k of Object.keys(MULS)) delete MULS[k];
+  try { return applyAll(JSON.parse(body)); } catch (e) { return false; }
 }
 function loadTune() {
   try {
@@ -245,9 +257,21 @@ function loadGameTune() {
   fetch(TUNE_FILE, { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
     .then(j => {
-      if (!j || (+j.stamp || 0) < localStamp) return;
-      applyAll(j);
+      if (!j) return;
+      if ((+j.stamp || 0) < localStamp) {
+        /* Paikalliset kokeilut ovat uudempia ja jäävät voimaan. Se mitä pelissä
+           on pitää silti tietää, jotta tallenna-nappi osaa olla päällä: käydään
+           tiedosto läpi kerran ja palataan omiin arvoihin. */
+        const mine = tuneBody();
+        applyBody(JSON.stringify(j));
+        savedBody = tuneBody();
+        applyBody(mine);
+        return;
+      }
+      applyBody(JSON.stringify(j));
       localStamp = +j.stamp || 0;
+      savedBody = tuneBody();
+      undoSnap = null;
       if (!panelEl.classList.contains('hidden')) buildPanel();
     })
     .catch(() => {});
@@ -289,6 +313,7 @@ function resetLevelTune() {
 
 layout();
 loadTune();
+savedBody = tuneBody();                        // kunnes tiedosto kertoo paremmin
 loadGameTune();
 
 /* ------------------------------------------------------------------ kangas */
@@ -2261,6 +2286,8 @@ function buildPanel() {
   const sideRow = el('div', 'row');
   const seg = el('div', 'seg');
   const mk = (side, text) => pbutton(gearSide === side ? 'on' : null, text, () => {
+    if (gearSide === side) return;
+    snapUndo();
     gearSide = side; layout(); saveTune(); buildPanel();
   });
   seg.append(mk('left', 'vasen'), mk('right', 'oikea'));
@@ -2279,6 +2306,10 @@ function buildPanel() {
     input.type = 'range';
     input.min = s.min; input.max = s.max; input.step = s.step;
     input.value = get();
+    /* Kumottava kuva otetaan ennen kuin arvo ehtii muuttua: molemmat tapahtumat
+       tulevat inputia aiemmin, hiirellä ja näppäimistöllä. */
+    input.addEventListener('pointerdown', snapUndo);
+    input.addEventListener('keydown', snapUndo);
     input.addEventListener('input', () => {
       set(+input.value);
       val.textContent = input.value;
@@ -2291,7 +2322,7 @@ function buildPanel() {
     BASE[s.key] = v;
     applyMul();
     saveTune();
-    if (ta && ta !== document.activeElement) ta.value = tuneJSON();
+    syncFoot();
   });
 
   /* Kentän arvot tallentuvat samalla tavalla kuin globaalit. Tämä puuttui
@@ -2299,8 +2330,16 @@ function buildPanel() {
      katosivat. */
   const levelChanged = () => {
     saveTune();
-    if (ta && ta !== document.activeElement) ta.value = tuneJSON();
+    syncFoot();
   };
+
+  /* Kumoa ja tallenna kertovat samaa asiaa: onko virityksessä jotain jota ei
+     ole viety peliin. Molemmat ovat harmaana kun ei ole. Funktiona eikä
+     nuolena, jotta säädinrivit saavat kutsua tätä ennen kuin napit on tehty. */
+  function syncFoot() {
+    undoBtn.disabled = !undoSnap;
+    saveBtn.disabled = !tuneDirty();
+  }
 
   /* <details> hoitaa auki ja kiinni itse, joten laatikoille ei tarvita omaa
      tilaa eikä kuuntelijaa. */
@@ -2354,87 +2393,88 @@ function buildPanel() {
   const rest = SLIDERS.filter(s => !used.has(s.key));
   if (rest.length) panelEl.append(group('muut', false, rest.map(globalRow)));
 
-  const foot = el('div', 'foot');
-  foot.append(
-    pbutton('btn sm ghost', 'oletukset', () => {
-      Object.assign(BASE, DEFAULTS);
-      resetLevelTune();                        // myös kenttien omat arvot
-      gearSide = DEFAULT_SIDE; layout();
-      applyMul();
-      saveTune();
-      panelNote = 'oletukset palautettu';
-      buildPanel();
-    }),
-    pbutton('btn sm', 'sulje', togglePanel),
-  );
-  panelEl.append(foot);
-
-  const io = el('div', 'row io');
-  io.append(el('label', null, 'arvot JSONina'));
-  const ta = el('textarea');
-  ta.spellcheck = false;
-  ta.autocapitalize = 'off';
-  ta.autocomplete = 'off';
-  ta.value = tuneJSON();
   const note = el('p', 'note', panelNote);
   panelNote = '';
 
-  const ioButtons = el('div', 'foot');
-  ioButtons.append(
-    pbutton('btn sm ghost', 'kopioi', () => {
-      ta.value = tuneJSON();
-      ta.focus(); ta.select();
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(ta.value)
-          .then(() => { note.textContent = 'kopioitu leikepöydälle'; })
-          .catch(() => { note.textContent = 'valittu — kopioi käsin'; });
-      } else note.textContent = 'valittu — kopioi käsin';
-    }),
-    pbutton('btn sm', 'tuo', () => {
-      if (applyTune(ta.value)) {
-        saveTune();
-        panelNote = 'arvot otettu käyttöön';
-        buildPanel();
-      } else note.textContent = 'ei kelvollista JSONia';
-    }),
-    /* Tallennus peliin kirjoittaa arvot pelin omaan tiedostoon draftissa,
-       jolloin julkaisu vie ne mukanaan oletuksiksi kaikille. Peli ei kirjoita
-       itse — se pyytää emosivulta, joka on kirjautunut ja jonka palvelinpuoli
-       tarkistaa omistajuuden. Siksi tämä toimii vain tekijän omalla sivulla,
-       ja siksi nappi kertoo sen ääneen kun se ei ole käytettävissä. */
-    pbutton('btn sm', 'tallenna peliin', () => {
-      const save = portalApi.savePortalFile;
-      if (typeof save !== 'function' || !portal.canWrite) {
-        note.textContent = 'tallennus peliin onnistuu vain omalta pelisivulta';
-        return;
-      }
-      note.textContent = 'tallennetaan…';
-      const body = JSON.stringify(tuneAll(Date.now()), null, 1);
-      /* Plugin ratkaisee lupauksen aina ja kertoo syyn tuloksessa — se ei heitä
-         eikä hylkää, joten tässä ei ole catchia eikä sellaista tarvita. */
-      Promise.resolve(save(TUNE_FILE, body)).then(res => {
-        if (res && res.saved) {
-          localStamp = JSON.parse(body).stamp;
-          try { localStorage.setItem(STORE, body); } catch (e) {}
-          note.textContent = 'tallennettu peliin — julkaise niin arvot lähtevät mukaan';
-        } else {
-          const why = (res && res.reason) || 'failed';
-          note.textContent = 'tallennus ei onnistunut: ' + (SAVE_FAIL[why] || why);
-        }
-      });
-    }),
-  );
-  io.append(ta, ioButtons, note);
+  /* Oletukset pyyhkii koko virityksen kerralla, joten se kysyy ensin. Kysymys
+     on napissa itsessään eikä selaimen confirm-ikkunassa: peli ajetaan
+     iframessa jossa omat ikkunat eivät ole varma asia. Varmistus raukeaa
+     itsestään, joten vahingossa painettu nappi ei jää odottamaan. */
+  let armed = null;
+  const disarm = () => {
+    clearTimeout(armed); armed = null;
+    resetBtn.textContent = 'oletukset';
+    resetBtn.classList.add('ghost');
+  };
+  const resetBtn = pbutton('btn sm ghost', 'oletukset', () => {
+    if (!armed) {
+      resetBtn.textContent = 'varmista';
+      resetBtn.classList.remove('ghost');
+      note.textContent = 'palauttaa kaikki arvot — paina uudestaan';
+      armed = setTimeout(disarm, 5000);
+      return;
+    }
+    disarm();
+    snapUndo();
+    Object.assign(BASE, DEFAULTS);
+    resetLevelTune();                          // myös kenttien omat arvot
+    gearSide = DEFAULT_SIDE; layout();
+    applyMul();
+    saveTune();
+    panelNote = 'oletukset palautettu — kumoa palauttaa entiset';
+    buildPanel();
+  });
 
-  io.append(pbutton('btn sm ghost', 'aja pompputesti', () => {
-    import('./bouncetest.js')
-      .then(m => {
-        const bad = m.run(P);
-        note.textContent = bad ? `${bad} riviä haarukan ulkopuolella (konsoli)` : 'pomput 1–3, kaikki ok';
-      })
-      .catch(() => { note.textContent = 'testiä ei saatu ladattua'; });
-  }));
-  panelEl.append(io);
+  /* Yksi askel taaksepäin, ei enempää: kuva on otettu viimeisimmän muutoksen
+     alusta. Kumoamisen jälkeen ei ole enää mitään kumottavaa, joten nappi
+     harmenee itsestään. */
+  const undoBtn = pbutton('btn sm ghost', 'kumoa', () => {
+    if (!undoSnap) return;
+    const back = undoSnap;
+    undoSnap = null;
+    if (!applyBody(back)) { note.textContent = 'kumoaminen ei onnistunut'; return; }
+    saveTune();
+    panelNote = 'viimeisin muutos kumottu';
+    buildPanel();
+  });
+
+  /* Tallennus peliin kirjoittaa arvot pelin omaan tiedostoon draftissa,
+     jolloin julkaisu vie ne mukanaan oletuksiksi kaikille. Peli ei kirjoita
+     itse — se pyytää emosivulta, joka on kirjautunut ja jonka palvelinpuoli
+     tarkistaa omistajuuden. Siksi tämä toimii vain tekijän omalla sivulla,
+     ja siksi nappi kertoo sen ääneen kun se ei ole käytettävissä. */
+  const saveBtn = pbutton('btn sm', 'tallenna peliin', () => {
+    const save = portalApi.savePortalFile;
+    if (typeof save !== 'function' || !portal.canWrite) {
+      note.textContent = 'tallennus peliin onnistuu vain omalta pelisivulta';
+      return;
+    }
+    note.textContent = 'tallennetaan…';
+    const body = JSON.stringify(tuneAll(Date.now()), null, 1);
+    /* Plugin ratkaisee lupauksen aina ja kertoo syyn tuloksessa — se ei heitä
+       eikä hylkää, joten tässä ei ole catchia eikä sellaista tarvita. */
+    Promise.resolve(save(TUNE_FILE, body)).then(res => {
+      if (res && res.saved) {
+        localStamp = JSON.parse(body).stamp;
+        try { localStorage.setItem(STORE, body); } catch (e) {}
+        savedBody = tuneBody();                // nyt pelissä on tämä
+        undoSnap = null;
+        syncFoot();
+        note.textContent = 'tallennettu peliin — julkaise niin arvot lähtevät mukaan';
+      } else {
+        const why = (res && res.reason) || 'failed';
+        note.textContent = 'tallennus ei onnistunut: ' + (SAVE_FAIL[why] || why);
+      }
+    });
+  });
+
+  /* Alimmalle riville ne kaksi jotka lopettavat työn, sulje viimeisenä. */
+  const acts = el('div', 'foot');
+  acts.append(resetBtn, undoBtn);
+  const ends = el('div', 'foot');
+  ends.append(saveBtn, pbutton('btn sm', 'sulje', togglePanel));
+  panelEl.append(acts, ends, note);
+  syncFoot();
 }
 
 function panelOpen() {
