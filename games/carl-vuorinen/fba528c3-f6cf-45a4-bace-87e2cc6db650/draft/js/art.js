@@ -144,7 +144,8 @@ function jungleTerrain(x, r, pal, X, Y, W, H){
   bands(L.groundY !== undefined ? L.groundY : L.h*0.8, L.canopyY !== undefined ? L.canopyY : L.h*0.3, X, L.plateau ? L.plateau.x0 : X+W);
   // plateau: a second band pair from x0 rightwards, for a high jungle beyond a cliff. The seam should sit inside a rock zone.
   if (L.plateau){ const p = L.plateau; x.fillStyle = pal.rock; x.fillRect(p.x0, Y, X+W-p.x0, H); bands(p.groundY, p.canopyY, p.x0, X+W); }
-  // rock zones: cave rock painted over the bands, exactly the cave theme's fill. Cut rooms inside read as cave.
+  // rock zones: cave rock painted over the bands, exactly the cave theme's fill. Cut rooms inside read as cave, and game.js
+  // crossfades the backdrop to the cave theme's while the rocket is inside one.
   for (const z of L.rockZones||[]){ poly(x, polyPts(z.x, z.y, z.r, z.ry||z.r, z.wob||0.12, z.seed)); x.fillStyle = pal.rock; x.fill(); }
 }
 const DEPTH_F = [0.98,0.96,0.94,0.92,0.90,0.88];
