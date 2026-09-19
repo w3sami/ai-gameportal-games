@@ -102,5 +102,31 @@
     },
     "createdAt": "2026-09-19T16:12:02.205Z",
     "updatedAt": "2026-09-19T16:12:02.205Z"
+  },
+  {
+    "name": "portal-events",
+    "description": "Se mitä pelin ympärillä oleva sivu tietää, annettuna pelille: portaalin kieli (fi/en) ja debug-tila. Peli on kehyksessä omassa nimessään eikä näe portaalin osoiteriviä tai evästeitä, joten ilman tätä se joutuu arvaamaan. onPortal-käsittelijä ajetaan kerran nykyisellä arvolla ja sen jälkeen jokaisesta muutoksesta, joten yksi koodipolku riittää. portal.ready ratkeaa aina — myös portaalia vasten joka ei tunne tätä pluginia — eikä odotus jää koskaan päälle. Suoraan avatussa pelissä arvot ovat arvauksia: selaimen kieli, ja debugille ?debug tai localStorage.debug === \"1\", sama sääntö jota debug-panel soveltaa omin päin.",
+    "author": "Sami Lehtilä",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "versions": [
+      {
+        "version": "1.0.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 5900
+          }
+        ],
+        "sizeBytes": 5900,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-19T16:39:55.099Z"
+      }
+    ],
+    "aliases": {
+      "v1": "1.0.0"
+    },
+    "createdAt": "2026-09-19T16:39:55.099Z",
+    "updatedAt": "2026-09-19T16:39:55.099Z"
   }
 ]
