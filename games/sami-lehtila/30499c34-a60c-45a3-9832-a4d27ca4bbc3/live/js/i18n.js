@@ -208,6 +208,21 @@ const STR = {
   },
 };
 
+/* Puhesyntetisaattori taivuttaa numeromerkin itse ja arvaa suomessa väärin:
+   "Alusta 1" luetaan "alusta yhden". Puheeseen menevä alustan numero
+   kirjoitetaan siksi sanana. Alustoja on kentässä viisi, mutta lista yltää
+   kymmeneen siltä varalta että niitä joskus on enemmän. */
+const NUM = {
+  fi: ['nolla', 'yksi', 'kaksi', 'kolme', 'neljä', 'viisi', 'kuusi', 'seitsemän', 'kahdeksan', 'yhdeksän', 'kymmenen'],
+  en: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'],
+};
+
+/** Luku sanana puhetta varten; listan ulkopuolinen jää numeroksi. */
+export function numWord(n, lang) {
+  const words = NUM[lang || LANG] || NUM.en;
+  return words[n] !== undefined ? words[n] : String(n);
+}
+
 /** t('ui.pads', {d: 2, t: 5}) — kolmas parametri pakottaa kielen. */
 export function t(key, params, lang) {
   const dict = STR[lang || LANG] || STR.en;

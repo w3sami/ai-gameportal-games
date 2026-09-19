@@ -46,7 +46,7 @@ import { createCut } from './cutscene.js';
 import { createHyperspace } from './hyperspace.js';
 import { LEVELS } from './levels.js';
 import { mountBoard } from './leaderboard.js';
-import { LANG, setLang, t, voiceFor } from './i18n.js';
+import { LANG, setLang, t, voiceFor, numWord } from './i18n.js';
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -431,9 +431,10 @@ function speakLine(key, kind, params) {
   const lang = v ? 'fi' : 'en';
   /* Kaneetti ratkaistaan samalla kielellä kuin lause, ettei suomalainen
      "vähän äkkiä" päädy englanninkielisen lauseen perään. */
-  const p = params && params.tail
-    ? Object.assign({}, params, { tail: t(params.tail, null, lang) })
-    : params;
+  let p = params;
+  if (p && p.tail) p = Object.assign({}, p, { tail: t(p.tail, null, lang) });
+  /* Alustan numero sanana: numeromerkin syntetisaattori taivuttaisi itse. */
+  if (p && p.n !== undefined) p = Object.assign({}, p, { n: numWord(p.n, lang) });
   const text = t('say.' + key, p, lang);
   try {
     const u = new SpeechSynthesisUtterance(text);
