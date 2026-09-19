@@ -10,11 +10,11 @@
  * paikan. Nouto arvotaan vapaasti mille tahansa alustalle, mutta määränpää on
  * aina jokin käymätön alusta — ja jos käymättömiä ei ole, asiakas pyytää ylös.
  *
- * Kolme varoitusta, kolme eri ääntä: matala piippaus vähistä bensoista, korkea
- * lähestymisvaroitus kun teline on alhaalla ja vauhti lähestyy laskurajaa, ja
- * murahtava törmäysvaroitus kun ollaan menossa päin seinää. Alusta varoittaa
- * myös itse: sen valolista vilkkuu punaisen ja sinisen väliä siitä lähtien kun
- * vauhti riittäisi pomppuun, ja tihenee laskurajaa kohti.
+ * Kaksi varoitusääntä: matala piippaus vähistä bensoista ja korkea
+ * lähestymisvaroitus kun teline on alhaalla ja vauhti lähestyy laskurajaa.
+ * Alusta varoittaa myös itse: sen valolista vilkkuu punaisen ja sinisen väliä
+ * siitä lähtien kun vauhti riittäisi pomppuun, ja tihenee laskurajaa kohti.
+ * Seinästä ei varoiteta erikseen — siitä kertoo se että seinä on edessä.
  *
  * Katosta ulos lähtenyt asiakas jatkaa kyydissä seuraavaan kenttään, joten uusi
  * kenttä alkaa jättökeikalla ja hän maksaa vasta perillä. Taksi tulee kenttään
@@ -59,8 +59,6 @@ const SQ_DUR = SQ_FALL + SQ_WAIT + SQ_RISE;
 const GRAVE_MAX = 10;
 const END_CARD_DELAY = 2600;
 const LAND_WARN_FROM = 0.75;               // varoitus jo ennen laskurajaa
-const NEAR_LEAD = 0.4;                     // sekuntia eteenpäin törmäystarkistus
-const NEAR_PAD = 10;                        // kiinteä marginaali sen ympärille
 const PAD_WARN_LEAD = 1.0;                 // sekuntia pudotusta ennen kuin alusta vilkkuu
 const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
 const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
@@ -314,8 +312,6 @@ const sfx = {
   warn() { tone(196, 0.10, { type: 'square', gain: 0.06, to: 165 }); },
   /** Lähestymisvaroitus: nousee ja tihenee sitä mukaa kun laskuraja lähenee. */
   fast(r) { tone(850 + clamp(r, 0, 1.5) * 450, 0.05, { type: 'square', gain: 0.05 }); },
-  /** Törmäysvaroitus: murahtava, selvästi eri ääni kuin kaksi muuta. */
-  near() { tone(330, 0.08, { type: 'sawtooth', gain: 0.07, to: 220 }); },
   buy() {
     tone(330, 0.10, { type: 'square', gain: 0.12 });
     tone(494, 0.12, { type: 'triangle', gain: 0.14, delay: 0.09 });
@@ -366,7 +362,7 @@ const MENU = 0, PLAY = 1, OVER = 2, BUY = 3, CUT = 4, ENTER = 5;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn, fastWarn, nearWarn, padWarn, padBlink,
+    msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
     graves, squishes,
     wreck, bounces, titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
     runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
@@ -639,27 +635,6 @@ function solids() {
 /** Kuinka lähellä laskurajaa ollaan: yli 1 hajottaa taksin. */
 const landRatio = () => Math.max(taxi.vy / P.landVY, Math.abs(taxi.vx) / P.landVX);
 
-/* Ollaanko menossa päin seinää? Laatikkoa venytetään 0,4 sekunnin verran
-   siihen suuntaan mihin ollaan menossa ja sen ympärille jätetään pieni
-   marginaali. Pelkkä etäisyys ei kelpaa mittariksi: Highrisen käytävässä
-   seinä on aina lähellä, ja jatkuva piippaus olisi pelkkää kohinaa. Alustat
-   jätetään pois — niitä kohti mennään tarkoituksella ja niistä varoittaa
-   lähestymisvaroitin. */
-function nearWall() {
-  if (!taxi || taxi.landed) return false;
-  const b = taxiBox(taxi);
-  const dx = taxi.vx * NEAR_LEAD, dy = taxi.vy * NEAR_LEAD;
-  const sweep = {
-    x: Math.min(b.x, b.x + dx) - NEAR_PAD,
-    y: Math.min(b.y, b.y + dy) - NEAR_PAD,
-    w: b.w + Math.abs(dx) + NEAR_PAD * 2,
-    h: b.h + Math.abs(dy) + NEAR_PAD * 2,
-  };
-  const list = gateOpen ? WALLS : WALLS.concat([gateBar()]);
-  for (const r of list) if (hit(sweep, r)) return true;
-  return false;
-}
-
 /* Kolari vie taksin ja kyydissä olleen asiakkaan — syytä ei selitetä, romu
    kertoo sen itse. Kaikki muu kentän tilanne jää koskematta. */
 function crash() {
@@ -840,14 +815,14 @@ function movePads() {
 }
 
 /* ------------------------------------------------------------ varoitukset
-   Kolme eri hätää, kolme eri ääntä ja tahtia:
+   Kaksi hätää, kaksi eri ääntä ja tahtia:
      bensa   — matala piippaus, tihenee tankin tyhjetessä
      lasku   — korkea, alkaa jo 75 %:ssa laskurajasta ja nousee ja tihenee
                sitä mukaa kun raja lähenee; yli mentäessä tiheintä
-     törmäys — murahdus kun 0,4 sekunnin päässä on seinä; pelkkä ääni,
-               sillä alustan oma valo riittää katseelle */
+   Katseelle saman kertoo alustan valolista, joka vilkkuu punaisen ja sinisen
+   väliä pompun rajalta lähtien. */
 function clearWarnings() {
-  lowWarn = 0; fastWarn = 0; nearWarn = 0;
+  lowWarn = 0; fastWarn = 0;
   padWarn = null; padBlink = 0;
 }
 
@@ -885,11 +860,6 @@ function warnings(dt) {
       fastWarn = clamp(0.30 - (r - LAND_WARN_FROM) * 0.5, 0.08, 0.30);
     }
   } else fastWarn = 0;
-
-  if (!dead && nearWall()) {
-    nearWarn -= dt;
-    if (nearWarn <= 0) { sfx.near(); nearWarn = 0.2; }
-  } else nearWarn = 0;
 
   /* Vilkun tahti kertyy vaiheeseen eikä kellonaikaan, jotta se voi kiihtyä
      kesken pudotuksen ilman että väri hyppää. */
