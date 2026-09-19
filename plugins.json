@@ -105,7 +105,7 @@
   },
   {
     "name": "portal-events",
-    "description": "Se mitä pelin ympärillä oleva sivu tietää, annettuna pelille: portaalin kieli (fi/en) ja debug-tila. Peli on kehyksessä omassa nimessään eikä näe portaalin osoiteriviä tai evästeitä, joten ilman tätä se joutuu arvaamaan. onPortal-käsittelijä ajetaan kerran nykyisellä arvolla ja sen jälkeen jokaisesta muutoksesta, joten yksi koodipolku riittää. portal.ready ratkeaa aina — myös portaalia vasten joka ei tunne tätä pluginia — eikä odotus jää koskaan päälle. Suoraan avatussa pelissä arvot ovat arvauksia: selaimen kieli, ja debugille ?debug tai localStorage.debug === \"1\", sama sääntö jota debug-panel soveltaa omin päin.",
+    "description": "Se mitä pelin ympärillä oleva sivu tietää, annettuna pelille, ja molempiin suuntiin: portaalin kieli (fi/en) ja debug-tila. onPortal-käsittelijä ajetaan kerran nykyisellä arvolla ja sen jälkeen jokaisesta muutoksesta, ja setPortal kertoo portaalille mitä pelaaja valitsi pelin sisällä — jolloin kieltä ei ole kahta vaan yksi. Arvo muuttuu vasta kun portaali vahvistaa, joten peli piirtää käsittelijästä. portal.ready ratkeaa aina, myös portaalia vasten joka ei tunne tätä pluginia. Suoraan avatussa pelissä arvot ovat arvauksia: selaimen kieli, ja debugille ?debug tai localStorage.debug === \"1\".",
     "author": "Sami Lehtilä",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
@@ -121,12 +121,24 @@
         "sizeBytes": 5900,
         "entryFile": "index.js",
         "publishedAt": "2026-09-19T16:39:55.099Z"
+      },
+      {
+        "version": "1.1.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 7389
+          }
+        ],
+        "sizeBytes": 7389,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-19T17:15:44.485Z"
       }
     ],
     "aliases": {
-      "v1": "1.0.0"
+      "v1": "1.1.0"
     },
     "createdAt": "2026-09-19T16:39:55.099Z",
-    "updatedAt": "2026-09-19T16:39:55.099Z"
+    "updatedAt": "2026-09-19T17:15:44.485Z"
   }
 ]
