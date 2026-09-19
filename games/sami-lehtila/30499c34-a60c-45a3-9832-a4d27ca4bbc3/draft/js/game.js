@@ -564,6 +564,16 @@ addEventListener('keydown', e => {
   KEY[e.code] = true;
 
   if (!card.classList.contains('hidden')) {
+    /* Ohjaimen tila näkyviin. Selain ei paljasta ohjainta ennen kuin sen nappia
+       on painettu, joten "ei ohjainta" ja "ohjain jota ei ole vielä koskettu"
+       näyttävät täältä samalta — siksi teksti on kehotus eikä vikailmoitus.
+       textContent eikä innerHTML: id tulee laitteelta, ei meiltä. */
+    const el = card.querySelector('#padstate');
+    if (el) {
+      const want = gamepad.connected ? t('pad.on', { id: gamepad.id }) : t('pad.none');
+      if (el.textContent !== want) el.textContent = want;
+    }
+
     const click = sel => {
       const b = card.querySelector(sel);
       if (!b) return false;
@@ -1994,6 +2004,7 @@ const menuCard = () => `
   <p>${t('menu.p2')}</p>
   <p>${t('menu.p3', { bonus: CLEAN_BONUS, levels: LEVELS.length, price: TAXI_PRICE, fleet: FLEET_PRICE })}</p>
   <p class="hint">${t('menu.hint')}</p>
+  <p class="hint" id="padstate"></p>
   <div id="lb"></div>
   ${buttons(t('card.play'))}`;
 
