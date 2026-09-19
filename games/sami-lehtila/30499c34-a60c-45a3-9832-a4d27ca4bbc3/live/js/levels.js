@@ -8,15 +8,20 @@
  *
  * Kentän kentät:
  *   name        näkyy HUDissa, aloituksessa ja välianimaatiossa
- *   glow        luukun hehkun väri
+ *   glow        luukun hehkun ja kentän tunnusväri
+ *   sky         taustan gradientti ylhäältä alas, 2–4 väriä; puuttuessa avaruus
+ *   sun         valinnainen {x, y, r, color} — hehkuva kiekko taustalle
  *   gate        {x, w} aukko katossa; kehäseinät peli lisää itse
  *   walls       sisäseinät: {x, y, w, h, win?} — win piirtää ikkunarivit
  *   pads        {id, x, y, w, h, fuel?, move?}
  *               id 0 = tankkaus, muut numeroidut alustat
  *               move {x, y, secs, phase} heiluttaa alustaa; taksi, odottava
  *               asiakas ja hautakivet kulkevat mukana
- *   start       alusta jolta taksi lähtee
+ *   start       alusta jolle taksi palaa kolarin jälkeen
  *   firstFrom   alusta jolle ensimmäinen asiakas ilmestyy
+ *
+ * Kenttä alkaa aina ilmasta: taksi tulee sisään katon luukusta, luukku
+ * sulkeutuu perässä ja peli käynnistyy READY–GO:lla.
  *
  * Koukut (kaikki valinnaisia), api = {P, taxi, pads, walls, t, rand, say}:
  *   init(api)                 kentän alussa
@@ -48,9 +53,11 @@ export const LEVELS = [
   {
     /* Kaksi tornitaloa aivan reunoissa, parvekkeet alustoina. Vasemmalla kaksi
        parveketta ja tankkaus, oikealla kolme. Parvekkeiden väliin jää 248 px
-       lentotilaa, eli käytävässä on varaa korjata mutta ei harhailla. */
+       lentotilaa. Tausta on auringonlasku, jota vasten tornit ovat siluetteja. */
     name: 'Highrise',
-    glow: '#7bf0a0',
+    glow: '#ffb45e',
+    sky: ['#221a4a', '#6d3352', '#c85f34', '#f0a04a'],
+    sun: { x: 360, y: 1000, r: 210, color: '#ffd089' },
     gate: { x: 300, w: 120 },
     start: 1,
     firstFrom: 3,
