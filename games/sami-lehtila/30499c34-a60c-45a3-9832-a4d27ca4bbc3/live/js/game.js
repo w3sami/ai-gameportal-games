@@ -14,7 +14,8 @@
  *
  * Kenttä alkaa aina ilmasta: taksi tulee katon luukusta, jarruttaa paikalleen
  * ja peli käynnistyy READY–GO:lla. Kenttien välissä on kaksivaiheinen
- * välianimaatio (js/cutscene.js).
+ * välianimaatio (js/cutscene.js), jossa näkyy kentän tilinpäätös: kolarit ja
+ * yliajot omine kuvakkeineen, ja kummastakin nollasta 100 euron bonus.
  *
  * Tämä tiedosto on moottori: fysiikka, keikat, piirto ja HUD. Kentät ovat
  * js/levels.js:ssä dataa ja valinnaisia koukkuja, luukun ulkoasu js/gate.js,
@@ -42,8 +43,9 @@ const TW = 54, TH = 28, GEAR = 14;
 const FUEL_MAX = 100;
 const TAXI_PRICE = 500;                                    // yksi uusi taksi
 const FLEET_COUNT = 3, FLEET_PRICE = 1000;                 // kolmen auton erä
-const ENTER_Y = H * 0.30;                                  // mihin sisääntulo pysähtyy
-const HORN_R = 300;                                        // kuinka kauas tööttäys kuuluu
+const CLEAN_BONUS = 100;                                   // nolla kolaria / nolla yliajoa
+const ENTER_Y = H * 0.15;                                  // mihin sisääntulo pysähtyy
+const HORN_R = 150;                                        // kuinka kauas tööttäys kuuluu
 
 let levelIndex = 0, level = LEVELS[0];
 let GATE = level.gate, WALLS = [], PADS = [];
@@ -307,6 +309,12 @@ const sfx = {
     tone(131, 2.4, { type: 'sine', gain: 0.07, to: 262 });
     tone(196, 1.6, { type: 'sine', gain: 0.06, to: 392, delay: 2.6 });
   },
+  /** Puhtaan suorituksen bonus välianimaation alussa. */
+  bonus() {
+    tone(784, 0.10, { type: 'triangle', gain: 0.12, delay: 0.5 });
+    tone(1047, 0.10, { type: 'triangle', gain: 0.12, delay: 0.6 });
+    tone(1319, 0.22, { type: 'triangle', gain: 0.12, delay: 0.7 });
+  },
   win() {
     tone(523, 0.12, { type: 'triangle', gain: 0.15 });
     tone(659, 0.12, { type: 'triangle', gain: 0.15, delay: 0.11 });
@@ -321,7 +329,7 @@ let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, graves, wreck, bounces, titleT, cut,
-    enterT, goT, levelMoney0, hornFx;
+    enterT, goT, levelMoney0, hornFx, levelDeaths;
 
 const stars = [];
 for (let i = 0; i < 70; i++) {
@@ -359,6 +367,7 @@ function loadLevel(i) {
   msg = ''; msgT = 0; titleT = 0; goT = 0;
   job = null;
   levelMoney0 = money;
+  levelDeaths = 0;
   resetTaxi();
   if (level.init) level.init(api());
   const from = level.firstFrom !== undefined ? level.firstFrom : pick(numbered()).id;
@@ -472,8 +481,9 @@ function toggleGear() {
   sfx.gear();
 }
 
-/* Töötti kuuluu 300 pikselin päähän. Jos odottava asiakas kuulee sen, hän
-   säikähtää ja kipittää alustan toiseen laitaan. */
+/* Töötti kuuluu 150 pikselin päähän, eli käytännössä vain kun ollaan jo
+   alustan tuntumassa. Jos odottava asiakas kuulee sen, hän säikähtää ja
+   kipittää alustan toiseen laitaan. */
 function honk() {
   if (state !== PLAY || dead) return;
   sfx.horn();
@@ -568,6 +578,7 @@ function crash(reason) {
   if (dead) return;
   dead = true; deadT = 0;
   lives--;
+  levelDeaths++;
   if (job && job.phase === 'aboard') {
     if (job.to === 'up') gateOpen = false;
     newJob(job.from, job.to, 1.2);           // menetetty kyyti, uusi tyyppi tilalle
@@ -726,10 +737,10 @@ function updateEnter(dt) {
   movePads();
 
   const d = ENTER_Y - taxi.y;
-  taxi.vy = clamp(d * 2.4, 0, 300);
+  taxi.vy = clamp(d * 2.6, 0, 300);
   taxi.y += taxi.vy * dt;
   jetLevel(clamp(1 - taxi.vy / 300, 0.15, 1) * 0.5);
-  if (taxi.y > 120) gateOpen = false;
+  if (taxi.y > 90) gateOpen = false;
 
   if (d < 3 || enterT > 4) {
     taxi.y = ENTER_Y;
@@ -864,9 +875,7 @@ function taxiLost() {
 }
 
 /* Ostetut taksit jatkavat samaa kenttää: käydyt alustat, hautakivet ja
-   odottava asiakas säilyvät, uusi auto vain tulee sisään katon luukusta.
-   Kolmen erä on halvempi per auto, mutta sitoo rahaa joka olisi voinut jäädä
-   tulokseen — siinä on koko valinta. */
+   odottava asiakas säilyvät, uusi auto vain tulee sisään katon luukusta. */
 function buyTaxis(count, price) {
   money -= price;
   lives = count;
@@ -895,9 +904,18 @@ function stepBits(dt) {
   }
 }
 
+/* Kentän tilinpäätös ja välianimaatio. Kolarit ja yliajot ovat kentän omat
+   mittarit, ja kummastakin nollasta maksetaan bonus — puhdas ajo on siis
+   rahanarvoista eikä pelkkä tilasto. */
 function startCut(nextIndex) {
   const nxt = LEVELS[nextIndex];
   const earned = Math.round(money - levelMoney0);
+  const runs = graves.length;
+  const cleanDrive = levelDeaths === 0, cleanPads = runs === 0;
+  const bonus = (cleanDrive ? CLEAN_BONUS : 0) + (cleanPads ? CLEAN_BONUS : 0);
+  money += bonus;
+  if (bonus) sfx.bonus();
+
   cut = createCut({
     W, H, TW, TH, rand,
     upSecs: 3, downSecs: 2.4,
@@ -905,11 +923,18 @@ function startCut(nextIndex) {
     toGlow: nxt.glow || '#6fe3ff',
     name: nxt.name, index: nextIndex, total: LEVELS.length,
     stats: [
-      `${level.name.toUpperCase()} SELVÄ`,
-      `keikat ${numbered().length}`,
-      `kentästä ${earned} €`,
-      `kassa ${Math.round(money)} €`,
-      `taksit ${Math.max(0, lives)}`,
+      { text: `${level.name.toUpperCase()} SELVÄ`, head: true },
+      { text: `keikat ${numbered().length}` },
+      { text: `kentästä ${earned} €` },
+      {
+        icon: 'wreck', good: cleanDrive,
+        text: cleanDrive ? `kolarit 0  +${CLEAN_BONUS} €` : `kolarit ${levelDeaths}`,
+      },
+      {
+        icon: 'grave', good: cleanPads,
+        text: cleanPads ? `yliajot 0  +${CLEAN_BONUS} €` : `yliajot ${runs}`,
+      },
+      { text: `kassa ${Math.round(money)} €` },
     ],
     body: () => taxiShape(TW, TH, false),
   });
@@ -1185,7 +1210,7 @@ function drawTaxi(v) {
   ctx.restore();
 }
 
-/** Tööttäyksen kuuluvuus näkyy renkaana: se on myös 300 px:n mitta. */
+/** Tööttäyksen kuuluvuus näkyy renkaana: se on myös 150 px:n mitta. */
 function drawHorn() {
   if (hornFx <= 0 || !taxi) return;
   const p = 1 - hornFx / 0.55;
@@ -1650,11 +1675,12 @@ const menuCard = () => `
   <p><b>Laskuteline pitää laskea ennen kosketusta</b> — ja alhaalla se sammuttaa
      sivusuuttimet, joten nosta se heti lähdössä. Vauhdikas kosketus pompauttaa,
      liian kova hajottaa.</p>
-  <p>Töötti kuuluu 300 pikselin päähän: jos asiakas kuulee sen, hän siirtyy
-     alustan toiseen laitaan. Keltainen alusta on tankkaus, ja bensa maksaa
-     omasta kassasta. ${LEVELS.length} kenttää, raha ja taksit kulkevat mukana,
-     ja varikolta saa uuden taksin ${TAXI_PRICE} eurolla tai kolme
-     ${FLEET_PRICE} eurolla.</p>
+  <p>Töötti kuuluu lähelle: jos asiakas kuulee sen, hän siirtyy alustan toiseen
+     laitaan. Keltainen alusta on tankkaus, ja bensa maksaa omasta kassasta.
+     Kentästä jossa ei tullut yhtään kolaria tai yhtään yliajoa maksetaan
+     ${CLEAN_BONUS} euron bonus kummastakin. ${LEVELS.length} kenttää, raha ja
+     taksit kulkevat mukana, ja varikolta saa uuden taksin ${TAXI_PRICE}
+     eurolla tai kolme ${FLEET_PRICE} eurolla.</p>
   <p class="hint">Vedä mistä tahansa ruudulta — sauva syntyy sormen alle.<br>
      Isot napit: teline ja töötti. Ratas avaa säädöt, nuoli koko ruudun.<br>
      Näppäimillä <kbd>WASD</kbd>/nuolet &middot; teline <kbd>väli</kbd> &middot;
