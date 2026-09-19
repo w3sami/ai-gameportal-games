@@ -294,5 +294,23 @@
     "sizeBytes": 137186,
     "createdAt": "2026-09-19T05:37:55.593Z",
     "updatedAt": "2026-09-19T15:59:28.967Z"
+  },
+  {
+    "id": "7cdbb6c3-8433-4798-af75-4e2b40f51d5b",
+    "slug": "ohjainkoe",
+    "title": "Ohjainkoe",
+    "description": "Näyttää mitä ohjain oikeasti lähettää: napit, akselit, liipaisimet ja mappauksen. Työkalu gamepad-pluginin todentamiseen oikealla raudalla, ei peli.",
+    "author": "Sami Lehtilä",
+    "tags": [
+      "työkalu",
+      "ohjain"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "sizeBytes": 0,
+    "createdAt": "2026-09-19T16:00:10.254Z",
+    "updatedAt": "2026-09-19T16:00:10.254Z"
   }
 ]
