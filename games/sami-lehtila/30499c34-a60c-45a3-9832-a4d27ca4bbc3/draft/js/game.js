@@ -258,6 +258,30 @@ function layout() {
   COG_BOX = { x: col(1), y: H - 74, w: 46, h: 46 };
   FULL_BOX = { x: col(2), y: H - 74, w: 46, h: 46 };
 }
+/* Kenttien omat lähtöarvot talteen ennen kuin tallennettu viritys kirjoittaa
+   niiden päälle. Kentän olio on ainoa paikka jossa ne elävät, joten ilman tätä
+   "oletukset" ei voisi palauttaa niitä millään. */
+const LEVEL_DEF = new Map();
+for (const lv of LEVELS) {
+  for (const g of lv.tune || []) {
+    if (!g.obj || !g.sliders) continue;
+    const d = {};
+    for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
+    LEVEL_DEF.set(lv.name + '\u0000' + g.name, d);
+  }
+}
+
+function resetLevelTune() {
+  for (const k of Object.keys(MULS)) delete MULS[k];
+  for (const lv of LEVELS) {
+    for (const g of lv.tune || []) {
+      const d = LEVEL_DEF.get(lv.name + '\u0000' + g.name);
+      if (d && g.obj) Object.assign(g.obj, d);
+    }
+  }
+  MUL = mulOf(level);
+}
+
 layout();
 loadTune();
 loadGameTune();
@@ -2263,6 +2287,14 @@ function buildPanel() {
     if (ta && ta !== document.activeElement) ta.value = tuneJSON();
   });
 
+  /* Kentän arvot tallentuvat samalla tavalla kuin globaalit. Tämä puuttui
+     ensin, ja vika näkyi vasta sivun latauksessa: säädöt toimivat, mutta
+     katosivat. */
+  const levelChanged = () => {
+    saveTune();
+    if (ta && ta !== document.activeElement) ta.value = tuneJSON();
+  };
+
   /* <details> hoitaa auki ja kiinni itse, joten laatikoille ei tarvita omaa
      tilaa eikä kuuntelijaa. */
   const group = (name, open, rows, graph) => {
@@ -2294,12 +2326,12 @@ function buildPanel() {
       rows.push(sliderRow(
         { label: base.label + ' ×', min: 0.2, max: 3, step: 0.05 },
         () => { const m = MUL[key]; return typeof m === 'number' ? m : 1; },
-        v => { MUL[key] = v; applyMul(); },
+        v => { MUL[key] = v; applyMul(); levelChanged(); },
       ));
     }
     for (const sl of g.sliders || []) {
       if (!g.obj) continue;
-      rows.push(sliderRow(sl, () => g.obj[sl.key], v => { g.obj[sl.key] = v; }));
+      rows.push(sliderRow(sl, () => g.obj[sl.key], v => { g.obj[sl.key] = v; levelChanged(); }));
     }
     if (rows.length || g.graph) {
       panelEl.append(group(level.name + ': ' + g.name, g.open !== false, rows, g.graph));
@@ -2319,8 +2351,7 @@ function buildPanel() {
   foot.append(
     pbutton('btn sm ghost', 'oletukset', () => {
       Object.assign(BASE, DEFAULTS);
-      delete MULS[level.name];
-      MUL = mulOf(level);
+      resetLevelTune();                        // myös kenttien omat arvot
       gearSide = DEFAULT_SIDE; layout();
       applyMul();
       saveTune();
