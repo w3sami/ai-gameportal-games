@@ -619,8 +619,16 @@ const gamepad = createGamepad({
    kutsun erotus. Kutsutaan myös korttiruuduissa, jotta vuoron saa käyntiin
    ohjaimella — ja jotta ohjain ylipäätään tulee näkyviin, sillä selain
    paljastaa sen vasta kun jotain on painettu. */
+let padSeen = '', padFrames = 0;
+
 function padInput() {
   gamepad.poll();
+
+  /* pressedAny kysytään joka ruutu ja kaikissa tiloissa: se on tämän ja
+     edellisen ruudun erotus, joten väliin jäänyt kysymys hukkaa painalluksen. */
+  padFrames++;
+  const hit = gamepad.pressedAny();
+  if (hit) padSeen = hit;
 
   if (!card.classList.contains('hidden')) {
     /* Ohjaimen tila näkyviin. Selain ei paljasta ohjainta ennen kuin sen nappia
@@ -629,7 +637,15 @@ function padInput() {
        textContent eikä innerHTML: id tulee laitteelta, ei meiltä. */
     const el = card.querySelector('#padstate');
     if (el) {
-      const want = gamepad.connected ? t('pad.on', { id: gamepad.id }) : t('pad.none');
+      const want = gamepad.connected
+        ? t('pad.on', {
+            id: gamepad.id,
+            map: gamepad.mapping || '(ei tunnistettu)',
+            x: gamepad.x.toFixed(2), y: gamepad.y.toFixed(2),
+            btn: padSeen || '(ei mitään)',
+            n: padFrames,
+          })
+        : t('pad.none');
       if (el.textContent !== want) el.textContent = want;
     }
 
@@ -1996,7 +2012,8 @@ const buttons = label => `
   <button id="go" class="btn">${label}</button>
   <button id="fs" class="btn ghost">${t('card.full')}</button>
   <button id="set" class="btn ghost">${t('card.tune')}</button>
-  <p class="hint">${t('card.keys')}</p>`;
+  <p class="hint">${t('card.keys')}</p>
+  <p class="hint" id="padstate"></p>`;
 
 const menuCard = () => `
   <h1>${t('menu.t1')} <span>${t('menu.t2')}</span></h1>
@@ -2004,7 +2021,6 @@ const menuCard = () => `
   <p>${t('menu.p2')}</p>
   <p>${t('menu.p3', { bonus: CLEAN_BONUS, levels: LEVELS.length, price: TAXI_PRICE, fleet: FLEET_PRICE })}</p>
   <p class="hint">${t('menu.hint')}</p>
-  <p class="hint" id="padstate"></p>
   <div id="lb"></div>
   ${buttons(t('card.play'))}`;
 
@@ -2017,7 +2033,8 @@ const buyCard = () => `
     ? `<button id="fleet" class="btn">${t('buy.fleet', { c: FLEET_COUNT, p: FLEET_PRICE })}</button>`
     : ''}
   <button id="end" class="btn ghost">${t('buy.end')}</button>
-  <p class="hint">${t('buy.keys')}</p>`;
+  <p class="hint">${t('buy.keys')}</p>
+  <p class="hint" id="padstate"></p>`;
 
 const overWon = () => `
   <h1>${t('won.t1')} <span>${t('won.t2')}</span></h1>
