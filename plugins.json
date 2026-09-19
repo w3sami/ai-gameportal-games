@@ -76,5 +76,31 @@
     },
     "createdAt": "2026-09-18T12:05:27.363Z",
     "updatedAt": "2026-09-18T12:05:27.363Z"
+  },
+  {
+    "name": "gamepad",
+    "description": "Ohjaintuki peleille. x ja y pitävät saman lupauksen kuin joystick-plugin — -1…1 ja vektori korkeintaan 1 — joten kosketussauvan ja ohjaimen voi vaihtaa keskenään koskematta pelin fysiikkaan. Nimetyt toiminnot kattavat ohjaimen ja näppäimistön yhdellä koodipolulla, ja bridgeKeys antaa vanhalle näppäimistöpelille ohjaintuen kahdella rivillä. Mikään ei heitä: ei ohjainta tarkoittaa connected: false ja nollia. Ohjain on selaimelle näkymätön kunnes sen nappia on painettu, joten pelin kuuluu sanoa \"paina nappia\", ei \"ohjainta ei löytynyt\".",
+    "author": "Sami Lehtilä",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "versions": [
+      {
+        "version": "1.0.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 16852
+          }
+        ],
+        "sizeBytes": 16852,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-19T16:12:02.204Z"
+      }
+    ],
+    "aliases": {
+      "v1": "1.0.0"
+    },
+    "createdAt": "2026-09-19T16:12:02.205Z",
+    "updatedAt": "2026-09-19T16:12:02.205Z"
   }
 ]
