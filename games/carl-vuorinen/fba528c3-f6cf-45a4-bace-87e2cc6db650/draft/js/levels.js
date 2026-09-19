@@ -242,7 +242,7 @@ const LEVELS = [
    trunks:[{x:-40,y:4000,tx:-40,ty:-200,w:300,taper:0,seed:-480}, {x:240,y:4000,tx:240,ty:-200,w:260,taper:0,seed:1480}, {x:7640,y:4000,tx:7640,ty:-200,w:300,taper:0,seed:53280}, {x:7360,y:4000,tx:7360,ty:-200,w:260,taper:0,seed:51320}, {x:2750,y:1900,tx:2750,ty:1500,w:190,taper:0.15,seed:545,broken:true}, {x:3250,y:2550,tx:3800,ty:2330,w:150,taper:0.1,seed:546}, {x:5750,y:3100,tx:5750,ty:2600,w:200,taper:0.15,seed:547,broken:true}],
    foliage:[{x:700,y:260,r:400,ry:120,seed:551,tone:1}, {x:2200,y:760,r:500,ry:130,seed:552,tone:0}, {x:4000,y:1310,r:550,ry:140,seed:553,tone:1}, {x:6300,y:1760,r:650,ry:150,seed:554,tone:0}],
    hazards:[{x:2600,y:770,tx:2605,ty:1030,w:60,seed:555,kind:'branch'}, {x:3500,y:1320,tx:3505,ty:1600,w:60,seed:556,kind:'branch'}, {x:4400,y:1330,tx:4405,ty:1610,w:60,seed:557,kind:'branch'}, {x:6700,y:1770,tx:6705,ty:2050,w:60,seed:558,kind:'branch'}],
-   forces:[{kind:'water',x:2130,y:700,w:140,h:1150,ay:150,drag:0.4,pool:{x:1850,w:700,h:60}}, {kind:'water',x:3920,y:1250,w:160,h:1250,ay:150,drag:0.4,pool:{x:3600,w:800,h:60}}, {kind:'water',x:6200,y:1700,w:200,h:1350,ay:150,drag:0.4,pool:{x:5850,w:900,h:60}}],
+   forces:[{kind:'water',x:2130,y:700,w:140,h:1150,ay:240,drag:1.1,pool:{x:1850,w:700,h:60}}, {kind:'water',x:3920,y:1250,w:160,h:1250,ay:240,drag:1.1,pool:{x:3600,w:800,h:60}}, {kind:'water',x:6200,y:1700,w:200,h:1350,ay:240,drag:1.1,pool:{x:5850,w:900,h:60}}],
    walls:[],
    pads:{start:{x:500,y:1090,w:120,h:100},target:{x:7100,y:2990,w:120,h:100}}},
 ];
