@@ -10,8 +10,9 @@
  *
  * Tämä tiedosto on moottori: fysiikka, keikat, piirto ja HUD. Kentät ovat
  * js/levels.js:ssä dataa ja valinnaisia koukkuja, luukun ulkoasu js/gate.js,
- * pompun malli js/bounce.js ja tulostaulu js/leaderboard.js. Raha ja taksit
- * kulkevat kentästä toiseen, ja taululle menee vain koko vuoron lopputulos.
+ * pompun malli js/bounce.js, kenttien välinen animaatio js/cutscene.js ja
+ * tulostaulu js/leaderboard.js. Raha ja taksit kulkevat kentästä toiseen, ja
+ * taululle menee vain koko vuoron lopputulos.
  *
  * Kenttä on kiinteä 720x1040 ja kangas sovitetaan siihen (contain). Grafiikka
  * on koodissa: ei yhtään tiedostoa, ei yhtään ulkoista hakua.
@@ -22,6 +23,7 @@
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
 import { liftFor } from './bounce.js';
 import { drawGateGlow } from './gate.js';
+import { createCut } from './cutscene.js';
 import { LEVELS } from './levels.js';
 import { mountBoard } from './leaderboard.js';
 
@@ -781,103 +783,19 @@ function stepBits(dt) {
   }
 }
 
-/* -------------------------------------------------------- välianimaatio
-   Kolme sekuntia avaruutta kenttien välissä: taksi nousee puolikaasulla,
-   sivusuuttimet läiskivät lyhyitä purskeita, tähdet valuvat alas ja seuraavan
-   kentän nimi on isolla keskellä. Ei seiniä, ei ohjausta. */
-const CUT_SECS = 3;
-
+/* Välianimaatio kenttien välissä: toteutus js/cutscene.js:ssä, matka jatkuu
+   alareunan alta yläreunan yli. */
 function startCut(nextIndex) {
-  cut = {
-    t: 0, idx: nextIndex,
-    x: W / 2, vx: 0, side: 0, sideT: 0, next: 0.4,
-    stars: Array.from({ length: 90 }, () => ({
-      x: rand(0, W), y: rand(0, H), r: rand(0.6, 2.2), a: rand(0.15, 0.7),
-    })),
-  };
+  const nxt = LEVELS[nextIndex];
+  cut = createCut({
+    W, H, TW, TH, secs: 3, rand,
+    name: nxt.name, index: nextIndex, total: LEVELS.length,
+    glow: nxt.glow || '#6fe3ff',
+    body: () => taxiShape(TW, TH, false),
+  });
+  cut.idx = nextIndex;
   state = CUT;
   sfx.cutscene();
-}
-
-function updateCut(dt) {
-  cut.t += dt;
-  for (const s of cut.stars) {
-    s.y += (160 + s.r * 190) * dt;                 // lähempänä olevat nopeammin
-    if (s.y > H + 4) { s.y = -4; s.x = rand(0, W); }
-  }
-  cut.next -= dt;
-  cut.sideT -= dt;
-  if (cut.next <= 0) {                             // satunnainen sivupurske
-    cut.side = Math.random() < 0.5 ? -1 : 1;
-    cut.vx += cut.side * rand(90, 190);
-    cut.sideT = 0.18;
-    cut.next = rand(0.3, 0.7);
-  }
-  cut.vx *= Math.pow(0.12, dt);
-  cut.x = clamp(cut.x + cut.vx * dt, 90, W - 90);
-  jetLevel(0.5);
-  if (cut.t >= CUT_SECS) {
-    jetLevel(0);
-    loadLevel(cut.idx, true);
-    cut = null;
-    state = PLAY;
-  }
-}
-
-function drawCut() {
-  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#080d22');
-  g.addColorStop(1, '#03050c');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-
-  for (const s of cut.stars) {
-    ctx.globalAlpha = s.a;
-    ctx.fillStyle = '#9fc4ff';
-    ctx.fillRect(s.x, s.y, s.r, s.r * 3.2);        // venytetty viiru = vauhti
-  }
-  ctx.globalAlpha = 1;
-
-  const y = H * 0.62 + Math.sin(cut.t * 3) * 6;
-  ctx.save();
-  ctx.translate(cut.x, y);
-  const flame = (dx, dy, rot, len) => {
-    ctx.save();
-    ctx.translate(dx, dy); ctx.rotate(rot);
-    const fg = ctx.createLinearGradient(0, 0, 0, len);
-    fg.addColorStop(0, 'rgba(255,240,180,.95)');
-    fg.addColorStop(0.5, 'rgba(255,150,60,.7)');
-    fg.addColorStop(1, 'rgba(255,60,60,0)');
-    ctx.fillStyle = fg;
-    ctx.beginPath();
-    ctx.moveTo(-6, 0); ctx.lineTo(6, 0); ctx.lineTo(0, len);
-    ctx.closePath(); ctx.fill();
-    ctx.restore();
-  };
-  const l = rand(18, 26);
-  flame(-14, TH / 2, 0, l); flame(14, TH / 2, 0, l);
-  if (cut.sideT > 0) {
-    const s = cut.side > 0 ? -1 : 1;               // liekki työnnön vastapuolelle
-    flame(s * TW / 2, 0, s * Math.PI / 2, rand(16, 24));
-  }
-  taxiShape(TW, TH, false);
-  ctx.restore();
-
-  const nxt = LEVELS[cut.idx];
-  const a = clamp(Math.min(cut.t / 0.45, (CUT_SECS - cut.t) / 0.5), 0, 1);
-  ctx.globalAlpha = a;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(233,237,255,.55)';
-  ctx.font = '600 14px system-ui, sans-serif';
-  ctx.fillText(`KENTTÄ ${cut.idx + 1} / ${LEVELS.length}`, W / 2, H * 0.3);
-  ctx.fillStyle = nxt.glow || '#6fe3ff';
-  ctx.shadowColor = nxt.glow || '#6fe3ff';
-  ctx.shadowBlur = 24;
-  ctx.font = '700 58px system-ui, sans-serif';
-  ctx.fillText(nxt.name.toUpperCase(), W / 2, H * 0.37);
-  ctx.shadowBlur = 0;
-  ctx.globalAlpha = 1;
 }
 
 /* ------------------------------------------------------------------ piirto */
@@ -917,7 +835,6 @@ function drawPad(p) {
   ctx.fillRect(p.x + 12, p.y + p.h, 8, 14);
   ctx.fillRect(p.x + p.w - 20, p.y + p.h, 8, 14);
 
-  // tunnus: numero ympyrässä, tankkauksella pisara
   const bx = p.x + p.w / 2, by = p.y + p.h + 22;
   ctx.beginPath(); ctx.arc(bx, by, 13, 0, 6.3);
   ctx.fillStyle = 'rgba(8,13,30,.75)'; ctx.fill();
@@ -1620,8 +1537,20 @@ function loop(now) {
   resize();
 
   if (state === CUT) {
-    updateCut(dt);
-    if (state === CUT) { drawCut(); requestAnimationFrame(loop); return; }
+    cut.update(dt);
+    jetLevel(0.5);                           // puolikaasu kuuluu myös
+    if (cut.done) {
+      jetLevel(0);
+      const nextIndex = cut.idx;
+      cut = null;
+      loadLevel(nextIndex, true);
+      state = PLAY;
+    } else {
+      ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+      cut.draw(ctx);
+      requestAnimationFrame(loop);
+      return;
+    }
   }
 
   const v = activeThrust();               // sama vektori fysiikkaan ja liekkeihin
