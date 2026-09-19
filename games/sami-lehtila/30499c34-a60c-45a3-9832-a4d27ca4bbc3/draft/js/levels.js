@@ -83,10 +83,11 @@ export const LEVELS = [
        vastakkaisessa — aukot menevät vuorotellen ristiin ja kohdakkain, ja
        läpimeno pitää ajoittaa. Alusta on 172 px ja lepoaukot 125/126/125, eli
        100 pikselin amplitudi vie alustan käytännössä seinään asti (9 px jää).
-       Tankkaus on ylärivin vasen — lohikäärme, joka puhaltaa liekin. */
+       Tankkaus on ylärivin vasen — lohikäärme, joka puhaltaa liekin.
+       Taustaa ei anneta sky-kentällä: drawBack maalaa markiisin koko kentän
+       yli, joten taivas jäisi kuitenkin piiloon. */
     name: 'Funfair',
     glow: '#ff5d7a',
-    sky: ['#3a1224', '#1d0a18', '#0d060f'],
     gate: { x: 300, w: 120 },
     start: 1,
     firstFrom: 5,
