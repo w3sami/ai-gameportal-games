@@ -164,8 +164,8 @@ function tick(){
         if (hit){
           if (hit.type === 'land'){
             if (hit.sp > 120) puff(hit.px, hit.py, hit.sp); Snd.land(hit.sp); settle(ship, hit.z);
-            if (hit.key === 'target'){ ship.state = 'finished'; doneT = 1.3; celebrate(hit.px, hit.py); shake = 0.5; finish(); }
-          } else { ship.state = 'dead'; deadT = 1.4; explode(hit.px, hit.py); shake = 1; Snd.explode(); setMsg('Crashed', ''); }
+            if (hit.key === 'target'){ ship.state = 'finished'; doneT = 1.3; celebrate(hit.px, hit.py); shake = 0.5; buzz(180, 0.35); finish(); }
+          } else { ship.state = 'dead'; deadT = 1.4; explode(hit.px, hit.py); shake = 1; Snd.explode(); buzz(280, 0.85); setMsg('Crashed', ''); }
         }
         if (ship.state === 'flying' && ship.flame) emitThrust(ship);
       }
@@ -260,6 +260,7 @@ function drawParticles(){
 let last = performance.now(), acc = 0;
 function frame(now){
   let dt = (now-last)/1000; last = now; if (dt > 0.1) dt = 0.1;
+  padFrame(now);
   if (mode === 'play' || mode === 'watch'){ acc += dt; while (acc >= DT){ tick(); acc -= DT; } } else acc = 0;
   render(dt);
   requestAnimationFrame(frame);
@@ -339,6 +340,7 @@ function showMenu(){
     <div class="cols">
       <div><b>Touch</b><br>${S.buttons ? '◀ ▶ buttons to steer' : 'Left half: drag to steer'}<br>Right half: hold to thrust<br>Touching a pad lands you</div>
       <div><b>Keyboard</b><br><kbd>◀</kbd> <kbd>▶</kbd> or <kbd>A</kbd> <kbd>D</kbd> steer<br><kbd>Space</kbd> <kbd>▲</kbd> <kbd>W</kbd> thrust<br><kbd>R</kbd> restart, <kbd>Esc</kbd> pause, <kbd>F</kbd> full screen</div>
+      <div><b>Gamepad</b><br>Stick points where to fly<br>D-pad turns, <kbd>A</kbd> or a trigger thrusts<br><kbd>X</kbd> restart, <kbd>Start</kbd> pause<br>Press a button to wake it up</div>
     </div>
     <h2>Level</h2>${tiles()}
     <div class="row"><button class="btn pri" data-act="start">Fly level ${li+1}</button></div>
@@ -367,7 +369,7 @@ function showWatched(){
     <div class="sub">${li+1}. ${L.name}</div>
     <div class="row"><button class="btn pri" data-act="race">Race this ghost</button><button class="btn" data-act="rewatch">Watch again</button><button class="btn" data-act="menu">Levels</button></div>`);
 }
-function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); document.body.classList.remove('watch'); Snd.init(); Snd.resume(); placeControls(); }
+function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); document.body.classList.remove('watch'); Snd.init(); Snd.resume(); placeControls(); padGate = true; }
 box.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return; Snd.init(); Snd.click();
   if (t.dataset.l !== undefined){ loadLevel(+t.dataset.l); showMenu(); return; }
@@ -405,9 +407,12 @@ function readInput(){
       const proj = stick.dx*Math.cos(ship.a) + stick.dy*Math.sin(ship.a);   // project onto the rocket's right-hand side
       steer = Math.max(-1, Math.min(1, proj/(d*R)))*m;
     } else steer = 0;
+  } else if (!kb){
+    const ps = padSteer();
+    if (ps !== null) steer = ps;
   }
   steer = Math.round(steer*15)/15;                                   // quantise so the recorded input replays exactly
-  return {thrust:(keys.thrust||thrTouch.active) ? 1 : 0, steer};
+  return {thrust:(keys.thrust||thrTouch.active||padThrust()) ? 1 : 0, steer};
 }
 const stickEl = $('stick'), knobEl = $('knob'), thrEl = $('thr'), ctl = $('ctl'), hdgEl = $('hdg'), padL = $('padL'), padR = $('padR');
 let CG = null;                                                  // control-layout geometry (G is the level geometry)
@@ -514,6 +519,147 @@ addEventListener('keydown', e => {
   else if (mode === 'complete' && e.key.toLowerCase() === 'r'){ reset(); play(); }
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false; });
+
+// ---- Controller ----
+// The gamepad plugin is a module and this file is not, so it arrives by dynamic
+// import: the game runs without it and picks it up the moment it lands. `keys`
+// is off because this file already reads the keyboard, and a key counted twice
+// is a key pressed twice.
+//
+// A controller is invisible to the browser until one of its buttons is pressed,
+// and invisible again whenever the window is not focused — inside the portal
+// that means the frame has to have been clicked. So "no controller" and
+// "controller nobody has touched" look the same from here, which is why the
+// menu says press a button rather than claiming there is nothing plugged in.
+let pad = null;
+import('https://plugins.game.bigbools.fi/gamepad/v1/index.js')
+  .then(m => { pad = m.createGamepad({ keys:false, actions:{
+    thrust: ['A', 'RT', 'LT', 'RB'],
+    select: ['A'],
+    back:   ['B', 'Back'],
+    start:  ['Start'],
+    again:  ['X'],
+  }}); })
+  .catch(() => {});                                       // blocked or offline: touch and keys are untouched
+
+// Thrust carried over from the menu would launch the run on the frame it opens,
+// so the button has to come up once before it counts as flying.
+let padGate = false;
+const padThrust = () => !!pad && !padGate && pad.held('thrust');
+const buzz = (duration, strong) => { if (pad) pad.rumble({duration, strong, weak:strong*0.6}); };
+
+// The stick points where the rocket should go, the same promise the touch stick
+// makes. The d-pad turns instead: "left" on a d-pad means left of the rocket,
+// not left of the screen. Returns null when the pad is saying nothing, so the
+// touch stick and the keys keep the last word.
+function padSteer(){
+  if (!pad || !pad.connected) return null;
+  const dp = (pad.held('Right') ? 1 : 0) - (pad.held('Left') ? 1 : 0);
+  if (dp) return dp;
+  const d = Math.min(1, Math.hypot(pad.x, pad.y));        // the plugin has already taken its dead zone out
+  if (!d) return null;
+  const proj = (pad.x*Math.cos(ship.a) + pad.y*Math.sin(ship.a))/d;   // cosine to the rocket's right-hand side
+  return Math.max(-1, Math.min(1, proj))*Math.pow(d, S.expo);
+}
+
+// Everything in a modal is a real button, so the controller cursor is nothing
+// but a selected element: left and right walk the document order, up and down
+// take the nearest thing that way, which is what turns the ten level tiles into
+// a grid instead of a list. Clicking the element is what runs the game's own
+// handler, so there is no second copy of what a menu does.
+const navItems = () => [...box.querySelectorAll('button:not(:disabled), input')].filter(el => el.offsetParent);
+let padSel = null;
+function padMark(el){
+  if (padSel && padSel !== el) padSel.classList.remove('gp');
+  padSel = el || null;
+  if (!padSel) return;
+  padSel.classList.add('gp');
+  padSel.scrollIntoView({block:'nearest'});
+}
+function padNav(x, y){
+  const items = navItems(); if (!items.length) return;
+  const i = items.indexOf(padSel);
+  if (i < 0){ padMark(items[0]); return; }
+  if (x){ padMark(items[(i+x+items.length) % items.length]); return; }
+  const a = padSel.getBoundingClientRect(), ax = a.left+a.width/2, ay = a.top+a.height/2;
+  let best = null, score = Infinity;
+  for (const el of items){
+    if (el === padSel) continue;
+    const b = el.getBoundingClientRect(), fwd = (b.top+b.height/2-ay)*y;
+    if (fwd < 4) continue;                                // behind us, or the same row
+    const s = fwd + Math.abs(b.left+b.width/2-ax)*2.2;    // drifting sideways costs more than reaching further
+    if (s < score){ score = s; best = el; }
+  }
+  if (best) padMark(best);
+}
+// A shove moves the cursor once and then repeats, the way a held arrow key does.
+let navDir = 0, navAt = 0;
+function padDir(now){
+  let x = (pad.held('Right') ? 1 : 0) - (pad.held('Left') ? 1 : 0);
+  let y = (pad.held('Down') ? 1 : 0) - (pad.held('Up') ? 1 : 0);
+  if (!x && !y){
+    if (Math.abs(pad.x) > 0.5) x = Math.sign(pad.x);
+    else if (Math.abs(pad.y) > 0.5) y = Math.sign(pad.y);
+  }
+  if (x && y) y = 0;
+  const dir = x*3 + y;
+  if (!dir){ navDir = 0; return null; }
+  if (dir !== navDir){ navDir = dir; navAt = now+380; return [x, y]; }
+  if (now < navAt) return null;
+  navAt = now+110;
+  return [x, y];
+}
+// A toggle redraws the whole menu underneath the cursor, so the thing it stood
+// on is remembered by what it is rather than by where it was: the board fills
+// itself in late and shifts every index below it.
+let padKeep = '';
+function padActivate(){
+  if (!padSel) return;
+  if (padSel.tagName === 'INPUT'){ padSel.focus(); return; }   // a name still wants a keyboard; this is where it is typed
+  const d = padSel.dataset;
+  padKeep = d.set ? `[data-set="${d.set}"]` : d.fs ? '[data-fs]' : '';
+  Snd.init(); padSel.click();
+}
+// Start is the obvious move in whatever is on screen, which is what Enter does.
+function padStart(){
+  Snd.init();
+  if (mode === 'menu'){ reset(); play(); }
+  else if (mode === 'paused') play();
+  else if (mode === 'complete'){ if (li < LEVELS.length-1){ loadLevel(li+1); play(); } else { reset(); showMenu(); } }
+  else if (mode === 'watched' && watched){ rival = watched; reset(); play(); }
+}
+function padBack(){
+  if (mode === 'paused'){ Snd.init(); play(); }
+  else if (mode === 'complete' || mode === 'watched'){ rival = watched = null; reset(); showMenu(); }
+}
+function padFrame(now){
+  if (!pad) return;
+  pad.poll();                                             // once a frame, before anything asks it a question
+  if (padGate && !pad.held('thrust')) padGate = false;
+  if (!pad.connected) return;
+  if (mode === 'play'){
+    if (pad.pressed('start') || pad.pressed('back')) showPause();
+    else if (pad.pressed('again')) reset();
+    return;
+  }
+  if (mode === 'watch'){
+    if (pad.pressed('start') || pad.pressed('back') || pad.pressed('select')) showWatched();
+    return;
+  }
+  // A modal is open. The board fills itself in late and redraws itself after a
+  // post, so the cursor is checked against the live DOM every frame rather than
+  // trusted to still be on screen.
+  if (!padSel || !padSel.isConnected || !padSel.offsetParent){
+    padMark((padKeep && box.querySelector(padKeep)) || box.querySelector('.btn.pri') || navItems()[0]);
+    padKeep = '';
+  }
+  const d = padDir(now);
+  if (d) padNav(d[0], d[1]);
+  if (pad.pressed('select')) padActivate();
+  else if (pad.pressed('start')) padStart();
+  else if (pad.pressed('back')) padBack();
+  else if (pad.pressed('again') && mode === 'complete'){ reset(); play(); }
+}
 
 // ---- Ghost replays ----
 // A run that travels to another player is stored as a path — ten positions a
