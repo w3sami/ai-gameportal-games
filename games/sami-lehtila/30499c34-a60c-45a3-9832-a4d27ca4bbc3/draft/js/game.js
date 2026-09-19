@@ -684,11 +684,17 @@ function inputVector() {
 
    Alustalta ei silti pääse lähtöön — lähtö vaatii bensaa erikseen — joten
    tyhjällä tankilla alustalle jääminen päättyy yhä kolariin. */
-const DRY_PERIOD = 0.55, DRY_ON = 0.12, DRY_SIDE = 0.5;
+const DRY_PERIOD = 0.55, DRY_AVG = 0.8, DRY_SIDE = 0.5;
+
+/* Paikallaan pysyminen vaatii suuttimelta osuuden grav/thrust täydestä. Sykäys
+   mitoitetaan siitä eikä kiinteästä sekuntimäärästä, joten sääto paneelista
+   kevennetty painovoima ei tee kuivasta taksista lentokelpoista: keskiteho on
+   aina DRY_AVG verran siitä mitä leijuminen vaatisi, eli aina liian vähän. */
+const dryOn = () => DRY_PERIOD * DRY_AVG * Math.min(1, P.grav / P.thrust);
 
 function dryThrust(v) {
   v.x *= DRY_SIDE;
-  if (runT % DRY_PERIOD >= DRY_ON) v.y = 0;
+  if (runT % DRY_PERIOD >= dryOn()) v.y = 0;
 }
 
 function activeThrust() {
@@ -781,7 +787,7 @@ function askForPad() {
   if (!job) return;
   job.announce = false;
   say(t('msg.toPad', { n: job.to }), 2.4);
-  speakLine('toPad', job.kind, { n: job.to, tail: t('say.tail.' + job.tail) });
+  speakLine('toPad', job.kind, { n: job.to, tail: t('say.tail.' + (job.tail || 'please')) });
   sfx.pickup();
 }
 
@@ -855,7 +861,7 @@ function jobStep(dt) {
       if (job.to === 'up') {
         gateOpen = true;
         say(t('msg.up'), 3);
-        speakLine('up', job.kind, { tail: t('say.tail.' + job.tail) });
+        speakLine('up', job.kind, { tail: t('say.tail.' + (job.tail || 'please')) });
         sfx.gate();
       } else askForPad();
       return;
