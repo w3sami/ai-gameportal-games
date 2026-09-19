@@ -4,7 +4,7 @@
  * yhtä aikaa kirjoittamatta toistensa yli. Kentän muoto on kuvattu
  * ../levels.js:ssä.
  */
-import { W, H, CEIL, HATCH } from '../shared.js';
+import { W, H, CEIL, HATCH } from './shared.js';
 
 /* ------------------------------------------------------------- rakenteet
 
