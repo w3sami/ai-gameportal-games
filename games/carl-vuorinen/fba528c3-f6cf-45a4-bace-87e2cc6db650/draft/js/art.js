@@ -56,19 +56,17 @@ function leafDetail(t, items, pal, r){
   for (const f of items){
     t.fillStyle = pal.leaf[Math.min(pal.leaf.length-1, f.tone+1)];
     poly(t, polyPts(f.x-f.r*0.12, f.y-f.ry*0.22, f.r*0.55, f.ry*0.5, 0.3, f.seed*3+1)); t.fill();
-    t.fillStyle = 'rgba(0,0,0,.2)';
-    for (let i=0;i<3;i++){ const px = f.x+(r()-0.5)*f.r*1.2, py = f.y+f.ry*(0.35+r()*0.5), s = 10+r()*10; poly(t,[[px-s,py+s*0.7],[px+s*0.9,py+s*0.8],[px+s*0.1,py-s*1.2]]); t.fill(); }
+    t.fillStyle = 'rgba(0,0,0,.14)';   // flat shadow slabs low in the blob, where the leaves are undercut
+    for (let i=0;i<3;i++){ const px = f.x+(r()-0.5)*f.r*1.2, py = f.y+f.ry*(0.3+r()*0.6), w = f.r*(0.2+r()*0.3), h = 8+r()*14; poly(t,[[px-w,py+h*0.3],[px+w*0.8,py-h*0.4],[px+w,py+h*0.5],[px-w*0.6,py+h]]); t.fill(); }
   }
 }
 function solidGroups(pal){
   const gs = [ {col:pal.rock, polys:G.rocks.map(rk => rk.pts), rects:G.blocks, walls:L.walls} ];
-  if (G.trunks.length || G.branches.length){
-    const items = G.trunks.concat(G.branches);
-    gs.push({col:pal.bark, polys:items.map(it => it.pts), detail:(t,r) => barkLines(t, items, r)});
-  }
+  // branches before trunks, so a trunk's fill covers the branch outline where the two join
+  for (const items of [G.branches, G.trunks]) if (items.length) gs.push({col:pal.bark, polys:items.map(it => it.pts), detail:(t,r) => barkLines(t, items, r)});
   for (let tone=0; tone<4; tone++){
     const fl = G.foliage.filter(f => f.tone === tone);
-    if (fl.length) gs.push({col:pal.leaf[tone], polys:fl.map(f => f.pts), detail:(t,r) => leafDetail(t, fl, pal, r)});
+    if (fl.length) gs.push({col:pal.leaf[tone], polys:fl.map(f => f.pts), edgeK:0.4, detail:(t,r) => leafDetail(t, fl, pal, r)});
   }
   return gs.filter(g => g.polys.length || (g.rects&&g.rects.length) || (g.walls&&g.walls.length));
 }
@@ -87,24 +85,24 @@ function renderLayer(q, st, padX, padY){
     for (const p of G.clear) x.fillRect(p[0], p[1], p[2], p[3]);
   };
   x.globalCompositeOperation = 'destination-out'; caveShapes('#000');
+  // a faint shadow band just inside every cave edge, so the outline reads without a drawn line. Done before the solids
+  // go in, so the band stays on the terrain and never crosses a stump or spike that straddles a room edge.
+  const edgeCol = `rgba(0,0,0,${st.edgeAlpha||0.14})`, edgeW = st.edge || 10;
+  x.globalCompositeOperation = 'source-atop'; x.strokeStyle = edgeCol; angular(x); x.lineWidth = edgeW;
+  for (const pts of G.caves){ poly(x,pts); x.stroke(); }
+  for (const p of G.clear) x.strokeRect(p[0],p[1],p[2],p[3]);
   // solids (rocks, trunks, foliage, pad blocks) on a scratch canvas, composited behind the terrain so overlaps never show.
   // Each group is filled, faceted, detailed and edge-shaded inside its own clip, so one group's edge never marks another.
   const tc = mkCanvas(W,H), t = tc.getContext('2d'); t.translate(padX*q, padY*q); t.scale(q,q);
-  const edgeCol = `rgba(0,0,0,${st.edgeAlpha||0.14})`, edgeW = st.edge || 10;
   for (const g of solidGroups(pal)){
     t.save(); groupPath(t,g); t.clip();
     t.fillStyle = g.col; t.fillRect(-400,-400,L.w+800,L.h+800);
     facets(t, r, -400, -400, L.w+800, L.h+800, Math.round(L.w*L.h/45000), 60, 240, st.amp);
     if (g.detail) g.detail(t, r);
-    t.strokeStyle = edgeCol; angular(t); t.lineWidth = edgeW; groupPath(t,g); t.stroke();
+    t.strokeStyle = `rgba(0,0,0,${(st.edgeAlpha||0.14)*(g.edgeK||1)})`; angular(t); t.lineWidth = edgeW; groupPath(t,g); t.stroke();
     t.restore();
   }
   x.globalCompositeOperation = 'destination-over'; x.save(); x.setTransform(1,0,0,1,0,0); x.drawImage(tc,0,0); x.restore();
-  // a faint shadow band just inside every edge, so the outline reads without a drawn line
-  x.globalCompositeOperation = 'source-atop';
-  x.strokeStyle = edgeCol; angular(x);
-  x.lineWidth = edgeW; for (const pts of G.caves){ poly(x,pts); x.stroke(); }
-  for (const p of G.clear) x.strokeRect(p[0],p[1],p[2],p[3]);
   x.globalCompositeOperation = 'source-over';
   if (st.captureMask) c.maskAlpha = x.getImageData(0,0,W,H).data;
   if (st.pads){ drawPad(x,L.pads.start,PAL.start,st.padK); drawPad(x,L.pads.target,PAL.target,st.padK); }
@@ -129,34 +127,40 @@ function renderSpikeSprite(pts, seed, kind, axis){
 // Jungle terrain: the solid mass is painted in bands before the cave is cut, so room ceilings come out as layered
 // canopy, walls as rock face and floors as earth. Band edges are jagged polylines; nothing here is curved either.
 function jungleTerrain(x, r, pal, X, Y, W, H){
-  const gy = L.groundY !== undefined ? L.groundY : L.h*0.8, cy = L.canopyY !== undefined ? L.canopyY : L.h*0.3;
-  const band = (yEdge, amp, step, col, up) => {
-    const pts = []; let px = X;
-    while (px < X+W){ pts.push([px, yEdge+(r()-0.5)*2*amp]); px += step*(0.6+r()*0.8); }
-    pts.push([X+W, yEdge+(r()-0.5)*2*amp]);
-    const yFar = up ? Y : Y+H; pts.push([X+W, yFar], [X, yFar]);
-    poly(x, pts); x.fillStyle = col; x.fill();
+  const bands = (gy, cy, x0, x1) => {
+    const band = (yEdge, amp, step, col, up) => {
+      const pts = []; let px = x0;
+      while (px < x1){ pts.push([px, yEdge+(r()-0.5)*2*amp]); px += step*(0.6+r()*0.8); }
+      pts.push([x1, yEdge+(r()-0.5)*2*amp]);
+      const yFar = up ? Y : Y+H; pts.push([x1, yFar], [x0, yFar]);
+      poly(x, pts); x.fillStyle = col; x.fill();
+    };
+    band(gy, 40, 160, pal.earth, false);
+    band(gy+150, 30, 230, pal.earthDark, false);
+    band(cy+90, 80, 110, pal.leaf[0], true);
+    band(cy, 70, 95, pal.leaf[1], true);
+    band(cy-100, 60, 85, pal.leaf[2], true);
   };
-  band(gy, 40, 160, pal.earth, false);
-  band(gy+150, 30, 230, pal.earthDark, false);
-  band(cy+90, 80, 110, pal.leaf[0], true);
-  band(cy, 70, 95, pal.leaf[1], true);
-  band(cy-100, 60, 85, pal.leaf[2], true);
+  bands(L.groundY !== undefined ? L.groundY : L.h*0.8, L.canopyY !== undefined ? L.canopyY : L.h*0.3, X, L.plateau ? L.plateau.x0 : X+W);
+  // plateau: a second band pair from x0 rightwards, for a high jungle beyond a cliff. The seam should sit inside a rock zone.
+  if (L.plateau){ const p = L.plateau; x.fillStyle = pal.rock; x.fillRect(p.x0, Y, X+W-p.x0, H); bands(p.groundY, p.canopyY, p.x0, X+W); }
+  // rock zones: cave rock painted over the bands, exactly the cave theme's fill. Cut rooms inside read as cave.
+  for (const z of L.rockZones||[]){ poly(x, polyPts(z.x, z.y, z.r, z.ry||z.r, z.wob||0.12, z.seed)); x.fillStyle = pal.rock; x.fill(); }
 }
 const DEPTH_F = [0.98,0.96,0.94,0.92,0.90,0.88];
 const JUNGLE_PAL = { rock:'#8f959d', earth:'#b08a58', earthDark:'#8e6b42', bark:'#4b3320', leaf:['#2c5a2a','#3d7c38','#559c47','#74b85a'] };
 const THEMES = {
   cave: {
-    main:  { pal:{rock:'#8f959d'}, amp:0.07, edge:10, pads:true, captureMask:true },
-    depth: DEPTH_F.map((f,i) => ({ f, pal:{rock:['#7d838b','#727880','#666c74','#5a6068','#4f555d','#454a52'][i]}, amp:0.06, edge:5, edgeAlpha:0.1, pads:true, padK:0.86-i*0.1 })),
+    main:  { pal:{rock:'#8f959d', bark:JUNGLE_PAL.bark, leaf:JUNGLE_PAL.leaf}, amp:0.07, edge:10, pads:true, captureMask:true },   // bark and leaf so a cave level can show a glimpse of jungle
+    depth: DEPTH_F.map((f,i) => ({ f, pal:Object.assign({rock:['#7d838b','#727880','#666c74','#5a6068','#4f555d','#454a52'][i]}, shadePal({bark:JUNGLE_PAL.bark, leaf:JUNGLE_PAL.leaf}, 0.87-i*0.075)), amp:0.06, edge:5, edgeAlpha:0.1, pads:true, padK:0.86-i*0.1 })),
     bg: { top:'#14161e', bottom:'#07080b', f:0.35, mote:'rgba(217,211,199,.16)',   // glows live in level space and parallax at 0.35×
       glows:[ {u:.18,v:.28,r:.5,c:'rgba(48,84,150,.42)'}, {u:.62,v:.62,r:.55,c:'rgba(28,120,122,.32)'}, {u:.42,v:.92,r:.45,c:'rgba(110,64,150,.32)'}, {u:.92,v:.14,r:.42,c:'rgba(160,110,60,.26)'}, {u:.85,v:.85,r:.4,c:'rgba(60,110,170,.28)'} ] },
   },
   jungle: {
     main:  { pal:JUNGLE_PAL, amp:0.07, edge:10, pads:true, captureMask:true },
     depth: DEPTH_F.map((f,i) => ({ f, pal:shadePal(JUNGLE_PAL, 0.87-i*0.075), amp:0.06, edge:5, edgeAlpha:0.1, pads:true, padK:0.86-i*0.1 })),
-    bg: { top:'#233219', bottom:'#150f09', f:0.35, mote:'rgba(225,240,140,.22)',    // warm shafts of light high up, brown shadow low down
-      glows:[ {u:.22,v:.12,r:.5,c:'rgba(150,180,70,.36)'}, {u:.70,v:.10,r:.5,c:'rgba(220,180,90,.32)'}, {u:.5,v:.55,r:.5,c:'rgba(50,100,55,.36)'}, {u:.92,v:.55,r:.45,c:'rgba(35,110,80,.30)'}, {u:.15,v:.88,r:.45,c:'rgba(110,70,38,.46)'}, {u:.8,v:.9,r:.4,c:'rgba(95,62,34,.42)'} ] },
+    bg: { top:'#27391d', bottom:'#150f09', f:0.35, mote:'rgba(225,240,140,.22)',    // green light high up, brown shadow low down
+      glows:[ {u:.22,v:.12,r:.5,c:'rgba(140,190,80,.34)'}, {u:.70,v:.10,r:.5,c:'rgba(120,190,90,.26)'}, {u:.5,v:.55,r:.5,c:'rgba(50,100,55,.36)'}, {u:.92,v:.55,r:.45,c:'rgba(35,110,80,.30)'}, {u:.15,v:.88,r:.45,c:'rgba(110,70,38,.46)'}, {u:.8,v:.9,r:.4,c:'rgba(95,62,34,.42)'} ] },
     terrain: jungleTerrain,
   },
 };
