@@ -12,9 +12,8 @@
  * geometria on sama joka näytöllä. Ohjaussauva tulee portaalin pluginista.
  *
  * Säätöpaneeli (ratas alakulmassa) on pelin oma eikä debug-pluginin: se on
- * auki kenellä tahansa ja arvot jäävät selaimen muistiin, jotta mekaniikkoja
- * voi hioa puhelimella ilman että kentän läpi joutuu ajamaan uusiksi.
- * ?debug=1 avaa sen heti latauksessa.
+ * auki kenellä tahansa ja arvot jäävät selaimen muistiin. ?debug=1 avaa sen
+ * heti latauksessa. Paneelin JSON-kenttä siirtää arvot koneelta toiselle.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
 import { mountBoard } from './leaderboard.js';
@@ -63,22 +62,31 @@ const P = Object.assign({}, DEFAULTS);
 let gearSide = 'right';                                    // kummalla puolella telinenappi on
 
 const STORE = 'spacetaxi.tune';
+const tuneJSON = () => JSON.stringify(Object.assign({ gearSide }, P));
+
+/** Ottaa arvot vastaan JSON-tekstistä tai oliosta. Tuntemattomat avaimet
+ *  ohitetaan, joten vanha vienti kelpaa vaikka kenttiä olisi tullut lisää. */
+function applyTune(src) {
+  let raw = src;
+  if (typeof src === 'string') {
+    try { raw = JSON.parse(src); } catch (e) { return false; }
+  }
+  if (!raw || typeof raw !== 'object') return false;
+  let n = 0;
+  for (const k of Object.keys(DEFAULTS)) {
+    if (typeof raw[k] === 'number' && isFinite(raw[k])) { P[k] = raw[k]; n++; }
+  }
+  if (raw.gearSide === 'left' || raw.gearSide === 'right') { gearSide = raw.gearSide; layout(); n++; }
+  if (typeof stick !== 'undefined' && stick) stick.gain = P.stick;
+  return n > 0;
+}
+
 function loadTune() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (!raw) return;
-    for (const k of Object.keys(DEFAULTS)) if (typeof raw[k] === 'number') P[k] = raw[k];
-    if (raw.gearSide === 'left' || raw.gearSide === 'right') gearSide = raw.gearSide;
-  } catch (e) {}
+  try { applyTune(localStorage.getItem(STORE) || ''); } catch (e) {}
 }
 function saveTune() {
-  try {
-    const out = { gearSide };
-    for (const k of Object.keys(DEFAULTS)) out[k] = P[k];
-    localStorage.setItem(STORE, JSON.stringify(out));
-  } catch (e) {}
+  try { localStorage.setItem(STORE, tuneJSON()); } catch (e) {}
 }
-loadTune();
 
 /* Napit: iso telinenappi valitulla puolella, pikkunapit vastakkaisessa
    alakulmassa. Ohjaussauva jättää nämä kaikki rauhaan. */
@@ -92,6 +100,7 @@ function layout() {
   FULL_BOX = { x: col(2), y: H - 74, w: 46, h: 46 };
 }
 layout();
+loadTune();
 
 /* ------------------------------------------------------------------ kangas */
 let scale = 1, dpr = 1, lastVW = -1, lastVH = -1;
@@ -346,6 +355,8 @@ canvas.addEventListener('pointerdown', e => {
 });
 
 addEventListener('keydown', e => {
+  // paneelin tekstikentässä näppäimet kuuluvat sille
+  if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
   KEY[e.code] = true;
   if (e.code === 'KeyM') { toggleMute(); return; }
   if (e.code === 'KeyF') { toggleFullscreen(); return; }
@@ -921,7 +932,9 @@ function draw(v) {
 }
 
 /* ------------------------------------------------------------ säätöpaneeli
-   Pelin oma, ei debug-pluginin: auki rattaasta, arvot jäävät selaimeen. */
+   Pelin oma, ei debug-pluginin: auki rattaasta, arvot jäävät selaimeen.
+   JSON-kenttä on sekä vienti että tuonti — samalla tekstillä arvot siirtyvät
+   puhelimelta koneelle tai keskusteluun. */
 const SLIDERS = [
   { key: 'grav', label: 'painovoima', min: 80, max: 500, step: 10 },
   { key: 'thrust', label: 'työntö', min: 300, max: 1200, step: 20 },
@@ -936,40 +949,43 @@ const SLIDERS = [
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
 ];
 
+let panelNote = '';
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+function pbutton(cls, text, fn) {
+  const b = el('button', cls, text);
+  b.type = 'button';
+  b.addEventListener('click', fn);
+  return b;
+}
+
 function buildPanel() {
-  panelEl.replaceChildren();
-  const h = document.createElement('h2');
-  h.textContent = 'säädöt';
-  panelEl.append(h);
+  panelEl.replaceChildren(el('h2', null, 'säädöt'));
 
   // telinenapin puoli
-  const sideRow = document.createElement('div');
-  sideRow.className = 'row';
-  const sideLab = document.createElement('label');
-  sideLab.append(document.createTextNode('telinenappi'));
-  const seg = document.createElement('div');
-  seg.className = 'seg';
+  const sideRow = el('div', 'row');
+  const seg = el('div', 'seg');
   const mk = (side, text) => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.textContent = text;
-    if (gearSide === side) b.className = 'on';
-    b.addEventListener('click', () => {
+    const b = pbutton(gearSide === side ? 'on' : null, text, () => {
       gearSide = side; layout(); saveTune(); buildPanel();
     });
     return b;
   };
   seg.append(mk('left', 'vasen'), mk('right', 'oikea'));
-  sideRow.append(sideLab, seg);
+  sideRow.append(el('label', null, 'telinenappi'), seg);
   panelEl.append(sideRow);
 
   for (const s of SLIDERS) {
-    const row = document.createElement('div');
-    row.className = 'row';
-    const lab = document.createElement('label');
-    const val = document.createElement('b');
-    val.textContent = P[s.key];
+    const row = el('div', 'row');
+    const lab = el('label');
+    const val = el('b', null, String(P[s.key]));
     lab.append(document.createTextNode(s.label), val);
-    const input = document.createElement('input');
+    const input = el('input');
     input.type = 'range';
     input.min = s.min; input.max = s.max; input.step = s.step;
     input.value = P[s.key];
@@ -978,25 +994,59 @@ function buildPanel() {
       val.textContent = input.value;
       if (s.key === 'stick') stick.gain = P.stick;
       saveTune();
+      if (ta && ta !== document.activeElement) ta.value = tuneJSON();
     });
     row.append(lab, input);
     panelEl.append(row);
   }
 
-  const foot = document.createElement('div');
-  foot.className = 'foot';
-  const reset = document.createElement('button');
-  reset.type = 'button'; reset.className = 'btn sm ghost'; reset.textContent = 'oletukset';
-  reset.addEventListener('click', () => {
-    Object.assign(P, DEFAULTS);
-    stick.gain = P.stick;
-    saveTune(); buildPanel();
-  });
-  const close = document.createElement('button');
-  close.type = 'button'; close.className = 'btn sm'; close.textContent = 'sulje';
-  close.addEventListener('click', togglePanel);
-  foot.append(reset, close);
+  const foot = el('div', 'foot');
+  foot.append(
+    pbutton('btn sm ghost', 'oletukset', () => {
+      Object.assign(P, DEFAULTS);
+      stick.gain = P.stick;
+      saveTune();
+      panelNote = 'oletukset palautettu';
+      buildPanel();
+    }),
+    pbutton('btn sm', 'sulje', togglePanel),
+  );
   panelEl.append(foot);
+
+  // vienti ja tuonti
+  const io = el('div', 'row io');
+  io.append(el('label', null, 'arvot JSONina'));
+  const ta = el('textarea');
+  ta.spellcheck = false;
+  ta.autocapitalize = 'off';
+  ta.autocomplete = 'off';
+  ta.value = tuneJSON();
+  const note = el('p', 'note', panelNote);
+  panelNote = '';
+
+  const ioButtons = el('div', 'foot');
+  ioButtons.append(
+    pbutton('btn sm ghost', 'kopioi', () => {
+      ta.value = tuneJSON();
+      ta.focus(); ta.select();
+      /* Leikepöytä voi olla iframessa kielletty. Silloin teksti jää valituksi
+         ja sen saa käsin — ei erillistä virhettä. */
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value)
+          .then(() => { note.textContent = 'kopioitu leikepöydälle'; })
+          .catch(() => { note.textContent = 'valittu — kopioi käsin'; });
+      } else note.textContent = 'valittu — kopioi käsin';
+    }),
+    pbutton('btn sm', 'tuo', () => {
+      if (applyTune(ta.value)) {
+        saveTune();
+        panelNote = 'arvot otettu käyttöön';
+        buildPanel();
+      } else note.textContent = 'ei kelvollista JSONia';
+    }),
+  );
+  io.append(ta, ioButtons, note);
+  panelEl.append(io);
 }
 
 function togglePanel() {
