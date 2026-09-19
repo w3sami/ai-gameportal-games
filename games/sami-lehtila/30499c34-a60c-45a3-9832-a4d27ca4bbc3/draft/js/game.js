@@ -418,7 +418,7 @@ function loadLevel(i) {
     const open = numbered().filter(p => !served[p.id]);
     job = {
       from: null, to: pick(open.length ? open : numbered()).id,
-      phase: 'aboard', wait: 0, kind: carried.kind,
+      phase: 'aboard', wait: 0, kind: carried.kind, announce: true,
       x: 0, t: 0, walk: 0, moving: false, shown: true, flee: null,
     };
     carried = null;
@@ -713,6 +713,17 @@ function touchdown(pad, b) {
 }
 
 /* --------------------------------------------------------- keikkalogiikka */
+
+/* Asiakas kertoo minne haluaa. Sama repliikki noudossa ja kentän alussa, kun
+   edellisestä kentästä mukaan tullut asiakas on jo valmiiksi kyydissä. */
+function askForPad() {
+  if (!job) return;
+  job.announce = false;
+  say(t('msg.toPad', { n: job.to }), 2.4);
+  speakLine('toPad', job.kind, { n: job.to });
+  sfx.pickup();
+}
+
 function onLanded(pad, softness) {
   if (!job) return;
 
@@ -780,11 +791,7 @@ function jobStep(dt) {
         say(t('msg.up'), 3);
         speakLine('up', job.kind);
         sfx.gate();
-      } else {
-        say(t('msg.toPad', { n: job.to }), 2.4);
-        speakLine('toPad', job.kind, { n: job.to });
-        sfx.pickup();
-      }
+      } else askForPad();
       return;
     }
     job.moving = true;
@@ -915,6 +922,7 @@ function updateEnter(dt) {
     goT = 0.8;
     state = PLAY;
     sfx.go();
+    if (job && job.announce) askForPad();
   }
 }
 
