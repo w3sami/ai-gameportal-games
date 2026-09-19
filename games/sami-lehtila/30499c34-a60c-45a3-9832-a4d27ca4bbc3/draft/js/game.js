@@ -4,16 +4,16 @@
  * suuntasuuttimet kiihdyttävät, ja laskutelineen pitää olla alhaalla ennen
  * kosketusta. Teline alhaalla sivusuuttimet eivät toimi — se on alkuperäisen
  * kauppa ja samalla se mikä tekee lähestymisestä päätöksen eikä refleksin.
- * Matkustaja ilmestyy alustalle, kertoo minne haluaa, ja maksaa perillä sitä
- * enemmän mitä nopeammin ja pehmeämmin keikka meni. Kun molemmilla alustoilla
- * on käyty, katon luukku aukeaa.
+ * Matkustaja ilmestyy alustan reunaan, kertoo minne haluaa, ja maksaa perillä
+ * sitä enemmän mitä nopeammin ja pehmeämmin keikka meni. Kun molemmilla
+ * alustoilla on käyty, katon luukku aukeaa.
  *
  * Kenttä on kiinteä 720x1040 ja kangas sovitetaan siihen (contain), joten
  * geometria on sama joka näytöllä. Ohjaussauva tulee portaalin pluginista.
+ * Grafiikka on koodissa: ei yhtään tiedostoa, ei yhtään ulkoista hakua.
  *
- * Säätöpaneeli (ratas alakulmassa) on pelin oma eikä debug-pluginin: se on
- * auki kenellä tahansa ja arvot jäävät selaimen muistiin. ?debug=1 avaa sen
- * heti latauksessa. Paneelin JSON-kenttä siirtää arvot koneelta toiselle.
+ * Säätöpaneeli (ratas alakulmassa) on pelin oma eikä debug-pluginin, ?debug=1
+ * avaa sen heti, ja sen JSON-kenttä siirtää arvot koneelta toiselle.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
 import { mountBoard } from './leaderboard.js';
@@ -49,17 +49,18 @@ const padById = id => PADS.find(p => p.id === id);
 const TW = 54, TH = 28, GEAR = 14;                         // taksin runko ja telineen pituus
 const FUEL_MAX = 100;
 
-/* Säädettävät kertoimet yhdessä paikassa. Oletukset pidetään erikseen, jotta
-   paneelin "oletukset" osaa palata niihin. */
+/* Säädettävät kertoimet yhdessä paikassa. Oletukset ovat puhelimella ajetusta
+   säätösessiosta, ja paneelin "oletukset" palaa näihin. */
 const DEFAULTS = {
-  grav: 250, thrust: 680,
-  landVY: 135, landVX: 75, softVY: 50,
-  burn: 12, refuel: 36, price: 0.9,
-  fare: 45, tip: 55, tipTime: 22, exitBonus: 40,
-  stick: 1,
+  grav: 250, thrust: 920,
+  landVY: 215, landVX: 200, softVY: 50,
+  burn: 12, refuel: 63, price: 0.9,
+  fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
+  stick: 2.05,
 };
+const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
-let gearSide = 'right';                                    // kummalla puolella telinenappi on
+let gearSide = DEFAULT_SIDE;                               // kummalla puolella telinenappi on
 
 const STORE = 'spacetaxi.tune';
 const tuneJSON = () => JSON.stringify(Object.assign({ gearSide }, P));
@@ -248,6 +249,10 @@ const sfx = {
     tone(780, 0.12, { type: 'triangle', gain: 0.12, delay: 0.07 });
   },
   hey() { tone(400, 0.16, { type: 'sawtooth', gain: 0.10, to: 250 }); },
+  squish() {
+    tone(150, 0.22, { type: 'sine', gain: 0.16, to: 55 });
+    noise(0.2, 0.18, 900, 120);
+  },
   pay() {
     tone(660, 0.10, { type: 'triangle', gain: 0.16 });
     tone(990, 0.12, { type: 'triangle', gain: 0.14, delay: 0.08 });
@@ -255,8 +260,8 @@ const sfx = {
   },
   gate() { tone(160, 0.5, { type: 'sawtooth', gain: 0.10, to: 640 }); },
   crash() {
-    noise(0.55, 0.38, 2400, 90);
-    tone(300, 0.5, { type: 'sawtooth', gain: 0.16, to: 55 });
+    noise(0.4, 0.3, 1800, 120);
+    tone(260, 0.45, { type: 'square', gain: 0.13, to: 70 });
   },
   pump() { tone(90, 0.06, { type: 'square', gain: 0.04 }); },
   warn() { tone(320, 0.11, { type: 'square', gain: 0.05 }); },
@@ -273,7 +278,7 @@ const MENU = 0, PLAY = 1, OVER = 2;
 let state = MENU;
 
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
-    msg, msgT, bits, lowWarn;
+    msg, msgT, bits, lowWarn, graves, wreck;
 
 const stars = [];
 for (let i = 0; i < 70; i++) {
@@ -284,7 +289,7 @@ function newRun() {
   money = 40; lives = 3; runT = 0;
   served = { 1: false, 2: false };
   gateOpen = false;
-  bits = []; lowWarn = 0;
+  bits = []; graves = []; wreck = null; lowWarn = 0;
   msg = ''; msgT = 0;
   job = null;
   resetTaxi();
@@ -301,23 +306,36 @@ function resetTaxi() {
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
   };
   fuel = FUEL_MAX;
-  dead = false; deadT = 0;
+  dead = false; deadT = 0; wreck = null;
 }
 
+/* Asiakas seisoo aina alustan reunassa: keskeltä häntä ei voi väistää, kun
+   taksi on leveämpi kuin väistövara. Puoli valitaan siltä laidalta jossa ei
+   jo ole hautakiveä. */
 function newJob(from, to, delay) {
   const p = padById(from);
+  const left = p.x + 20, right = p.x + p.w - 20;
+  const taken = e => graves.some(g => g.pad === from && Math.abs(g.x - e) < 26);
+  let x;
+  if (taken(left) && !taken(right)) x = right;
+  else if (taken(right) && !taken(left)) x = left;
+  else x = Math.random() < 0.5 ? left : right;
   job = {
     from, to, phase: 'wait', wait: delay || 0,
-    x: rand(p.x + 26, p.x + p.w - 26), t: 0, walk: 0, shown: false,
+    kind: (Math.random() * ALIENS.length) | 0,
+    x, t: 0, walk: 0, moving: false, shown: false,
   };
 }
 
 function say(text, secs) { msg = text; msgT = secs || 2.4; }
 
-function burst(x, y, color, n, speed) {
+function burst(x, y, color, n, speed, gravity) {
   for (let i = 0; i < n; i++) {
     const a = rand(0, Math.PI * 2), s = rand(speed * 0.25, speed);
-    bits.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, color, r: rand(1.5, 4.5) });
+    bits.push({
+      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      life: 1, color, r: rand(1.5, 4.5), g: gravity,
+    });
   }
 }
 
@@ -414,6 +432,8 @@ function solids() {
   return list;
 }
 
+/* Ei räjähdystä: taksi hajoaa, kimpoaa kerran ja tippuu pyörien ruudusta
+   alas. Se on se kuva joka klassikosta jäi mieleen. */
 function crash(reason) {
   if (dead) return;
   dead = true; deadT = 0;
@@ -422,8 +442,13 @@ function crash(reason) {
     newJob(job.from, job.to, 1.2);
     say('Keikka meni — ' + reason, 3);
   } else say(reason, 3);
-  burst(taxi.x, taxi.y, '#ffd479', 34, 420);
-  burst(taxi.x, taxi.y, '#ff5d7a', 26, 320);
+  wreck = {
+    x: taxi.x, y: taxi.y,
+    vx: taxi.vx * 0.5 + rand(-60, 60),
+    vy: Math.min(taxi.vy * 0.3, 40) - rand(90, 170),
+    rot: 0, spin: rand(-5, 5), puff: 0,
+  };
+  burst(taxi.x, taxi.y, '#ffd479', 8, 220);   // irronneita paloja, ei tulipalloa
   jetLevel(0);
   sfx.crash();
 }
@@ -468,17 +493,15 @@ function onLanded(pad, softness) {
     return;
   }
 
-  /* Alkuperäisessä kyydin päälle laskeutuminen saa asiakkaan huutamaan ja
-     vaihtamaan paikkaa. Sama tässä: laskeudu viereen, älä päälle. */
+  // Asiakkaan päälle laskeutuminen jättää hautakiven. Uusi asiakas tulee
+  // toiseen reunaan, ja kivi jää siihen muistuttamaan koko vuoron ajaksi.
   if (job.phase === 'wait' && pad.id === job.from && job.shown) {
     const b = taxiBox(taxi);
     if (job.x > b.x - 6 && job.x < b.x + b.w + 6) {
-      const p = padById(job.from);
-      job.x = job.x < p.x + p.w / 2
-        ? rand(p.x + p.w - 60, p.x + p.w - 18)
-        : rand(p.x + 18, p.x + 60);
-      say('Hei!', 1.4);
-      sfx.hey();
+      if (graves.length < 10) graves.push({ pad: pad.id, x: job.x, kind: job.kind });
+      say('Hups.', 1.8);
+      sfx.squish();
+      newJob(job.from, job.to, 1.8);
     }
   }
 }
@@ -491,17 +514,21 @@ function jobStep(dt) {
   if (!job.shown) { job.shown = true; say('Hei, taksi!', 2.2); sfx.hey(); }
 
   // Kyytiin vain pysäköidystä taksista samalla alustalla.
-  if (dead || !taxi.landed || taxi.landed.id !== job.from) return;
-  const b = taxiBox(taxi);
-  const target = job.x < taxi.x ? b.x - 8 : b.x + b.w + 8;
-  const d = target - job.x;
-  job.x += Math.sign(d) * Math.min(Math.abs(d), 95 * dt);
-  job.walk += dt * 9;
-  if (Math.abs(d) < 3) {
-    job.phase = 'aboard'; job.t = 0;
-    say(`Alusta ${job.to}, kiitos`, 2.4);
-    sfx.pickup();
+  job.moving = false;
+  if (!dead && taxi.landed && taxi.landed.id === job.from) {
+    const b = taxiBox(taxi);
+    const target = job.x < taxi.x ? b.x - 10 : b.x + b.w + 10;
+    const d = target - job.x;
+    if (Math.abs(d) < 3) {
+      job.phase = 'aboard'; job.t = 0;
+      say(`Alusta ${job.to}, kiitos`, 2.4);
+      sfx.pickup();
+      return;
+    }
+    job.moving = true;
+    job.x += Math.sign(d) * Math.min(Math.abs(d), 95 * dt);
   }
+  job.walk += dt * (job.moving ? 9 : 3);
 }
 
 const fareNow = () => job && job.phase === 'aboard'
@@ -517,7 +544,23 @@ function update(dt) {
   if (dead) {
     deadT += dt;
     jetLevel(0);
-    if (deadT > 1.4) {
+    if (wreck) {
+      wreck.vy += 640 * dt;
+      wreck.x += wreck.vx * dt;
+      wreck.y += wreck.vy * dt;
+      wreck.rot += wreck.spin * dt;
+      wreck.puff -= dt;
+      if (wreck.puff <= 0) {
+        wreck.puff = 0.06;
+        bits.push({
+          x: wreck.x + rand(-10, 10), y: wreck.y + rand(-8, 8),
+          vx: rand(-20, 20), vy: rand(-30, -10),
+          life: 1, color: '#5a6480', r: rand(3, 6), g: -20,
+        });
+      }
+    }
+    const gone = wreck && wreck.y > H + 160;
+    if (gone || deadT > 3.2) {
       if (lives <= 0) return gameOver(false);
       resetTaxi();
     }
@@ -609,7 +652,7 @@ function stepBits(dt) {
   for (let i = bits.length - 1; i >= 0; i--) {
     const b = bits[i];
     b.x += b.vx * dt; b.y += b.vy * dt;
-    b.vy += 200 * dt;
+    b.vy += (b.g === undefined ? 200 : b.g) * dt;
     b.vx *= Math.pow(0.15, dt);
     b.life -= dt * 1.3;
     if (b.life <= 0) bits.splice(i, 1);
@@ -672,23 +715,160 @@ function drawGate() {
   }
 }
 
+/* ------------------------------------------------------------------ alienit
+   Viisi tyyppiä, kaikki samasta piirtorutiinista: vartalon muoto, silmien
+   määrä, raajat ja tuntosarvet vaihtuvat. Kävely on jalkojen vastavaihe ja
+   vartalon pomppu; odottaessa yksi käsi heiluu. Ei tiedostoja, ei latauksia. */
+const ALIENS = [
+  { c: '#7bf0a0', shape: 'blob', eyes: 1, arms: 2, legs: 2, ant: 0 },
+  { c: '#c79bff', shape: 'tall', eyes: 3, arms: 2, legs: 2, ant: 2 },
+  { c: '#ff9ae0', shape: 'dome', eyes: 2, arms: 2, legs: 4, ant: 0 },
+  { c: '#6fe3ff', shape: 'squat', eyes: 2, arms: 4, legs: 2, ant: 1 },
+  { c: '#ffb020', shape: 'bug', eyes: 4, arms: 2, legs: 2, ant: 2 },
+];
+
+function drawAlien(kind, x, groundY, phase, walking, waving, alpha) {
+  const A = ALIENS[kind % ALIENS.length];
+  const bob = (walking ? Math.abs(Math.sin(phase)) * 2 : Math.sin(phase * 0.8) * 1);
+  ctx.save();
+  ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+  ctx.translate(x, groundY - bob);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = A.c; ctx.fillStyle = A.c;
+
+  const hip = -12;
+  const h = A.shape === 'tall' ? 24 : A.shape === 'squat' ? 13 : 17;
+  const w = A.shape === 'tall' ? 11 : A.shape === 'squat' ? 20 : 15;
+  const cy = hip - h / 2;
+  const top = cy - h / 2;
+
+  // jalat: vastavaiheessa kun kävellään
+  ctx.lineWidth = 2.6;
+  for (let i = 0; i < A.legs; i++) {
+    const base = A.legs === 2 ? (i ? 5 : -5) : (i - (A.legs - 1) / 2) * 4.5;
+    const sw = walking ? Math.sin(phase + i * Math.PI) * 5 : 0;
+    ctx.beginPath();
+    ctx.moveTo(base * 0.5, hip);
+    ctx.lineTo(base + sw, bob);
+    ctx.stroke();
+  }
+
+  // vartalo
+  ctx.beginPath();
+  if (A.shape === 'dome') {
+    ctx.moveTo(-w / 2, hip);
+    ctx.lineTo(-w / 2, cy);
+    ctx.arc(0, cy, w / 2, Math.PI, 0);
+    ctx.lineTo(w / 2, hip);
+    ctx.closePath();
+  } else if (A.shape === 'bug' || A.shape === 'blob') {
+    ctx.ellipse(0, cy, w / 2, h / 2, 0, 0, 6.3);
+  } else {
+    ctx.roundRect(-w / 2, top, w, h, w / 2.6);
+  }
+  ctx.fill();
+
+  // kädet
+  ctx.lineWidth = 2.3;
+  for (let i = 0; i < A.arms; i++) {
+    const side = i % 2 ? 1 : -1;
+    const row = Math.floor(i / 2);
+    const sx = side * w / 2 * 0.85, sy = top + 5 + row * 6;
+    let ex = sx + side * 9, ey = sy + 7;
+    if (waving && side === 1 && row === 0) {
+      const a = -1.15 + Math.sin(phase * 2.6) * 0.45;   // kädenheilautus
+      ex = sx + Math.cos(a) * 11; ey = sy + Math.sin(a) * 11;
+    } else if (walking) {
+      ey = sy + 7 + Math.sin(phase + (side > 0 ? Math.PI : 0)) * 3.5;
+    }
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+  }
+
+  // tuntosarvet
+  ctx.lineWidth = 1.8;
+  for (let i = 0; i < A.ant; i++) {
+    const side = A.ant === 1 ? 0 : (i ? 1 : -1);
+    const tipx = side * 6 + Math.sin(phase * 1.5 + i) * 1.5, tipy = top - 10;
+    ctx.beginPath();
+    ctx.moveTo(side * 3, top + 1);
+    ctx.quadraticCurveTo(side * 6, top - 6, tipx, tipy);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(tipx, tipy, 2, 0, 6.3); ctx.fill();
+  }
+
+  // silmät
+  const n = A.eyes, r = n === 1 ? 5.5 : n < 4 ? 2.8 : 2.2;
+  const gap = n === 1 ? 0 : (n === 3 ? 5.5 : n === 4 ? 4.6 : 6);
+  const ey0 = A.shape === 'tall' ? top + 7 : cy - 1;
+  for (let i = 0; i < n; i++) {
+    const ex = (i - (n - 1) / 2) * gap;
+    ctx.fillStyle = '#0b1020';
+    ctx.beginPath(); ctx.arc(ex, ey0, r, 0, 6.3); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(ex + r * 0.25, ey0 - r * 0.25, r * 0.4, 0, 6.3); ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/** Muisto yliajetusta asiakkaasta. Jää alustalle koko vuoron ajaksi. */
+function drawGrave(g) {
+  const p = padById(g.pad);
+  ctx.save();
+  ctx.translate(g.x, p.y);
+  ctx.fillStyle = '#6b7488';
+  ctx.beginPath();
+  ctx.moveTo(-9, 0);
+  ctx.lineTo(-9, -11);
+  ctx.arc(0, -11, 9, Math.PI, 0);
+  ctx.lineTo(9, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#39405180'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -17); ctx.lineTo(0, -6);
+  ctx.moveTo(-4.5, -13); ctx.lineTo(4.5, -13);
+  ctx.stroke();
+  // pieni kukkatupsu sen väriseksi jonka alle jäi
+  ctx.fillStyle = ALIENS[g.kind % ALIENS.length].c;
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath(); ctx.arc(11, -3, 2.6, 0, 6.3); ctx.fill();
+  ctx.restore();
+}
+
 function drawPassenger() {
   if (!job || job.phase !== 'wait' || !job.shown) return;
   const p = padById(job.from);
-  const bob = Math.sin(job.walk) * 2;
+  drawAlien(job.kind, job.x, p.y, job.walk, job.moving, !job.moving);
+}
+
+function taxiShape(w, h, broken) {
+  // runko
+  ctx.fillStyle = broken ? '#c9a253' : '#ffd479';
+  if (!broken) { ctx.shadowColor = 'rgba(255,212,121,.5)'; ctx.shadowBlur = 16; }
+  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 9); ctx.fill();
+  ctx.shadowBlur = 0;
+
   ctx.save();
-  ctx.translate(job.x, p.y - 2 + bob);
-  ctx.strokeStyle = '#ffe6a3'; ctx.fillStyle = '#ffe6a3';
-  ctx.lineWidth = 2.6; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.arc(0, -26, 5, 0, 6.3); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(0, -21); ctx.lineTo(0, -9);
-  ctx.moveTo(0, -18); ctx.lineTo(-7, -13);
-  ctx.moveTo(0, -18); ctx.lineTo(7, -13);
-  ctx.moveTo(0, -9); ctx.lineTo(-6, 0);
-  ctx.moveTo(0, -9); ctx.lineTo(6, 0);
-  ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 9); ctx.clip();
+  ctx.fillStyle = '#22293f';
+  for (let i = 0; i < 9; i++) ctx.fillRect(-w / 2 + i * 6, -h / 2 + (i % 2 ? 5 : 0) + 8, 6, 5);
+  if (broken) {                                  // murtuma ja nokipaikat
+    ctx.fillStyle = '#1a1207';
+    ctx.beginPath();
+    ctx.moveTo(-4, -h / 2); ctx.lineTo(4, -2); ctx.lineTo(-2, 4); ctx.lineTo(6, h / 2);
+    ctx.lineTo(14, h / 2); ctx.lineTo(14, -h / 2);
+    ctx.closePath(); ctx.fill();
+  }
   ctx.restore();
+
+  // ohjaamo
+  ctx.fillStyle = broken ? '#3d6470' : '#7fe6ff';
+  ctx.beginPath(); ctx.ellipse(-w * 0.22, -3, w * 0.2, h * 0.28, 0, 0, 6.3); ctx.fill();
+  if (!broken) {
+    ctx.fillStyle = 'rgba(255,255,255,.7)';
+    ctx.beginPath(); ctx.ellipse(-w * 0.28, -6, 4, 2.6, -0.4, 0, 6.3); ctx.fill();
+  }
 }
 
 function drawTaxi(v) {
@@ -729,21 +909,7 @@ function drawTaxi(v) {
     ctx.stroke();
   }
 
-  ctx.fillStyle = '#ffd479';
-  ctx.shadowColor = 'rgba(255,212,121,.5)'; ctx.shadowBlur = 16;
-  ctx.beginPath(); ctx.roundRect(-TW / 2, -TH / 2, TW, TH, 9); ctx.fill();
-  ctx.shadowBlur = 0;
-
-  ctx.save();
-  ctx.beginPath(); ctx.roundRect(-TW / 2, -TH / 2, TW, TH, 9); ctx.clip();
-  ctx.fillStyle = '#22293f';
-  for (let i = 0; i < 9; i++) ctx.fillRect(-TW / 2 + i * 6, -TH / 2 + (i % 2 ? 5 : 0) + 8, 6, 5);
-  ctx.restore();
-
-  ctx.fillStyle = '#7fe6ff';
-  ctx.beginPath(); ctx.ellipse(-12, -3, 11, 8, 0, 0, 6.3); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.7)';
-  ctx.beginPath(); ctx.ellipse(-15, -6, 4, 2.6, -0.4, 0, 6.3); ctx.fill();
+  taxiShape(TW, TH, false);
 
   const busy = job && job.phase === 'aboard';
   ctx.fillStyle = busy ? '#ff5d7a' : '#9fb0d8';
@@ -751,6 +917,22 @@ function drawTaxi(v) {
   ctx.fillRect(-8, -TH / 2 - 6, 16, 6);
   ctx.shadowBlur = 0;
 
+  ctx.restore();
+}
+
+/** Rikkinäinen taksi matkalla ulos ruudusta: pyörii, savuaa, ei törmää mihinkään. */
+function drawWreck() {
+  if (!wreck) return;
+  ctx.save();
+  ctx.translate(wreck.x, wreck.y);
+  ctx.rotate(wreck.rot);
+  taxiShape(TW, TH, true);
+  // roikkuva laskuteline
+  ctx.strokeStyle = '#7b87a8'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-16, TH / 2 - 2); ctx.lineTo(-24, TH / 2 + 12);
+  ctx.moveTo(16, TH / 2 - 2); ctx.lineTo(19, TH / 2 + 6);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -769,6 +951,24 @@ function bar(x, y, w, h, f, color, label) {
   ctx.fillText(label, x, y - 6);
 }
 
+/** Elämät pieninä takseina: sama muoto kuin pelissä, ei numeroa. */
+function drawLives() {
+  const n = Math.max(0, lives);
+  for (let i = 0; i < n; i++) {
+    ctx.save();
+    ctx.translate(W - 40 - i * 34, 40);
+    ctx.scale(0.5, 0.5);
+    ctx.globalAlpha = 0.9;
+    taxiShape(TW, TH, false);
+    ctx.strokeStyle = '#9fb0d8'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-16, TH / 2 - 2); ctx.lineTo(-20, TH / 2 + 8);
+    ctx.moveTo(16, TH / 2 - 2); ctx.lineTo(20, TH / 2 + 8);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function drawHud() {
   ctx.fillStyle = '#e9edff';
   ctx.font = '700 30px system-ui, sans-serif';
@@ -778,23 +978,24 @@ function drawHud() {
   const f = clamp(fuel / FUEL_MAX, 0, 1);
   bar(26, 74, 200, 11, f, f > 0.45 ? '#7bf0a0' : f > 0.2 ? '#ffd479' : '#ff5d7a', 'POLTTOAINE');
 
+  drawLives();
+
   ctx.textAlign = 'right';
   ctx.fillStyle = '#8a97be';
   ctx.font = '600 15px system-ui, sans-serif';
-  ctx.fillText('taksit ' + Math.max(0, lives), W - 26, 40);
   ctx.fillText(
     served[1] && served[2] ? 'ulos ylhäältä' : `keikat ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2`,
-    W - 26, 62
+    W - 26, 74
   );
 
   const fare = fareNow();
   if (fare) {
     ctx.fillStyle = '#ffd479';
     ctx.font = '700 22px system-ui, sans-serif';
-    ctx.fillText(fare + ' €', W - 26, 98);
+    ctx.fillText(fare + ' €', W - 26, 108);
     ctx.fillStyle = 'rgba(233,237,255,.45)';
     ctx.font = '600 11px system-ui, sans-serif';
-    ctx.fillText('MITTARI  →  ALUSTA ' + job.to, W - 26, 114);
+    ctx.fillText('MITTARI  →  ALUSTA ' + job.to, W - 26, 124);
   }
 
   if (msgT > 0) {
@@ -802,7 +1003,7 @@ function drawHud() {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e9edff';
     ctx.font = '700 22px system-ui, sans-serif';
-    ctx.fillText(msg, W / 2, 160);
+    ctx.fillText(msg, W / 2, 170);
     ctx.globalAlpha = 1;
   }
 }
@@ -916,8 +1117,10 @@ function draw(v) {
   for (const r of WALLS) drawWall(r);
   drawGate();
   for (const p of PADS) drawPad(p);
+  for (const gr of graves) drawGrave(gr);
   drawPassenger();
   drawTaxi(v);
+  drawWreck();
 
   for (const b of bits) {
     ctx.globalAlpha = clamp(b.life, 0, 1);
@@ -943,8 +1146,8 @@ const SLIDERS = [
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
   { key: 'refuel', label: 'tankkaus / s', min: 5, max: 80, step: 1 },
   { key: 'price', label: 'bensan hinta', min: 0, max: 3, step: 0.1 },
-  { key: 'fare', label: 'perusmaksu', min: 0, max: 150, step: 5 },
-  { key: 'tip', label: 'tippi max', min: 0, max: 150, step: 5 },
+  { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
+  { key: 'tip', label: 'tippi max', min: 0, max: 200, step: 5 },
   { key: 'tipTime', label: 'tipin kesto s', min: 5, max: 60, step: 1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
 ];
@@ -970,12 +1173,9 @@ function buildPanel() {
   // telinenapin puoli
   const sideRow = el('div', 'row');
   const seg = el('div', 'seg');
-  const mk = (side, text) => {
-    const b = pbutton(gearSide === side ? 'on' : null, text, () => {
-      gearSide = side; layout(); saveTune(); buildPanel();
-    });
-    return b;
-  };
+  const mk = (side, text) => pbutton(gearSide === side ? 'on' : null, text, () => {
+    gearSide = side; layout(); saveTune(); buildPanel();
+  });
   seg.append(mk('left', 'vasen'), mk('right', 'oikea'));
   sideRow.append(el('label', null, 'telinenappi'), seg);
   panelEl.append(sideRow);
@@ -1004,6 +1204,7 @@ function buildPanel() {
   foot.append(
     pbutton('btn sm ghost', 'oletukset', () => {
       Object.assign(P, DEFAULTS);
+      gearSide = DEFAULT_SIDE; layout();
       stick.gain = P.stick;
       saveTune();
       panelNote = 'oletukset palautettu';
@@ -1075,8 +1276,8 @@ const buttons = `
 
 const menuCard = () => `
   <h1>Space <span>Taxi</span></h1>
-  <p>Nosta tyyppi kyytiin ja vie hänet toiselle alustalle. Mitä nopeammin ja
-     pehmeämmin, sitä isompi tippi.</p>
+  <p>Nosta alien kyytiin ja vie hänet toiselle alustalle. Mitä nopeammin ja
+     pehmeämmin, sitä isompi tippi. Laskeudu viereen, älä päälle.</p>
   <p><b>Laskuteline pitää laskea ennen kosketusta</b> — ja alhaalla se sammuttaa
      sivusuuttimet, joten suunta on oltava valmiina.</p>
   <p>Keskellä tankataan omalla rahalla. Kun molemmilla alustoilla on käyty,
@@ -1092,7 +1293,7 @@ const overWon = () => `
   <h1>Vuoro <span>selvä</span></h1>
   <div class="big">${Math.round(money)} €</div>
   <p>Molemmat keikat ajettu ja ulos katosta — ${Math.round(runT)} sekuntia,
-     ${Math.max(0, lives)} taksia ehjänä.</p>
+     ${Math.max(0, lives)} taksia ehjänä${graves.length ? `, ${graves.length} hautakiveä` : ''}.</p>
   <div id="lb"></div>
   ${buttons.replace('%s', 'Uusi vuoro')}`;
 
@@ -1100,7 +1301,7 @@ const overLost = () => `
   <h1>Taksit <span>loppu</span></h1>
   <div class="big">${Math.round(money)} €</div>
   <p>Vuoro katkesi ${Math.round(runT)} sekunnin kohdalla.
-     Keikkoja tehtynä ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2.</p>
+     Keikkoja tehtynä ${(served[1] ? 1 : 0) + (served[2] ? 1 : 0)}/2${graves.length ? `, hautakiviä ${graves.length}` : ''}.</p>
   <p class="hint">Pehmeä lasku maksaa itsensä takaisin tippinä.</p>
   <div id="lb"></div>
   ${buttons.replace('%s', 'Uusi vuoro')}`;
