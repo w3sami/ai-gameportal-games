@@ -911,6 +911,20 @@ const TIPPERS = [
 const tipper = () => TIPPERS[job ? job.tipper : 0] || TIPPERS[0];
 const tipMul = () => P[tipper().mul];
 
+/* Kaasuasiakas maksaa bensan. Hänen kyydissään suuttimet eivät kuluta tankkia,
+   mikä on se syy pitää kaasu pohjassa: mittari ei laske eikä tankki tyhjene.
+   Mittari hehkuu sen merkiksi oman värinsä ja syaanin väliä, jotta tilan
+   tunnistaa vilkaisulla eikä sitä tarvitse päätellä repliikistä. */
+const holdRide = () => !!job && job.phase === 'aboard' && tipper().onlyIdle;
+const FUEL_HOLD = '#6fe3ff';
+
+/** Kahden hex-värin sekoitus: u = 0 antaa a:n, u = 1 antaa b:n. */
+function mixHex(a, b, u) {
+  const na = parseInt(a.slice(1), 16), nb = parseInt(b.slice(1), 16);
+  const ch = sh => Math.round(((na >> sh) & 255) * (1 - u) + ((nb >> sh) & 255) * u);
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+}
+
 /* Jäljellä oleva tippi, 0…1. Sama kaava kassanäytössä ja maksussa. */
 const tipLeft = () => Math.max(0, 1 - job.t / P.tipTime);
 
@@ -1078,7 +1092,7 @@ function update(dt) {
   }
 
   const throttle = Math.min(1, Math.hypot(v.x, v.y));
-  if (throttle > 0) {
+  if (throttle > 0 && !holdRide()) {
     const had = fuel;
     fuel = Math.max(0, fuel - P.burn * throttle * dt);
     if (had > 0 && fuel <= 0) say(t('msg.dry'), 3);
@@ -1635,8 +1649,10 @@ function drawHud() {
 
   const f = clamp(fuel / FUEL_MAX, 0, 1);
   const blink = fuel < FUEL_LOW ? 0.55 + Math.sin(runT * 9) * 0.45 : 1;
+  const own = f > 0.45 ? '#7bf0a0' : f > 0.2 ? '#ffd479' : '#ff5d7a';
+  const col = holdRide() ? mixHex(own, FUEL_HOLD, 0.5 + Math.sin(runT * 4) * 0.5) : own;
   ctx.globalAlpha = blink;
-  bar(26, 74, 200, 11, f, f > 0.45 ? '#7bf0a0' : f > 0.2 ? '#ffd479' : '#ff5d7a', t('ui.fuel'));
+  bar(26, 74, 200, 11, f, col, t('ui.fuel'));
   ctx.globalAlpha = 1;
 
   drawLives();
