@@ -795,8 +795,10 @@ function drawPad(p) {
   }
 }
 
-/* Luukku: kiinni tavallinen seinä, auki kaksi efektiä päällekkäin — hengittävä
-   hehku ja sen läpi ylöspäin juoksevat pulssit. Väri tulee kentästä. */
+/* Luukku. Kiinni se on tavallinen seinä. Auki siitä valuu valoa kuin katossa
+   olisi lamppu: pallomainen hehku, josta näkyy alaspäin aukeava neljännes.
+   Päällä aallot, jotka kulkevat sisäänpäin kohti aukkoa — pisaran renkaat
+   takaperin. Ei reunaviivoja: mikään tässä ei ole pintaa johon voi osua. */
 function drawGate() {
   const g = GATE;
   if (!gateOpen) {
@@ -807,49 +809,39 @@ function drawGate() {
   }
 
   const col = glowColor();
-  const tall = 150;
-  const breathe = 0.6 + Math.sin(runT * 2.4) * 0.4;
+  const cx = g.x + g.w / 2, cy = 12;                 // valonlähde katon tasolla
+  const R = 260;                                     // pallon säde
+  const A0 = Math.PI * 0.25, A1 = Math.PI * 0.75;    // näkyvä neljännes
+  const breathe = 0.6 + Math.sin(runT * 2.2) * 0.4;
 
   ctx.save();
-  ctx.beginPath(); ctx.rect(g.x, 0, g.w, tall); ctx.clip();
-
-  // 1) hehku: kirkkaimmillaan aukolla, haipuu alaspäin
-  const grad = ctx.createLinearGradient(0, 0, 0, tall);
-  grad.addColorStop(0, rgba(col, 0.30 + breathe * 0.26));
-  grad.addColorStop(0.45, rgba(col, 0.12 + breathe * 0.12));
-  grad.addColorStop(1, rgba(col, 0));
-  ctx.fillStyle = grad;
-  ctx.fillRect(g.x, 0, g.w, tall);
-
-  // reunojen valoviivat, jotta aukko erottuu seinästä
-  ctx.strokeStyle = rgba(col, 0.5 + breathe * 0.3);
-  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(g.x + 1.5, tall); ctx.lineTo(g.x + 1.5, 0);
-  ctx.moveTo(g.x + g.w - 1.5, tall); ctx.lineTo(g.x + g.w - 1.5, 0);
-  ctx.stroke();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, R, A0, A1);
+  ctx.closePath();
+  ctx.clip();
 
-  // 2) pulssit: kolme valokaistaa nousee pohjalta aukkoon ja haipuu
+  const ball = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  ball.addColorStop(0, rgba(col, 0.42 + breathe * 0.30));
+  ball.addColorStop(0.18, rgba(col, 0.22 + breathe * 0.16));
+  ball.addColorStop(0.55, rgba(col, 0.07));
+  ball.addColorStop(1, rgba(col, 0));
+  ctx.fillStyle = ball;
+  ctx.fillRect(cx - R, cy, R * 2, R);
+
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = col;
+  ctx.shadowColor = col;
+  ctx.shadowBlur = 18;
   for (let i = 0; i < 3; i++) {
-    const p = ((runT * 0.75 + i / 3) % 1);
-    const y = tall - p * tall;
-    const a = Math.sin(p * Math.PI) * 0.55;
-    const half = g.w / 2 * (0.55 + p * 0.45);
-    const band = ctx.createLinearGradient(0, y - 16, 0, y + 16);
-    band.addColorStop(0, rgba(col, 0));
-    band.addColorStop(0.5, rgba(col, a));
-    band.addColorStop(1, rgba(col, 0));
-    ctx.fillStyle = band;
-    ctx.fillRect(g.x + g.w / 2 - half, y - 16, half * 2, 32);
+    const p = (runT * 0.45 + i / 3) % 1;
+    const r = 14 + (R - 14) * (1 - p);              // ulkoa sisään
+    ctx.globalAlpha = Math.sin(p * Math.PI) * 0.5;  // kirkkain puolimatkassa
+    ctx.lineWidth = 2 + 7 * (1 - p);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, A0, A1);
+    ctx.stroke();
   }
-  ctx.restore();
-
-  // aukon huulet hehkuvat kirkkaimmin
-  ctx.save();
-  ctx.shadowColor = col; ctx.shadowBlur = 22;
-  ctx.fillStyle = rgba(col, 0.75 + breathe * 0.25);
-  ctx.fillRect(g.x - 4, 0, 6, 16);
-  ctx.fillRect(g.x + g.w - 2, 0, 6, 16);
   ctx.restore();
 }
 
