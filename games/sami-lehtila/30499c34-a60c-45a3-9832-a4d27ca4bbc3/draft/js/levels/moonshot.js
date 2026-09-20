@@ -152,14 +152,18 @@ const POLES = [
      tai alustalle — se oli ensimmäisen version vika. Siksi x on joko lohkon
      reunassa tai oviaukkojen välissä, ja korkeus jää alustan alapuolelle. */
   { x: 262, y: HY[0], h: 44, hz: 0.5, col: '#7bf0a0' },    // TM, vasen nurkka
-  { x: 696, y: HY[0], h: 40, hz: 0.9, col: '#ff5d7a' },    // TR, oikea nurkka
+  { x: 592, y: 248, rot: 270, h: 16, hz: 0.9, col: '#ff5d7a' },  // TR, hyllyn pää
   { x: 26, y: HY[1], h: 44, hz: 0.75, col: '#7bf0a0' },    // ML, vasen nurkka
   { x: 458, y: HY[1], h: 40, hz: 0.6, col: '#7bf0a0' },    // C, oikea nurkka
-  { x: 700, y: HY[1], h: 42, hz: 0.35, col: '#ff5d7a' },   // MR, oikea nurkka
+  { x: 496, y: HY[1], h: 42, hz: 0.35, col: '#ff5d7a' },   // MR, vasen nurkka
   { x: 46, y: 1004, h: 92, hz: 0.7, col: '#7bf0a0' },      // BL, vasen nurkka
   { x: 214, y: 1004, h: 76, hz: 1.1, col: '#7bf0a0' },     // BL, oikea nurkka
   { x: 268, y: 1004, h: 88, hz: 0.45, col: '#7bf0a0' },    // BM, vasen nurkka
   { x: 692, y: 1004, h: 96, hz: 0.85, col: '#ff5d7a' },    // BR, oikea nurkka
+  /* Katosta roikkuvat: rot 180 kääntää maston alaspäin. Kiinnityspiste on
+     katon alapinnassa, jolloin tolppa näyttää pultatulta eikä leijuvalta. */
+  { x: 444, y: 24, rot: 180, h: 28, hz: 0.5, col: '#7bf0a0' },   // TM, katto
+  { x: 276, y: 28, rot: 180, h: 28, hz: 0.8, col: '#7bf0a0' },   // TM, katto
 ];
 
 /* Raketti telineessään siinä lohkossa, josta vuoro alkaa (alusta 1), kannen
@@ -170,7 +174,7 @@ const POLES = [
    kumpaankin reunaan. Raketti eväineen on 56 leveä.
 
    x, y on telineen jalka kannen pinnalla. */
-const ROCKET = { x: 198, y: HY[0], h: 128 };
+const ROCKET = { x: 200, y: HY[0], h: 128 };
 const ROCKETS = [ROCKET];                     // taulukkona, jotta niitä saa lisää
 
 /* ---------------------------------------------------------- valonheittimet
@@ -190,10 +194,15 @@ const ROCKETS = [ROCKET];                     // taulukkona, jotta niitä saa li
 
    Nämä ovat kulissia kuten kaikki muukin kentän koriste: ei törmäystä. */
 const LAMPS = [
-  { x: 535, y: 20, rot: 0, h: 224, col: '#ffd479' },    // TR:n katto, alusta 2
-  { x: 535, y: 360, rot: 0, h: 76, col: '#ffd479' },    // MR, alusta 4
-  { x: 300, y: 696, rot: 0, h: 122, col: '#9ad8ff' },   // BM, alusta 6
+  { x: 536, y: 20, rot: 0, h: 120, col: '#ffd479' },    // TR:n katto
+  { x: 536, y: 360, rot: 0, h: 120, col: '#ffd479' },   // MR, alusta 4
+  { x: 352, y: 708, rot: 0, h: 122, col: '#9ad8ff' },   // BM, alusta 6
   { x: 520, y: 696, rot: 0, h: 210, col: '#ffd479' },   // BR, alusta 7
+  /* Kolme vinoon käännettyä: valo tulee sivusta ja piirtää viistoa kaistaa.
+     Kulmat ovat asteina, 0 alas. */
+  { x: 252, y: 576, rot: 330, h: 120, col: '#ffd479' }, // C, oikealta alas
+  { x: 176, y: 708, rot: 0, h: 132, col: '#ffd479' },   // BL, alusta 5
+  { x: 32, y: 372, rot: 345, h: 144, col: '#ffd479' },  // ML, vasen seinä
 ];
 
 /** Heksaväri läpinäkyvyydellä. Kentän värit ovat kuusinumeroisia. */
@@ -235,6 +244,49 @@ const LEDGES = [
   { x: 594, y: 240, w: 108, h: 18 },          // TR, oikea laita
 ];
 
+/* --------------------------------------------------------------------- ufo
+
+   Taustalla kiertävä lautanen. Sami piirsi radan luonnoslehtiöön vapaalla
+   vedolla, ja siitä sovitettiin ellipsi pääakseleiden kautta: keskipiste,
+   säteet ja kallistus. Sovitus osuu vetoon keskimäärin 3,8 %:n tarkkuudella,
+   eli rata on se jonka hän piirsi eikä sen siisti sukulainen.
+
+   Kiertää koristekellolla eikä pelin kellolla, kuten kentän muutkin koristeet:
+   pelin kello pysähtyy luukusta tullessa, ja pysähtynyt lautanen näyttäisi
+   rikkinäiseltä.
+
+   Piirtyy drawBackissa ruudukon seinien alle — se on taustalla eikä kentässä,
+   eikä siinä ole törmäystä sen enempää kuin muissakaan koristeissa.
+
+   x, y  radan keskipiste    rx, ry  säteet    rot  radan kallistus asteina
+   secs  kierrosaika         sx, sy  venyttävät rataa editorista */
+const UFO = { x: 478, y: 510, rx: 163, ry: 65, rot: 17, secs: 16 };
+
+function ufo(ctx, u) {
+  const t = (clock / 1000 / Math.max(2, u.secs)) * Math.PI * 2;
+  const a = (u.rot || 0) * Math.PI / 180;
+  const ex = Math.cos(t) * u.rx * Math.abs(u.sx ?? 1);
+  const ey = Math.sin(t) * u.ry * Math.abs(u.sy ?? 1);
+  const x = u.x + ex * Math.cos(a) - ey * Math.sin(a);
+  const y = u.y + ex * Math.sin(a) + ey * Math.cos(a);
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = 0.8;                      // kaukana: pieni ja vähäkontrastinen
+  ctx.fillStyle = '#39414f';                  // runko
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 4, 0, 0, 6.3); ctx.fill();
+  ctx.fillStyle = 'rgba(155,200,235,.45)';    // kupu
+  ctx.beginPath(); ctx.ellipse(0, -1.5, 5.5, 5, 0, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = 'rgba(214,224,240,.3)';     // valo ylävasemmalta
+  ctx.beginPath(); ctx.ellipse(-2, -1, 8, 1.2, 0, 0, 6.3); ctx.fill();
+  const lit = (clock / 220 | 0) % 3;          // alavalot kiertävät
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = i === lit ? '#7bf0a0' : 'rgba(58,78,70,.8)';
+    ctx.fillRect(-7 + i * 6, 3, 2.5, 2);
+  }
+  ctx.restore();
+}
+
 const SOLIDS = [...GRID, ...PANELS, ...LEDGES];
 
 /* ----------------------------------------------------------------- alustat
@@ -248,7 +300,7 @@ const PADS = [
   { id: 1, x: 20, y: 240, w: 104, h: 18 },    // TL, vasen kehäseinä
   { id: 2, x: 488, y: 120, w: 104, h: 18 },   // TR, ylhäällä
   { id: 3, x: 20, y: 504, w: 104, h: 18 },    // ML, vasen kehäseinä
-  { id: 4, x: 483, y: 430, w: 104, h: 18 },   // MR, keskiseinä
+  { id: 4, x: 483, y: 487, w: 104, h: 18 },   // MR, keskiseinä
   { id: 5, x: 128, y: 868, w: 104, h: 18 },   // BL, alanurkka nappien päällä
   { id: 6, x: 304, y: 852, w: 104, h: 18 },   // BM
   { id: 7, x: 483, y: 900, w: 104, h: 18 },   // BR, keskiseinä
@@ -671,6 +723,7 @@ function moonBack(ctx, api) {
   earth(ctx);
   ridges(ctx);
   farDomes(ctx);
+  ufo(ctx, UFO);                              // taustalla, seinien alla
   plain(ctx);
   for (const d of DOMES) {
     ctx.fillStyle = 'rgba(10,12,18,.4)';
@@ -749,6 +802,11 @@ const EDIT = [
      ylävasemmalta, ja kääntäminen rikkoisi kentän toisen piirtosäännön. */
   { id: 'prop:earth', kind: 'prop', obj: EARTH, label: 'maapallo',
     knob: { key: 'r', label: 'säde', min: 18, max: 120, step: 1 } },
+  /* Ufon kahva on radan keskipiste eikä lautanen: sitä sommitellaan. Kierto
+     kallistaa rataa, skaalaus venyttää sitä, knob on kierrosaika. */
+  { id: 'prop:ufo', kind: 'prop', obj: UFO, label: 'ufo',
+    transform: { rot: true, scale: true },
+    knob: { key: 'secs', label: 'kierros s', min: 4, max: 60, step: 1 } },
   ...DOMES.map((d, i) => ({
     id: `prop:dome-${i + 1}`, kind: 'prop', obj: d, label: `kupoli ${i + 1}`,
     knob: { key: 'r', label: 'säde', min: 24, max: 140, step: 1 },
