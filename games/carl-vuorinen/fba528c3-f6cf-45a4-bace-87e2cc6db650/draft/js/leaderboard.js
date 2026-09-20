@@ -1,6 +1,6 @@
-// Leaderboard, phase 1: one board for the whole game, the level a dimension inside it. A time is posted when it
-// beats the one this browser has already put up, and the board is read back into every placeholder a menu leaves.
-// No ghost travels with a time yet; the board's `data` is untouched, which is where a replay will go.
+// Leaderboard: one board for the whole game, the level a dimension inside it. A time is posted when it beats the
+// one this browser has already put up, and the board is read back into every placeholder a menu leaves. The run
+// that flew the time rides along in the entry's data, so any row carrying one can be raced as a ghost.
 //
 // The rows are drawn here rather than with <leaderboard-panel> because a board stores whole numbers and this game
 // counts in milliseconds: a time belongs on screen as a clock, not as "12,431".
@@ -61,7 +61,15 @@ async function panel(host){
 async function send(lv, ms, status){
   status.className = 'lb-note';
   status.textContent = 'Posting your time…';
-  const r = await submit({ score: ms, board: BOARD, level: levelOf(lv) });
+  const post = { score: ms, board: BOARD, level: levelOf(lv) };
+  // The ghost rides along with the time. The game packs it and the board never looks inside; if it will not fit,
+  // the time goes up without one and the row is simply not raceable.
+  const path = window.Thruster && window.Thruster.replay(lv);
+  if (path){
+    const data = {v:1, r:path};
+    if (JSON.stringify(data).length <= 1980) post.data = data;
+  }
+  const r = await submit(post);
   if (r.kept){
     mine[lv] = {ms, id: r.entry.id}; remember();
     status.className = 'lb-note good';
@@ -82,9 +90,26 @@ async function draw(lv, body, sub, title){
   for (const e of page.entries){
     const row = el('li', `lbrow${e.rank <= 3 ? ' top' : ''}${e.id === highlight ? ' me' : ''}`);
     row.append(el('span', 'r', e.rank), el('span', 'n', e.name), el('span', 't', clock(e.score)));
+    const go = raceButton(lv, e); if (go) row.append(go);
     list.append(row);
   }
   body.replaceChildren(list);
+}
+
+// A row whose entry carries a ghost can be raced. A row without one is just a time, and says nothing about it.
+// The path knows its own tick length, so a time that disagrees with the run supposed to have flown it is not
+// offered: it stops the lazy forgery, and nothing more than that.
+function raceButton(lv, entry){
+  const path = entry.data && entry.data.v === 1 ? entry.data.r : null;
+  if (!path || !window.Thruster) return null;
+  const ticks = window.Thruster.ticksOf(path);
+  if (!ticks || Math.abs(Math.round(ticks*1000/120) - entry.score) > 500) return null;
+  const b = el('button', 'lbgo', 'VS');
+  b.type = 'button';
+  b.title = `Race ${entry.name}'s ghost`;
+  b.setAttribute('aria-label', `Race ${entry.name}'s ghost`);
+  b.addEventListener('click', () => window.Thruster.race(lv, entry.name, path));
+  return b;
 }
 
 // The name line, and the only place a name is ever asked for: a player who never lands is never asked at all.
