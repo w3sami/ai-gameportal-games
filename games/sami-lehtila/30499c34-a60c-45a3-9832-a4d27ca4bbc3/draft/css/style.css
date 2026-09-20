@@ -121,10 +121,11 @@ kbd {
 /* Nappirivi rivittyy. Kenttiä tulee lisää yksi kerrallaan, ja ilman
    rivitystä kuudes kenttä puristi nimet lukukelvottomiksi ja työnsi
    viimeisen paneelin reunan yli. min-width: max-content pitää huolen siitä,
-   ettei nappi kapene tekstiään pienemmäksi vaan siirtyy seuraavalle riville. */
+   ettei nappi kapene tekstiään pienemmäksi vaan siirtyy seuraavalle riville,
+   ja max-width siitä, ettei rivin ainoa nappi veny koko paneelin levyiseksi. */
 #panel .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 #panel .seg button {
-  flex: 1 1 auto; min-width: max-content; white-space: nowrap;
+  flex: 1 1 auto; min-width: max-content; max-width: 160px; white-space: nowrap;
   font: inherit; font-size: 12px; padding: 8px 10px;
   color: #a9b6dd; background: rgba(255,255,255,.06);
   border: 1px solid rgba(120,160,255,.26); border-radius: 9px; cursor: pointer;
