@@ -1538,10 +1538,12 @@ function drawPad(p) {
   ctx.fillRect(p.x + 6, p.y, p.w - 12, 3);
   ctx.shadowBlur = 0;
 
-  /* Kaksi jalkaa alustan alla. Kenttä saa ottaa ne pois (padLegs: false):
-     seinään pultattu alusta ei seiso jaloilla, ja tyngät sen alla näyttävät
-     siltä että kiinnitys unohtui kesken. */
-  if (level.padLegs !== false) {
+  /* Kaksi jalkaa alustan alla, oletuksena pois. Kenttä pyytää ne erikseen
+     (padLegs: true), koska ne näyttävät hyvältä vain silloin kun niiden alla
+     on jotain mihin alusta on pultattu — huvipuistossa laitteet, jolloin
+     alusta on niiden katolla. Muualla ne roikkuvat tyhjässä, ja kahdessa
+     kentässä ne jäävät muutenkin kulissien peittoon. */
+  if (level.padLegs) {
     ctx.fillStyle = 'rgba(30,40,70,.85)';
     ctx.fillRect(p.x + 12, p.y + p.h, 8, 14);
     ctx.fillRect(p.x + p.w - 20, p.y + p.h, 8, 14);
