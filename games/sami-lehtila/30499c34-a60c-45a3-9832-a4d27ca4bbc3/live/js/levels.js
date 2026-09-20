@@ -19,6 +19,12 @@
  *               asiakas ja hautakivet kulkevat mukana
  *   start       alusta jolle taksi palaa kolarin jälkeen
  *   firstFrom   alusta jolle ensimmäinen asiakas ilmestyy
+ *   taxiScale   valinnainen 0…1: peli skaalaa taksin piirron tällä. Pelkkää
+ *               piirtoa — fysiikka ei tiedä siitä. Getterinä, jos se muuttuu
+ *               ruudusta toiseen. Ks. levels/teleport.js.
+ *   seeds       valinnaisia {x, y}: paikkoja joihin taksi voi ilmestyä
+ *               lentämättä. Työkalut lukevat ne, jotta vuototäyttö ei luule
+ *               portin takaista huonetta saavuttamattomaksi.
  *   edit        mitä kenttäeditori saa raahata, valinnainen:
  *               [{ id, kind: 'pad' | 'prop', obj, label }]
  *               obj on olio jolla on x ja y ja jonka piirto lukee ne joka
@@ -54,13 +60,17 @@ import { highrise } from './levels/highrise.js';
 import { funfair } from './levels/funfair.js';
 import { stormport } from './levels/stormport.js';
 import { troublefactory } from './levels/troublefactory.js';
+import { teleport } from './levels/teleport.js';
 import { moonshot } from './levels/moonshot.js';
 
-export const LEVELS = [intro, highrise, funfair, stormport, troublefactory, moonshot];
+/* Teleport on Moonshotin edellä, koska Moonshot on liian vaikea kuudenneksi:
+   Sami pääsi kolmella taksilla neljään keikkaan seitsemästä. Teleport on
+   kartan opettelua eikä käsien nopeutta, ja järjestys on tässä yksi rivi. */
+export const LEVELS = [intro, highrise, funfair, stormport, troublefactory, teleport, moonshot];
 
 /* Sama järjestys tiedostoniminä. Tämä on vain sitä varten, että säätöpaneelin
    "lataa kenttä" saa tuotua kentän uudestaan ilman koko sivun latausta —
    kenttää rakentaessa sivu ladataan kymmeniä kertoja, ja sivun lataus pudottaa
    kokoruututilan ja avoimet paneelit. Kentän vaihtaminen ei koske tätä riviä
    sen enempää kuin LEVELS-riviäkään. */
-export const LEVEL_FILES = ['intro', 'highrise', 'funfair', 'stormport', 'troublefactory', 'moonshot'];
+export const LEVEL_FILES = ['intro', 'highrise', 'funfair', 'stormport', 'troublefactory', 'teleport', 'moonshot'];

@@ -65,7 +65,7 @@ function gapOf(w) {
 /** Mihin taksin kokoinen laatikko pääsee luukun alta, ovet auki. Sama
     vuototäyttö kuin tarkistimessa: sillä löytyi kolme virhettä joita ei olisi
     huomannut ilman kenttää läpi lentämällä. */
-function reach(walls, pads, gate) {
+function reach(walls, pads, gate, seeds) {
   const solids = walls.filter(w => !w.door).concat(pads.map(box));
   const free = (x, y) => {
     const b = { x: x - TWB / 2, y: y - THB / 2, w: TWB, h: THB };
@@ -73,10 +73,22 @@ function reach(walls, pads, gate) {
     for (const s of solids) if (hit(b, s)) return false;
     return true;
   };
-  const sx = Math.round((gate.x + gate.w / 2) / STEP) * STEP, sy = 60;
+  const snap = v => Math.round(v / STEP) * STEP;
+  const sx = snap(gate.x + gate.w / 2), sy = 60;
   if (!free(sx, sy)) return null;
   const seen = new Set([sx + ',' + sy]);
   const st = [[sx, sy]];
+  /* Kenttä voi kertoa paikkoja joihin taksi ilmestyy lentämättä — Teleportin
+     porttien ulostulot. Ilman niitä täyttö luulisi kolmea huonetta
+     saavuttamattomiksi, ja jokainen niiden alusta olisi "ei pääse
+     laskeutumaan". */
+  for (const s of seeds || []) {
+    const x = snap(s.x), y = snap(s.y);
+    const k = x + ',' + y;
+    if (seen.has(k) || !free(x, y)) continue;
+    seen.add(k);
+    st.push([x, y]);
+  }
   while (st.length) {
     const [x, y] = st.pop();
     for (const [dx, dy] of [[STEP, 0], [-STEP, 0], [0, STEP], [0, -STEP]]) {
@@ -158,7 +170,7 @@ export function createSketch(host) {
       }
     }
 
-    const vis = reach(walls, pads, host.gate());
+    const vis = reach(walls, pads, host.gate(), host.level().seeds);
     if (!vis) { add('luukun alla ei ole tilaa tulla sisään', null); return out; }
 
     for (const p of pads) {
