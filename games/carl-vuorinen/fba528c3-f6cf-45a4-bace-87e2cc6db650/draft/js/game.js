@@ -100,7 +100,7 @@ const Snd = (() => {
 })();
 
 // ---- Game state ----
-let ship, ghost = null, best = null, particles = [], ticks = 0, gTick = 0, running = false, inputs = [], deadT = 0, shake = 0, doneT = 0;
+let ship, ghost = null, gPath = null, best = null, particles = [], ticks = 0, gTick = 0, running = false, gRec = [], deadT = 0, shake = 0, doneT = 0;
 let mode = 'menu', wet = false, caveK = 0;                   // menu | play | paused | complete; wet: rocket inside a waterfall; caveK: 0 jungle → 1 cave backdrop
 const cam = {x:0,y:0};
 const keys = {thrust:false,left:false,right:false};
@@ -110,8 +110,9 @@ const fmt = t => { const s = t/120, m = Math.floor(s/60); return `${m}:${(s-m*60
 
 function spawn(){ const p = L.pads.start; return {x:p.x+p.w/2, y:p.y-11, vx:0, vy:0, a:0, state:'idle', flame:0}; }
 function reset(){
-  ship = spawn(); best = store.bests[li] || null; ghost = best ? spawn() : null;
-  ticks = 0; gTick = 0; running = false; inputs = []; particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
+  ship = spawn(); best = store.bests[li] || null; ghost = null; gPath = null;
+  if (best && best.path){ try { gPath = GP.decode(GP.unb64(best.path)); ghost = GP.pose(gPath, 0, {}); } catch (e) { gPath = null; ghost = null; } }
+  ticks = 0; gTick = 0; running = false; gRec = []; particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
   cam.x = ship.x - vw/(2*Z); cam.y = ship.y - vh/(2*Z);
   hud();
 }
@@ -127,8 +128,8 @@ function loadLevel(i){
 //   water adds {pool:{x,w,h}} for the pool it lands in. kind ∈ water | wind | gas, which only changes how it is drawn.
 const forceOn = (f, tick) => !f.period || (((tick*DT + (f.phase||0)) % f.period) / f.period) < (f.duty === undefined ? 1 : f.duty);
 const inRect = (f, x, y) => x >= f.x && x <= f.x+f.w && y >= f.y && y <= f.y+f.h;
-function applyForces(s, tick){
-  for (const f of L.forces||[]){
+function applyForces(s, tick, fs){
+  for (const f of fs || L.forces || []){
     if (!forceOn(f, tick)) continue;
     if (f.r !== undefined){
       const dx = f.cx-s.x, dy = f.cy-s.y, d = Math.hypot(dx,dy); if (d > f.r || d < 1) continue;
@@ -171,17 +172,61 @@ function collide(s){
   return null;
 }
 function settle(s, z){ s.state = 'landed'; s.vx = s.vy = 0; s.a = 0; s.y = z.y-11; s.flame = 0; }
-const encode = i => i.thrust | (Math.round(i.steer*15)+15) << 1;
-const decode = c => ({thrust:c&1, steer:((c>>1)-15)/15});
+// Saves from before ghost paths hold a tick-by-tick input recording. Those still replay exactly (the flight model has
+// not moved), so each one is converted to a path once, at startup, rather than thrown away along with the ghost.
+// The replay needs no collision mask: a finished run never touches rock, and only a pad can stop it early. Forces do
+// apply, so a converted ghost still drifts down a waterfall the way it did on the run.
+function padZones(lev){ return Object.values(lev.pads).map(p => ({x:p.x-14, w:p.w+28, y:p.y})); }
+function stepFree(s, inp, zones, fs, tick){
+  if (s.state === 'idle' || s.state === 'landed'){ if (!inp.thrust) return; s.state = 'flying'; }
+  if (s.state !== 'flying') return;
+  s.a = normAng(s.a + inp.steer*P.turnRate*DEG*DT);
+  const th = inp.thrust ? P.thrust : 0;
+  s.vx += Math.sin(s.a)*th*DT; s.vy += (-Math.cos(s.a)*th + P.gravity)*DT;
+  applyForces(s, tick, fs);
+  s.flame = inp.thrust ? 1 : 0;
+  const sp = Math.hypot(s.vx,s.vy), n = Math.ceil(sp*DT/2) || 1;
+  for (let i=0;i<n;i++){
+    s.x += s.vx*DT/n; s.y += s.vy*DT/n;
+    if (s.vy < 0) continue;
+    const c = Math.cos(s.a), sn = Math.sin(s.a);
+    for (const [lx,ly] of HULL){
+      const px = s.x+lx*c-ly*sn, py = s.y+lx*sn+ly*c;
+      for (const z of zones) if (px>=z.x && px<=z.x+z.w && py>=z.y-1 && py<=z.y+10){ settle(s, z); return; }
+    }
+  }
+}
+function migrateBests(){
+  let changed = false;
+  for (const key of Object.keys(store.bests)){
+    const b = store.bests[key], lev = LEVELS[key];
+    if (!b || !b.inputs) continue;
+    if (!b.path && lev){
+      try {
+        const zones = padZones(lev), fs = lev.forces || [], p0 = lev.pads.start, step = GP.STEP;
+        const s = {x:p0.x+p0.w/2, y:p0.y-11, vx:0, vy:0, a:0, state:'idle', flame:0}, rec = [GP.sample(s)];
+        for (let t=1;t<=b.inputs.length;t++){
+          const c = b.inputs[t-1]|0;
+          stepFree(s, {thrust:c&1, steer:((c>>1)-15)/15}, zones, fs, t-1);
+          if (t % step === 0) rec.push(GP.sample(s));
+        }
+        const tail = b.inputs.length % step; if (tail) rec.push(GP.sample(s));
+        b.path = GP.b64(GP.encode(rec, step, tail));
+      } catch (e) {}
+    }
+    delete b.inputs; changed = true;                            // the time is kept whether or not the ghost converted
+  }
+  if (changed) save();
+}
 
 function tick(){
   const inp = readInput();
   if (ship.state === 'dead'){ deadT -= DT; if (deadT <= 0) reset(); }
   else if (ship.state === 'finished'){ doneT -= DT; if (doneT <= 0 && mode === 'play') showComplete(); }
   else {
-    if (!running && ship.state === 'idle' && inp.thrust) running = true;
+    if (!running && ship.state === 'idle' && inp.thrust){ running = true; gRec = [GP.sample(ship)]; }
     if (running){
-      ticks++; inputs.push(encode(inp));
+      ticks++;
       const hit = stepShip(ship, inp, ticks-1);
       if (hit){
         if (hit.type === 'land'){
@@ -192,22 +237,23 @@ function tick(){
         const hz = updateHazards(ship);
         if (hz){ ship.state = 'dead'; deadT = 1.4; explode(hz.px, hz.py); shake = 1; Snd.explode(); setMsg('Crashed', hz.kind === 'branch' ? 'Branch' : 'Stalactite'); }
       }
+      if (ship.state !== 'dead' && ship.state !== 'finished' && ticks % GP.STEP === 0) gRec.push(GP.sample(ship));
       if (ship.state === 'flying' && ship.flame) emitThrust(ship);
       wet = ship.state === 'flying' && inWater(ship);
       if (wet && ticks % 3 === 0) spray(ship);
       froth();
     }
   }
-  if (ghost && running && ghost.state !== 'dead'){
-    const code = best.inputs[gTick++];
-    if (code !== undefined){ const gh = stepShip(ghost, decode(code), gTick-1); if (gh){ if (gh.type === 'land') settle(ghost, gh.z); else ghost.state = 'dead'; } }
-  }
+  if (ghost && running) GP.pose(gPath, ++gTick, ghost);       // the ghost is replayed, not re-simulated
   updateParticles();
 }
 let lastResult = null;
 function finish(){
   const prev = store.bests[li], isBest = !prev || ticks < prev.ticks;
-  if (isBest) store.bests[li] = {ticks, inputs:inputs.slice()};
+  if (isBest){
+    const tail = ticks % GP.STEP; if (tail) gRec.push(GP.sample(ship));             // the landed pose closes the path
+    store.bests[li] = {ticks, path:GP.b64(GP.encode(gRec, GP.STEP, tail))};
+  }
   if (li >= store.unlocked) store.unlocked = Math.min(LEVELS.length-1, li+1);
   save(); Snd.finish();
   lastResult = {ticks, prev: prev ? prev.ticks : null, isBest};
@@ -431,7 +477,7 @@ const timerEl = $('timer'), lvlEl = $('lvl'), bestEl = $('bestline'), msgMain = 
 function setMsg(a,b){ msgMain.textContent = a; msgSub.textContent = b; }
 function hud(){
   lvlEl.textContent = `${li+1}. ${L.name}`;
-  bestEl.textContent = best ? `Best ${fmt(best.ticks)}, ghost flying` : '';
+  bestEl.textContent = best ? `Best ${fmt(best.ticks)}${ghost ? ', ghost flying' : ''}` : '';
 }
 
 // ---- Menus ----
@@ -521,7 +567,7 @@ function readInput(){
       steer = Math.max(-1, Math.min(1, proj/(d*R)))*m;
     } else steer = 0;
   }
-  steer = Math.round(steer*15)/15;                                   // quantise so the recorded input replays exactly
+  steer = Math.round(steer*15)/15;                                   // quantise so the steering feels the same on every device
   return {thrust:(keys.thrust||thrTouch.active) ? 1 : 0, steer};
 }
 const stickEl = $('stick'), knobEl = $('knob'), thrEl = $('thr'), ctl = $('ctl'), hdgEl = $('hdg'), padL = $('padL'), padR = $('padR');
@@ -628,5 +674,6 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false; });
 
 // ---- Go ----
+migrateBests();
 li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; menuCh = chapterOf(li); setGeom(); applyTheme();
 resize(); buildMain(); buildHazards(); reset(); showMenu(); requestAnimationFrame(frame);
