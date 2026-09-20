@@ -5,6 +5,8 @@
 // game.js); a band may set its own `ramp` in seconds. src is the visual source — 'hollow' (a knot-hole on the
 // upwind trunk face), 'fissure' (a crack on the upwind rock face), 'sky' (none: the wind is simply there because the space is
 // open, so only valid where it is). Not read by the engine yet. Opposing gusts always sit in separate vertical bands.
+// A band's upwind edge should sit inside solid mass — a trunk, a rock face, the edge trunks — so the field is never seen to
+// begin in open air. The downwind edge may end in the open: that reads as the gale dying out, which is fine.
 const EDGE_TRUNKS = w => [{x:-20,y:4000,tx:-20,ty:-200,w:300,taper:0,seed:-340}, {x:260,y:4000,tx:260,ty:-200,w:260,taper:0,seed:1620}, {x:w+20,y:4000,tx:w+20,ty:-200,w:300,taper:0,seed:w*7}, {x:w-260,y:4000,tx:w-260,ty:-200,w:260,taper:0,seed:w*7-1960}];
 LEVELS.push(
   {name:'Treetops', theme:'jungle', w:5600, h:2600, groundY:2300, canopyY:350,
@@ -22,7 +24,7 @@ LEVELS.push(
             {x:3450,y:1050,r:420,ry:570,seed:718,tone:2}, {x:3380,y:850,r:260,ry:220,seed:721,tone:3},
             {x:4250,y:1300,r:520,ry:460,seed:711,tone:0}, {x:4200,y:1120,r:280,ry:250,seed:710,tone:1}, {x:4900,y:1420,r:330,ry:230,seed:712,tone:1}],
    hazards:[{x:2150,y:60,tx:2155,ty:330,w:60,seed:719,kind:'branch'}, {x:4550,y:60,tx:4555,ty:340,w:60,seed:720,kind:'branch'}],
-   forces:[{kind:'wind',x:380,y:190,w:2870,h:590,ax:240,period:6,duty:0.4,phase:0,src:'hollow'}],
+   forces:[{kind:'wind',x:380,y:190,w:2870,h:590,ax:200,period:6,duty:0.4,phase:0,src:'hollow'}],
    walls:[],
    pads:{start:{x:540,y:1960,w:120,h:100}, target:{x:5040,y:1100,w:120,h:100,base:'bark'}}},
   {name:'Steps', theme:'jungle', w:8200, h:3800, groundY:3700, canopyY:400,
@@ -38,10 +40,10 @@ LEVELS.push(
    foliage:[{x:800,y:350,r:480,ry:150,seed:819,tone:1}, {x:2400,y:1000,r:520,ry:160,seed:820,tone:0}, {x:4100,y:1650,r:540,ry:160,seed:821,tone:1}, {x:5800,y:2250,r:540,ry:160,seed:822,tone:0}, {x:7400,y:2720,r:520,ry:150,seed:823,tone:2},
             {x:1500,y:2050,r:300,ry:120,seed:824,tone:0}, {x:3200,y:2700,r:300,ry:120,seed:825,tone:1}, {x:4900,y:3250,r:300,ry:120,seed:826,tone:0}],
    hazards:[{x:2100,y:1020,tx:2105,ty:1260,w:60,seed:827,kind:'branch'}, {x:4400,y:1680,tx:4405,ty:1930,w:60,seed:828,kind:'branch'}, {x:6100,y:2280,tx:6105,ty:2530,w:60,seed:829,kind:'branch'}, {x:7700,y:2740,tx:7705,ty:2990,w:60,seed:830,kind:'branch'}],
-   forces:[{kind:'wind',x:1750,y:1030,w:1300,h:820,ax:280,period:5,duty:0.4,phase:0,src:'sky'},
-           {kind:'wind',x:3400,y:1880,w:1450,h:640,ax:-280,period:5,duty:0.4,phase:1.6,src:'sky'},
-           {kind:'wind',x:5100,y:2550,w:1450,h:570,ax:300,period:5,duty:0.4,phase:3.2,src:'sky'},
-           {kind:'wind',x:6750,y:3150,w:1350,h:430,ax:-300,period:5,duty:0.4,phase:0.8,src:'sky'}],
+   forces:[{kind:'wind',x:1750,y:1030,w:1300,h:820,ax:240,period:5,duty:0.4,phase:0,src:'sky'},
+           {kind:'wind',x:3400,y:1880,w:1450,h:640,ax:-240,period:5,duty:0.4,phase:1.6,src:'sky'},
+           {kind:'wind',x:5100,y:2550,w:1450,h:570,ax:260,period:5,duty:0.4,phase:3.2,src:'sky'},
+           {kind:'wind',x:6750,y:3150,w:1350,h:430,ax:-260,period:5,duty:0.4,phase:0.8,src:'sky'}],
    walls:[],
    pads:{start:{x:440,y:1140,w:120,h:100}, target:{x:7700,y:3490,w:120,h:100}}},
   {name:'Two ways', theme:'jungle', w:7400, h:3800, groundY:3400, canopyY:500,
@@ -68,9 +70,9 @@ LEVELS.push(
            {x:4600,y:3500,tx:4600,ty:3180,w:180,taper:0.15,broken:true,seed:791}, {x:6900,y:3500,tx:6900,ty:2450,w:220,taper:0.15,broken:true,seed:781}, {x:7300,y:1430,tx:6620,ty:1330,w:230,taper:0.1,seed:790}]),
    foliage:[{x:1900,y:420,r:420,ry:140,seed:782,tone:1}, {x:4600,y:340,r:450,ry:140,seed:783,tone:0}, {x:3200,y:1210,r:380,ry:130,seed:784,tone:2}, {x:6900,y:820,r:400,ry:140,seed:785,tone:1}],
    hazards:[{x:2300,y:630,tx:2305,ty:880,w:60,seed:786,kind:'branch'}, {x:3450,y:1350,tx:3455,ty:1600,w:60,seed:787,kind:'branch'}, {x:5000,y:520,tx:5005,ty:770,w:60,seed:788,kind:'branch'}, {x:2900,y:2480,tx:2905,ty:2740,w:60,seed:789,kind:'branch'}],
-   forces:[{kind:'wind',x:1300,y:600,w:1200,h:780,ax:280,period:4.5,duty:0.4,phase:0,src:'sky'},
-           {kind:'wind',x:2650,y:1390,w:1150,h:700,ax:-280,period:4.5,duty:0.4,phase:1.5,src:'fissure'},
-           {kind:'wind',x:3950,y:500,w:1300,h:780,ax:300,period:4.5,duty:0.4,phase:3,src:'sky'},
+   forces:[{kind:'wind',x:1300,y:600,w:1200,h:780,ax:240,period:4.5,duty:0.4,phase:0,src:'sky'},
+           {kind:'wind',x:2650,y:1390,w:1150,h:700,ax:-240,period:4.5,duty:0.4,phase:1.5,src:'fissure'},
+           {kind:'wind',x:3950,y:500,w:1300,h:780,ax:260,period:4.5,duty:0.4,phase:3,src:'sky'},
            {kind:'water',x:2050,y:2300,w:300,h:1075,ay:340,drag:1.6,pool:{x:1750,w:750,h:70}},
            {kind:'water',x:3600,y:2400,w:300,h:1050,ay:340,drag:1.6,pool:{x:3200,w:680,h:120}},
            {kind:'water',x:4950,y:2300,w:300,h:1040,ay:340,drag:1.6,pool:{x:4600,w:900,h:70}}],
@@ -85,7 +87,7 @@ LEVELS.push(
    trunks:[{x:560,y:2900,tx:540,ty:500,w:380,taper:0,broken:true,seed:908}, {x:1840,y:3400,tx:1860,ty:620,w:380,taper:0,seed:909}],
    foliage:[{x:250,y:350,r:320,ry:130,seed:910,tone:1}, {x:2200,y:320,r:320,ry:130,seed:911,tone:0}],
    hazards:[{x:1500,y:120,tx:1505,ty:340,w:60,seed:912,kind:'branch'}],
-   forces:[{kind:'wind',x:760,y:2250,w:880,h:300,ax:300,period:4,duty:0.4,phase:0,src:'hollow'}, {kind:'wind',x:760,y:1550,w:880,h:300,ax:-300,period:4,duty:0.4,phase:1.33,src:'hollow'}, {kind:'wind',x:760,y:850,w:880,h:300,ax:300,period:4,duty:0.4,phase:2.67,src:'hollow'}],
+   forces:[{kind:'wind',x:760,y:2250,w:880,h:300,ax:260,period:4,duty:0.4,phase:0,src:'hollow'}, {kind:'wind',x:760,y:1550,w:880,h:300,ax:-260,period:4,duty:0.4,phase:1.33,src:'hollow'}, {kind:'wind',x:760,y:850,w:880,h:300,ax:260,period:4,duty:0.4,phase:2.67,src:'hollow'}],
    walls:[],
    pads:{start:{x:340,y:3300,w:120,h:100}, target:{x:1780,y:620,w:120,h:100,base:'bark'}}},
   {name:'Behind the falls', theme:'jungle', w:7000, h:3600, groundY:3100, canopyY:700,
@@ -119,11 +121,12 @@ LEVELS.push(
    foliage:[{x:1000,y:520,r:420,ry:140,seed:994,tone:1}, {x:3400,y:480,r:520,ry:150,seed:995,tone:0}, {x:5800,y:520,r:420,ry:140,seed:996,tone:2},
             {x:2300,y:1780,r:320,ry:130,seed:997,tone:0}, {x:4700,y:1790,r:320,ry:130,seed:998,tone:1}],
    hazards:[{x:1200,y:560,tx:1205,ty:800,w:60,seed:999,kind:'branch'}, {x:2300,y:540,tx:2305,ty:790,w:60,seed:1000,kind:'branch'}, {x:3500,y:530,tx:3505,ty:800,w:70,seed:1001,kind:'branch'}, {x:4700,y:550,tx:4705,ty:800,w:60,seed:1002,kind:'branch'}, {x:5700,y:560,tx:5705,ty:790,w:60,seed:1003,kind:'branch'}],
-   forces:[{kind:'wind',x:900,y:600,w:570,h:1120,ax:340,period:5,duty:0.5,phase:0,src:'sky'},
-           {kind:'wind',x:1980,y:600,w:690,h:1120,ax:340,period:5,duty:0.5,phase:1.25,src:'sky'},
-           {kind:'wind',x:3180,y:600,w:680,h:1120,ax:340,period:5,duty:0.5,phase:2.5,src:'sky'},
-           {kind:'wind',x:4390,y:600,w:680,h:1120,ax:340,period:5,duty:0.5,phase:3.75,src:'sky'},
-           {kind:'wind',x:5580,y:600,w:320,h:1120,ax:340,period:5,duty:0.5,phase:0.6,src:'sky'}],
+   // the first band runs from x=0, so the gale comes out of the edge trunks rather than starting in mid-air over the launch pad.
+   forces:[{kind:'wind',x:0,y:600,w:1470,h:1120,ax:290,period:5,duty:0.5,phase:0,src:'sky'},
+           {kind:'wind',x:1980,y:600,w:690,h:1120,ax:290,period:5,duty:0.5,phase:1.25,src:'sky'},
+           {kind:'wind',x:3180,y:600,w:680,h:1120,ax:290,period:5,duty:0.5,phase:2.5,src:'sky'},
+           {kind:'wind',x:4390,y:600,w:680,h:1120,ax:290,period:5,duty:0.5,phase:3.75,src:'sky'},
+           {kind:'wind',x:5580,y:600,w:320,h:1120,ax:290,period:5,duty:0.5,phase:0.6,src:'sky'}],
    walls:[],
    // the two end hollows floor out around y=1750–1780, deeper than the 100 px pedestal reached: both pads sat clear of the ground.
    // Dropped a little and given a taller plinth, so each one is dug into the floor the way the rest of the chapter's pads are.
