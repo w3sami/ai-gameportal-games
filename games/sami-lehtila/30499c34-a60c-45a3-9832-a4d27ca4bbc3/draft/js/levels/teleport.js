@@ -576,16 +576,20 @@ function labLive(ctx) {
      lamppu ei — vilkkuva työvalo tarkoittaisi jotain muuta kuin valaistusta. */
   for (let i = 0; i < DROPS.length; i++) {
     const l = DROPS[i];
-    ctx.fillStyle = STEEL_HI;                 // kiinnike kanavan alapintaan
+    /* Johto on taustaa, ja taustan pitää näyttää selvästi taustalta: pelaajan
+       ei kuulu joutua miettimään osuuko siihen. Ensin se oli melkein musta eikä
+       erottunut lainkaan, sitten liian kirkas ja näytti rakenteelta — tämä on
+       se väli. Lamppu itse saa hohtaa, koska lamppu on valo eikä este. */
+    ctx.fillStyle = 'rgba(42,52,70,.55)';     // kiinnike kanavan alapintaan
     ctx.fillRect(l.x - 5, l.y0 - 2, 10, 6);
-    ctx.fillStyle = LIT;
+    ctx.fillStyle = 'rgba(214,224,240,.12)';
     ctx.fillRect(l.x - 5, l.y0 - 2, 10, 1.5);
-    ctx.strokeStyle = 'rgba(126,140,164,.9)'; // johto: näkyvä, ei melkein musta
-    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = 'rgba(126,140,164,.5)';
+    ctx.lineWidth = 2.2;
     ctx.beginPath(); ctx.moveTo(l.x, l.y0 + 4); ctx.lineTo(l.x, l.y1 - 7); ctx.stroke();
-    ctx.strokeStyle = 'rgba(214,224,240,.45)';
+    ctx.strokeStyle = 'rgba(214,224,240,.2)';
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(l.x - 0.9, l.y0 + 4); ctx.lineTo(l.x - 0.9, l.y1 - 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(l.x - 0.8, l.y0 + 4); ctx.lineTo(l.x - 0.8, l.y1 - 7); ctx.stroke();
     const glow = 0.5 + Math.sin(clock / 900 + i * 1.7) * 0.08;
     const g = ctx.createRadialGradient(l.x, l.y1, 0, l.x, l.y1, 34);
     g.addColorStop(0, fade(l.col, glow * 0.5));
