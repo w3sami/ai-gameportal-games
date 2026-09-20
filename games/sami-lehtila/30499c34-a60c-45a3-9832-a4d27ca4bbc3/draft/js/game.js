@@ -1538,9 +1538,14 @@ function drawPad(p) {
   ctx.fillRect(p.x + 6, p.y, p.w - 12, 3);
   ctx.shadowBlur = 0;
 
-  ctx.fillStyle = 'rgba(30,40,70,.85)';
-  ctx.fillRect(p.x + 12, p.y + p.h, 8, 14);
-  ctx.fillRect(p.x + p.w - 20, p.y + p.h, 8, 14);
+  /* Kaksi jalkaa alustan alla. Kenttä saa ottaa ne pois (padLegs: false):
+     seinään pultattu alusta ei seiso jaloilla, ja tyngät sen alla näyttävät
+     siltä että kiinnitys unohtui kesken. */
+  if (level.padLegs !== false) {
+    ctx.fillStyle = 'rgba(30,40,70,.85)';
+    ctx.fillRect(p.x + 12, p.y + p.h, 8, 14);
+    ctx.fillRect(p.x + p.w - 20, p.y + p.h, 8, 14);
+  }
 
   const bx = p.x + p.w / 2, by = p.y + p.h + 22;
   ctx.textAlign = 'center';
