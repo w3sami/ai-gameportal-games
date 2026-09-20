@@ -49,7 +49,8 @@ import { liftFor, bounceNorm } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
 import { createHyperspace } from './hyperspace.js';
-import { LEVELS } from './levels.js';
+import { LEVELS, LEVEL_FILES } from './levels.js';
+import { createSketch } from './sketch.js';
 import { mountBoard } from './leaderboard.js';
 import { LANG, setLang, t, voiceFor, numWord } from './i18n.js';
 
@@ -309,6 +310,193 @@ function resetLevelTune() {
     }
   }
   MUL = mulOf(level);
+}
+
+/* -------------------------------------------------------------- sommittelu
+ *
+ * Kenttäluonnostelu on portaalin sketchpad-plugin, ja Space Taxin oma puoli
+ * siitä — mikä on törmäystä ja mikä sommittelussa on vikana — on js/sketch.js.
+ * Peliin jää kolme asiaa: kutsu kentän alussa, piirto silmukan lopussa ja se
+ * ettei pelin oma syöte tartu kankaaseen kun työkalu on auki.
+ *
+ * Plugin ei kirjoita geometriaa peliin. Kentän luvut ovat kenttätiedostossa,
+ * ja luonnoksesta ne kirjoitetaan sinne käsin — muuten tools/check-grid.mjs,
+ * joka lukee kenttämoduulin, tarkistaisi eri kenttää kuin mitä pelataan.
+ * Raahatut paikat jäävät voimaan vain tässä selaimessa. */
+
+/* Elävät alustat ovat kopioita kentän omista — loadLevel kopioi ne ja ottaa
+   bx/by talteen liikkuvia alustoja varten — joten siirto pitää viedä myös
+   niihin. Muuten raahaus näkyisi vasta kenttää vaihdettaessa. */
+function syncPads() {
+  for (const p of PADS) {
+    const src = (level.pads || []).find(q => q.id === p.id);
+    if (!src) continue;
+    p.x = p.bx = src.x;
+    p.y = p.by = src.y;
+    /* Myös leveys: alusta on törmäyslaatikko, joten sen koko säädetään sillä
+       luvulla jota fysiikka lukee eikä piirron skaalalla. */
+    if (typeof src.w === 'number') p.w = src.w;
+  }
+}
+
+let sketchPaused = false;
+const refreshPanel = () => { if (panelOpen()) buildPanel(); };
+
+const sketch = createSketch({
+  canvas,
+  toLocal: toLogical,
+  level: () => level,
+  pads: () => PADS,
+  walls: () => WALLS,
+  gate: () => GATE,
+  buttons: () => [HORN_BOX, GEAR_BOX],
+  /* Peli ei kirjoita omia tiedostojaan — se pyytää emosivulta, joka on
+     kirjautunut ja jonka palvelinpuoli tarkistaa omistajuuden. Siksi tallennus
+     onnistuu vain tekijän omalla sivulla, ja plugin kertoo syyn itse. */
+  save: (file, body) => Promise.resolve(portalApi.savePortalFile(file, body)),
+  canSave: () => typeof portalApi.savePortalFile === 'function' && !!portal.canWrite,
+  onMove: syncPads,
+  /* Tauko editorin ajaksi: liikkuvaa kenttää ei voi lukea liikkeestä, eikä
+     taksin tarvitse ajelehtia seinään sillä aikaa kun mittoja katsotaan.
+     Sulkeminen palauttaa sen mikä oli. */
+  /* saveDev vasta täällä eikä kytkimessä: lehtiö ladataan vasta avattaessa,
+     joten kytkin kirjaisi tilan ennen kuin se on totta. */
+  onOpen: () => { sketchPaused = paused; setPaused(true); dev.sketch = true; saveDev(); refreshPanel(); },
+  onClose: () => { setPaused(sketchPaused); dev.sketch = false; saveDev(); refreshPanel(); },
+});
+
+/* ---------------------------------------------------------- kehittäjän tila
+
+   Kenttää rakentaessa sivu ladataan kymmeniä kertoja, ja joka kerta piti etsiä
+   kolme kytkintä uudestaan: säätöpaneeli auki, luonnoslehtiö auki, oikea
+   kenttä. Se on pieni työ kerrallaan ja iso silmukassa, joten se muistetaan.
+
+   Vain tässä selaimessa ja vain kun säätöjä on käytetty; pelaajan kone ei
+   kirjoita tähän koskaan mitään. */
+const DEV_STORE = 'spacetaxi.dev';
+const dev = { panel: false, sketch: false, level: -1, watch: true };
+try { Object.assign(dev, JSON.parse(localStorage.getItem(DEV_STORE) || 'null') || {}); } catch (e) {}
+let devReady = false;                          // vasta palautuksen jälkeen
+/* dev.sketch asetetaan käsin eikä lueta sketch.activesta: onOpen ajetaan ennen
+   kuin paneeli on pystyssä — juuri siksi että peli ehtii mennä tauolle ensin —
+   joten siinä hetkessä active on vielä false. */
+function saveDev() {
+  if (!devReady) return;
+  dev.panel = panelOpen();
+  dev.level = levelIndex;
+  dev.watch = watching;
+  try { localStorage.setItem(DEV_STORE, JSON.stringify(dev)); } catch (e) {}
+}
+
+/* Kenttä uusiksi ilman sivun latausta.
+ *
+ * Sivun lataus pudottaa kokoruututilan — kokoruutu on selaimen dokumentin
+ * ominaisuus ja lataus vaihtaa dokumentin — ja se on juuri se mitä kentän
+ * kanssa työskennellessä ei haluta. Kenttä on kuitenkin oma moduulinsa, joten
+ * sen voi tuoda uudestaan: kyselyparametri tekee siitä eri osoitteen, ja eri
+ * osoite on selaimelle eri moduuli.
+ *
+ * Kolme asiaa pitää siirtää vanhasta uuteen, ja kaikki kolme siksi että uusi
+ * moduuli on pelille tuntematon: kentän omat säätöarvot (jotka ovat kentän
+ * omassa oliossa eivätkä missään muualla), niiden oletukset, ja se mitä
+ * luonnoslehtiö piti kentän lähtöpaikkoina. Ilman viimeistä jokainen muuttunut
+ * luku näyttäisi siltä että joku raahasi sen. */
+async function reloadLevel() {
+  const file = LEVEL_FILES[levelIndex];
+  if (!file) return false;
+  const keep = tuneBody();                     // kentän omat arvot vanhasta oliosta
+  let lv;
+  try {
+    const m = await import(`./levels/${file}.js?v=${Date.now()}`);
+    lv = m[file];
+  } catch (e) { return false; }
+  if (!lv || !lv.name) return false;
+  LEVELS[levelIndex] = lv;
+  for (const g of lv.tune || []) {             // uudet oletukset uusista olioista
+    if (!g.obj || !g.sliders) continue;
+    const d = {};
+    for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
+    LEVEL_DEF.set(lv.name + '\u0000' + g.name, d);
+  }
+  applyBody(keep);                             // ja säädetyt arvot takaisin
+  sketch.forget(lv.name);
+  /* Luonnos uusiksi samalla: jos kentän muutos oli juuri se että luonnos
+     kirjoitettiin lähteeseen ja tyhjennettiin, tässä selaimessa olevat siirrot
+     ja lisäykset piirtyisivät muuten toiseen kertaan jo kirjoitettujen päälle. */
+  try { await sketch.sync(); } catch (e) {}
+  beginLevel(levelIndex, false);
+  return true;
+}
+
+/* Kenttä uusiksi itsestään kun tiedosto vaihtuu palvelimella.
+ *
+ * Silmukka on nyt: avustaja kirjoittaa kentän ja vie sen draftiin, ja tekijä
+ * näkee muutoksen ilman että koskee mihinkään. Vartija kysyy tiedoston
+ * tunnisteen (ETag, Last-Modified tai koko) muutaman sekunnin välein ja
+ * lataa kentän kun se on eri kuin viimeksi.
+ *
+ * Koko tiedosto haetaan ja siitä lasketaan tiiviste. HEAD olisi halvempi,
+ * mutta palvelin ei anna ETagia eikä Last-Modifiedia — pelkkä pituus jäisi
+ * ainoaksi tunnisteeksi, ja samanmittainen muutos menisi huomaamatta. 38 kt
+ * kolmen sekunnin välein on kehittäjän koneella se mitä se on.
+ *
+ * no-store ohittaa välimuistin, jota draftilla on viisi minuuttia — ilman sitä
+ * vartija katsoisi vanhaa kopiota eikä huomaisi mitään.
+ *
+ * Käy vain kun säätöpaneeli on auki. debugAllowed yksin ei riitä ehdoksi:
+ * pelin omassa osoitteessa se on tosi kenelle tahansa, ja silloin vartija
+ * hakisi 38 kt kolmen sekunnin välein pelaajalle joka ei ole avannut mitään.
+ * Paneeli auki on se hetki jolloin kenttää rakennetaan, ja se on myös hetki
+ * jonka pelaaja ei vahingossa saa aikaan. */
+const WATCH_MS = 3000;
+let watchT = 0, watchTag = null, watching = false;
+
+function levelUrl() {
+  const file = LEVEL_FILES[levelIndex];
+  return file ? new URL(`./levels/${file}.js`, import.meta.url).href : null;
+}
+
+async function levelTag() {
+  const url = levelUrl();
+  if (!url) return null;
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const text = await r.text();
+    let h = 2166136261;                        // FNV-1a, riittää vertailuun
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return text.length + ':' + (h >>> 0).toString(36);
+  } catch (e) { return null; }
+}
+
+async function watchTick() {
+  if (!watching) return;
+  const tag = await levelTag();
+  if (watching && tag && watchTag && tag !== watchTag) {
+    watchTag = tag;
+    const ok = await reloadLevel();
+    panelNote = ok ? 'kenttä päivittyi itsestään' : 'kentän lataus ei onnistunut';
+    if (panelOpen()) buildPanel();
+  } else if (tag) {
+    watchTag = tag;
+  }
+  if (watching) watchT = setTimeout(watchTick, WATCH_MS);
+}
+
+/** Onko vartijan syytä käydä: sallittu, päälle kytketty ja paneeli auki. */
+const wantWatch = () => debugAllowed() && dev.watch !== false && panelOpen();
+
+function setWatch(on) {
+  on = !!on;
+  if (on === watching) return;
+  watching = on;
+  clearTimeout(watchT);
+  if (!on) { watchTag = null; return; }
+  watchTag = null;                             // ensimmäinen kysely on lähtötaso
+  watchTick();
 }
 
 layout();
@@ -605,6 +793,7 @@ function loadLevel(i) {
   MUL = mulOf(level);                        // kentän kertoimet, säätimet muuttavat näitä
   applyMul();
   GATE = level.gate;
+  sketch.restore();                          // ennen kuin PADS kopioidaan
   WALLS = frameWalls(GATE).concat(level.walls || []);
   PADS = (level.pads || []).map(p => Object.assign({ h: 18 }, p, { bx: p.x, by: p.y }));
   served = {};
@@ -618,6 +807,7 @@ function loadLevel(i) {
   levelDeaths = 0;
   resetTaxi();
   if (level.init) level.init(api());
+  sketch.refresh();                          // muodot ja varoitukset ovat kenttäkohtaisia
 
   if (carried) {
     /* Edellisestä kentästä mukaan tullut asiakas: kenttä alkaa jättökeikalla
@@ -761,6 +951,10 @@ function toggleMute() {
 
 canvas.addEventListener('pointerdown', e => {
   const p = toLogical(e.clientX, e.clientY);
+  /* Luonnoslehtiö omistaa kankaan niin kauan kuin se on auki: sen kahvat ovat
+     nappien päällä eikä teline saa napsahtaa siitä että alustaa siirretään.
+     Ratas jää auki, koska säätöpaneeli ja editori ovat eri työkalut. */
+  if (sketch.active && !inBox(p, COG_BOX)) return;
   if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
   if (inBox(p, HORN_BOX)) { honk(); return; }
   if (inBox(p, MUTE_BOX)) { toggleMute(); return; }
@@ -794,6 +988,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') { toggleMute(); return; }
   if (e.code === 'KeyF') { toggleFullscreen(); return; }
   if (e.code === 'KeyP') { togglePanel(); return; }
+  if (e.code === 'KeyK' || e.code === 'Pause') { togglePause(); return; }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyH') { honk(); return; }
   if (e.code === 'Space' || e.code === 'KeyG') { e.preventDefault(); toggleGear(); }
 });
@@ -803,7 +998,9 @@ const stick = createJoystick({
   target: canvas,
   toLocal: toLogical,
   radius: 96,
-  ignore: onButtons,
+  /* Editorin auki ollessa sauva ei tartu lainkaan: peli on tauolla, ja veto
+     kankaalla tarkoittaa siirtoa tai maalausta. */
+  ignore: p => onButtons(p) || sketch.active,
 });
 stickReady = true;
 stick.gain = P.stick;
@@ -1537,9 +1734,16 @@ function drawPad(p) {
   ctx.fillRect(p.x + 6, p.y, p.w - 12, 3);
   ctx.shadowBlur = 0;
 
-  ctx.fillStyle = 'rgba(30,40,70,.85)';
-  ctx.fillRect(p.x + 12, p.y + p.h, 8, 14);
-  ctx.fillRect(p.x + p.w - 20, p.y + p.h, 8, 14);
+  /* Kaksi jalkaa alustan alla, oletuksena pois. Kenttä pyytää ne erikseen
+     (padLegs: true), koska ne näyttävät hyvältä vain silloin kun niiden alla
+     on jotain mihin alusta on pultattu — huvipuistossa laitteet, jolloin
+     alusta on niiden katolla. Muualla ne roikkuvat tyhjässä, ja kahdessa
+     kentässä ne jäävät muutenkin kulissien peittoon. */
+  if (level.padLegs) {
+    ctx.fillStyle = 'rgba(30,40,70,.85)';
+    ctx.fillRect(p.x + 12, p.y + p.h, 8, 14);
+    ctx.fillRect(p.x + p.w - 20, p.y + p.h, 8, 14);
+  }
 
   const bx = p.x + p.w / 2, by = p.y + p.h + 22;
   ctx.textAlign = 'center';
@@ -2088,6 +2292,20 @@ function drawSky() {
   for (let y = 0; y <= H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 }
 
+/* Taukomerkki: kaksi palkkia, ei tekstiä. Kieletön merkki ei tarvitse
+   käännöstä eikä sitä että i18n.js muistetaan päivittää. */
+function pauseBadge() {
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  const x = W / 2, y = 132;
+  ctx.fillStyle = 'rgba(8,13,30,.74)';
+  ctx.beginPath(); ctx.roundRect(x - 33, y - 23, 66, 46, 12); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,160,255,.35)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(x - 33, y - 23, 66, 46, 12); ctx.stroke();
+  ctx.fillStyle = '#6fe3ff';
+  ctx.fillRect(x - 12, y - 12, 8, 24);
+  ctx.fillRect(x + 4, y - 12, 8, 24);
+}
+
 function draw(v) {
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
   drawSky();
@@ -2116,6 +2334,7 @@ function draw(v) {
   if (state !== MENU) drawHud();
   stick.draw(ctx);
   drawButtons();
+  sketch.draw(ctx);                          // työkalu kaiken päälle
 }
 
 /* ------------------------------------------------------------ säätöpaneeli
@@ -2275,6 +2494,41 @@ function buildPanel() {
   });
   lvlRow.append(el('label', null, 'kenttä'), lvlSeg);
   panelEl.append(lvlRow);
+
+  const pauseRow = el('div', 'row');
+  const pauseSeg = el('div', 'seg');
+  pauseSeg.append(pbutton(paused ? 'on' : null, paused ? 'jatka' : 'tauko', togglePause));
+  pauseSeg.append(pbutton(sketch.active ? 'on' : null, 'luonnos', () => {
+    Promise.resolve(sketch.toggle()).then(ok => {
+      if (ok === false && !sketch.active) panelNote = 'luonnoslehtiötä ei saatu ladattua';
+      refreshPanel();
+    });
+  }));
+  pauseRow.append(el('label', null, 'peli'), pauseSeg);
+  panelEl.append(pauseRow);
+
+  /* Kaksi latausta, koska ne maksavat eri verran. Kenttä tulee uusiksi ilman
+     että kokoruutu, paneelit tai kenttävalinta katoavat; sivu on sitä varten
+     kun muukin kuin kenttä on muuttunut. */
+  const loadRow = el('div', 'row');
+  const loadSeg = el('div', 'seg');
+  loadSeg.append(pbutton(null, 'lataa kenttä', () => {
+    panelNote = 'ladataan kenttää…';
+    buildPanel();
+    reloadLevel().then(ok => {
+      panelNote = ok ? 'kenttä ladattu uudestaan' : 'kentän lataus ei onnistunut';
+      buildPanel();
+    });
+  }));
+  loadSeg.append(pbutton(null, 'lataa sivu', () => location.reload()));
+  loadSeg.append(pbutton(watching ? 'on' : null, 'seuraa', () => {
+    dev.watch = !watching;
+    setWatch(wantWatch());
+    saveDev();
+    buildPanel();
+  }));
+  loadRow.append(el('label', null, 'lataus'), loadSeg);
+  panelEl.append(loadRow);
 
   const langRow = el('div', 'row');
   const langSeg = el('div', 'seg');
@@ -2492,9 +2746,32 @@ function setPanel(on) {
   if (on === panelOpen()) return;
   if (on) { buildPanel(); panelEl.classList.remove('hidden'); }
   else panelEl.classList.add('hidden');
+  saveDev();
+  setWatch(wantWatch());                       // vartija seuraa paneelia
   /* Ja portaalille, jotta sen kytkin näyttää sen mikä on auki. */
   setPortal('debug', on);
 }
+
+/* Tauko. Peli piirtyy mutta ei etene: liikkuvan kentän — ovet, alustat,
+   koneet — saa katsoa paikallaan, eikä testatessa tarvitse katsella sitä että
+   taksi ajelehtii seinään sillä välin kun lukee mittoja. Tauko on kytkin
+   säätöpaneelissa, K näppäimistöllä ja arvo portaalin kytkimessä, ja kaikki
+   kolme näyttävät saman tilan.
+
+   runT ei kulje tauolla, koska update jää väliin — siis tippimittari, ovet ja
+   koristeet pysähtyvät samaan hetkeen eikä mikään hyppää jatkettaessa. */
+let paused = false;
+
+function setPaused(on) {
+  on = !!on;
+  if (on === paused) return;                 // myös silmukan katkaisu: portaali
+  paused = on;                               // vastaa omaan pyyntöömme samalla arvolla
+  if (on) jetLevel(0);                       // suuttimen ääni ei jää soimaan
+  if (!panelEl.classList.contains('hidden')) buildPanel();
+  setPortal('pause', on);
+}
+
+function togglePause() { setPaused(!paused); }
 
 function togglePanel() {
   const want = !panelOpen();
@@ -2599,6 +2876,9 @@ function start() {
 
 function startLevel(i) {
   warmSpeech();
+  dev.level = i;
+  saveDev();
+  watchTag = null;                           // eri kenttä, eri tiedosto
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
   cut = null; carried = null; hyper = null;
@@ -2608,6 +2888,20 @@ function startLevel(i) {
 
 newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
+
+/* Takaisin siihen mistä edellinen lataus jäi. Vain tekijälle: debugAllowed on
+   kehyksessä portaalin myöntämä, ja julkaistulla sivulla tätä ei tapahdu
+   vaikka avaimet sattuisivat olemaan selaimessa. */
+function restoreDev() {
+  devReady = true;
+  if (!debugAllowed()) return;
+  /* Vartija ensin: kaikki muu täällä kutsuu saveDeviä, ja saveDev lukee
+     vartijan tilan — käynnistämätön vartija tallentuisi pois päältä. */
+  if (dev.level >= 0 && dev.level < LEVELS.length) startLevel(dev.level);
+  if (dev.panel) { if (portal.embedded) setPortal('debug', true); else setPanel(true); }
+  if (dev.sketch) Promise.resolve(sketch.open()).then(refreshPanel);
+  setWatch(wantWatch());
+}
 
 /* Kieli, kummasta päästä tahansa.
  *
@@ -2639,8 +2933,15 @@ if (portal.embedded) {
     onPortal('debug', setPanel);
     /* canWrite ratkaisee näkyykö ratas ja kortin nappi, ja se saapuu vasta
        tässä — kortti on jo ruudulla, joten se piirretään uusiksi. */
+    /* Tauko myös portaalista: kehyksessä pelin oma näppäin vaatii fokuksen,
+       sivun kytkin ei vaadi mitään. Kumpikin kirjoittaa samaan arvoon, ja
+       setPaused palaa heti jos arvo on jo se — silmukkaa ei synny. */
+    onPortal('pause', setPaused);
     onPortal('canWrite', () => { if (state === MENU) showCard(menuCard(), 0, null); });
+    restoreDev();                            // vasta kun canWrite on tiedossa
   });
+} else {
+  restoreDev();
 }
 
 /* Liput osoitteesta: ?debug=1 säätöpaneeli, ?test=1 pompputesti, ?lang=fi|en. */
@@ -2649,7 +2950,7 @@ try {
   for (const [k, v] of q) {
     const key = k.toLowerCase();
     const on = v !== '0' && v !== 'false';
-    if (key === 'debug' && on) togglePanel();
+    if (key === 'debug' && on && !panelOpen()) togglePanel();
     if (key === 'test' && on) import('./bouncetest.js').then(m => m.run(P)).catch(() => {});
   }
 } catch (e) {}
@@ -2662,6 +2963,15 @@ function loop(now) {
   resize();
   padInput();
   paintGraphs();                               // vain auki olevaan paneeliin
+
+  /* Tauolla piirretään sama ruutu uudestaan ilman päivitystä. Vain lennon
+     aikana: valikossa ja välianimaatiossa taukoa ei ole mitä pitää. */
+  if (paused && (state === PLAY || state === ENTER)) {
+    draw({ x: 0, y: 0 });
+    pauseBadge();
+    requestAnimationFrame(loop);
+    return;
+  }
 
   if (state === CUT) {
     cut.update(dt);

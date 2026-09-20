@@ -302,7 +302,10 @@
     "slug": "space-taxi",
     "title": "Space Taxi",
     "description": "Lentävä taksi, laskeutumisalustoja ja bensa-asema. Nosta tyyppi kyytiin ja vie hänet perille nopeasti — tippimittari alkaa valua heti noudosta, joten aika on rahaa. Laskuteline pitää laskea ennen kosketusta, ja telineen ollessa alhaalla sivusuuttimet eivät toimi. Polttoaine maksaa, keikka tuottaa, ja jos kuolet lasti kyydissä, keikka menee. Kun kaikilla alustoilla on käyty, saat jatkaa seuraavaan tasoon. Kunnianosoitus Muse Softwaren vuoden 1984 C64-klassikolle. Yksi vuoro, portaalin ohjaussauva ja yhteinen tulostaulu.",
-    "descriptions": {},
+    "descriptions": {
+      "fi": "Lentävä taksi, laskeutumisalustoja ja bensa-asema. Nosta tyyppi kyytiin ja vie hänet perille nopeasti — tippimittari alkaa valua heti noudosta, joten aika on rahaa. Laskuteline pitää laskea ennen kosketusta, ja telineen ollessa alhaalla sivusuuttimet eivät toimi. Polttoaine maksaa, keikka tuottaa, ja jos kuolet lasti kyydissä, keikka menee. Kun kaikilla alustoilla on käyty, saat jatkaa seuraavaan tasoon. Kunnianosoitus Muse Softwaren vuoden 1984 C64-klassikolle. Yksi vuoro, portaalin ohjaussauva ja yhteinen tulostaulu.",
+      "en": "A flying taxi, landing pads and a fuel station. Pick up your passenger and get them there fast — the tip meter starts draining the moment they board, so time is money. The landing gear has to be down before you touch a pad, and while it is down the side thrusters are dead. Fuel costs money, a delivered fare pays, and if you die with one aboard the job is gone. Once every pad has been visited you move on to the next level. A homage to Muse Software's 1984 C64 classic. One turn, controller support from the portal, and a shared leaderboard."
+    },
     "author": "Sami Lehtilä",
     "tags": [
       "arcade",
@@ -317,10 +320,10 @@
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
-    "revision": 8,
+    "revision": 9,
     "sizeBytes": 295617,
     "createdAt": "2026-09-19T05:37:55.593Z",
-    "updatedAt": "2026-09-20T21:35:11.884Z"
+    "updatedAt": "2026-09-20T21:36:00.389Z"
   },
   {
     "id": "7cdbb6c3-8433-4798-af75-4e2b40f51d5b",

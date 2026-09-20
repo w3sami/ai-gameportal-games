@@ -19,6 +19,14 @@
  *               asiakas ja hautakivet kulkevat mukana
  *   start       alusta jolle taksi palaa kolarin jälkeen
  *   firstFrom   alusta jolle ensimmäinen asiakas ilmestyy
+ *   edit        mitä kenttäeditori saa raahata, valinnainen:
+ *               [{ id, kind: 'pad' | 'prop', obj, label }]
+ *               obj on olio jolla on x ja y ja jonka piirto lukee ne joka
+ *               ruudulla; alustoille se on tämän listan oma alusta-olio.
+ *               Editori ei kirjoita kenttätiedostoa — se tallentaa siirrot
+ *               luonnokseksi (config/sketch.json), josta luvut kirjoitetaan
+ *               tänne käsin. Kentän luvut ovat aina ne joita peli käyttää.
+ *               Ks. js/editor.js.
  *
  * Kenttä alkaa aina ilmasta: taksi tulee sisään katon luukusta, jarruttaa
  * paikalleen, luukku sulkeutuu ja peli käynnistyy READY–GO:lla.
@@ -46,5 +54,13 @@ import { highrise } from './levels/highrise.js';
 import { funfair } from './levels/funfair.js';
 import { stormport } from './levels/stormport.js';
 import { troublefactory } from './levels/troublefactory.js';
+import { moonshot } from './levels/moonshot.js';
 
-export const LEVELS = [intro, highrise, funfair, stormport, troublefactory];
+export const LEVELS = [intro, highrise, funfair, stormport, troublefactory, moonshot];
+
+/* Sama järjestys tiedostoniminä. Tämä on vain sitä varten, että säätöpaneelin
+   "lataa kenttä" saa tuotua kentän uudestaan ilman koko sivun latausta —
+   kenttää rakentaessa sivu ladataan kymmeniä kertoja, ja sivun lataus pudottaa
+   kokoruututilan ja avoimet paneelit. Kentän vaihtaminen ei koske tätä riviä
+   sen enempää kuin LEVELS-riviäkään. */
+export const LEVEL_FILES = ['intro', 'highrise', 'funfair', 'stormport', 'troublefactory', 'moonshot'];

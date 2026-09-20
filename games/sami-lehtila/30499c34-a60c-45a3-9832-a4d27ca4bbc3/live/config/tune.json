@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1789857952405,
+ "stamp": 1789939389778,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -61,6 +61,21 @@
      "arc": 1.7,
      "warn": 0.9,
      "reach": 130
+    }
+   }
+  },
+  "Moonshot": {
+   "mul": {
+    "grav": 0.2,
+    "thrust": 0.25,
+    "burn": 0.2
+   },
+   "own": {
+    "ovet": {
+     "cycle": 7.4,
+     "open": 0.42,
+     "move": 0.6,
+     "warn": 1.1
     }
    }
   }
