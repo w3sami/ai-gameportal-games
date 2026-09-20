@@ -168,6 +168,62 @@ const POLES = [
    x, y on telineen jalka kannen pinnalla. */
 const ROCKET = { x: 198, y: HY[0], h: 128 };
 
+/* ---------------------------------------------------------- valonheittimet
+
+   Yksi alustan yläpuolella siellä missä sellainen on: laskeutumisalue näkyy
+   siitä että se on valaistu, ja se on juuri se mitä avaruussatamassa olisi.
+
+   Origo on kiinnityspiste ja valo osoittaa **alas** (+y). Kierto kohdistaa
+   sen, ja kulmat ovat kentän omissa asteissa: 0 alas, 90 vasemmalle, 180 ylös,
+   270 oikealle. `h` on kantama — kuinka kauas keila yltää ennen kuin se
+   sammuu.
+
+   Keilalla on terävät reunat eikä se sumene matkalla: kuussa ei ole
+   ilmakehää, ja se on kentän ensimmäinen piirtosääntö. Valo myös palaa
+   tasaisesti — tolpat vilkkuvat, tämä ei, koska vilkkuva laskeutumisvalo
+   tarkoittaisi jotain muuta.
+
+   Nämä ovat kulissia kuten kaikki muukin kentän koriste: ei törmäystä. */
+const LAMPS = [
+  { x: 535, y: 20, rot: 0, h: 224, col: '#ffd479' },    // TR:n katto, alusta 2
+  { x: 535, y: 360, rot: 0, h: 76, col: '#ffd479' },    // MR, alusta 4
+  { x: 300, y: 696, rot: 0, h: 122, col: '#9ad8ff' },   // BM, alusta 6
+  { x: 520, y: 696, rot: 0, h: 210, col: '#ffd479' },   // BR, alusta 7
+];
+
+/** Heksaväri läpinäkyvyydellä. Kentän värit ovat kuusinumeroisia. */
+const fade = (c, a) => c + Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0');
+
+function lamp(ctx, l) {
+  ctx.save();
+  applyTransform(ctx, l);
+  const reach = Math.max(14, l.h);
+  const spread = reach * 0.4;
+
+  const g = ctx.createLinearGradient(0, 12, 0, reach);   // keila sammuu matkalla
+  g.addColorStop(0, fade(l.col, 0.26));
+  g.addColorStop(1, fade(l.col, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(-5, 12); ctx.lineTo(5, 12);
+  ctx.lineTo(spread, reach); ctx.lineTo(-spread, reach);
+  ctx.closePath(); ctx.fill();
+
+  ctx.fillStyle = '#39414f';                  // varsi ja kotelo
+  ctx.fillRect(-2.5, -5, 5, 9);
+  ctx.beginPath();
+  ctx.moveTo(-9, 12); ctx.lineTo(9, 12); ctx.lineTo(6, 3); ctx.lineTo(-6, 3);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(214,224,240,.32)';    // valo tulee ylävasemmalta
+  ctx.fillRect(-6, 3, 12, 1.5);
+
+  ctx.fillStyle = l.col;                      // linssi
+  ctx.shadowColor = l.col;
+  ctx.shadowBlur = 12;
+  ctx.fillRect(-7, 9.5, 14, 3);
+  ctx.restore();
+}
+
 const SOLIDS = [...GRID, ...PANELS];
 
 /* ----------------------------------------------------------------- alustat
@@ -638,6 +694,9 @@ function mount(ctx, p) {
 }
 
 function moonFront(ctx, api) {
+  /* Valot kaiken päälle, jotta ne valaisevat alustan ja taksin eivätkä jää
+     niiden alle — mutta ennen luukkuja, koska sulkeutuva ovi on valon edessä. */
+  for (const l of LAMPS) lamp(ctx, l);
   for (const p of PANELS) panelFace(ctx, p);
   doorLamps(ctx);
 }
@@ -687,6 +746,13 @@ const EDIT = [
     id: `prop:pole-${i + 1}`, kind: 'prop', obj: p, label: `tolppa ${i + 1}`,
     transform: { rot: true },
     knob: { key: 'h', label: 'korkeus', min: 16, max: 200, step: 2 },
+  })),
+  /* Valonheitin: kierto kohdistaa, knob on kantama. Ei skaalaa — kotelon koko
+     on vakio ja valon pituus on se mitä säädetään. */
+  ...LAMPS.map((l, i) => ({
+    id: `prop:lamp-${i + 1}`, kind: 'prop', obj: l, label: `valo ${i + 1}`,
+    transform: { rot: true },
+    knob: { key: 'h', label: 'kantama', min: 20, max: 320, step: 2 },
   })),
 ];
 
