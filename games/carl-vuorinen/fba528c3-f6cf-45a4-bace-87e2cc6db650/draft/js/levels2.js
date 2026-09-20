@@ -7,24 +7,21 @@
 const EDGE_TRUNKS = w => [{x:-20,y:4000,tx:-20,ty:-200,w:300,taper:0,seed:-340}, {x:260,y:4000,tx:260,ty:-200,w:260,taper:0,seed:1620}, {x:w+20,y:4000,tx:w+20,ty:-200,w:300,taper:0,seed:w*7}, {x:w-260,y:4000,tx:w-260,ty:-200,w:260,taper:0,seed:w*7-1960}];
 LEVELS.push(
   {name:'Treetops', theme:'jungle', w:5600, h:2600, groundY:2300, canopyY:350,
-   // the teaching level: a run over two crowns, then the way on is barred by a snapped trunk hanging out of the canopy. One gust runs the
-   // whole open stretch, from a knot-hole in a dead spar to the hanging trunk, and carries you into the shaft that drops away at its
-   // downwind end: down past the splintered end, through the hollow under it, up the far side. Land on the last treetop.
-   rooms:[{x:2800,y:700,rx:2700,ry:520,wob:0.07,seed:701}, {x:3450,y:1900,rx:700,ry:450,wob:0.08,seed:702}, {x:600,y:1500,rx:430,ry:520,wob:0.08,seed:703}],
-   corridors:[{pts:[[700,1260],[770,1080],[840,950]],w:260},
-              {pts:[[3120,1150],[3130,1400],[3140,1620]],w:260},
-              {pts:[[4020,1620],[4030,1400],[4040,1200],[4045,1080]],w:260}],
+   // the teaching level: a run through the canopy layer, over four crowns at different heights. The gale fills the layer end to end —
+   // out of the great trunk at the map edge, under the canopy, over the treetop line, dying into the big crown that is the one real
+   // climb of the run. A dead spar stands in the middle of it. Land on the last treetop.
+   rooms:[{x:2800,y:700,rx:2700,ry:520,wob:0.07,seed:701}, {x:600,y:1500,rx:430,ry:520,wob:0.08,seed:703}],
+   corridors:[{pts:[[700,1260],[770,1080],[840,950]],w:260}],
    rocks:[],
    spikes:[{x:1650,y:850,tx:2150,ty:700,w:100,seed:716,kind:'branch'}, {x:5100,y:1300,tx:4700,ty:1120,w:110,seed:717,kind:'branch'}],
-   trunks:EDGE_TRUNKS(5600).concat([{x:1650,y:1800,tx:1660,ty:540,w:240,taper:0.2,broken:true,seed:715},
-           {x:2850,y:2600,tx:2880,ty:1080,w:300,taper:0.1,broken:true,seed:713}, {x:4000,y:2600,tx:4020,ty:2000,w:240,taper:0.15,broken:true,seed:714},
-           {x:3550,y:-250,tx:3560,ty:1520,w:520,taper:0.12,broken:true,seed:730},
+   trunks:EDGE_TRUNKS(5600).concat([{x:1650,y:1800,tx:1660,ty:600,w:240,taper:0.2,broken:true,seed:715},
            {x:5100,y:2600,tx:5100,ty:1100,w:300,taper:0.15,seed:705}]),
    foliage:[{x:1250,y:1330,r:460,ry:360,seed:706,tone:0}, {x:1280,y:1130,r:260,ry:190,seed:707,tone:1},
-            {x:3550,y:420,r:380,ry:280,seed:718,tone:2},
-            {x:4500,y:1300,r:330,ry:250,seed:711,tone:0}, {x:4520,y:1180,r:230,ry:140,seed:710,tone:1}, {x:4900,y:1420,r:330,ry:230,seed:712,tone:1}],
+            {x:2500,y:1500,r:520,ry:700,seed:708,tone:1}, {x:2450,y:1300,r:300,ry:460,seed:709,tone:2},
+            {x:3450,y:1050,r:420,ry:570,seed:718,tone:2}, {x:3380,y:850,r:260,ry:220,seed:721,tone:3},
+            {x:4250,y:1300,r:520,ry:460,seed:711,tone:0}, {x:4200,y:1120,r:280,ry:250,seed:710,tone:1}, {x:4900,y:1420,r:330,ry:230,seed:712,tone:1}],
    hazards:[{x:2150,y:60,tx:2155,ty:330,w:60,seed:719,kind:'branch'}, {x:4550,y:60,tx:4555,ty:340,w:60,seed:720,kind:'branch'}],
-   forces:[{kind:'wind',x:1745,y:555,w:1567,h:625,ax:240,period:6,duty:0.4,phase:0,src:'hollow'}],
+   forces:[{kind:'wind',x:380,y:190,w:2870,h:590,ax:240,period:6,duty:0.4,phase:0,src:'hollow'}],
    walls:[],
    pads:{start:{x:540,y:1960,w:120,h:100}, target:{x:5040,y:1100,w:120,h:100,base:'bark'}}},
   {name:'Steps', theme:'jungle', w:8200, h:3800, groundY:3700, canopyY:400,
