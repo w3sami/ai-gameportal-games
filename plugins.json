@@ -355,12 +355,32 @@
         "sizeBytes": 86233,
         "entryFile": "index.js",
         "publishedAt": "2026-09-20T20:26:15.720Z"
+      },
+      {
+        "version": "1.2.1",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 28856
+          },
+          {
+            "path": "README.md",
+            "sizeBytes": 15156
+          },
+          {
+            "path": "ui.js",
+            "sizeBytes": 42824
+          }
+        ],
+        "sizeBytes": 86836,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-20T20:28:07.200Z"
       }
     ],
     "aliases": {
-      "v1": "1.2.0"
+      "v1": "1.2.1"
     },
     "createdAt": "2026-09-20T18:06:45.736Z",
-    "updatedAt": "2026-09-20T20:26:15.721Z"
+    "updatedAt": "2026-09-20T20:28:07.200Z"
   }
 ]
