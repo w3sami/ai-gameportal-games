@@ -347,6 +347,10 @@ export const funfair = {
      kentän yli, joten taivas jäisi kuitenkin piiloon. */
   name: 'Funfair',
   glow: '#ff5d7a',
+  /* Ainoa kenttä joka pyytää alustoille jalat: laitteet piirtyvät alustojen
+     alle, joten alusta näyttää olevan pultattu niiden katolle. Muissa
+     kentissä jalat roikkuisivat tyhjässä. */
+  padLegs: true,
   gate: HATCH,
   start: 2,
   firstFrom: 5,
