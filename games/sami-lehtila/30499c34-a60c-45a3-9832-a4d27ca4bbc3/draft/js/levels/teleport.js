@@ -184,14 +184,22 @@ const LIT = 'rgba(214,224,240,.22)', DARK = 'rgba(0,0,0,.32)';
 
 const ROOM_LIST = [ROOMS.TL, ROOMS.TR, ROOMS.BL, ROOMS.BR];
 
+/* Kansilevyn paksuus, ja **lattiapinta johdettuna huoneesta**. Ensimmäisessä
+   versiossa alahuoneiden lattia oli kirjoitettu lukuna ja se oli 16 px väärässä
+   — H on 1040 eikä 1024 — jolloin räkit ja lasit jäivät roikkumaan ilmaan.
+   Sami huomasi sen heti. Kun luku johdetaan, sitä ei voi kirjoittaa väärin. */
+const DECK = 14;
+const floorOf = (r) => r.y1 - DECK;
+
 /* Näytelasit: lasisylinteri, jossa kelluu jotain. Yksi per huone, ja väri on
    sen huoneen väri — sekin auttaa tietämään missä ollaan. */
 const TANKS = [
-  { x: 332, y: 504, h: 96, col: '#6fe3ff' },
-  { x: 388, y: 504, h: 110, col: '#7bf0a0' },
-  { x: 336, y: 1008, h: 120, col: '#c58cff' },
-  { x: 684, y: 1008, h: 130, col: '#ffd479' },
+  { room: ROOMS.TL, x: 332, h: 96, col: '#6fe3ff' },
+  { room: ROOMS.TR, x: 388, h: 110, col: '#7bf0a0' },
+  { room: ROOMS.BL, x: 336, h: 120, col: '#c58cff' },
+  { room: ROOMS.BR, x: 684, h: 130, col: '#ffd479' },
 ];
+for (const t of TANKS) t.y = floorOf(t.room);
 
 /* Laiteräkit **seisovat kansilevyllä**. Ensimmäisessä versiossa ne leijuivat
    keskellä huonetta kiinni missään, ja Sami huomasi sen heti: *"serveriräkit on
@@ -200,11 +208,12 @@ const TANKS = [
    Paikat on lisäksi valittu niin etteivät ne ole portin suulla eivätkä alustan
    päällä — sama sääntö kuin kuukentän tolpilla. */
 const RACKS = [
-  { x: 196, y: 394, w: 40, h: 96 },           // TL
-  { x: 480, y: 386, w: 40, h: 104 },          // TR
-  { x: 200, y: 902, w: 40, h: 92 },           // BL
-  { x: 560, y: 894, w: 40, h: 100 },          // BR
+  { room: ROOMS.TL, x: 196, w: 40, h: 96 },
+  { room: ROOMS.TR, x: 480, w: 40, h: 104 },
+  { room: ROOMS.BL, x: 200, w: 40, h: 92 },
+  { room: ROOMS.BR, x: 560, w: 40, h: 100 },
 ];
+for (const k of RACKS) k.y = floorOf(k.room) - k.h;
 
 /* --------------------------------------------------------------- putkisto
 
@@ -219,9 +228,9 @@ const PIPES = [
   { w: 18, ribs: 11, pts: [[349, 192], [319, 194], [295, 204], [275, 221], [260, 251],
                            [265, 283], [284, 310], [306, 325], [336, 328], [344, 328]] },
   { w: 7, pts: [[374, 292], [408, 295], [432, 312], [432, 345], [432, 372],
-                [432, 399], [435, 425], [436, 456], [438, 479]] },
+                [432, 399], [435, 425], [436, 456], [438, 490]] },
   { w: 7, pts: [[372, 257], [405, 257], [436, 258], [457, 279], [461, 312],
-                [461, 338], [461, 367], [461, 394], [461, 427], [461, 453], [461, 481]] },
+                [461, 338], [461, 367], [461, 394], [461, 427], [461, 453], [461, 490]] },
 ];
 
 /* Pisaralamput johdon päässä, TR:n katosta. */
@@ -232,6 +241,24 @@ const DROPS = [
 
 /* Hylly pikkubeakereineen, BR. */
 const SHELF = { x0: 405, x1: 524, y: 733 };
+
+/* Putken polku pehmeänä kaarena eikä murtoviivana.
+
+   Sami: *"piirrokset toki vain suuntaa antavia, ilman kunnon spline
+   työkalua."* Juuri niin, joten veto luetaan suunnaksi eikä jäljeksi:
+   pisteiden välipisteiden kautta kulkeva neliökäyrä tasoittaa käsivaran
+   tärinän mutta jättää sen muodon jonka hän tarkoitti. */
+function pipePath(ctx, pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x, y] = pts[i];
+    const [nx, ny] = pts[i + 1];
+    ctx.quadraticCurveTo(x, y, (x + nx) / 2, (y + ny) / 2);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last[0], last[1]);
+}
 
 /** Kävelee polkua pitkin ja kutsuu takaisin joka `step` pikselin välein,
     mukana paikallinen suunta. Haitariputken kylkiluut tarvitsevat sen. */
@@ -270,13 +297,13 @@ function paintBack(g) {
     const w = r.x1 - r.x0;
 
     g.fillStyle = STEEL;                      // kansilevy lattiaan
-    g.fillRect(r.x0, r.y1 - 14, w, 14);
+    g.fillRect(r.x0, floorOf(r), w, DECK);
     g.fillStyle = LIT;
-    g.fillRect(r.x0, r.y1 - 14, w, 1.5);
+    g.fillRect(r.x0, floorOf(r), w, 1.5);
     g.strokeStyle = DARK;                     // levysaumat
     g.lineWidth = 1.5;
     for (let x = r.x0 + 56; x < r.x1; x += 56) {
-      g.beginPath(); g.moveTo(x, r.y1 - 14); g.lineTo(x, r.y1); g.stroke();
+      g.beginPath(); g.moveTo(x, floorOf(r)); g.lineTo(x, r.y1); g.stroke();
     }
 
     g.fillStyle = STEEL_HI;                   // ilmakanava kattoon
@@ -308,13 +335,11 @@ function paintBack(g) {
     g.lineJoin = 'round';
     g.strokeStyle = STEEL;
     g.lineWidth = q.w;
-    g.beginPath();
-    q.pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    pipePath(g, q.pts);
     g.stroke();
     g.strokeStyle = LIT;
     g.lineWidth = Math.max(1.5, q.w * 0.16);
-    g.beginPath();
-    q.pts.forEach(([x, y], i) => (i ? g.lineTo(x - 1.5, y - 1.5) : g.moveTo(x - 1.5, y - 1.5)));
+    pipePath(g, q.pts.map(([x, y]) => [x - 1.5, y - 1.5]));
     g.stroke();
     if (q.ribs) {
       g.strokeStyle = STEEL_HI;
