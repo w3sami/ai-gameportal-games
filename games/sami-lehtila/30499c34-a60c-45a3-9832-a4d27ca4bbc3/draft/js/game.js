@@ -431,8 +431,11 @@ async function reloadLevel() {
  * tunnisteen (ETag, Last-Modified tai koko) muutaman sekunnin välein ja
  * lataa kentän kun se on eri kuin viimeksi.
  *
- * HEAD eikä GET: pelkkä otsake riittää, eikä 38 kt:n kenttää kannata hakea
- * kolmen sekunnin välein sen selvittämiseksi ettei mikään muuttunut.
+ * Koko tiedosto haetaan ja siitä lasketaan tiiviste. HEAD olisi halvempi,
+ * mutta palvelin ei anna ETagia eikä Last-Modifiedia — pelkkä pituus jäisi
+ * ainoaksi tunnisteeksi, ja samanmittainen muutos menisi huomaamatta. 38 kt
+ * kolmen sekunnin välein on kehittäjän koneella se mitä se on.
+ *
  * no-store ohittaa välimuistin, jota draftilla on viisi minuuttia — ilman sitä
  * vartija katsoisi vanhaa kopiota eikä huomaisi mitään.
  *
@@ -449,10 +452,15 @@ async function levelTag() {
   const url = levelUrl();
   if (!url) return null;
   try {
-    const r = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    const r = await fetch(url, { cache: 'no-store' });
     if (!r.ok) return null;
-    return r.headers.get('etag') || r.headers.get('last-modified')
-      || r.headers.get('content-length') || null;
+    const text = await r.text();
+    let h = 2166136261;                        // FNV-1a, riittää vertailuun
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return text.length + ':' + (h >>> 0).toString(36);
   } catch (e) { return null; }
 }
 
