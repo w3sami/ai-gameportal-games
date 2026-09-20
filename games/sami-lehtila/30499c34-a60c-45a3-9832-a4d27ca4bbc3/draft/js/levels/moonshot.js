@@ -135,21 +135,28 @@ const spanAt = (d, h) => Math.sqrt(Math.max(0, d.r * d.r - h * h));
    vihreänä tai punaisena omalla jaksollaan. Ne seisovat tasangolla ja kansien
    päällä, ja niiden tehtävä on tehdä tyhjästä kohdasta rakennettu. */
 const POLES = [
-  { x: 46, base: 1004, h: 92, hz: 0.7, col: '#7bf0a0' },
-  { x: 214, base: 1004, h: 116, hz: 0.45, col: '#ff5d7a' },
-  { x: 300, base: 1004, h: 78, hz: 1.1, col: '#7bf0a0' },
-  { x: 446, base: 1004, h: 104, hz: 0.6, col: '#7bf0a0' },
-  { x: 528, base: 1004, h: 86, hz: 0.35, col: '#ff5d7a' },
-  { x: 686, base: 1004, h: 98, hz: 0.85, col: '#7bf0a0' },
-  { x: 330, base: HY[0], h: 40, hz: 0.5, col: '#7bf0a0' },
-  { x: 700, base: HY[0], h: 36, hz: 0.9, col: '#ff5d7a' },
-  { x: 120, base: HY[1], h: 44, hz: 0.75, col: '#7bf0a0' },
-  { x: 640, base: HY[1], h: 38, hz: 0.55, col: '#7bf0a0' },
+  /* Yksi per lohko, lohkon vapaaseen nurkkaan. Sääntö: tolppa ei saa seistä
+     oviaukon kohdalla eikä sillä väylällä, jota pitkin ovelta mennään ovelle
+     tai alustalle — se oli ensimmäisen version vika. Siksi x on joko lohkon
+     reunassa tai oviaukkojen välissä, ja korkeus jää alustan alapuolelle. */
+  { x: 262, base: HY[0], h: 44, hz: 0.5, col: '#7bf0a0' },    // TM, vasen nurkka
+  { x: 696, base: HY[0], h: 40, hz: 0.9, col: '#ff5d7a' },    // TR, oikea nurkka
+  { x: 26, base: HY[1], h: 44, hz: 0.75, col: '#7bf0a0' },    // ML, vasen nurkka
+  { x: 458, base: HY[1], h: 40, hz: 0.6, col: '#7bf0a0' },    // C, oikea nurkka
+  { x: 700, base: HY[1], h: 42, hz: 0.35, col: '#ff5d7a' },   // MR, oikea nurkka
+  { x: 46, base: 1004, h: 92, hz: 0.7, col: '#7bf0a0' },      // BL, vasen nurkka
+  { x: 214, base: 1004, h: 76, hz: 1.1, col: '#7bf0a0' },     // BL, oikea nurkka
+  { x: 268, base: 1004, h: 88, hz: 0.45, col: '#7bf0a0' },    // BM, vasen nurkka
+  { x: 692, base: 1004, h: 96, hz: 0.85, col: '#ff5d7a' },    // BR, oikea nurkka
 ];
 
-/* Raketti telineessään tasangolla. Nousee horisontin yli, jotta siluetti
-   näkyy mustaa taivasta vasten. */
-const ROCKET = { x: 196, base: 1002, h: 132 };
+/* Raketti telineessään siinä lohkossa, josta vuoro alkaa (alusta 1), kannen
+   päällä oikeassa nurkassa.
+
+   Ylä keskimmäiseen se ei mahtunut, vaikka se on se ruutu josta taksi tulee
+   sisään: luukun väylä vie lohkon 214 pikselistä 120, ja jäljelle jää 47 px
+   kumpaankin reunaan. Raketti eväineen on 56 leveä. */
+const ROCKET = { x: 198, base: HY[0], h: 128 };
 
 const SOLIDS = [...GRID, ...PANELS];
 
@@ -457,21 +464,21 @@ function pole(ctx, p) {
   const on = (clock / 1000 / Math.max(0.15, p.hz)) % 2 < 1;
   ctx.fillStyle = on ? p.col : 'rgba(40,48,62,.85)';
   if (on) { ctx.shadowColor = p.col; ctx.shadowBlur = 10; }
-  ctx.fillRect(p.x - 4, top - 8, 8, 8);
+  ctx.fillRect(p.x - 3, top - 6, 6, 6);
   ctx.shadowBlur = 0;
 }
 
 /* Raketti telineessä: runko, kärki, evät ja ristikkotorni kylkeen. Kulissia. */
 function rocket(ctx, k) {
   const top = k.base - k.h, wRoc = 17;
-  ctx.fillStyle = '#7d8798';                  // ristikkotorni
-  ctx.fillRect(k.x + 22, top + 12, 4, k.h - 12);
-  ctx.fillRect(k.x + 44, top + 12, 4, k.h - 12);
+  ctx.fillStyle = '#7d8798';                  // ristikkotorni kylkeen
+  ctx.fillRect(k.x + 20, top + 12, 3, k.h - 12);
+  ctx.fillRect(k.x + 34, top + 12, 3, k.h - 12);
   ctx.strokeStyle = 'rgba(125,135,152,.85)';
-  ctx.lineWidth = 2;
-  for (let y = top + 20; y < k.base; y += 22) {
-    ctx.beginPath(); ctx.moveTo(k.x + 26, y); ctx.lineTo(k.x + 44, y + 11); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(k.x + 26, y + 11); ctx.lineTo(k.x + 44, y); ctx.stroke();
+  ctx.lineWidth = 1.6;
+  for (let y = top + 20; y < k.base; y += 20) {
+    ctx.beginPath(); ctx.moveTo(k.x + 23, y); ctx.lineTo(k.x + 34, y + 10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(k.x + 23, y + 10); ctx.lineTo(k.x + 34, y); ctx.stroke();
   }
 
   ctx.fillStyle = '#2a3140';                  // evät
@@ -570,29 +577,23 @@ function moonBack(ctx, api) {
   doorLamps(ctx);
 }
 
-/* Alustan kiinnike: alusta on pultattu seinään eikä leiju. Levy seinää vasten
-   ja kaksi vinotukea alustan alle; puoli tulee MOUNTS-taulusta. Piirretään
-   drawBackissa, koska peli piirtää alustat vasta sen jälkeen. */
+/* Alustan kiinnike: alusta on pultattu seinään eikä leiju. Pelkkä sivulevy
+   pultteineen — vinotuet kokeiltiin ja poistettiin, ne sotkivat alustan alle
+   piirtyvää tunnusta. Puoli tulee MOUNTS-taulusta, ja se on valittu niin ettei
+   alusta peitä sen seinän oviaukkoa. Piirretään drawBackissa, koska peli
+   piirtää alustat vasta sen jälkeen. */
 const MOUNTS = { 1: 'left', 2: 'left', 3: 'left', 4: 'left', 5: 'right', 6: 'left', 7: 'left', 0: 'left' };
 function mount(ctx, p) {
   const right = MOUNTS[p.id] === 'right';
-  const wx = right ? p.x + p.w : p.x;         // seinäpinta
-  const sgn = right ? 1 : -1;
+  const x = right ? p.x + p.w - 7 : p.x;      // levy seinäpintaa vasten
   ctx.fillStyle = '#39414f';
-  ctx.fillRect(right ? wx - 6 : wx, p.y - 4, 6, p.h + 22);
+  ctx.fillRect(x, p.y - 5, 7, p.h + 10);
   ctx.fillStyle = 'rgba(214,224,240,.32)';
-  ctx.fillRect(right ? wx - 6 : wx, p.y - 4, 6, 1.5);
-
-  ctx.strokeStyle = 'rgba(146,160,182,.8)';   // vinotuet
-  ctx.lineWidth = 3;
-  for (const reach of [0.42, 0.78]) {
-    ctx.beginPath();
-    ctx.moveTo(wx - sgn * 1, p.y + p.h + 16);
-    ctx.lineTo(wx - sgn * (p.w * reach), p.y + p.h + 1);
-    ctx.stroke();
-  }
+  ctx.fillRect(x, p.y - 5, 7, 1.5);
+  ctx.fillStyle = 'rgba(0,0,0,.4)';
+  ctx.fillRect(x, p.y + p.h + 3.5, 7, 1.5);
   ctx.fillStyle = WARM;                       // pultit
-  for (const dy of [2, p.h + 12]) ctx.fillRect(right ? wx - 5 : wx + 1, p.y + dy, 3, 3);
+  for (const dy of [-1, p.h + 4]) ctx.fillRect(x + 2, p.y + dy, 3, 3);
 }
 
 function moonFront(ctx, api) {
