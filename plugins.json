@@ -54,9 +54,9 @@
   {
     "name": "leaderboard",
     "description": "Yhteiset tulostaulut peleille. Peli lähettää tuloksen ja lukee taulun takaisin; avainta ei ole, koska portaali tietää kutsujan pelin omasta nimestä. Mikään ei heitä: submit palauttaa aina vastauksen ja kept on koko totuus. Mukana <leaderboard-panel>, valmis taulu pelin sisään.",
-    "author": "Sami",
-    "ownerId": "11ff8596-9f59-4bde-afb6-347992d19de7",
-    "ownerFolder": "sami",
+    "author": "Sami Lehtilä",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
     "versions": [
       {
         "version": "1.0.0",
@@ -75,7 +75,7 @@
       "v1": "1.0.0"
     },
     "createdAt": "2026-09-18T12:05:27.363Z",
-    "updatedAt": "2026-09-18T12:05:27.363Z"
+    "updatedAt": "2026-09-20T10:11:04.074Z"
   },
   {
     "name": "gamepad",
