@@ -84,6 +84,17 @@ const TOOLS = [
    mieltä eikä kumpikaan päästä läpi sitä mistä toinen huomauttaa. */
 const TWB = 58, THB = 46, STEP = 4;
 
+/* Vapaan vedon pisteet menevät tiedostoon merkkijonona eivätkä sisäkkäisinä
+   taulukkoina. Sisennetty JSON venyttäisi yhden vedon tuhanteen riviin, ja
+   config-kansiossa on 64 kt katto tiedostolta ja 256 kt koko kansiolta — se
+   täyttyisi muutamasta vedosta. Merkkijono on myös se muoto jonka ihminen
+   lukee yhdellä silmäyksellä. */
+const packPts = pts => pts.map(([x, y]) => x + ',' + y).join(' ');
+const unpackPts = v => (typeof v !== 'string' ? v
+  : v.trim().split(/\s+/).filter(Boolean).map(t => t.split(',').map(Number)));
+const packShape = s => (s.kind === 'free' ? { ...s, pts: packPts(s.pts) } : s);
+const unpackShape = s => (s && s.kind === 'free' ? { ...s, pts: unpackPts(s.pts) } : s);
+
 const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 const padBox = p => ({ x: p.x, y: p.y, w: p.w, h: p.h });
 const grow = (b, d) => ({ x: b.x - d, y: b.y - d, w: b.w + d * 2, h: b.h + d * 2 });
@@ -257,7 +268,7 @@ export function createEditor(host) {
     const names = new Set([...Object.keys(store.paint), ...Object.keys(store.moves), levelName()]);
     for (const name of names) {
       const here = name === levelName();
-      const paint = here ? shapes : (store.paint[name] || []);
+      const paint = (here ? shapes : store.paint[name] || []).map(packShape);
       const mv = here ? moves() : (store.moves[name] || []);
       if (paint.length || mv.length) levels[name] = { paint, moves: mv };
     }
@@ -271,7 +282,7 @@ export function createEditor(host) {
     store.paint = {};
     store.moves = {};
     for (const [name, e] of Object.entries(raw.levels)) {
-      store.paint[name] = Array.isArray(e.paint) ? e.paint : [];
+      store.paint[name] = Array.isArray(e.paint) ? e.paint.map(unpackShape) : [];
       store.moves[name] = Array.isArray(e.moves) ? e.moves : [];
     }
     shapes = (store.paint[levelName()] || []).slice();
@@ -624,7 +635,7 @@ export function createEditor(host) {
       s.x2 = round(p.x); s.y2 = round(p.y);
     } else {
       const last = s.pts[s.pts.length - 1];
-      if (Math.hypot(p.x - last[0], p.y - last[1]) > 6 && s.pts.length < 220) {
+      if (Math.hypot(p.x - last[0], p.y - last[1]) > 7 && s.pts.length < 160) {
         s.pts.push([round(p.x), round(p.y)]);
       }
     }
