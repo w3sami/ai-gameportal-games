@@ -622,6 +622,9 @@ export const moonshot = {
   start: 1,
   firstFrom: 2,
   walls: SOLIDS,
+  /* Alustat ovat kiinni seinässä, joten pelin piirtämät kaksi jalkaa niiden
+     alla ovat väärin: ne roikkuisivat tyhjässä kiinnikkeen vieressä. */
+  padLegs: false,
   pads: [
     { id: 1, x: 16, y: 238, w: 104, h: 18 },    // TL, vasen kehäseinä
     { id: 2, x: 483, y: 250, w: 104, h: 18 },   // TR, keskiseinä
