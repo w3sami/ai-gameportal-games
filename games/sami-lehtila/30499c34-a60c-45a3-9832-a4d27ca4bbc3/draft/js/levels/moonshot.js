@@ -120,11 +120,13 @@ for (const line of [0, 1]) GRID.push(...segments('V', line), ...segments('H', li
    Kolme kupolia tasangolla, ei muuta. Katos (se vaakapalkki kupolin poikki)
    on poistettu: se oli oveneste ja näytti oudolta.
 
-   base  se pinta jolla kupoli seisoo */
+   x, y  kupolin keskipiste sillä pinnalla jolla se seisoo. Nimet ovat x ja y
+         eivätkä x ja base siksi, että kenttäeditori tarttuu niihin: sen
+         sopimus on olio jolla on x ja y. Ks. edit-taulu tiedoston lopussa. */
 const DOMES = [
-  { x: 122, base: 1004, r: 62 },
-  { x: 352, base: 1004, r: 60 },
-  { x: 600, base: 1004, r: 58 },
+  { x: 122, y: 1004, r: 62 },
+  { x: 352, y: 1004, r: 60 },
+  { x: 600, y: 1004, r: 58 },
 ];
 
 const spanAt = (d, h) => Math.sqrt(Math.max(0, d.r * d.r - h * h));
@@ -133,21 +135,23 @@ const spanAt = (d, h) => Math.sqrt(Math.max(0, d.r * d.r - h * h));
 
    Tolppa on ohut ja suora, ja sen päässä on neliönmuotoinen valo joka vilkkuu
    vihreänä tai punaisena omalla jaksollaan. Ne seisovat tasangolla ja kansien
-   päällä, ja niiden tehtävä on tehdä tyhjästä kohdasta rakennettu. */
+   päällä, ja niiden tehtävä on tehdä tyhjästä kohdasta rakennettu.
+
+   x, y on tolpan jalka, ei latva — se on se piste josta tolppaa raahataan. */
 const POLES = [
   /* Yksi per lohko, lohkon vapaaseen nurkkaan. Sääntö: tolppa ei saa seistä
      oviaukon kohdalla eikä sillä väylällä, jota pitkin ovelta mennään ovelle
      tai alustalle — se oli ensimmäisen version vika. Siksi x on joko lohkon
      reunassa tai oviaukkojen välissä, ja korkeus jää alustan alapuolelle. */
-  { x: 262, base: HY[0], h: 44, hz: 0.5, col: '#7bf0a0' },    // TM, vasen nurkka
-  { x: 696, base: HY[0], h: 40, hz: 0.9, col: '#ff5d7a' },    // TR, oikea nurkka
-  { x: 26, base: HY[1], h: 44, hz: 0.75, col: '#7bf0a0' },    // ML, vasen nurkka
-  { x: 458, base: HY[1], h: 40, hz: 0.6, col: '#7bf0a0' },    // C, oikea nurkka
-  { x: 700, base: HY[1], h: 42, hz: 0.35, col: '#ff5d7a' },   // MR, oikea nurkka
-  { x: 46, base: 1004, h: 92, hz: 0.7, col: '#7bf0a0' },      // BL, vasen nurkka
-  { x: 214, base: 1004, h: 76, hz: 1.1, col: '#7bf0a0' },     // BL, oikea nurkka
-  { x: 268, base: 1004, h: 88, hz: 0.45, col: '#7bf0a0' },    // BM, vasen nurkka
-  { x: 692, base: 1004, h: 96, hz: 0.85, col: '#ff5d7a' },    // BR, oikea nurkka
+  { x: 262, y: HY[0], h: 44, hz: 0.5, col: '#7bf0a0' },    // TM, vasen nurkka
+  { x: 696, y: HY[0], h: 40, hz: 0.9, col: '#ff5d7a' },    // TR, oikea nurkka
+  { x: 26, y: HY[1], h: 44, hz: 0.75, col: '#7bf0a0' },    // ML, vasen nurkka
+  { x: 458, y: HY[1], h: 40, hz: 0.6, col: '#7bf0a0' },    // C, oikea nurkka
+  { x: 700, y: HY[1], h: 42, hz: 0.35, col: '#ff5d7a' },   // MR, oikea nurkka
+  { x: 46, y: 1004, h: 92, hz: 0.7, col: '#7bf0a0' },      // BL, vasen nurkka
+  { x: 214, y: 1004, h: 76, hz: 1.1, col: '#7bf0a0' },     // BL, oikea nurkka
+  { x: 268, y: 1004, h: 88, hz: 0.45, col: '#7bf0a0' },    // BM, vasen nurkka
+  { x: 692, y: 1004, h: 96, hz: 0.85, col: '#ff5d7a' },    // BR, oikea nurkka
 ];
 
 /* Raketti telineessään siinä lohkossa, josta vuoro alkaa (alusta 1), kannen
@@ -155,10 +159,31 @@ const POLES = [
 
    Ylä keskimmäiseen se ei mahtunut, vaikka se on se ruutu josta taksi tulee
    sisään: luukun väylä vie lohkon 214 pikselistä 120, ja jäljelle jää 47 px
-   kumpaankin reunaan. Raketti eväineen on 56 leveä. */
-const ROCKET = { x: 198, base: HY[0], h: 128 };
+   kumpaankin reunaan. Raketti eväineen on 56 leveä.
+
+   x, y on telineen jalka kannen pinnalla. */
+const ROCKET = { x: 198, y: HY[0], h: 128 };
 
 const SOLIDS = [...GRID, ...PANELS];
+
+/* ----------------------------------------------------------------- alustat
+
+   Yksi per lohko: jokaisessa yksi, paitsi keskellä tankkaus ja ylhäällä
+   keskellä ei mitään — se lohko on pelkkä ulosmenoväylä luukulle. Alustat
+   ovat kapeampia (104 px) kuin muissa kentissä, koska lohkon sisämitta on
+   220 px ja oviaukko vie siitä 92. Nappien nurkat (x 30…158, y 778…964)
+   kierretään: vasemman alalohkon alusta on lohkon yläreunassa. */
+const PADS = [
+  { id: 1, x: 16, y: 238, w: 104, h: 18 },    // TL, vasen kehäseinä
+  { id: 2, x: 483, y: 250, w: 104, h: 18 },   // TR, keskiseinä
+  { id: 3, x: 16, y: 600, w: 104, h: 18 },    // ML, vasen kehäseinä
+  { id: 4, x: 483, y: 430, w: 104, h: 18 },   // MR, keskiseinä
+  { id: 5, x: 133, y: 748, w: 104, h: 18 },   // BL, oikea seinä (napit vievät nurkan)
+  { id: 6, x: 253, y: 812, w: 104, h: 18 },   // BM, vasen seinä
+  { id: 7, x: 483, y: 900, w: 104, h: 18 },   // BR, keskiseinä
+  { id: 0, x: 253, y: 560, w: 104, h: 18, fuel: true },  // keskilohko, vasen seinä
+];
+
 
 /* ---------------------------------------------------------------- arvonnat
 
@@ -373,7 +398,7 @@ function plain(ctx) {
    ei mitään kupolin poikki menevää palkkia. */
 function dome(ctx, d) {
   ctx.save();
-  ctx.translate(d.x, d.base);
+  ctx.translate(d.x, d.y);
 
   ctx.save();
   ctx.beginPath();
@@ -455,11 +480,11 @@ function interior(ctx, d) {
 /* Tolppa: ohut suora masto, päässä neliövalo joka vilkkuu omalla jaksollaan.
    Kello on performance.now(), koska pelin runT pysähtyy luukusta tullessa. */
 function pole(ctx, p) {
-  const top = p.base - p.h;
+  const top = p.y - p.h;
   ctx.fillStyle = 'rgba(146,160,182,.75)';
   ctx.fillRect(p.x - 1.5, top, 3, p.h);
   ctx.fillStyle = 'rgba(120,134,156,.8)';     // jalka
-  ctx.fillRect(p.x - 5, p.base - 4, 10, 4);
+  ctx.fillRect(p.x - 5, p.y - 4, 10, 4);
 
   const on = (clock / 1000 / Math.max(0.15, p.hz)) % 2 < 1;
   ctx.fillStyle = on ? p.col : 'rgba(40,48,62,.85)';
@@ -470,24 +495,24 @@ function pole(ctx, p) {
 
 /* Raketti telineessä: runko, kärki, evät ja ristikkotorni kylkeen. Kulissia. */
 function rocket(ctx, k) {
-  const top = k.base - k.h, wRoc = 17;
+  const top = k.y - k.h, wRoc = 17;
   ctx.fillStyle = '#7d8798';                  // ristikkotorni kylkeen
   ctx.fillRect(k.x + 20, top + 12, 3, k.h - 12);
   ctx.fillRect(k.x + 34, top + 12, 3, k.h - 12);
   ctx.strokeStyle = 'rgba(125,135,152,.85)';
   ctx.lineWidth = 1.6;
-  for (let y = top + 20; y < k.base; y += 20) {
+  for (let y = top + 20; y < k.y; y += 20) {
     ctx.beginPath(); ctx.moveTo(k.x + 23, y); ctx.lineTo(k.x + 34, y + 10); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(k.x + 23, y + 10); ctx.lineTo(k.x + 34, y); ctx.stroke();
   }
 
   ctx.fillStyle = '#2a3140';                  // evät
   ctx.beginPath();
-  ctx.moveTo(k.x - wRoc, k.base); ctx.lineTo(k.x - wRoc - 11, k.base);
-  ctx.lineTo(k.x - wRoc, k.base - 34); ctx.closePath(); ctx.fill();
+  ctx.moveTo(k.x - wRoc, k.y); ctx.lineTo(k.x - wRoc - 11, k.y);
+  ctx.lineTo(k.x - wRoc, k.y - 34); ctx.closePath(); ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(k.x + wRoc, k.base); ctx.lineTo(k.x + wRoc + 11, k.base);
-  ctx.lineTo(k.x + wRoc, k.base - 34); ctx.closePath(); ctx.fill();
+  ctx.moveTo(k.x + wRoc, k.y); ctx.lineTo(k.x + wRoc + 11, k.y);
+  ctx.lineTo(k.x + wRoc, k.y - 34); ctx.closePath(); ctx.fill();
 
   const g = ctx.createLinearGradient(k.x - wRoc, 0, k.x + wRoc, 0);
   g.addColorStop(0, '#cfd6e4');
@@ -507,7 +532,7 @@ function rocket(ctx, k) {
   ctx.beginPath(); ctx.arc(k.x, top + 66, 5, 0, 6.3); ctx.fill();
 
   ctx.fillStyle = 'rgba(20,26,36,.7)';        // suutin
-  ctx.fillRect(k.x - 9, k.base - 6, 18, 6);
+  ctx.fillRect(k.x - 9, k.y - 6, 18, 6);
 }
 
 /* Oviaukon karmi ja lamppurivi. Lamput ovat aukon molemmin puolin seinässä,
@@ -568,7 +593,7 @@ function moonBack(ctx, api) {
   plain(ctx);
   for (const d of DOMES) {
     ctx.fillStyle = 'rgba(10,12,18,.4)';
-    ctx.beginPath(); ctx.ellipse(d.x + 14, d.base + 5, d.r * 1.05, 10, 0, 0, 6.3); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(d.x + 14, d.y + 5, d.r * 1.05, 10, 0, 0, 6.3); ctx.fill();
   }
   for (const d of DOMES) dome(ctx, d);
   rocket(ctx, ROCKET);
@@ -601,6 +626,36 @@ function moonFront(ctx, api) {
   doorLamps(ctx);
 }
 
+/* ---------------------------------------------------------------- editointi
+
+   Mitä tässä kentässä saa raahata kenttäeditorilla (js/editor.js). Sopimus on
+   kapea tarkoituksella: olio jolla on x ja y ja jonka piirto lukee ne joka
+   ruudulla. Siksi kupolit, tolpat ja raketti puhuvat x:stä ja y:stä eivätkä
+   basesta.
+
+   Ruudukon seinät ja oviaukot EIVÄT ole listassa. Ne ovat johdettuja — SOLIDS
+   rakennetaan segments()illä oviaukkojen ympärille — eikä aukkoa voi siirtää
+   ilman koko seinälinjan uudelleenlaskentaa ja sen tarkistusta, että auki
+   vetäytyvä luukku yhä mahtuu umpiseinään. Seinämuutokset kerrotaan editorin
+   maalauskalulla ja kirjoitetaan käsin tähän tiedostoon.
+
+   Editori ei kirjoita tätä tiedostoa eikä mitään konffia geometriasta: se
+   tallentaa siirrot luonnokseksi (config/sketch.json), josta luvut tulevat
+   tänne. Kentän luvut ovat siis aina ne joita peli oikeasti käyttää — myös
+   tools/check-grid.mjs:lle, joka lukee tämän moduulin. */
+const EDIT = [
+  ...PADS.map(p => ({
+    id: 'pad:' + p.id,
+    kind: 'pad',
+    obj: p,
+    label: p.fuel ? 'tankkaus' : 'alusta ' + p.id,
+  })),
+  { id: 'prop:rocket', kind: 'prop', obj: ROCKET, label: 'raketti' },
+  { id: 'prop:earth', kind: 'prop', obj: EARTH, label: 'maapallo' },
+  ...DOMES.map((d, i) => ({ id: `prop:dome-${i + 1}`, kind: 'prop', obj: d, label: `kupoli ${i + 1}` })),
+  ...POLES.map((p, i) => ({ id: `prop:pole-${i + 1}`, kind: 'prop', obj: p, label: `tolppa ${i + 1}` })),
+];
+
 /* ------------------------------------------------------------------ kenttä */
 
 export const moonshot = {
@@ -622,16 +677,8 @@ export const moonshot = {
   start: 1,
   firstFrom: 2,
   walls: SOLIDS,
-  pads: [
-    { id: 1, x: 16, y: 238, w: 104, h: 18 },    // TL, vasen kehäseinä
-    { id: 2, x: 483, y: 250, w: 104, h: 18 },   // TR, keskiseinä
-    { id: 3, x: 16, y: 600, w: 104, h: 18 },    // ML, vasen kehäseinä
-    { id: 4, x: 483, y: 430, w: 104, h: 18 },   // MR, keskiseinä
-    { id: 5, x: 133, y: 748, w: 104, h: 18 },   // BL, oikea seinä (napit vievät nurkan)
-    { id: 6, x: 253, y: 812, w: 104, h: 18 },   // BM, vasen seinä
-    { id: 7, x: 483, y: 900, w: 104, h: 18 },   // BR, keskiseinä
-    { id: 0, x: 253, y: 560, w: 104, h: 18, fuel: true },  // keskilohko, vasen seinä
-  ],
+  pads: PADS,
+  edit: EDIT,
   mul: { grav: 0.3 },
   tune: [
     {
