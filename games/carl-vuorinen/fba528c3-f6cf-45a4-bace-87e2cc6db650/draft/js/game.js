@@ -532,7 +532,8 @@ function showComplete(){
 function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); Snd.init(); Snd.resume(); placeControls(); }
 box.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return; Snd.init(); Snd.click();
-  if (t.dataset.l !== undefined){ loadLevel(+t.dataset.l); showMenu(); return; }
+  if (t.dataset.l !== undefined){ const n = +t.dataset.l;       // first tap picks the level, a second tap on it flies
+    if (n === li){ reset(); play(); } else { loadLevel(n); showMenu(); } return; }
   if (t.dataset.ch){ menuCh = Math.max(0, Math.min(CHAPTERS.length-1, menuCh + +t.dataset.ch)); showMenu(); return; }
   if (t.dataset.fs){ toggleFS(); return; }                      // the label is refreshed by onFsChange
   if (t.dataset.set){
