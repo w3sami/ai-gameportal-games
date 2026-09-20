@@ -266,34 +266,45 @@ for (const l of DROPS) {
 /* Hylly pikkubeakereineen, BR. */
 const SHELF = { x0: 405, x1: 524, y: 733 };
 
-/* ---------------------------------------------------------- iso vesitankki
+/* ------------------------------------------------------------- vesitankit
 
-   Sami merkitsi TR:ään laatikon ilman tekstiä ja kysyi mitä tähän tulisi
-   mieleen. Ehdotin tarkkaamoa jossa väkeä katsoo koetta; hänen oma ehdotuksensa
-   oli parempi: **hehkuva vesitankki jossa kuplia, himmeänä jotta näyttää
-   taustalta.**
+   Sami merkitsi TR:ään laatikon ilman tekstiä ja kysyi mitä siihen tulisi
+   mieleen. Ehdotin tarkkaamoa jossa väkeä katsoo koetta; hänen oma
+   ehdotuksensa oli parempi: **hehkuvia vesitankkeja joissa kuplia, himmeinä
+   jotta näyttävät taustalta.**
 
    Se on oikea siksi että tausta ei saa varastaa katsetta. Katsojajoukko
    ikkunassa olisi ollut aihe, ja aihe vetää silmän puoleensa juuri silloin kun
-   pitäisi katsoa porttia. Hiljaa hohtava tankki antaa huoneelle syvyyttä ja
-   jättää huomion sinne minne se kuuluu — ja se on sama olio kuin huoneiden
-   pikkulasit, vain isona.
+   pitäisi katsoa porttia.
 
-   Piirtyy taustatasossa kaiken alle, ja kaikki on tahallaan vaimeaa. */
-const BIGTANK = { x0: 548, x1: 688, y0: 91, y1: 402, col: '#6fe3ff' };
+   Yksi iso kokeiltiin ensin; **neljä pienempää 2 × 2 on parempi**, koska rivi
+   samanlaisia astioita lukeutuu kalustoksi eikä kohteeksi — yksi iso on aina
+   jokin, neljä pientä on varastointia.
+
+   `DIM` on koko tankiston kirkkauden katto, ja kaikki alfat lausutaan sen
+   osuuksina. Kun se on yksi luku, sitä voi kääntää yhdestä paikasta eikä
+   kahdestatoista — ja juuri sitä tässä on käännetty kahdesti. */
+const DIM = 0.10;
+const VAT_COL = '#6fe3ff';
+const VATS = [];
+{
+  const box = { x0: 548, y0: 91, w: 140, h: 311 }, gap = 10;
+  const w = (box.w - gap) / 2, h = (box.h - gap) / 2;
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 2; c++) {
+      VATS.push({ x: box.x0 + c * (w + gap), y: box.y0 + r * (h + gap), w, h, ph: r * 2 + c });
+    }
+  }
+}
 
 /* Kuplat: paikka leveydellä 0…1, säde, nousunopeus ja oma vaihe. Vaiheet ovat
    eri, jottei rivi nouse yhtenä ryhmänä — yhtä aikaa nouseva joukko näyttää
    animaatiolta eikä vedeltä. */
 const BUBBLES = [
-  [0.18, 3.2, 0.09, 0.0], [0.34, 2.1, 0.13, 0.37], [0.52, 4.0, 0.07, 0.64],
-  [0.68, 2.6, 0.11, 0.18], [0.82, 3.4, 0.08, 0.81], [0.26, 1.8, 0.16, 0.52],
-  [0.44, 2.9, 0.10, 0.05], [0.60, 2.2, 0.14, 0.73], [0.76, 3.8, 0.06, 0.29],
-  [0.12, 2.4, 0.12, 0.91], [0.38, 1.6, 0.18, 0.44], [0.90, 2.0, 0.15, 0.12],
+  [0.24, 2.6, 0.09, 0.00], [0.46, 1.8, 0.14, 0.37], [0.64, 3.0, 0.07, 0.64],
+  [0.36, 2.2, 0.11, 0.18], [0.78, 2.4, 0.08, 0.81], [0.14, 1.6, 0.16, 0.52],
 ];
 
-/** Kävelee polkua pitkin ja kutsuu takaisin joka `step` pikselin välein,
-    mukana paikallinen suunta. Haitariputken kylkiluut tarvitsevat sen. */
 /* Putken polku pehmeänä kaarena eikä murtoviivana.
 
    Sami: *"piirrokset toki vain suuntaa antavia, ilman kunnon spline
@@ -431,40 +442,37 @@ function paintBack(g) {
     g.fillRect(x + 1.5, SHELF.y - h + 2, 2, h - 4);
   }
 
-  /* Ison tankin kiinteä osa: lasi, neste ja metalliosat. Kaikki vaimeaa —
-     se on tausta, ja tausta lakkaa olemasta tausta heti kun se kirkastuu. */
-  {
-    const b = BIGTANK, bw = b.x1 - b.x0, bh = b.y1 - b.y0;
-    const liq = g.createLinearGradient(0, b.y0, 0, b.y1);
-    liq.addColorStop(0, fade(b.col, 0.05));
-    liq.addColorStop(0.55, fade(b.col, 0.12));
-    liq.addColorStop(1, fade(b.col, 0.20));
+  /* Tankkien kiinteä osa: lasi, neste ja metalliosat. Kaikki DIM:n osuuksina —
+     tausta lakkaa olemasta tausta heti kun se kirkastuu. */
+  for (const v of VATS) {
+    const liq = g.createLinearGradient(0, v.y, 0, v.y + v.h);
+    liq.addColorStop(0, fade(VAT_COL, DIM * 0.25));
+    liq.addColorStop(0.55, fade(VAT_COL, DIM * 0.6));
+    liq.addColorStop(1, fade(VAT_COL, DIM));
     g.fillStyle = liq;
-    g.fillRect(b.x0, b.y0, bw, bh);
+    g.fillRect(v.x, v.y, v.w, v.h);
 
-    g.fillStyle = fade(b.col, 0.05);          // pohjan hohde
-    g.beginPath(); g.ellipse(b.x0 + bw / 2, b.y1 - 6, bw * 0.46, 26, 0, 0, 6.3); g.fill();
+    g.fillStyle = fade(VAT_COL, DIM * 0.3);   // pohjan hohde
+    g.beginPath();
+    g.ellipse(v.x + v.w / 2, v.y + v.h - 5, v.w * 0.42, 13, 0, 0, 6.3);
+    g.fill();
 
-    g.fillStyle = 'rgba(190,225,255,.055)';   // lasin kiilto vasempaan reunaan
-    g.fillRect(b.x0 + 7, b.y0 + 12, 5, bh - 24);
-    g.fillStyle = 'rgba(190,225,255,.03)';
-    g.fillRect(b.x1 - 16, b.y0 + 12, 3, bh - 24);
+    g.fillStyle = `rgba(190,225,255,${DIM * 0.5})`;   // lasin kiilto
+    g.fillRect(v.x + 5, v.y + 8, 3.5, v.h - 16);
+    g.fillStyle = `rgba(190,225,255,${DIM * 0.25})`;
+    g.fillRect(v.x + v.w - 10, v.y + 8, 2, v.h - 16);
 
-    g.strokeStyle = 'rgba(120,170,220,.10)';  // lasin reuna
-    g.lineWidth = 2;
-    g.strokeRect(b.x0 + 1, b.y0 + 1, bw - 2, bh - 2);
+    g.strokeStyle = `rgba(120,170,220,${DIM * 0.7})`; // lasin reuna
+    g.lineWidth = 1.5;
+    g.strokeRect(v.x + 0.75, v.y + 0.75, v.w - 1.5, v.h - 1.5);
 
-    g.fillStyle = 'rgba(42,52,70,.75)';       // kannet, vaimennettuna
-    g.fillRect(b.x0 - 8, b.y0 - 12, bw + 16, 12);
-    g.fillRect(b.x0 - 8, b.y1, bw + 16, 12);
-    g.fillStyle = 'rgba(214,224,240,.12)';
-    g.fillRect(b.x0 - 8, b.y0 - 12, bw + 16, 1.5);
-    g.fillStyle = 'rgba(0,0,0,.25)';
-    g.fillRect(b.x0 - 8, b.y1 + 10.5, bw + 16, 1.5);
-    g.fillStyle = 'rgba(42,52,70,.6)';        // pannat
-    for (const y of [b.y0 + bh * 0.34, b.y0 + bh * 0.67]) g.fillRect(b.x0 - 4, y, bw + 8, 5);
-    g.fillStyle = 'rgba(42,52,70,.7)';        // syöttöputki katosta
-    g.fillRect(b.x0 + bw / 2 - 5, b.y0 - 34, 10, 22);
+    g.fillStyle = `rgba(42,52,70,${DIM * 3.6})`;      // kannet
+    g.fillRect(v.x - 5, v.y - 8, v.w + 10, 8);
+    g.fillRect(v.x - 5, v.y + v.h, v.w + 10, 8);
+    g.fillStyle = `rgba(214,224,240,${DIM * 0.9})`;
+    g.fillRect(v.x - 5, v.y - 8, v.w + 10, 1.5);
+    g.fillStyle = `rgba(42,52,70,${DIM * 2.6})`;      // syöttöputki
+    g.fillRect(v.x + v.w / 2 - 3, v.y - 20, 6, 12);
   }
 
   for (const t of TANKS) {
@@ -532,27 +540,30 @@ function labLive(ctx) {
     ctx.beginPath(); ctx.ellipse(t.x, cy, 7, 5.5, u * 3, 0, 6.3); ctx.fill();
   }
 
-  /* Kuplat nousevat ja alkavat alusta. Nekin ovat vaimeita: tankin pitää
+  /* Kuplat nousevat ja alkavat alusta. Nekin ovat vaimeita: tankiston pitää
      elää sen verran että sen huomaa, ei niin että sitä katsoo. */
   {
-    const b = BIGTANK, bw = b.x1 - b.x0, bh = b.y1 - b.y0;
     const t = clock / 1000;
-    for (const [px, r, spd, ph] of BUBBLES) {
-      const u = ((t * spd + ph) % 1);
-      const y = b.y1 - 8 - u * (bh - 18);
-      const x = b.x0 + px * bw + Math.sin(t * 1.4 + ph * 9) * 3.5;
-      const a = 0.30 * Math.sin(Math.PI * Math.min(1, u * 3));
-      ctx.fillStyle = fade(b.col, a);
-      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.3); ctx.fill();
-      ctx.fillStyle = fade('#ffffff', a * 0.5);
-      ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.3, 0, 6.3); ctx.fill();
+    for (const v of VATS) {
+      for (let i = 0; i < BUBBLES.length; i++) {
+        const [px, r, spd, bp] = BUBBLES[(i + v.ph * 2) % BUBBLES.length];
+        const ph = (bp + v.ph * 0.23) % 1;
+        const u = (t * spd + ph) % 1;
+        const y = v.y + v.h - 6 - u * (v.h - 14);
+        const x = v.x + px * v.w + Math.sin(t * 1.4 + ph * 9) * 2.5;
+        const a = DIM * 1.8 * Math.sin(Math.PI * Math.min(1, u * 3));
+        ctx.fillStyle = fade(VAT_COL, a);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 6.3); ctx.fill();
+        ctx.fillStyle = `rgba(255,255,255,${a * 0.45})`;
+        ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.3, 0, 6.3); ctx.fill();
+      }
+      const pulse = DIM * (0.35 + Math.sin(t / 2.6 + v.ph) * 0.15);   // hidas hengitys
+      const gl = ctx.createLinearGradient(0, v.y, 0, v.y + v.h);
+      gl.addColorStop(0, fade(VAT_COL, 0));
+      gl.addColorStop(1, fade(VAT_COL, pulse));
+      ctx.fillStyle = gl;
+      ctx.fillRect(v.x, v.y, v.w, v.h);
     }
-    const pulse = 0.05 + Math.sin(t / 2.6) * 0.02;   // hidas hengitys
-    const gl = ctx.createLinearGradient(0, b.y0, 0, b.y1);
-    gl.addColorStop(0, fade(b.col, 0));
-    gl.addColorStop(1, fade(b.col, pulse));
-    ctx.fillStyle = gl;
-    ctx.fillRect(b.x0, b.y0, bw, bh);
   }
 
   /* Pisaralamput: johto katosta ja hohtava pisara sen päässä. Hohde elää, itse
