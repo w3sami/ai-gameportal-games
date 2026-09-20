@@ -409,10 +409,13 @@ function dome(ctx, d) {
   ctx.fillStyle = 'rgba(214,224,240,.35)';
   ctx.fillRect(-d.r, -4, d.r * 2, 1.5);
 
-  ctx.fillStyle = '#10161f';                  // sulkuovi
-  ctx.fillRect(-9, -18, 18, 18);
-  ctx.strokeStyle = WARM; ctx.lineWidth = 1.2;
-  ctx.strokeRect(-9, -18, 18, 18);
+  ctx.fillStyle = 'rgba(8,12,20,.9)';         // sulkuovi: syvennys, ei laatikko
+  ctx.beginPath();
+  ctx.moveTo(-8, -2); ctx.lineTo(-8, -13);
+  ctx.quadraticCurveTo(0, -20, 8, -13);
+  ctx.lineTo(8, -2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,212,121,.55)';
+  ctx.fillRect(-8, -3.5, 16, 1.5);
   ctx.restore();
 }
 
