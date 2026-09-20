@@ -226,6 +226,12 @@ export function createEditor(host) {
   let label = 'seinä';
   let shapes = [];                 // tämän kentän maalaukset
   let sel = null;                  // valittu muoto tai siirrettävä olio
+  /* Label-nappi tekee kahta asiaa: valitsee lajin seuraavalle muodolle ja
+     korjaa väärin merkityn. Jälkimmäinen vain silloin kun muoto on valittu
+     listasta — juuri piirretty muoto jää valituksi siksi että sille
+     kirjoitetaan teksti, eikä seuraavan muodon lajin valinta saa silloin
+     merkitä edellistä uudelleen. */
+  let relabel = false;
   let drag = null;                 // käynnissä oleva veto
   let warns = [];                  // { text, box }
   let note = '';
@@ -603,6 +609,7 @@ export function createEditor(host) {
     if (tool === 'move') {
       const it = pick(p);
       sel = it;
+      relabel = false;
       if (it) { snapshot(); drag = { it, ox: it.obj.x - p.x, oy: it.obj.y - p.y }; }
       build();
       return;
@@ -641,8 +648,12 @@ export function createEditor(host) {
     }
   }
 
-  function onUp() {
+  function onUp(e) {
     if (!drag) return;
+    /* Viimeinen piste on se jossa sormi nostetaan. Ilman tätä laatikon nurkka
+       jäisi viimeiseen väliliikkeeseen, ja veto päättyisi hieman eri kohtaan
+       kuin mihin se näytti päättyvän. */
+    if (e && e.clientX !== undefined) onMove(e);
     const d = drag;
     drag = null;
     if (d.it) {
@@ -660,6 +671,7 @@ export function createEditor(host) {
     snapshot();
     shapes.push(s);
     sel = s;
+    relabel = false;                           // vain teksti, ei uutta labelia
     saveLocal();
     build();
     const inp = box.querySelector('#etext');
@@ -761,7 +773,7 @@ export function createEditor(host) {
       if (s === sel) selName = name;
       li.append(name, el('span', 'v', s.kind === 'rect' ? `${s.w}×${s.h}` : s.kind));
       li.prepend(dot);
-      li.addEventListener('click', () => { sel = s; label = s.label; build(); });
+      li.addEventListener('click', () => { sel = s; label = s.label; relabel = true; build(); });
       list.append(li);
     }
     /* Rivi seuraa kirjoittamista suoraan eikä koko laatikkoa rakenneta uusiksi:
@@ -792,7 +804,7 @@ export function createEditor(host) {
     });
     segRow('label', LABELS, o => o.key === label, o => {
       label = o.key;
-      if (isShape(sel)) { snapshot(); sel.label = label; saveLocal(); }
+      if (relabel && isShape(sel)) { snapshot(); sel.label = label; saveLocal(); }
       build();
     }, () => tool === 'move');
 
