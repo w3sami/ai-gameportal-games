@@ -233,11 +233,24 @@ const PIPES = [
                 [461, 338], [461, 367], [461, 394], [461, 427], [461, 453], [461, 490]] },
 ];
 
-/* Pisaralamput johdon päässä, TR:n katosta. */
+/* Pisaralamput johdon päässä. Neljä, yksi lisää kahteen pimeimpään huoneeseen.
+
+   **Johto roikkuu suoraan alas** vaikka veto oli käyrä — Sami 21.9.2026.
+   Roikkuva johto on pystysuora, piste. Veto kertoi mihin ja kuinka pitkälle,
+   ei sitä että se heiluisi.
+
+   Johto lähtee ilmakanavan alapinnasta (`room.y0 + 12`), ei katosta: kanava on
+   siinä välissä, ja johto joka lähtee sen läpi näyttäisi unohtuneen. */
 const DROPS = [
-  { x: 443, y0: 26, y1: 121, col: '#ffd479' },
-  { x: 487, y0: 27, y1: 86, col: '#ffd479' },
+  { room: ROOMS.TR, x: 443, len: 93, col: '#ffd479' },
+  { room: ROOMS.TR, x: 487, len: 58, col: '#ffd479' },
+  { room: ROOMS.TL, x: 112, len: 68, col: '#ffd479' },
+  { room: ROOMS.BL, x: 130, len: 64, col: '#ffd479' },
 ];
+for (const l of DROPS) {
+  l.y0 = l.room.y0 + 12;
+  l.y1 = l.y0 + l.len;
+}
 
 /* Hylly pikkubeakereineen, BR. */
 const SHELF = { x0: 405, x1: 524, y: 733 };
@@ -448,9 +461,16 @@ function labLive(ctx) {
      lamppu ei — vilkkuva työvalo tarkoittaisi jotain muuta kuin valaistusta. */
   for (let i = 0; i < DROPS.length; i++) {
     const l = DROPS[i];
-    ctx.strokeStyle = 'rgba(20,26,38,.9)';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(l.x, l.y0); ctx.lineTo(l.x, l.y1 - 7); ctx.stroke();
+    ctx.fillStyle = STEEL_HI;                 // kiinnike kanavan alapintaan
+    ctx.fillRect(l.x - 5, l.y0 - 2, 10, 6);
+    ctx.fillStyle = LIT;
+    ctx.fillRect(l.x - 5, l.y0 - 2, 10, 1.5);
+    ctx.strokeStyle = 'rgba(126,140,164,.9)'; // johto: näkyvä, ei melkein musta
+    ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(l.x, l.y0 + 4); ctx.lineTo(l.x, l.y1 - 7); ctx.stroke();
+    ctx.strokeStyle = 'rgba(214,224,240,.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(l.x - 0.9, l.y0 + 4); ctx.lineTo(l.x - 0.9, l.y1 - 7); ctx.stroke();
     const glow = 0.5 + Math.sin(clock / 900 + i * 1.7) * 0.08;
     const g = ctx.createRadialGradient(l.x, l.y1, 0, l.x, l.y1, 34);
     g.addColorStop(0, fade(l.col, glow * 0.5));
