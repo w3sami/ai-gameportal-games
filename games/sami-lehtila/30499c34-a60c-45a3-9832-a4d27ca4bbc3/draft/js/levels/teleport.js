@@ -1,4 +1,8 @@
-/* Teleport — ruutu neljään huoneeseen, ja ainoa tie huoneesta toiseen on portti.
+/* Lab Experiment — ruutu neljään huoneeseen, ja ainoa tie toiseen on portti.
+ *
+ * Tiedosto ja vienti ovat `teleport`, koska mekaniikka on teleportti; nimi
+ * ruudulla on Lab Experiment, koska paikka on koelaitos. Ne ovat eri asia
+ * eikä nimeä kannata pakottaa tiedostoon.
  *
  * Alkuperäisen Space Taxin teleporttikenttä, Samin suosikki. Idea on että
  * lentäminen ei riitä: huoneiden välillä ei ole aukkoa lainkaan, vaan reitti
@@ -262,6 +266,29 @@ for (const l of DROPS) {
 /* Hylly pikkubeakereineen, BR. */
 const SHELF = { x0: 405, x1: 524, y: 733 };
 
+/* ------------------------------------------------------------- tarkkaamo
+
+   Sami merkitsi TR:ään laatikon ilman tekstiä ja kysyi mitä tähän tulisi
+   mieleen. Tämä: **iso ikkuna, ja sen takana valaistu tarkkaamo jossa on
+   väkeä katsomassa.**
+
+   Se on kentälle aihe eikä vain koriste. Neljä suljettua huonetta, joiden
+   välillä liikutaan koneella, on koe — ja koetta katsoo aina joku. Taksi ei
+   ole vain taksi vaan koe-esine, ja se selittää portit. Pelissä ei ole ennen
+   ollut yleisöä.
+
+   Ikkuna on taustatasossa eli kaiken alla: taksi lentää sen edestä, ja lasin
+   heijastus jää taksin taakse niin kuin lasilla kuuluu. */
+const BOOTH = { x0: 548, x1: 688, y0: 91, y1: 402 };
+
+/* Kolme hahmoa konsolin ääressä. `sway` on kunkin oma tahti, jotta ne eivät
+   nyökkää yhtä aikaa — samaan tahtiin liikkuva joukko on kone, ei väkeä. */
+const WATCHERS = [
+  { x: 582, h: 52, sway: 3.1, lean: 1 },
+  { x: 620, h: 47, sway: 4.4, lean: -1 },
+  { x: 658, h: 50, sway: 3.7, lean: 1 },
+];
+
 /* Putken polku pehmeänä kaarena eikä murtoviivana.
 
    Sami: *"piirrokset toki vain suuntaa antavia, ilman kunnon spline
@@ -399,6 +426,50 @@ function paintBack(g) {
     g.fillRect(x + 1.5, SHELF.y - h + 2, 2, h - 4);
   }
 
+  /* Tarkkaamon kiinteä osa: karmi, lasi, konsoli ja takaseinän hyllyt.
+     Väki ja ruudut elävät, ja ne piirretään erikseen. */
+  const b = BOOTH, bw = b.x1 - b.x0, bh = b.y1 - b.y0;
+  g.fillStyle = '#16202f';                    // tarkkaamon sisus
+  g.fillRect(b.x0, b.y0, bw, bh);
+  const lit = g.createLinearGradient(b.x0, b.y0, b.x0, b.y1);
+  lit.addColorStop(0, 'rgba(120,160,220,.16)');
+  lit.addColorStop(0.55, 'rgba(120,160,220,.05)');
+  lit.addColorStop(1, 'rgba(120,160,220,.10)');
+  g.fillStyle = lit;
+  g.fillRect(b.x0, b.y0, bw, bh);
+
+  g.fillStyle = 'rgba(90,120,170,.14)';       // takaseinän hyllyt
+  for (let y = b.y0 + 40; y < b.y1 - 130; y += 34) g.fillRect(b.x0 + 14, y, bw - 28, 5);
+
+  g.fillStyle = '#1d2a3d';                    // konsoli
+  g.fillRect(b.x0 + 8, b.y1 - 96, bw - 16, 14);
+  g.fillStyle = 'rgba(214,224,240,.16)';
+  g.fillRect(b.x0 + 8, b.y1 - 96, bw - 16, 1.5);
+  g.fillStyle = '#16202f';                    // konsolin jalusta
+  g.fillRect(b.x0 + 8, b.y1 - 82, bw - 16, 82);
+
+  g.fillStyle = 'rgba(150,200,255,.055)';     // lasi
+  g.fillRect(b.x0, b.y0, bw, bh);
+  g.save();                                   // vino kiilto lasissa
+  g.beginPath(); g.rect(b.x0, b.y0, bw, bh); g.clip();
+  g.fillStyle = 'rgba(190,220,255,.05)';
+  g.beginPath();
+  g.moveTo(b.x0 - 40, b.y1); g.lineTo(b.x0 + 90, b.y0 - 10);
+  g.lineTo(b.x0 + 150, b.y0 - 10); g.lineTo(b.x0 + 20, b.y1);
+  g.closePath(); g.fill();
+  g.restore();
+
+  g.fillStyle = STEEL_HI;                     // karmi
+  g.fillRect(b.x0 - 7, b.y0 - 7, bw + 14, 7);
+  g.fillRect(b.x0 - 7, b.y1, bw + 14, 7);
+  g.fillRect(b.x0 - 7, b.y0, 7, bh);
+  g.fillRect(b.x1, b.y0, 7, bh);
+  g.fillStyle = LIT;
+  g.fillRect(b.x0 - 7, b.y0 - 7, bw + 14, 1.5);
+  g.fillRect(b.x0 - 7, b.y0, 1.5, bh);
+  g.fillStyle = DARK;
+  g.fillRect(b.x0 - 7, b.y1 + 5.5, bw + 14, 1.5);
+
   for (const t of TANKS) {
     const w = 26, top = t.y - t.h;
     g.fillStyle = 'rgba(120,180,230,.09)';    // lasi
@@ -462,6 +533,34 @@ function labLive(ctx) {
     ctx.beginPath(); ctx.arc(t.x, cy, 22, 0, 6.3); ctx.fill();
     ctx.fillStyle = fade(t.col, 0.85);
     ctx.beginPath(); ctx.ellipse(t.x, cy, 7, 5.5, u * 3, 0, 6.3); ctx.fill();
+  }
+
+  /* Tarkkaamon väki ja ruudut. Hahmot ovat siluetteja valaistua huonetta
+     vasten — kasvoja ei piirretä, koska ne ovat katsojia eivätkä hahmoja. */
+  {
+    const b = BOOTH;
+    const deck = b.y1 - 96;
+    for (let i = 0; i < 4; i++) {             // konsolin ruudut
+      const on = 0.18 + 0.12 * ((Math.sin(clock / (700 + i * 210) + i) + 1) / 2);
+      ctx.fillStyle = fade('#6fe3ff', on);
+      ctx.fillRect(b.x0 + 16 + i * 32, deck - 17, 22, 15);
+    }
+    ctx.fillStyle = 'rgba(8,12,20,.88)';
+    for (const w of WATCHERS) {
+      const t = clock / 1000;
+      const bob = Math.sin(t / w.sway) * 1.6;
+      const tilt = Math.sin(t / (w.sway * 1.7)) * 2.2 * w.lean;
+      const foot = deck + 2 + bob;
+      ctx.beginPath();                        // vartalo
+      ctx.moveTo(w.x - 9, foot);
+      ctx.quadraticCurveTo(w.x - 8 + tilt, foot - w.h * 0.62, w.x - 5 + tilt, foot - w.h * 0.76);
+      ctx.lineTo(w.x + 5 + tilt, foot - w.h * 0.76);
+      ctx.quadraticCurveTo(w.x + 8 + tilt, foot - w.h * 0.62, w.x + 9, foot);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();                        // pää
+      ctx.arc(w.x + tilt, foot - w.h * 0.86, w.h * 0.115, 0, 6.3);
+      ctx.fill();
+    }
   }
 
   /* Pisaralamput: johto katosta ja hohtava pisara sen päässä. Hohde elää, itse
@@ -648,7 +747,7 @@ const EDIT = [
 ];
 
 export const teleport = {
-  name: 'Teleport',
+  name: 'Lab Experiment',
   glow: '#c58cff',
   sky: ['#0a0616', '#100a24', '#080614'],
   gate: GATE,
