@@ -1974,9 +1974,15 @@ function taxiShape(w, h, broken) {
 
 function drawTaxi(v) {
   if (dead || !taxi) return;
+  /* Kenttä saa kutistaa taksin piirron: Teleportissa se katoaa portin suuhun
+     ja kasvaa ulos toisesta päästä. Pelkkää piirtoa — fysiikka, törmäys ja
+     laskuteline eivät tiedä tästä mitään, eikä niiden kuulukaan. */
+  const ts = typeof level.taxiScale === 'number' ? level.taxiScale : 1;
+  if (ts <= 0.01) return;
   const t2 = taxi, gl = GEAR * t2.gear;
   ctx.save();
   ctx.translate(t2.x, t2.y);
+  if (ts !== 1) ctx.scale(ts, ts);
 
   const flame = (dx, dy, rot, len) => {
     ctx.save();
