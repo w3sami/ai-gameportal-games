@@ -1,7 +1,8 @@
 'use strict';
 // Chapter 2 continued: the wind levels. Loaded after levels.js, so it just appends to LEVELS.
 // Wind forces: {kind:'wind', x,y,w,h, ax:±, period, duty, phase, src}. Horizontal only, no drag; the gust cycle comes from
-// period/duty/phase and runs on sim ticks, so replays stay exact. src is the visual source — 'hollow' (a knot-hole on the
+// period/duty/phase and runs on sim ticks, so replays stay exact. A gust ramps in and out inside its on-window (see RAMP in
+// game.js); a band may set its own `ramp` in seconds. src is the visual source — 'hollow' (a knot-hole on the
 // upwind trunk face), 'fissure' (a crack on the upwind rock face), 'sky' (none: the wind is simply there because the space is
 // open, so only valid where it is). Not read by the engine yet. Opposing gusts always sit in separate vertical bands.
 const EDGE_TRUNKS = w => [{x:-20,y:4000,tx:-20,ty:-200,w:300,taper:0,seed:-340}, {x:260,y:4000,tx:260,ty:-200,w:260,taper:0,seed:1620}, {x:w+20,y:4000,tx:w+20,ty:-200,w:300,taper:0,seed:w*7}, {x:w-260,y:4000,tx:w-260,ty:-200,w:260,taper:0,seed:w*7-1960}];
@@ -124,5 +125,7 @@ LEVELS.push(
            {kind:'wind',x:4390,y:600,w:680,h:1120,ax:340,period:5,duty:0.5,phase:3.75,src:'sky'},
            {kind:'wind',x:5580,y:600,w:320,h:1120,ax:340,period:5,duty:0.5,phase:0.6,src:'sky'}],
    walls:[],
-   pads:{start:{x:540,y:1620,w:120,h:100}, target:{x:5940,y:1620,w:120,h:100}}}
+   // the two end hollows floor out around y=1750–1780, deeper than the 100 px pedestal reached: both pads sat clear of the ground.
+   // Dropped a little and given a taller plinth, so each one is dug into the floor the way the rest of the chapter's pads are.
+   pads:{start:{x:540,y:1650,w:120,h:150}, target:{x:5940,y:1670,w:120,h:150}}}
 );
