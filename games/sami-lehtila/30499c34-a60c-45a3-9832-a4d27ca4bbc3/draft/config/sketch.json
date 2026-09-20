@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1789935721098,
+ "stamp": 1789937193172,
  "scenes": {
   "Moonshot": {
    "paint": [
@@ -34,91 +34,85 @@
    ],
    "moves": [
     {
-     "id": "pad:1",
-     "label": "alusta 1",
+     "id": "pad:4",
+     "label": "alusta 4",
      "from": {
-      "x": 16,
-      "y": 238
+      "y": 430
      },
      "to": {
-      "x": 20,
-      "y": 240
+      "y": 487
      }
     },
     {
-     "id": "pad:2",
-     "label": "alusta 2",
+     "id": "prop:rocket",
+     "label": "raketti",
      "from": {
-      "x": 483,
-      "y": 250
+      "x": 198
      },
      "to": {
-      "x": 488,
-      "y": 120
+      "x": 200
      }
     },
     {
-     "id": "pad:3",
-     "label": "alusta 3",
+     "id": "prop:pole-2",
+     "label": "tolppa 2",
      "from": {
-      "x": 16,
-      "y": 600
+      "x": 696,
+      "y": 344,
+      "rot": 0,
+      "h": 40
      },
      "to": {
-      "x": 20,
-      "y": 504
+      "x": 592,
+      "y": 248,
+      "rot": 270,
+      "h": 16
      }
     },
     {
-     "id": "pad:5",
-     "label": "alusta 5",
+     "id": "prop:pole-5",
+     "label": "tolppa 5",
      "from": {
-      "x": 133,
-      "y": 748
+      "x": 700
      },
      "to": {
-      "x": 128,
-      "y": 868
+      "x": 496
      }
     },
     {
-     "id": "pad:6",
-     "label": "alusta 6",
+     "id": "prop:lamp-3",
+     "label": "valo 3",
      "from": {
-      "x": 253,
-      "y": 812
+      "x": 300,
+      "y": 696
      },
      "to": {
-      "x": 304,
-      "y": 852
+      "x": 352,
+      "y": 708
+     }
+    }
+   ],
+   "adds": [
+    {
+     "kind": "pole",
+     "id": "add:pole:1",
+     "label": "tolppa 1",
+     "at": {
+      "x": 444,
+      "y": 24,
+      "rot": 180,
+      "h": 28
      }
     },
     {
-     "id": "pad:0",
-     "label": "tankkaus",
-     "from": {
-      "x": 253,
-      "y": 560,
-      "w": 104
-     },
-     "to": {
-      "x": 256,
-      "y": 672,
-      "w": 90
-     }
-    },
-    {
-     "id": "prop:earth",
-     "label": "maapallo",
-     "from": {
-      "x": 120,
-      "y": 150,
-      "r": 46
-     },
-     "to": {
-      "x": 112,
-      "y": 124,
-      "r": 70
+     "kind": "pole",
+     "id": "add:pole:2",
+     "label": "tolppa 2",
+     "at": {
+      "x": 276,
+      "y": 28,
+      "rot": 180,
+      "h": 28
      }
     }
    ]
