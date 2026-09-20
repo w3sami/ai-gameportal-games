@@ -1,20 +1,5 @@
 {
  "v": 1,
- "stamp": 1789945427018,
- "scenes": {
-  "Teleport": {
-   "paint": [
-    {
-     "kind": "rect",
-     "label": "propsi",
-     "text": "",
-     "x": 548,
-     "y": 91,
-     "w": 149,
-     "h": 311
-    }
-   ],
-   "moves": []
-  }
- }
+ "stamp": 1789945682229,
+ "scenes": {}
 }
