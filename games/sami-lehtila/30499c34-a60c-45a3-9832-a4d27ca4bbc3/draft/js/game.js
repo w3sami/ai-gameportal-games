@@ -311,10 +311,93 @@ function resetLevelTune() {
   MUL = mulOf(level);
 }
 
+/* -------------------------------------------------------------- sommittelu
+ *
+ * Kenttäeditorin (js/editor.js) raahaamat paikat. Nämä EIVÄT ole kentän
+ * totuus: totuus on kenttätiedostossa, ja editori tallentaa siirrot
+ * luonnokseksi josta ne kirjoitetaan sinne käsin. Tässä on vain se, että
+ * kesken jäänyt sommittelu ei katoa sivun latauksessa — arvot elävät
+ * selaimessa eivätkä missään muualla, eivätkä siis lähde julkaisun mukaan
+ * eivätkä näy kenellekään muulle.
+ *
+ * Tämä on tietoinen ero tune.jsoniin, joka nimenomaan voittaa koodin
+ * oletukset kaikilla pelaajilla. Geometria ei saa käyttäytyä niin: silloin
+ * kenttätiedosto sanoisi lukuja jotka eivät ole ne luvut, ja
+ * tools/check-grid.mjs — joka lukee kenttämoduulin — tarkistaisi eri kenttää
+ * kuin mitä pelataan.
+ *
+ * Mitä kentässä saa siirtää, kertoo kenttä itse (level.edit), joten peli ei
+ * tiedä yhdenkään kentän sisällöstä mitään tälläkään puolella. */
+const MOVE_STORE = 'spacetaxi.moves';
+let moveRaw = {};                              // { kenttä: { id: {x, y} } }
+let editor = null;
+
+/* Kenttien omat paikat talteen ennen kuin tallennetut siirrot kirjoittavat
+   niiden päälle. Kentän olio on ainoa paikka jossa ne elävät, joten ilman tätä
+   "palauta oletukset" ei voisi palauttaa niitä millään — sama syy kuin
+   LEVEL_DEFillä. */
+const MOVE_DEF = new Map();
+for (const lv of LEVELS) {
+  for (const it of lv.edit || []) {
+    if (it.obj) MOVE_DEF.set(lv.name + '\u0000' + it.id, { x: it.obj.x, y: it.obj.y });
+  }
+}
+const moveDef = id => MOVE_DEF.get(level.name + '\u0000' + id);
+
+/** Yhden kentän siirrettävät olioit paikoilleen. Tuntemattomat id:t ohitetaan,
+    jotta vanha muistiinpano ei kaadu uuteen kenttään eikä toisin päin — sama
+    sääntö kuin applyAllissa. Ilman merkintää olio palaa koodin oletukseen. */
+function applyMoves(lv) {
+  const e = moveRaw[lv.name] || {};
+  for (const it of lv.edit || []) {
+    const d = MOVE_DEF.get(lv.name + '\u0000' + it.id);
+    if (!d || !it.obj) continue;
+    const m = e[it.id];
+    it.obj.x = m && isFinite(m.x) ? +m.x : d.x;
+    it.obj.y = m && isFinite(m.y) ? +m.y : d.y;
+  }
+}
+
+/* Elävät alustat ovat kopioita kentän omista — loadLevel kopioi ne ja ottaa
+   bx/by talteen liikkuvia alustoja varten — joten siirto pitää viedä myös
+   niihin. Muuten raahaus näkyisi vasta kenttää vaihdettaessa. */
+function syncPads() {
+  for (const p of PADS) {
+    const src = (level.pads || []).find(q => q.id === p.id);
+    if (!src) continue;
+    p.x = p.bx = src.x;
+    p.y = p.by = src.y;
+  }
+}
+
+function saveMoves() {
+  const e = {};
+  for (const it of level.edit || []) {
+    const d = moveDef(it.id);
+    if (!d || !it.obj) continue;
+    if (it.obj.x !== d.x || it.obj.y !== d.y) e[it.id] = { x: it.obj.x, y: it.obj.y };
+  }
+  if (Object.keys(e).length) moveRaw[level.name] = e;
+  else delete moveRaw[level.name];
+  try { localStorage.setItem(MOVE_STORE, JSON.stringify(moveRaw)); } catch (e2) {}
+}
+
+function loadMoves() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MOVE_STORE) || 'null');
+    if (raw && typeof raw === 'object') moveRaw = raw;
+  } catch (e) {}
+  /* Paikallinen poikkeama koodista on hiljainen ansa, joten se sanotaan
+     ääneen edes lokiin: kentässä lukee eri luku kuin mitä ruudulla näkyy. */
+  const n = Object.values(moveRaw).reduce((a, e) => a + Object.keys(e).length, 0);
+  if (n) console.info(`[space-taxi] ${n} kenttäeditorin siirtoa voimassa vain tässä selaimessa`);
+}
+
 layout();
 loadTune();
 savedBody = tuneBody();                        // kunnes tiedosto kertoo paremmin
 loadGameTune();
+loadMoves();
 
 /* ------------------------------------------------------------------ kangas */
 let scale = 1, dpr = 1, lastVW = -1, lastVH = -1;
@@ -605,6 +688,7 @@ function loadLevel(i) {
   MUL = mulOf(level);                        // kentän kertoimet, säätimet muuttavat näitä
   applyMul();
   GATE = level.gate;
+  applyMoves(level);                         // ennen kuin PADS kopioidaan
   WALLS = frameWalls(GATE).concat(level.walls || []);
   PADS = (level.pads || []).map(p => Object.assign({ h: 18 }, p, { bx: p.x, by: p.y }));
   served = {};
@@ -618,6 +702,7 @@ function loadLevel(i) {
   levelDeaths = 0;
   resetTaxi();
   if (level.init) level.init(api());
+  if (editor) editor.refresh();              // muodot ja varoitukset ovat kenttäkohtaisia
 
   if (carried) {
     /* Edellisestä kentästä mukaan tullut asiakas: kenttä alkaa jättökeikalla
@@ -761,6 +846,10 @@ function toggleMute() {
 
 canvas.addEventListener('pointerdown', e => {
   const p = toLogical(e.clientX, e.clientY);
+  /* Editori omistaa kankaan niin kauan kuin se on auki: sen kahvat ovat
+     nappien päällä eikä teline saa napsahtaa siitä että alustaa siirretään.
+     Ratas jää auki, koska säätöpaneeli ja editori ovat eri työkalut. */
+  if (editor && !inBox(p, COG_BOX)) return;
   if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
   if (inBox(p, HORN_BOX)) { honk(); return; }
   if (inBox(p, MUTE_BOX)) { toggleMute(); return; }
@@ -804,7 +893,9 @@ const stick = createJoystick({
   target: canvas,
   toLocal: toLogical,
   radius: 96,
-  ignore: onButtons,
+  /* Editorin auki ollessa sauva ei tartu lainkaan: peli on tauolla, ja veto
+     kankaalla tarkoittaa siirtoa tai maalausta. */
+  ignore: p => onButtons(p) || !!editor,
 });
 stickReady = true;
 stick.gain = P.stick;
@@ -2138,6 +2229,7 @@ function draw(v) {
   if (state !== MENU) drawHud();
   stick.draw(ctx);
   drawButtons();
+  if (editor) editor.draw(ctx);              // työkalu kaiken päälle
 }
 
 /* ------------------------------------------------------------ säätöpaneeli
@@ -2301,6 +2393,9 @@ function buildPanel() {
   const pauseRow = el('div', 'row');
   const pauseSeg = el('div', 'seg');
   pauseSeg.append(pbutton(paused ? 'on' : null, paused ? 'jatka' : 'tauko', togglePause));
+  pauseSeg.append(pbutton(editor ? 'on' : null, 'editori', () => {
+    if (editor) closeEditor(); else openEditor();
+  }));
   pauseRow.append(el('label', null, 'peli'), pauseSeg);
   panelEl.append(pauseRow);
 
@@ -2544,6 +2639,74 @@ function setPaused(on) {
 }
 
 function togglePause() { setPaused(!paused); }
+
+/* ---------------------------------------------------------- kenttäeditori
+
+   Editori on kehittäjän työkalu ja oma moduulinsa: se ladataan vasta kun se
+   avataan, jotta pelaaja ei lataa kaluja joita hän ei saa käyttää. Tämä pää
+   on tarkoituksella ohut — kaikki mitä editori tekee, se tekee editor.js:ssä.
+
+   Host on se kapea pinta jonka peli lupaa: elävät taulukot, koodin
+   oletuspaikat, paikkojen muistaminen selaimessa ja tiedoston kirjoittaminen
+   portaalin kautta. */
+let editorLoading = false;
+
+const editorHost = {
+  canvas, toLogical,
+  level: () => level,
+  pads: () => PADS,
+  walls: () => WALLS,
+  gate: () => GATE,
+  buttons: () => [HORN_BOX, GEAR_BOX],
+  def: moveDef,
+  moved: syncPads,
+  persist: saveMoves,
+  paused: () => paused,
+  setPaused,
+  canSave: () => typeof portalApi.savePortalFile === 'function' && !!portal.canWrite,
+  save: saveToGame,
+  close: () => closeEditor(),
+};
+
+function openEditor() {
+  if (editor || editorLoading) return;
+  editorLoading = true;
+  import('./editor.js').then(m => {
+    editorLoading = false;
+    editor = m.createEditor(editorHost);
+    if (panelOpen()) buildPanel();
+  }).catch(() => {
+    editorLoading = false;
+    panelNote = 'editoria ei saatu ladattua';
+    if (panelOpen()) buildPanel();
+  });
+}
+
+function closeEditor() {
+  if (!editor) return;
+  const e = editor;
+  editor = null;                               // ennen destroyta: setPaused
+  e.destroy();                                 // rakentaa paneelin uusiksi
+  if (panelOpen()) buildPanel();
+}
+
+/* Tallennus peliin. Peli ei kirjoita itse — se pyytää emosivulta, joka on
+   kirjautunut ja jonka palvelinpuoli tarkistaa omistajuuden. Siksi tämä toimii
+   vain tekijän omalla sivulla. Sama mekanismi ja samat virheet kuin
+   virityksellä, joten syyt luetaan samasta taulusta. */
+function saveToGame(path, body) {
+  const save = portalApi.savePortalFile;
+  if (typeof save !== 'function' || !portal.canWrite) {
+    return Promise.resolve({ ok: false, note: 'tallennus onnistuu vain omalta pelisivulta' });
+  }
+  /* Plugin ratkaisee lupauksen aina ja kertoo syyn tuloksessa — se ei heitä
+     eikä hylkää, joten tässä ei ole catchia eikä sellaista tarvita. */
+  return Promise.resolve(save(path, body)).then(res => {
+    if (res && res.saved) return { ok: true, note: 'tallennettu peliin' };
+    const why = (res && res.reason) || 'failed';
+    return { ok: false, note: 'tallennus ei onnistunut: ' + (SAVE_FAIL[why] || why) };
+  });
+}
 
 function togglePanel() {
   const want = !panelOpen();
