@@ -266,46 +266,31 @@ for (const l of DROPS) {
 /* Hylly pikkubeakereineen, BR. */
 const SHELF = { x0: 405, x1: 524, y: 733 };
 
-/* ------------------------------------------------------------- tarkkaamo
+/* ---------------------------------------------------------- iso vesitankki
 
    Sami merkitsi TR:ään laatikon ilman tekstiä ja kysyi mitä tähän tulisi
-   mieleen. Tämä: **iso ikkuna, ja sen takana valaistu tarkkaamo jossa on
-   väkeä katsomassa.**
+   mieleen. Ehdotin tarkkaamoa jossa väkeä katsoo koetta; hänen oma ehdotuksensa
+   oli parempi: **hehkuva vesitankki jossa kuplia, himmeänä jotta näyttää
+   taustalta.**
 
-   Se on kentälle aihe eikä vain koriste. Neljä suljettua huonetta, joiden
-   välillä liikutaan koneella, on koe — ja koetta katsoo aina joku. Taksi ei
-   ole vain taksi vaan koe-esine, ja se selittää portit. Pelissä ei ole ennen
-   ollut yleisöä.
+   Se on oikea siksi että tausta ei saa varastaa katsetta. Katsojajoukko
+   ikkunassa olisi ollut aihe, ja aihe vetää silmän puoleensa juuri silloin kun
+   pitäisi katsoa porttia. Hiljaa hohtava tankki antaa huoneelle syvyyttä ja
+   jättää huomion sinne minne se kuuluu — ja se on sama olio kuin huoneiden
+   pikkulasit, vain isona.
 
-   Ikkuna on taustatasossa eli kaiken alla: taksi lentää sen edestä, ja lasin
-   heijastus jää taksin taakse niin kuin lasilla kuuluu. */
-const BOOTH = { x0: 548, x1: 688, y0: 91, y1: 402 };
+   Piirtyy taustatasossa kaiken alle, ja kaikki on tahallaan vaimeaa. */
+const BIGTANK = { x0: 548, x1: 688, y0: 91, y1: 402, col: '#6fe3ff' };
 
-/* Kolme hahmoa konsolin ääressä. `sway` on kunkin oma tahti, jotta ne eivät
-   nyökkää yhtä aikaa — samaan tahtiin liikkuva joukko on kone, ei väkeä. */
-const WATCHERS = [
-  { x: 582, h: 52, sway: 3.1, lean: 1 },
-  { x: 620, h: 47, sway: 4.4, lean: -1 },
-  { x: 658, h: 50, sway: 3.7, lean: 1 },
+/* Kuplat: paikka leveydellä 0…1, säde, nousunopeus ja oma vaihe. Vaiheet ovat
+   eri, jottei rivi nouse yhtenä ryhmänä — yhtä aikaa nouseva joukko näyttää
+   animaatiolta eikä vedeltä. */
+const BUBBLES = [
+  [0.18, 3.2, 0.09, 0.0], [0.34, 2.1, 0.13, 0.37], [0.52, 4.0, 0.07, 0.64],
+  [0.68, 2.6, 0.11, 0.18], [0.82, 3.4, 0.08, 0.81], [0.26, 1.8, 0.16, 0.52],
+  [0.44, 2.9, 0.10, 0.05], [0.60, 2.2, 0.14, 0.73], [0.76, 3.8, 0.06, 0.29],
+  [0.12, 2.4, 0.12, 0.91], [0.38, 1.6, 0.18, 0.44], [0.90, 2.0, 0.15, 0.12],
 ];
-
-/* Putken polku pehmeänä kaarena eikä murtoviivana.
-
-   Sami: *"piirrokset toki vain suuntaa antavia, ilman kunnon spline
-   työkalua."* Juuri niin, joten veto luetaan suunnaksi eikä jäljeksi:
-   pisteiden välipisteiden kautta kulkeva neliökäyrä tasoittaa käsivaran
-   tärinän mutta jättää sen muodon jonka hän tarkoitti. */
-function pipePath(ctx, pts) {
-  ctx.beginPath();
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length - 1; i++) {
-    const [x, y] = pts[i];
-    const [nx, ny] = pts[i + 1];
-    ctx.quadraticCurveTo(x, y, (x + nx) / 2, (y + ny) / 2);
-  }
-  const last = pts[pts.length - 1];
-  ctx.lineTo(last[0], last[1]);
-}
 
 /** Kävelee polkua pitkin ja kutsuu takaisin joka `step` pikselin välein,
     mukana paikallinen suunta. Haitariputken kylkiluut tarvitsevat sen. */
@@ -426,49 +411,41 @@ function paintBack(g) {
     g.fillRect(x + 1.5, SHELF.y - h + 2, 2, h - 4);
   }
 
-  /* Tarkkaamon kiinteä osa: karmi, lasi, konsoli ja takaseinän hyllyt.
-     Väki ja ruudut elävät, ja ne piirretään erikseen. */
-  const b = BOOTH, bw = b.x1 - b.x0, bh = b.y1 - b.y0;
-  g.fillStyle = '#16202f';                    // tarkkaamon sisus
-  g.fillRect(b.x0, b.y0, bw, bh);
-  const lit = g.createLinearGradient(b.x0, b.y0, b.x0, b.y1);
-  lit.addColorStop(0, 'rgba(120,160,220,.16)');
-  lit.addColorStop(0.55, 'rgba(120,160,220,.05)');
-  lit.addColorStop(1, 'rgba(120,160,220,.10)');
-  g.fillStyle = lit;
-  g.fillRect(b.x0, b.y0, bw, bh);
+  /* Ison tankin kiinteä osa: lasi, neste ja metalliosat. Kaikki vaimeaa —
+     se on tausta, ja tausta lakkaa olemasta tausta heti kun se kirkastuu. */
+  {
+    const b = BIGTANK, bw = b.x1 - b.x0, bh = b.y1 - b.y0;
+    const liq = g.createLinearGradient(0, b.y0, 0, b.y1);
+    liq.addColorStop(0, fade(b.col, 0.05));
+    liq.addColorStop(0.55, fade(b.col, 0.12));
+    liq.addColorStop(1, fade(b.col, 0.20));
+    g.fillStyle = liq;
+    g.fillRect(b.x0, b.y0, bw, bh);
 
-  g.fillStyle = 'rgba(90,120,170,.14)';       // takaseinän hyllyt
-  for (let y = b.y0 + 40; y < b.y1 - 130; y += 34) g.fillRect(b.x0 + 14, y, bw - 28, 5);
+    g.fillStyle = fade(b.col, 0.05);          // pohjan hohde
+    g.beginPath(); g.ellipse(b.x0 + bw / 2, b.y1 - 6, bw * 0.46, 26, 0, 0, 6.3); g.fill();
 
-  g.fillStyle = '#1d2a3d';                    // konsoli
-  g.fillRect(b.x0 + 8, b.y1 - 96, bw - 16, 14);
-  g.fillStyle = 'rgba(214,224,240,.16)';
-  g.fillRect(b.x0 + 8, b.y1 - 96, bw - 16, 1.5);
-  g.fillStyle = '#16202f';                    // konsolin jalusta
-  g.fillRect(b.x0 + 8, b.y1 - 82, bw - 16, 82);
+    g.fillStyle = 'rgba(190,225,255,.055)';   // lasin kiilto vasempaan reunaan
+    g.fillRect(b.x0 + 7, b.y0 + 12, 5, bh - 24);
+    g.fillStyle = 'rgba(190,225,255,.03)';
+    g.fillRect(b.x1 - 16, b.y0 + 12, 3, bh - 24);
 
-  g.fillStyle = 'rgba(150,200,255,.055)';     // lasi
-  g.fillRect(b.x0, b.y0, bw, bh);
-  g.save();                                   // vino kiilto lasissa
-  g.beginPath(); g.rect(b.x0, b.y0, bw, bh); g.clip();
-  g.fillStyle = 'rgba(190,220,255,.05)';
-  g.beginPath();
-  g.moveTo(b.x0 - 40, b.y1); g.lineTo(b.x0 + 90, b.y0 - 10);
-  g.lineTo(b.x0 + 150, b.y0 - 10); g.lineTo(b.x0 + 20, b.y1);
-  g.closePath(); g.fill();
-  g.restore();
+    g.strokeStyle = 'rgba(120,170,220,.10)';  // lasin reuna
+    g.lineWidth = 2;
+    g.strokeRect(b.x0 + 1, b.y0 + 1, bw - 2, bh - 2);
 
-  g.fillStyle = STEEL_HI;                     // karmi
-  g.fillRect(b.x0 - 7, b.y0 - 7, bw + 14, 7);
-  g.fillRect(b.x0 - 7, b.y1, bw + 14, 7);
-  g.fillRect(b.x0 - 7, b.y0, 7, bh);
-  g.fillRect(b.x1, b.y0, 7, bh);
-  g.fillStyle = LIT;
-  g.fillRect(b.x0 - 7, b.y0 - 7, bw + 14, 1.5);
-  g.fillRect(b.x0 - 7, b.y0, 1.5, bh);
-  g.fillStyle = DARK;
-  g.fillRect(b.x0 - 7, b.y1 + 5.5, bw + 14, 1.5);
+    g.fillStyle = 'rgba(42,52,70,.75)';       // kannet, vaimennettuna
+    g.fillRect(b.x0 - 8, b.y0 - 12, bw + 16, 12);
+    g.fillRect(b.x0 - 8, b.y1, bw + 16, 12);
+    g.fillStyle = 'rgba(214,224,240,.12)';
+    g.fillRect(b.x0 - 8, b.y0 - 12, bw + 16, 1.5);
+    g.fillStyle = 'rgba(0,0,0,.25)';
+    g.fillRect(b.x0 - 8, b.y1 + 10.5, bw + 16, 1.5);
+    g.fillStyle = 'rgba(42,52,70,.6)';        // pannat
+    for (const y of [b.y0 + bh * 0.34, b.y0 + bh * 0.67]) g.fillRect(b.x0 - 4, y, bw + 8, 5);
+    g.fillStyle = 'rgba(42,52,70,.7)';        // syöttöputki katosta
+    g.fillRect(b.x0 + bw / 2 - 5, b.y0 - 34, 10, 22);
+  }
 
   for (const t of TANKS) {
     const w = 26, top = t.y - t.h;
@@ -535,32 +512,27 @@ function labLive(ctx) {
     ctx.beginPath(); ctx.ellipse(t.x, cy, 7, 5.5, u * 3, 0, 6.3); ctx.fill();
   }
 
-  /* Tarkkaamon väki ja ruudut. Hahmot ovat siluetteja valaistua huonetta
-     vasten — kasvoja ei piirretä, koska ne ovat katsojia eivätkä hahmoja. */
+  /* Kuplat nousevat ja alkavat alusta. Nekin ovat vaimeita: tankin pitää
+     elää sen verran että sen huomaa, ei niin että sitä katsoo. */
   {
-    const b = BOOTH;
-    const deck = b.y1 - 96;
-    for (let i = 0; i < 4; i++) {             // konsolin ruudut
-      const on = 0.18 + 0.12 * ((Math.sin(clock / (700 + i * 210) + i) + 1) / 2);
-      ctx.fillStyle = fade('#6fe3ff', on);
-      ctx.fillRect(b.x0 + 16 + i * 32, deck - 17, 22, 15);
+    const b = BIGTANK, bw = b.x1 - b.x0, bh = b.y1 - b.y0;
+    const t = clock / 1000;
+    for (const [px, r, spd, ph] of BUBBLES) {
+      const u = ((t * spd + ph) % 1);
+      const y = b.y1 - 8 - u * (bh - 18);
+      const x = b.x0 + px * bw + Math.sin(t * 1.4 + ph * 9) * 3.5;
+      const a = 0.30 * Math.sin(Math.PI * Math.min(1, u * 3));
+      ctx.fillStyle = fade(b.col, a);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.3); ctx.fill();
+      ctx.fillStyle = fade('#ffffff', a * 0.5);
+      ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.3, 0, 6.3); ctx.fill();
     }
-    ctx.fillStyle = 'rgba(8,12,20,.88)';
-    for (const w of WATCHERS) {
-      const t = clock / 1000;
-      const bob = Math.sin(t / w.sway) * 1.6;
-      const tilt = Math.sin(t / (w.sway * 1.7)) * 2.2 * w.lean;
-      const foot = deck + 2 + bob;
-      ctx.beginPath();                        // vartalo
-      ctx.moveTo(w.x - 9, foot);
-      ctx.quadraticCurveTo(w.x - 8 + tilt, foot - w.h * 0.62, w.x - 5 + tilt, foot - w.h * 0.76);
-      ctx.lineTo(w.x + 5 + tilt, foot - w.h * 0.76);
-      ctx.quadraticCurveTo(w.x + 8 + tilt, foot - w.h * 0.62, w.x + 9, foot);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();                        // pää
-      ctx.arc(w.x + tilt, foot - w.h * 0.86, w.h * 0.115, 0, 6.3);
-      ctx.fill();
-    }
+    const pulse = 0.05 + Math.sin(t / 2.6) * 0.02;   // hidas hengitys
+    const gl = ctx.createLinearGradient(0, b.y0, 0, b.y1);
+    gl.addColorStop(0, fade(b.col, 0));
+    gl.addColorStop(1, fade(b.col, pulse));
+    ctx.fillStyle = gl;
+    ctx.fillRect(b.x0, b.y0, bw, bh);
   }
 
   /* Pisaralamput: johto katosta ja hohtava pisara sen päässä. Hohde elää, itse
