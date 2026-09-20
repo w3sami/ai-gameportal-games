@@ -20,9 +20,9 @@ import { W, H } from './levels/shared.js';
 
 /* Taksin kokoinen laatikko telineineen ja sama askel kuin check-grid.mjs:ssä. */
 const TWB = 58, THB = 46, STEP = 4;
+const GAP = 92;                                // oviaukon vapaa mitta
 const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 const box = p => ({ x: p.x, y: p.y, w: p.w, h: p.h });
-const grow = (b, d) => ({ x: b.x - d, y: b.y - d, w: b.w + d * 2, h: b.h + d * 2 });
 
 /* Maalauksen sanasto suomeksi: luonnos on viesti avustajalle, ja se puhuu sitä
    kieltä jolla tästä pelistä puhutaan. Paneeli itse on kehittäjän työkalu ja
@@ -127,40 +127,40 @@ export function createSketch(host) {
     return out;
   }
 
-  /* Mikä sommittelussa on vikana. Samat tarkistukset kuin check-grid.mjs:ssä,
-     mutta heti. Varoitus on teksti ja punainen kehys, ei esto: Sami päättää
-     itse mikä on virhe, ja tarkistin sanoo saman uudestaan ennen julkaisua. */
+  /* Mikä sommittelussa on vikana. Samat tarkistukset kuin check-grid.mjs:ssä
+     ja samoilla luvuilla — kaksi työkalua jotka ovat kentästä eri mieltä on
+     huonompi kuin yksikään. Varoitus on teksti ja punainen kehys, ei esto.
+
+     Kaksi sääntöä on tahallaan poissa, molemmat Samin päätöksiä 20.9.2026:
+
+       Kosketusnapit. Ne ovat läpikuultavia ja sormen vierestä näkee, joten
+       alusta saa mennä niiden viereen ja vähän päällekin. Ne piirtyvät yhä
+       törmäyskuvaan, koska paikka on hyvä tietää — se ei vain ole virhe.
+
+       Alusta seinässä. Merkitystä on vain sillä, voiko alustalle laskeutua:
+       yläpinta seinän päällä riittää, ja alapuoli saa olla seinän sisässä,
+       koska alusta piirtyy joka tapauksessa seinän päälle. */
   function check() {
     const out = [];
     const seen = new Set();
     const add = (text, b) => { if (!seen.has(text)) { seen.add(text); out.push({ text, box: b }); } };
     const pads = host.pads();
     const walls = host.walls();
-    const btns = host.buttons();
     const who = p => (p.fuel ? 'tankkaus' : 'alusta ' + p.id);
 
     for (const p of pads) {
-      const b = box(p);
-      const num = { x: p.x + p.w / 2 - 13, y: p.y + p.h + 9, w: 26, h: 26 };
-      for (const w of walls) if (!w.door && hit(b, w)) { add(`${who(p)} on seinässä`, b); break; }
-      for (const t of btns) if (hit(b, t)) { add(`${who(p)} on nappien alla`, b); break; }
-      for (const t of btns) if (hit(num, t)) { add(`${who(p)}: tunnus jää napin taakse`, num); break; }
-      if (p.x < 0 || p.y < 0 || p.x + p.w > W || p.y + p.h > H) {
-        add(`${who(p)} on kentän ulkopuolella`, b);
+      const top = { x: p.x, y: p.y - 1, w: p.w, h: 2 };
+      for (const w of walls) {
+        if (!w.door && hit(top, w)) { add(`${who(p)}: laskupinta on seinän sisällä`, top); break; }
       }
-    }
-
-    for (const w of walls) {
-      const g = gapOf(w);
-      if (!g) continue;
-      const near = grow(g, 24);
-      for (const p of pads) {
-        if (hit(near, box(p))) add(`${who(p)} tukkii oven ${w.door.id || ''}`.trim(), box(p));
+      if (p.x < 0 || p.y < 0 || p.x + p.w > W || p.y + p.h > H) {
+        add(`${who(p)} on kentän ulkopuolella`, box(p));
       }
     }
 
     const vis = reach(walls, pads, host.gate());
     if (!vis) { add('luukun alla ei ole tilaa tulla sisään', null); return out; }
+
     for (const p of pads) {
       const x = Math.round((p.x + p.w / 2) / STEP) * STEP;
       const y = Math.round((p.y - THB / 2 - 6) / STEP) * STEP;
@@ -169,6 +169,24 @@ export function createSketch(host) {
         for (let dy = 0; dy <= 24 && !ok; dy += STEP) if (vis.has((x + dx) + ',' + (y - dy))) ok = true;
       }
       if (!ok) add(`${who(p)}: ei pääse laskeutumaan`, box(p));
+    }
+
+    /* Auki vetäytynyt luukku on umpinainen koko matkansa, joten merkitystä on
+       vain sillä onko se siellä missä taksi voi olla. Kentän reunalla se saa
+       mennä kehäseinän sisään ja ruudun yli: sinne ei pääse eikä siellä näy
+       mitään. */
+    for (const w of walls) {
+      const g = gapOf(w);
+      if (!g) continue;
+      const slid = w.door.axis === 'V'
+        ? { x: g.x, y: w.door.at + GAP * w.door.dir, w: g.w, h: GAP }
+        : { x: w.door.at + GAP * w.door.dir, y: g.y, w: GAP, h: g.h };
+      for (const k of vis) {
+        const [x, y] = k.split(',').map(Number);
+        if (!hit({ x: x - TWB / 2, y: y - THB / 2, w: TWB, h: THB }, slid)) continue;
+        add(`ovi ${w.door.id || ''}: auki luukku on lennettävässä tilassa`.trim(), slid);
+        break;
+      }
     }
     return out;
   }
