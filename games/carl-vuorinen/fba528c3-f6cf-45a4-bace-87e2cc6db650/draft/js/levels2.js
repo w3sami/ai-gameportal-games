@@ -4,6 +4,7 @@
 // period/duty/phase and runs on sim ticks, so replays stay exact. src is the visual source — 'hollow' (a knot-hole on the
 // upwind trunk face), 'fissure' (a crack on the upwind rock face), 'sky' (none: the wind is simply there because the space is
 // open, so only valid where it is). Not read by the engine yet. Opposing gusts always sit in separate vertical bands.
+// wallMat:'wood' paints the level's solid mass as the inside of a tree (pal.wood plus grain) instead of rock face.
 const EDGE_TRUNKS = w => [{x:-20,y:4000,tx:-20,ty:-200,w:300,taper:0,seed:-340}, {x:260,y:4000,tx:260,ty:-200,w:260,taper:0,seed:1620}, {x:w+20,y:4000,tx:w+20,ty:-200,w:300,taper:0,seed:w*7}, {x:w-260,y:4000,tx:w-260,ty:-200,w:260,taper:0,seed:w*7-1960}];
 LEVELS.push(
   {name:'Treetops', theme:'jungle', w:5600, h:2600, groundY:2300, canopyY:350,
@@ -73,8 +74,9 @@ LEVELS.push(
            {kind:'water',x:4950,y:2300,w:300,h:1025,ay:340,drag:1.6,pool:{x:4600,w:900,h:70}}],
    walls:[],
    pads:{start:{x:640,y:2920,w:120,h:100}, target:{x:6740,y:1180,w:120,h:100,base:'bark'}}},
-  {name:'Hollow', theme:'jungle', w:2400, h:3400, groundY:2800, canopyY:500,
+  {name:'Hollow', theme:'jungle', wallMat:'wood', w:2400, h:3400, groundY:2800, canopyY:500,
    // the inside of a hollow tree: a climb between two trunk faces, knot-holes gusting across the shaft, branch stubs for ledges.
+   // wallMat:'wood' makes the mass itself wood, so the shaft walls read as heartwood rather than rock face.
    rooms:[{x:400,y:3150,rx:330,ry:230,wob:0.1,seed:901}, {x:1200,y:1750,rx:450,ry:1400,wob:0.04,seed:902}, {x:1300,y:450,rx:900,ry:330,wob:0.08,seed:903}],
    corridors:[{pts:[[650,3100],[850,3050],[1000,3000]],w:190}],
    rocks:[],
