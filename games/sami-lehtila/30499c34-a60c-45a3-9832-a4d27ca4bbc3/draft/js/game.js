@@ -794,6 +794,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') { toggleMute(); return; }
   if (e.code === 'KeyF') { toggleFullscreen(); return; }
   if (e.code === 'KeyP') { togglePanel(); return; }
+  if (e.code === 'KeyK' || e.code === 'Pause') { togglePause(); return; }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyH') { honk(); return; }
   if (e.code === 'Space' || e.code === 'KeyG') { e.preventDefault(); toggleGear(); }
 });
@@ -2088,6 +2089,20 @@ function drawSky() {
   for (let y = 0; y <= H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 }
 
+/* Taukomerkki: kaksi palkkia, ei tekstiä. Kieletön merkki ei tarvitse
+   käännöstä eikä sitä että i18n.js muistetaan päivittää. */
+function pauseBadge() {
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  const x = W / 2, y = 132;
+  ctx.fillStyle = 'rgba(8,13,30,.74)';
+  ctx.beginPath(); ctx.roundRect(x - 33, y - 23, 66, 46, 12); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,160,255,.35)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(x - 33, y - 23, 66, 46, 12); ctx.stroke();
+  ctx.fillStyle = '#6fe3ff';
+  ctx.fillRect(x - 12, y - 12, 8, 24);
+  ctx.fillRect(x + 4, y - 12, 8, 24);
+}
+
 function draw(v) {
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
   drawSky();
@@ -2275,6 +2290,12 @@ function buildPanel() {
   });
   lvlRow.append(el('label', null, 'kenttä'), lvlSeg);
   panelEl.append(lvlRow);
+
+  const pauseRow = el('div', 'row');
+  const pauseSeg = el('div', 'seg');
+  pauseSeg.append(pbutton(paused ? 'on' : null, paused ? 'jatka' : 'tauko', togglePause));
+  pauseRow.append(el('label', null, 'peli'), pauseSeg);
+  panelEl.append(pauseRow);
 
   const langRow = el('div', 'row');
   const langSeg = el('div', 'seg');
@@ -2496,6 +2517,27 @@ function setPanel(on) {
   setPortal('debug', on);
 }
 
+/* Tauko. Peli piirtyy mutta ei etene: liikkuvan kentän — ovet, alustat,
+   koneet — saa katsoa paikallaan, eikä testatessa tarvitse katsella sitä että
+   taksi ajelehtii seinään sillä välin kun lukee mittoja. Tauko on kytkin
+   säätöpaneelissa, K näppäimistöllä ja arvo portaalin kytkimessä, ja kaikki
+   kolme näyttävät saman tilan.
+
+   runT ei kulje tauolla, koska update jää väliin — siis tippimittari, ovet ja
+   koristeet pysähtyvät samaan hetkeen eikä mikään hyppää jatkettaessa. */
+let paused = false;
+
+function setPaused(on) {
+  on = !!on;
+  if (on === paused) return;                 // myös silmukan katkaisu: portaali
+  paused = on;                               // vastaa omaan pyyntöömme samalla arvolla
+  if (on) jetLevel(0);                       // suuttimen ääni ei jää soimaan
+  if (!panelEl.classList.contains('hidden')) buildPanel();
+  setPortal('pause', on);
+}
+
+function togglePause() { setPaused(!paused); }
+
 function togglePanel() {
   const want = !panelOpen();
   /* Kehyksessä debug on portaalin myönnettävä eikä pelin otettava: pyydä ja
@@ -2639,6 +2681,10 @@ if (portal.embedded) {
     onPortal('debug', setPanel);
     /* canWrite ratkaisee näkyykö ratas ja kortin nappi, ja se saapuu vasta
        tässä — kortti on jo ruudulla, joten se piirretään uusiksi. */
+    /* Tauko myös portaalista: kehyksessä pelin oma näppäin vaatii fokuksen,
+       sivun kytkin ei vaadi mitään. Kumpikin kirjoittaa samaan arvoon, ja
+       setPaused palaa heti jos arvo on jo se — silmukkaa ei synny. */
+    onPortal('pause', setPaused);
     onPortal('canWrite', () => { if (state === MENU) showCard(menuCard(), 0, null); });
   });
 }
@@ -2662,6 +2708,15 @@ function loop(now) {
   resize();
   padInput();
   paintGraphs();                               // vain auki olevaan paneeliin
+
+  /* Tauolla piirretään sama ruutu uudestaan ilman päivitystä. Vain lennon
+     aikana: valikossa ja välianimaatiossa taukoa ei ole mitä pitää. */
+  if (paused && (state === PLAY || state === ENTER)) {
+    draw({ x: 0, y: 0 });
+    pauseBadge();
+    requestAnimationFrame(loop);
+    return;
+  }
 
   if (state === CUT) {
     cut.update(dt);
