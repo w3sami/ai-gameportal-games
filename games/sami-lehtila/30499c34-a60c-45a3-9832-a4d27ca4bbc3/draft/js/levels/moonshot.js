@@ -111,62 +111,47 @@ for (const line of [0, 1]) GRID.push(...segments('V', line), ...segments('H', li
 
 /* ------------------------------------------------------------------ kupolit
 
-   Kupoli on kentän ainoa koriste ja samalla este — umpinaiselta näyttävä ei
-   saa olla läpilennettävää. Sama piirtofunktio palvelee kolmea paikkaa:
-   tasangolla seisova, kannen päällä seisova ja katosta roikkuva (flip).
-   Halvalla saa paljon, kun sama kupoli käännetään ylösalaisin.
+   Kupolit ovat **kulissia, eivät esteitä** — sama ratkaisu kuin huvipuiston
+   laitteilla. Ensimmäisessä versiossa ne olivat seiniä, ja katoslaatta tukki
+   kaksi oviaukkoa; Sami 20.9.2026: "ei collisioneita näihin ollenkaan".
+   Siksi täällä ei ole törmäyslaatikoita eikä drawFrontin uudelleenmaalausta:
+   kupoli piirtyy taustaan, ruudukon seinien alle.
 
-   base  se pinta jolla kupoli seisoo (tai josta se roikkuu)
-   eave  katoksen korkeus osuutena säteestä */
-const OVER = 22;                              // katoksen ulkonema kupolin yli
-const EAVE_H = 11;
+   Kolme kupolia tasangolla, ei muuta. Katos (se vaakapalkki kupolin poikki)
+   on poistettu: se oli oveneste ja näytti oudolta.
 
+   base  se pinta jolla kupoli seisoo */
 const DOMES = [
-  /* tasangolla, alarivi */
-  { x: 122, base: 1004, r: 62, eave: 0.42 },
-  { x: 352, base: 1004, r: 60, eave: 0.42 },
-  { x: 600, base: 1004, r: 58, eave: 0.42 },
-  /* kansien päällä. Ylimmän rivin kattoon ei ripusteta mitään: HUD piirtyy
-     ruudun ylälaitaan ja kupoli jäisi rahasumman ja alustalaskurin alle. */
-  { x: 200, base: HY[0], r: 38, eave: 0.44 },
-  { x: 536, base: HY[0], r: 34, eave: 0.44 },
-  /* kansien alta roikkuen: sama kupoli ylösalaisin */
-  { x: 170, base: ROWS[1][0], r: 36, eave: 0.44, flip: true },
-  { x: 430, base: ROWS[1][0], r: 34, eave: 0.44, flip: true },
-  { x: 604, base: ROWS[2][0], r: 34, eave: 0.44, flip: true },
+  { x: 122, base: 1004, r: 62 },
+  { x: 352, base: 1004, r: 60 },
+  { x: 600, base: 1004, r: 58 },
 ];
 
 const spanAt = (d, h) => Math.sqrt(Math.max(0, d.r * d.r - h * h));
-const up = d => (d.flip ? -1 : 1);            // +1 = kupoli aukeaa ylös
 
-function eaveBox(d) {
-  const h = d.r * d.eave;
-  const half = spanAt(d, h) + OVER;
-  const y = d.flip ? d.base + h : d.base - h - EAVE_H;
-  return { x: d.x - half, y, w: half * 2, h: EAVE_H };
-}
+/* Propsit: tolpat ja raketti. Nämäkään eivät ole esteitä.
 
-/* Kupolin törmäyslaatikot: portaittainen puolipallo. Laatikot ovat kaaren
-   sisäpuolella, joten piirretty kupoli peittää ne aina — ja koska taksi ei voi
-   olla laatikon sisällä olematta kolarissa, kupolin saa maalata drawFrontissa
-   laatikoiden päälle ilman että taksi katoaa lasin taakse. Sama ratkaisu kuin
-   Trouble Factoryn koneilla. */
-const STEPS = 6;
-function domeBoxes(d) {
-  const out = [];
-  for (let i = 0; i < STEPS; i++) {
-    const top = d.r * (i + 1) / STEPS;
-    const half = spanAt(d, top);
-    if (half < 12) break;
-    const band = d.r / STEPS + 0.5;
-    const y = d.flip ? d.base + top - band : d.base - top;
-    out.push({ x: d.x - half, y, w: half * 2, h: band });
-  }
-  return out;
-}
+   Tolppa on ohut ja suora, ja sen päässä on neliönmuotoinen valo joka vilkkuu
+   vihreänä tai punaisena omalla jaksollaan. Ne seisovat tasangolla ja kansien
+   päällä, ja niiden tehtävä on tehdä tyhjästä kohdasta rakennettu. */
+const POLES = [
+  { x: 46, base: 1004, h: 92, hz: 0.7, col: '#7bf0a0' },
+  { x: 214, base: 1004, h: 116, hz: 0.45, col: '#ff5d7a' },
+  { x: 300, base: 1004, h: 78, hz: 1.1, col: '#7bf0a0' },
+  { x: 446, base: 1004, h: 104, hz: 0.6, col: '#7bf0a0' },
+  { x: 528, base: 1004, h: 86, hz: 0.35, col: '#ff5d7a' },
+  { x: 686, base: 1004, h: 98, hz: 0.85, col: '#7bf0a0' },
+  { x: 330, base: HY[0], h: 40, hz: 0.5, col: '#7bf0a0' },
+  { x: 700, base: HY[0], h: 36, hz: 0.9, col: '#ff5d7a' },
+  { x: 120, base: HY[1], h: 44, hz: 0.75, col: '#7bf0a0' },
+  { x: 640, base: HY[1], h: 38, hz: 0.55, col: '#7bf0a0' },
+];
+
+/* Raketti telineessään tasangolla. Nousee horisontin yli, jotta siluetti
+   näkyy mustaa taivasta vasten. */
+const ROCKET = { x: 196, base: 1002, h: 132 };
 
 const SOLIDS = [...GRID, ...PANELS];
-for (const d of DOMES) SOLIDS.push(...domeBoxes(d), eaveBox(d));
 
 /* ---------------------------------------------------------------- arvonnat
 
@@ -376,13 +361,12 @@ function plain(ctx) {
   }
 }
 
-/* Kupoli. Piirretään kahdesti: drawBackissa kokonaan ja drawFrontissa
-   törmäyslaatikoihin rajattuna, joten tässä ei saa olla mitään ruudusta
-   toiseen arpovaa — molempien maalausten on oltava identtiset. */
+/* Kupoli: lasikellon kaari, pituus- ja leveyspiirit, kiilto ylävasemmalla ja
+   sisällä valaistu pikkukaupunki. Jalustassa on vain ohut lista ja sulkuovi —
+   ei mitään kupolin poikki menevää palkkia. */
 function dome(ctx, d) {
   ctx.save();
   ctx.translate(d.x, d.base);
-  ctx.scale(1, up(d));                        // roikkuva kupoli on sama kuvio ylösalaisin
 
   ctx.save();
   ctx.beginPath();
@@ -392,22 +376,22 @@ function dome(ctx, d) {
   ctx.clip();
 
   const g = ctx.createLinearGradient(-d.r * 0.6, -d.r, d.r * 0.7, 0);
-  g.addColorStop(0, 'rgba(154,216,255,.30)');
-  g.addColorStop(0.45, 'rgba(90,140,190,.16)');
-  g.addColorStop(1, 'rgba(12,18,28,.55)');
+  g.addColorStop(0, 'rgba(154,216,255,.26)');
+  g.addColorStop(0.45, 'rgba(90,140,190,.13)');
+  g.addColorStop(1, 'rgba(12,18,28,.5)');
   ctx.fillStyle = g;
   ctx.fillRect(-d.r, -d.r, d.r * 2, d.r);
 
   interior(ctx, d);
 
-  ctx.strokeStyle = 'rgba(190,230,255,.20)';
-  ctx.lineWidth = 1.2;
-  for (let i = 1; i < 5; i++) {
-    const rx = Math.abs(d.r * (i / 5) * 2 - d.r);
+  ctx.strokeStyle = 'rgba(190,230,255,.16)';
+  ctx.lineWidth = 1.1;
+  for (let i = 1; i < 4; i++) {
+    const rx = Math.abs(d.r * (i / 4) * 2 - d.r);
     ctx.beginPath(); ctx.ellipse(0, 0, rx, d.r, 0, Math.PI, 0); ctx.stroke();
   }
-  for (let i = 1; i < 4; i++) {
-    const rr = d.r * (i / 4);
+  for (let i = 1; i < 3; i++) {
+    const rr = d.r * (i / 3);
     ctx.beginPath(); ctx.ellipse(0, 0, spanAt(d, rr), rr, 0, Math.PI, 0); ctx.stroke();
   }
 
@@ -416,20 +400,20 @@ function dome(ctx, d) {
   ctx.beginPath(); ctx.arc(0, 0, d.r - 5, Math.PI * 1.08, Math.PI * 1.38); ctx.stroke();
   ctx.restore();
 
-  ctx.strokeStyle = 'rgba(180,206,235,.55)';
+  ctx.strokeStyle = 'rgba(180,206,235,.5)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(0, 0, d.r, Math.PI, 0); ctx.stroke();
-  ctx.restore();
 
-  const e = eaveBox(d);                       // katos: yläsärmä valossa, alle varjo
-  ctx.fillStyle = FRAME;
-  ctx.fillRect(e.x, e.y, e.w, e.h);
-  ctx.fillStyle = 'rgba(214,224,240,.5)';
-  ctx.fillRect(e.x, d.flip ? e.y + e.h - 2 : e.y, e.w, 2);
-  ctx.fillStyle = WARM;
-  for (let x = e.x + 14; x < e.x + e.w - 8; x += 30) {
-    ctx.fillRect(x, d.flip ? e.y - 2 : e.y + e.h, 5, 2);
-  }
+  ctx.fillStyle = '#39414f';                  // ohut jalkalista
+  ctx.fillRect(-d.r, -4, d.r * 2, 4);
+  ctx.fillStyle = 'rgba(214,224,240,.35)';
+  ctx.fillRect(-d.r, -4, d.r * 2, 1.5);
+
+  ctx.fillStyle = '#10161f';                  // sulkuovi
+  ctx.fillRect(-9, -18, 18, 18);
+  ctx.strokeStyle = WARM; ctx.lineWidth = 1.2;
+  ctx.strokeRect(-9, -18, 18, 18);
+  ctx.restore();
 }
 
 /* Kupolin sisus: pimeä pohja, matalia rakennuksia ja puita, ikkunoissa valoa.
@@ -458,6 +442,64 @@ function interior(ctx, d) {
   }
 }
 
+/* Tolppa: ohut suora masto, päässä neliövalo joka vilkkuu omalla jaksollaan.
+   Kello on performance.now(), koska pelin runT pysähtyy luukusta tullessa. */
+function pole(ctx, p) {
+  const top = p.base - p.h;
+  ctx.fillStyle = 'rgba(146,160,182,.75)';
+  ctx.fillRect(p.x - 1.5, top, 3, p.h);
+  ctx.fillStyle = 'rgba(120,134,156,.8)';     // jalka
+  ctx.fillRect(p.x - 5, p.base - 4, 10, 4);
+
+  const on = (clock / 1000 / Math.max(0.15, p.hz)) % 2 < 1;
+  ctx.fillStyle = on ? p.col : 'rgba(40,48,62,.85)';
+  if (on) { ctx.shadowColor = p.col; ctx.shadowBlur = 10; }
+  ctx.fillRect(p.x - 4, top - 8, 8, 8);
+  ctx.shadowBlur = 0;
+}
+
+/* Raketti telineessä: runko, kärki, evät ja ristikkotorni kylkeen. Kulissia. */
+function rocket(ctx, k) {
+  const top = k.base - k.h, wRoc = 17;
+  ctx.fillStyle = '#7d8798';                  // ristikkotorni
+  ctx.fillRect(k.x + 22, top + 12, 4, k.h - 12);
+  ctx.fillRect(k.x + 44, top + 12, 4, k.h - 12);
+  ctx.strokeStyle = 'rgba(125,135,152,.85)';
+  ctx.lineWidth = 2;
+  for (let y = top + 20; y < k.base; y += 22) {
+    ctx.beginPath(); ctx.moveTo(k.x + 26, y); ctx.lineTo(k.x + 44, y + 11); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(k.x + 26, y + 11); ctx.lineTo(k.x + 44, y); ctx.stroke();
+  }
+
+  ctx.fillStyle = '#2a3140';                  // evät
+  ctx.beginPath();
+  ctx.moveTo(k.x - wRoc, k.base); ctx.lineTo(k.x - wRoc - 11, k.base);
+  ctx.lineTo(k.x - wRoc, k.base - 34); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(k.x + wRoc, k.base); ctx.lineTo(k.x + wRoc + 11, k.base);
+  ctx.lineTo(k.x + wRoc, k.base - 34); ctx.closePath(); ctx.fill();
+
+  const g = ctx.createLinearGradient(k.x - wRoc, 0, k.x + wRoc, 0);
+  g.addColorStop(0, '#cfd6e4');
+  g.addColorStop(0.45, '#f2f5fa');
+  g.addColorStop(1, '#79839a');
+  ctx.fillStyle = g;
+  ctx.fillRect(k.x - wRoc, top + 26, wRoc * 2, k.h - 26);
+
+  ctx.beginPath();                            // kärki
+  ctx.moveTo(k.x - wRoc, top + 28);
+  ctx.quadraticCurveTo(k.x, top - 12, k.x + wRoc, top + 28);
+  ctx.closePath();
+  ctx.fillStyle = '#e9edf5'; ctx.fill();
+  ctx.fillStyle = '#c8324a';
+  ctx.fillRect(k.x - wRoc, top + 44, wRoc * 2, 7);
+  ctx.fillStyle = 'rgba(12,18,28,.55)';       // ikkuna
+  ctx.beginPath(); ctx.arc(k.x, top + 66, 5, 0, 6.3); ctx.fill();
+
+  ctx.fillStyle = 'rgba(20,26,36,.7)';        // suutin
+  ctx.fillRect(k.x - 9, k.base - 6, 18, 6);
+}
+
 /* Oviaukon karmi ja lamppurivi. Lamput ovat aukon molemmin puolin seinässä,
    eli ne näkyvät kummastakin lohkosta — ovi on se asia jota pelaaja lukee
    koko ajan. Vilkku on sama kieli kuin alustan valolistassa: punainen kun
@@ -484,8 +526,12 @@ function doorLamps(ctx) {
    valojuova. Rajataan tasan luukun laatikkoon, jonka sisällä ei voi olla
    taksia. */
 function panelFace(ctx, p) {
+  const g = gapBox(p.door);                   // näkyviin vain se osa joka on aukossa
+  const x0 = Math.max(p.x, g.x), y0 = Math.max(p.y, g.y);
+  const x1 = Math.min(p.x + p.w, g.x + g.w), y1 = Math.min(p.y + p.h, g.y + g.h);
+  if (x1 - x0 < 0.5 || y1 - y0 < 0.5) return; // kokonaan seinän sisällä
   ctx.save();
-  ctx.beginPath(); ctx.rect(p.x, p.y, p.w, p.h); ctx.clip();
+  ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip();
   ctx.fillStyle = '#39414f';
   ctx.fillRect(p.x, p.y, p.w, p.h);
   ctx.strokeStyle = 'rgba(255,212,121,.35)';
@@ -511,28 +557,42 @@ function moonBack(ctx, api) {
   farDomes(ctx);
   plain(ctx);
   for (const d of DOMES) {
-    if (d.flip) continue;
     ctx.fillStyle = 'rgba(10,12,18,.4)';
     ctx.beginPath(); ctx.ellipse(d.x + 14, d.base + 5, d.r * 1.05, 10, 0, 0, 6.3); ctx.fill();
   }
   for (const d of DOMES) dome(ctx, d);
+  rocket(ctx, ROCKET);
+  for (const p of POLES) pole(ctx, p);
+  for (const p of api.pads) mount(ctx, p);
   doorLamps(ctx);
 }
 
-function moonFront(ctx, api) {
-  ctx.save();                                 // kupolit seinälaatikoiden päälle
-  ctx.beginPath();
-  for (const d of DOMES) {
-    for (const b of domeBoxes(d)) ctx.rect(b.x, b.y, b.w, b.h);
-    const e = eaveBox(d);
-    ctx.rect(e.x, e.y - 2, e.w, e.h + 4);
-  }
-  ctx.clip();
-  ctx.fillStyle = '#10161f';
-  ctx.fillRect(0, 0, W, H);
-  for (const d of DOMES) dome(ctx, d);
-  ctx.restore();
+/* Alustan kiinnike: alusta on pultattu seinään eikä leiju. Levy seinää vasten
+   ja kaksi vinotukea alustan alle; puoli tulee MOUNTS-taulusta. Piirretään
+   drawBackissa, koska peli piirtää alustat vasta sen jälkeen. */
+const MOUNTS = { 1: 'left', 2: 'left', 3: 'left', 4: 'left', 5: 'right', 6: 'left', 7: 'left', 0: 'left' };
+function mount(ctx, p) {
+  const right = MOUNTS[p.id] === 'right';
+  const wx = right ? p.x + p.w : p.x;         // seinäpinta
+  const sgn = right ? 1 : -1;
+  ctx.fillStyle = '#39414f';
+  ctx.fillRect(right ? wx - 6 : wx, p.y - 4, 6, p.h + 22);
+  ctx.fillStyle = 'rgba(214,224,240,.32)';
+  ctx.fillRect(right ? wx - 6 : wx, p.y - 4, 6, 1.5);
 
+  ctx.strokeStyle = 'rgba(146,160,182,.8)';   // vinotuet
+  ctx.lineWidth = 3;
+  for (const reach of [0.42, 0.78]) {
+    ctx.beginPath();
+    ctx.moveTo(wx - sgn * 1, p.y + p.h + 16);
+    ctx.lineTo(wx - sgn * (p.w * reach), p.y + p.h + 1);
+    ctx.stroke();
+  }
+  ctx.fillStyle = WARM;                       // pultit
+  for (const dy of [2, p.h + 12]) ctx.fillRect(right ? wx - 5 : wx + 1, p.y + dy, 3, 3);
+}
+
+function moonFront(ctx, api) {
   for (const p of PANELS) panelFace(ctx, p);
   doorLamps(ctx);
 }
@@ -559,14 +619,14 @@ export const moonshot = {
   firstFrom: 2,
   walls: SOLIDS,
   pads: [
-    { id: 1, x: 60, y: 238, w: 104, h: 18 },    // TL
-    { id: 2, x: 495, y: 250, w: 104, h: 18 },   // TR
-    { id: 3, x: 24, y: 600, w: 104, h: 18 },    // ML
-    { id: 4, x: 500, y: 430, w: 104, h: 18 },   // MR
-    { id: 5, x: 133, y: 748, w: 104, h: 18 },   // BL
-    { id: 6, x: 258, y: 812, w: 104, h: 18 },   // BM
-    { id: 7, x: 492, y: 900, w: 104, h: 18 },   // BR
-    { id: 0, x: 262, y: 560, w: 104, h: 18, fuel: true },  // keskilohko
+    { id: 1, x: 16, y: 238, w: 104, h: 18 },    // TL, vasen kehäseinä
+    { id: 2, x: 483, y: 250, w: 104, h: 18 },   // TR, keskiseinä
+    { id: 3, x: 16, y: 600, w: 104, h: 18 },    // ML, vasen kehäseinä
+    { id: 4, x: 483, y: 430, w: 104, h: 18 },   // MR, keskiseinä
+    { id: 5, x: 133, y: 748, w: 104, h: 18 },   // BL, oikea seinä (napit vievät nurkan)
+    { id: 6, x: 253, y: 812, w: 104, h: 18 },   // BM, vasen seinä
+    { id: 7, x: 483, y: 900, w: 104, h: 18 },   // BR, keskiseinä
+    { id: 0, x: 253, y: 560, w: 104, h: 18, fuel: true },  // keskilohko, vasen seinä
   ],
   mul: { grav: 0.3 },
   tune: [
