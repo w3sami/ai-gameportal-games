@@ -260,7 +260,7 @@ const LEDGES = [
 
    x, y  radan keskipiste    rx, ry  säteet    rot  radan kallistus asteina
    secs  kierrosaika         sx, sy  venyttävät rataa editorista */
-const UFO = { x: 478, y: 510, rx: 163, ry: 65, rot: 17, secs: 9 };
+const UFO = { x: 478, y: 510, rx: 163, ry: 65, rot: 17, secs: 16 };
 
 function ufo(ctx, u) {
   const t = (clock / 1000 / Math.max(2, u.secs)) * Math.PI * 2;
