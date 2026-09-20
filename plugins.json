@@ -231,7 +231,7 @@
   },
   {
     "name": "sketchpad",
-    "description": "Kenttäluonnostelu pelin päälle: näe missä törmäys oikeasti on, raahaa tavarat paikoilleen ja maalaa kentän päälle mitä kohtaan oli tarkoitus tulla. Jokaisella maalatulla muodolla on label ja vapaa teksti, joten kuva kertoo itse mitä siinä lukee.\n\nTämä ei kirjoita geometriaa peliin, ja se on pluginin muoto eikä puuttuva ominaisuus: kenttä on tavallisesti koodia eikä dataa, ja jos osa luvuista eläisi konffissa ja osa koodissa, geometriaa tarkistava työkalu tarkistaisi eri kentän kuin se jota pelataan. Maalaus ja siirrot menevät config/sketch.jsoniin luonnokseksi avustajalle, ja kentän luvut pysyvät kentän omassa lähdekoodissa. Raahatut paikat jäävät voimaan vain siinä selaimessa jossa raahattiin, jottei sivun lataus pyyhi kesken jäänyttä sommittelua — ne eivät lähde julkaisun mukaan, ja paneeli kertoo montako siirtoa on vielä kirjoittamatta lähteeseen.\n\nKenttä julistaa siirrettävänsä itse: olio jolla on x ja y ja jonka piirto lukee ne joka ruudulla. Varoitukset ovat pelin omia — plugin ei tiedä mikä pelissä on virhe, joten peli antaa listan ja plugin näyttää sen tekstinä ja punaisena kehyksenä, estämättä mitään. index.js on pieni puolisko ja paneeli haetaan vasta kun se avataan, joten pelin voi tuoda tämän lähettämättä editoria yhdellekään pelaajalle. Mikään ei heitä.",
+    "description": "Kenttäluonnostelu pelin päälle: näe missä törmäys oikeasti on, raahaa tavarat paikoilleen ja maalaa kentän päälle mitä kohtaan oli tarkoitus tulla. Jokaisella maalatulla muodolla on label ja vapaa teksti, joten kuva kertoo itse mitä siinä lukee.\n\nTämä ei kirjoita geometriaa peliin, ja se on pluginin muoto eikä puuttuva ominaisuus: kenttä on tavallisesti koodia eikä dataa, ja jos osa luvuista eläisi konffissa ja osa koodissa, geometriaa tarkistava työkalu tarkistaisi eri kentän kuin se jota pelataan. Maalaus ja siirrot menevät config/sketch.jsoniin luonnokseksi avustajalle, ja kentän luvut pysyvät kentän omassa lähdekoodissa. Raahatut paikat jäävät voimaan vain siinä selaimessa jossa raahattiin, jottei sivun lataus pyyhi kesken jäänyttä sommittelua — ne eivät lähde julkaisun mukaan, ja sekä paneeli että konsoli kertovat montako siirtoa on vielä kirjoittamatta lähteeseen.\n\n1.1.0: skaala, kierto ja peilaus. Ne ovat yksi asia eivätkä kolme — 2D-transformi, sama jonka canvas ja CSS osaavat valmiiksi ja samassa järjestyksessä, ja peilaus on negatiivinen skaala kuten kummassakin on aina ollut. applyTransform(ctx, obj) ja cssTransform(obj) antavat sen yhdellä rivillä; hinta on että olio piirretään oman origonsa ympärille. Rinnalla knob: yksi nimetty luku jonka peli jo omistaa, kuten kupolin r tai alustan w. Ero ratkaisee kumpaa käyttää — transform muuttaa miltä olio näyttää eikä fysiikka tiedä siitä mitään, knob muuttaa mikä olio on, ja törmäyslaatikon leveys kuuluu jälkimmäiseen. Luonnoksen from ja to kantavat vain ne luvut jotka muuttuivat.\n\nKenttä julistaa siirrettävänsä itse. Varoitukset ovat pelin omia — plugin ei tiedä mikä pelissä on virhe, joten peli antaa listan ja plugin näyttää sen tekstinä ja punaisena kehyksenä, estämättä mitään. index.js on pieni puolisko ja paneeli haetaan vasta kun se avataan, joten pelin voi tuoda tämän lähettämättä editoria yhdellekään pelaajalle. Mikään ei heitä.",
     "author": "Sami Lehtilä",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
@@ -275,12 +275,32 @@
         "sizeBytes": 57666,
         "entryFile": "index.js",
         "publishedAt": "2026-09-20T18:10:38.119Z"
+      },
+      {
+        "version": "1.1.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 22294
+          },
+          {
+            "path": "README.md",
+            "sizeBytes": 12787
+          },
+          {
+            "path": "ui.js",
+            "sizeBytes": 35530
+          }
+        ],
+        "sizeBytes": 70611,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-20T18:46:33.786Z"
       }
     ],
     "aliases": {
-      "v1": "1.0.1"
+      "v1": "1.1.0"
     },
     "createdAt": "2026-09-20T18:06:45.736Z",
-    "updatedAt": "2026-09-20T18:10:38.120Z"
+    "updatedAt": "2026-09-20T18:46:33.787Z"
   }
 ]
