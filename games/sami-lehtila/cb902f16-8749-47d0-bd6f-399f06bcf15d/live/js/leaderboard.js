@@ -1,4 +1,5 @@
-// Leaderboard: one board per level, posted when the player beats their own best.
+// Leaderboard: one board, one level per game level, posted when the player
+// beats their own best.
 //
 // The rows are drawn here instead of with <leaderboard-panel> for one reason:
 // a board stores whole numbers, this game counts in milliseconds, and a time
@@ -12,7 +13,11 @@ let mine = {};                                              // level -> {ms, id}
 try { mine = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
 const remember = () => { try { localStorage.setItem(KEY, JSON.stringify(mine)); } catch (e) {} };
 
-const boardOf = lv => `level-${lv+1}`;
+// One board for the whole game; the level is a dimension inside it. The board
+// carries the title, the styling and the sort once — before this there were ten
+// boards each holding its own copy of the same stylesheet.
+const BOARD = 'fastest-pilots';
+const levelOf = lv => String(lv + 1);
 const fmt = ms => { const s = ms/1000, m = Math.floor(s/60); return `${m}:${(s-m*60).toFixed(2).padStart(5,'0')}`; };
 function el(tag, cls, text){ const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
@@ -60,7 +65,7 @@ async function send(lv, ms, status){
   const replay = window.Thruster && window.Thruster.replay(lv);
   if (replay) data.r = replay;
   if (JSON.stringify(data).length > 1980) delete data.r;
-  const r = await submit({ score: ms, board: boardOf(lv), data });
+  const r = await submit({ score: ms, board: BOARD, level: levelOf(lv), data });
   if (r.kept){
     mine[lv] = {ms, id: r.entry.id}; remember();
     status.className = 'lb-note good';
@@ -72,7 +77,7 @@ async function send(lv, ms, status){
 
 async function draw(lv, body, sub, title){
   const highlight = mine[lv] ? mine[lv].id : undefined;
-  const page = await top({board: boardOf(lv), limit: 8, around: highlight});
+  const page = await top({board: BOARD, level: levelOf(lv), limit: 8, around: highlight});
   if (page.reason){ body.replaceChildren(el('p', 'lb-note', 'The board could not be reached.')); return; }
   if (!page.entries.length){ body.replaceChildren(el('p', 'lb-note', 'No times here yet. First landing takes the top spot.')); return; }
 
