@@ -94,8 +94,8 @@ LEVELS.push(
    // through the shaft you have to climb, and the way out onto the plateau runs straight through a third.
    plateau:{x0:4750,groundY:1600,canopyY:400},
    rockZones:[{x:3600,y:1900,r:1050,ry:1750,seed:951}],
-   rooms:[{x:1500,y:2300,rx:1300,ry:750,wob:0.07,seed:952}, {x:3100,y:2350,rx:380,ry:450,wob:0.1,seed:953}, {x:3600,y:1900,rx:350,ry:700,wob:0.09,seed:954}, {x:4200,y:1150,rx:400,ry:450,wob:0.1,seed:955}, {x:5900,y:1050,rx:1050,ry:560,wob:0.07,seed:956}],
-   corridors:[{pts:[[2500,2330],[2800,2350],[3000,2350]],w:190}, {pts:[[3300,2250],[3500,2100],[3600,1950]],w:180}, {pts:[[3650,1450],[3900,1300],[4100,1200]],w:180}, {pts:[[4450,1080],[4750,1100],[5050,1110]],w:200}],
+   rooms:[{x:1500,y:2300,rx:1300,ry:750,wob:0.07,seed:952}, {x:3050,y:2400,rx:200,ry:300,wob:0.1,seed:953}, {x:3600,y:1900,rx:350,ry:700,wob:0.09,seed:954}, {x:4200,y:1150,rx:400,ry:450,wob:0.1,seed:955}, {x:5900,y:1050,rx:1050,ry:560,wob:0.07,seed:956}],
+   corridors:[{pts:[[2500,2330],[2800,2350],[3000,2350]],w:190}, {pts:[[3120,2280],[3300,2130],[3480,1990]],w:160}, {pts:[[3650,1450],[3900,1300],[4100,1200]],w:180}, {pts:[[4450,1080],[4750,1100],[5050,1110]],w:200}],
    rocks:[],
    spikes:[{x:2750,y:1700,tx:2550,ty:1820,w:130,seed:957}, {x:3350,y:1500,tx:3500,ty:1620,w:110,seed:958}, {x:3900,y:2300,tx:3750,ty:2150,w:110,seed:959}, {x:800,y:1400,tx:805,ty:1680,w:90,seed:960,kind:'branch'}, {x:6300,y:520,tx:6305,ty:800,w:100,seed:961,kind:'branch'}],
    trunks:EDGE_TRUNKS(7000).concat([{x:1700,y:3100,tx:1700,ty:2550,w:200,taper:0.15,broken:true,seed:962}, {x:900,y:3100,tx:1600,ty:2800,w:150,taper:0.1,seed:963},
