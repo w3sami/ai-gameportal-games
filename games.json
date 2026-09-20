@@ -4,6 +4,7 @@
     "slug": "kivisade",
     "title": "Kivisade",
     "description": "",
+    "descriptions": {},
     "author": "Sami",
     "tags": [
       "demo"
@@ -22,6 +23,7 @@
     "slug": "kuplapallo",
     "title": "Kuplapallo",
     "description": "Happi kuluu koko ajan kiihtyvää tahtia — tähdet täyttävät sitä, piikit puhkaisevat kuplan. Kerää tähdet putkeen, niin piikit muuttuvat hetkeksi kerättäviksi. Ohjaussauva syntyy sormen alle, mistä tahansa vedät.",
+    "descriptions": {},
     "author": "Sami Lehtilä",
     "tags": [
       "arcade",
@@ -45,6 +47,7 @@
     "slug": "matopeli-3310",
     "title": "Matopeli",
     "description": "Klassinen yksivärinen matopeli. Ohjaa nuolinäppäimillä, WASD-näppäimillä, ruutupainikkeilla tai pyyhkäisemällä.",
+    "descriptions": {},
     "author": "Tuukka Tihekari",
     "tags": [
       "snake",
@@ -67,6 +70,7 @@
     "slug": "tobu-tobu-girl-deluxe",
     "title": "Tobu Tobu Girl Deluxe",
     "description": "A fast-paced Game Boy Color arcade platformer by Tangram Games, running directly in your browser through Game Boy emulation. This open-source browser deployment contains the official ROM and uses the MIT-licensed binjgb emulator.",
+    "descriptions": {},
     "author": "Tuukka Tihekari",
     "tags": [
       "arcade",
@@ -91,6 +95,7 @@
     "slug": "bigbools-amp",
     "title": "Bigbools Player",
     "description": "A browser radio and music player with live stations, Audius and Creative Commons Internet Archive netlabels. Short tracks under one minute are filtered out.",
+    "descriptions": {},
     "author": "Tuukka Tihekari",
     "tags": [
       "music-player",
@@ -114,6 +119,7 @@
     "slug": "bigbools-tv",
     "title": "Bigbools TV",
     "description": "A browser television app with legally redistributable and creator-authorized live channels.",
+    "descriptions": {},
     "author": "Tuukka Tihekari",
     "tags": [
       "live-tv",
@@ -138,6 +144,7 @@
     "slug": "bigbools-pocket",
     "title": "Bigbools Pocket",
     "description": "A browser-based retro handheld packed with open-licensed Game Boy and Game Boy Color games.",
+    "descriptions": {},
     "author": "Tuukka Tihekari",
     "tags": [
       "game-boy",
@@ -162,6 +169,7 @@
     "slug": "voxide-ps1",
     "title": "VoXide",
     "description": "A real PlayStation 1 homebrew survival sandbox. Mine, craft, explore and save a procedural voxel world in VoXide v0.1.11, running from the official BIN/CUE in the open-source PSoXide browser emulator.",
+    "descriptions": {},
     "author": "Tuukka Tihekari",
     "tags": [
       "PlayStation 1",
@@ -185,6 +193,7 @@
     "slug": "cortex-ignition-ps1",
     "title": "Cortex Ignition",
     "description": "A real PlayStation 1 homebrew 3D action tech demo. Fight with light and heavy attacks, dodge, lock on and swap combat stances, with original CD audio in the open-source PSoXide browser emulator.",
+    "descriptions": {},
     "author": "Tuukka Tihekari",
     "tags": [
       "PlayStation 1",
@@ -208,6 +217,7 @@
     "slug": "tyracraft",
     "title": "TyraCraft",
     "description": "An open-source voxel sandbox built natively for PlayStation 2, running through PS2 emulation directly in your browser.",
+    "descriptions": {},
     "author": "Tuukka Tihekari",
     "tags": [
       "PlayStation 2",
@@ -239,6 +249,7 @@
     "slug": "thruster",
     "title": "Thruster",
     "description": "A cave-flying time attack. Thrust and steer a rocket through caverns, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Analog stick that steers relative to the rocket's heading, keyboard support, ghost replay of your best run on every level, and everything (levels, art, sound) generated in code.",
+    "descriptions": {},
     "author": "Carl Vuorinen",
     "tags": [
       "arcade",
@@ -251,16 +262,17 @@
     "ownerId": "00467d4f-580d-4f75-882e-24ae9b02a0a4",
     "ownerFolder": "carl-vuorinen",
     "entryFile": "index.html",
-    "revision": 1,
+    "revision": 2,
     "sizeBytes": 154236,
     "createdAt": "2026-09-18T05:19:46.032Z",
-    "updatedAt": "2026-09-20T21:28:47.097Z"
+    "updatedAt": "2026-09-20T21:33:23.486Z"
   },
   {
     "id": "cb902f16-8749-47d0-bd6f-399f06bcf15d",
     "slug": "thruster-2",
     "title": "Thruster Time Attack",
     "description": "A cave-flying time attack with shared leaderboards and ghosts. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Every level has its own board: land, put your name up once, and the fastest pilots are there in the menu and on the finish screen. Every posted time carries the run that flew it, so any row can be watched from the outside or raced as a ghost beside you. Touch, keyboard and controller all fly it: the touch stick steers relative to the rocket's heading, a controller's stick and d-pad turn it the way the arrow keys do, and a gamepad walks the menus too. Everything (levels, art, sound) is generated in code. A fork of Thruster by Carl Vuorinen, with the portal's leaderboard and gamepad plugins added.",
+    "descriptions": {},
     "author": "Sami Lehtilä",
     "tags": [
       "arcade",
@@ -290,6 +302,7 @@
     "slug": "space-taxi",
     "title": "Space Taxi",
     "description": "Lentävä taksi, laskeutumisalustoja ja bensa-asema. Nosta tyyppi kyytiin ja vie hänet perille nopeasti — tippimittari alkaa valua heti noudosta, joten aika on rahaa. Laskuteline pitää laskea ennen kosketusta, ja telineen ollessa alhaalla sivusuuttimet eivät toimi. Polttoaine maksaa, keikka tuottaa, ja jos kuolet lasti kyydissä, keikka menee. Kun kaikilla alustoilla on käyty, saat jatkaa seuraavaan tasoon. Kunnianosoitus Muse Softwaren vuoden 1984 C64-klassikolle. Yksi vuoro, portaalin ohjaussauva ja yhteinen tulostaulu.",
+    "descriptions": {},
     "author": "Sami Lehtilä",
     "tags": [
       "arcade",
@@ -314,6 +327,7 @@
     "slug": "ohjainkoe",
     "title": "Ohjainkoe",
     "description": "Toimiiko ohjaimesi? Tämä sivu näyttää kaiken mitä selain ohjaimestasi lukee: napit, sauvat, liipaisimet ja sen tunnistaman mappauksen. Jos peli ei tottele ohjainta, täältä näkee onko vika ohjaimessa, selaimessa vai pelissä. Klikkaa ruutua ja paina ohjaimen nappia — selain piilottaa ohjaimet sivulta jolla ei ole fokusta. Sivu ajaa gamepad-pluginin v1:tä, samaa jota pelit lataavat.",
+    "descriptions": {},
     "author": "Sami Lehtilä",
     "tags": [
       "työkalu",
@@ -334,6 +348,7 @@
     "slug": "thruster-lb-study-scratch",
     "title": "Thruster LB study (scratch)",
     "description": "A cave-flying time attack with shared leaderboards and ghosts. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Every level has its own board: land, put your name up once, and the fastest pilots are there in the menu and on the finish screen. Every posted time carries the run that flew it, so any row can be watched from the outside or raced as a ghost beside you. Touch, keyboard and controller all fly it: the touch stick steers relative to the rocket's heading, a controller's stick and d-pad turn it the way the arrow keys do, and a gamepad walks the menus too. Everything (levels, art, sound) is generated in code. A fork of Thruster by Carl Vuorinen, with the portal's leaderboard and gamepad plugins added.",
+    "descriptions": {},
     "author": "Carl Vuorinen",
     "tags": [
       "arcade",
