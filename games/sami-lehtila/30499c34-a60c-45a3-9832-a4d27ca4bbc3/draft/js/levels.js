@@ -57,3 +57,10 @@ import { troublefactory } from './levels/troublefactory.js';
 import { moonshot } from './levels/moonshot.js';
 
 export const LEVELS = [intro, highrise, funfair, stormport, troublefactory, moonshot];
+
+/* Sama järjestys tiedostoniminä. Tämä on vain sitä varten, että säätöpaneelin
+   "lataa kenttä" saa tuotua kentän uudestaan ilman koko sivun latausta —
+   kenttää rakentaessa sivu ladataan kymmeniä kertoja, ja sivun lataus pudottaa
+   kokoruututilan ja avoimet paneelit. Kentän vaihtaminen ei koske tätä riviä
+   sen enempää kuin LEVELS-riviäkään. */
+export const LEVEL_FILES = ['intro', 'highrise', 'funfair', 'stormport', 'troublefactory', 'moonshot'];
