@@ -420,6 +420,10 @@ async function reloadLevel() {
   }
   applyBody(keep);                             // ja säädetyt arvot takaisin
   sketch.forget(lv.name);
+  /* Luonnos uusiksi samalla: jos kentän muutos oli juuri se että luonnos
+     kirjoitettiin lähteeseen ja tyhjennettiin, tässä selaimessa olevat siirrot
+     ja lisäykset piirtyisivät muuten toiseen kertaan jo kirjoitettujen päälle. */
+  try { await sketch.sync(); } catch (e) {}
   beginLevel(levelIndex, false);
   return true;
 }
