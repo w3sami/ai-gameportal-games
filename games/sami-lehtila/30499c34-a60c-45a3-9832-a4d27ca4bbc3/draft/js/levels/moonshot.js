@@ -65,7 +65,7 @@ const DOORS = [
   { id: 'TR-MR', axis: 'H', line: 0, at: 596, dir: -1, phase: 0.72 },
   { id: 'ML-C', axis: 'V', line: 0, at: 404, dir: -1, phase: 0.40 },
   { id: 'C-MR', axis: 'V', line: 1, at: 520, dir: -1, phase: 0.12 },
-  { id: 'ML-BL', axis: 'H', line: 1, at: 40, dir: -1, phase: 0.66 },
+  { id: 'ML-BL', axis: 'H', line: 1, at: 140, dir: 1, phase: 0.66 },
   { id: 'C-BM', axis: 'H', line: 1, at: 352, dir: -1, phase: 0.85 },
   { id: 'MR-BR', axis: 'H', line: 1, at: 540, dir: -1, phase: 0.34 },
   { id: 'BM-BR', axis: 'V', line: 1, at: 780, dir: 1, phase: 0.58 },
