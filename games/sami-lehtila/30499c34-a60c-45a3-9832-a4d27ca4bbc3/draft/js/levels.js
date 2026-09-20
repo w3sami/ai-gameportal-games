@@ -19,6 +19,14 @@
  *               asiakas ja hautakivet kulkevat mukana
  *   start       alusta jolle taksi palaa kolarin jälkeen
  *   firstFrom   alusta jolle ensimmäinen asiakas ilmestyy
+ *   edit        mitä kenttäeditori saa raahata, valinnainen:
+ *               [{ id, kind: 'pad' | 'prop', obj, label }]
+ *               obj on olio jolla on x ja y ja jonka piirto lukee ne joka
+ *               ruudulla; alustoille se on tämän listan oma alusta-olio.
+ *               Editori ei kirjoita kenttätiedostoa — se tallentaa siirrot
+ *               luonnokseksi (config/sketch.json), josta luvut kirjoitetaan
+ *               tänne käsin. Kentän luvut ovat aina ne joita peli käyttää.
+ *               Ks. js/editor.js.
  *
  * Kenttä alkaa aina ilmasta: taksi tulee sisään katon luukusta, jarruttaa
  * paikalleen, luukku sulkeutuu ja peli käynnistyy READY–GO:lla.
