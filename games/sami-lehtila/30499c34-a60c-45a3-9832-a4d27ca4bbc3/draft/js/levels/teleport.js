@@ -193,14 +193,61 @@ const TANKS = [
   { x: 684, y: 1008, h: 130, col: '#ffd479' },
 ];
 
-/* Laiteräkit. Paikat on valittu niin etteivät ne ole portin suulla eivätkä
-   alustan päällä — sama sääntö kuin kuukentän tolpilla. */
+/* Laiteräkit **seisovat kansilevyllä**. Ensimmäisessä versiossa ne leijuivat
+   keskellä huonetta kiinni missään, ja Sami huomasi sen heti: *"serveriräkit on
+   hassuissa paikoissa."* Kaappi on huonekalu, ja huonekalu seisoo lattialla.
+
+   Paikat on lisäksi valittu niin etteivät ne ole portin suulla eivätkä alustan
+   päällä — sama sääntö kuin kuukentän tolpilla. */
 const RACKS = [
-  { x: 24, y: 32, w: 40, h: 76 },
-  { x: 648, y: 40, w: 40, h: 90 },
-  { x: 90, y: 536, w: 40, h: 84 },
-  { x: 648, y: 700, w: 40, h: 100 },
+  { x: 196, y: 394, w: 40, h: 96 },           // TL
+  { x: 480, y: 386, w: 40, h: 104 },          // TR
+  { x: 200, y: 902, w: 40, h: 92 },           // BL
+  { x: 560, y: 894, w: 40, h: 100 },          // BR
 ];
+
+/* --------------------------------------------------------------- putkisto
+
+   Sami piirsi nämä luonnoslehtiöön vapaalla vedolla, ja ne piirretään sitä
+   polkua pitkin: veto ON muoto, eikä siitä kannata tehdä siistimpää kuin se
+   on. Pisteet ovat hänen vetonsa harvennettuna 26 pikselin välein.
+
+   Paksu on haitaripalje — silmukka joka pullistuu seinästä ulos ja palaa
+   takaisin, eli lämpölaajenemisen varaa. Ohuet tulevat väliseinästä ja
+   laskeutuvat lattiaan. */
+const PIPES = [
+  { w: 18, ribs: 11, pts: [[349, 192], [319, 194], [295, 204], [275, 221], [260, 251],
+                           [265, 283], [284, 310], [306, 325], [336, 328], [344, 328]] },
+  { w: 7, pts: [[374, 292], [408, 295], [432, 312], [432, 345], [432, 372],
+                [432, 399], [435, 425], [436, 456], [438, 479]] },
+  { w: 7, pts: [[372, 257], [405, 257], [436, 258], [457, 279], [461, 312],
+                [461, 338], [461, 367], [461, 394], [461, 427], [461, 453], [461, 481]] },
+];
+
+/* Pisaralamput johdon päässä, TR:n katosta. */
+const DROPS = [
+  { x: 443, y0: 26, y1: 121, col: '#ffd479' },
+  { x: 487, y0: 27, y1: 86, col: '#ffd479' },
+];
+
+/* Hylly pikkubeakereineen, BR. */
+const SHELF = { x0: 405, x1: 524, y: 733 };
+
+/** Kävelee polkua pitkin ja kutsuu takaisin joka `step` pikselin välein,
+    mukana paikallinen suunta. Haitariputken kylkiluut tarvitsevat sen. */
+function walk(pts, step, fn) {
+  let carry = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1];
+    const [x1, y1] = pts[i];
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    const a = Math.atan2(y1 - y0, x1 - x0);
+    for (let d = step - carry; d < len; d += step) {
+      fn(x0 + ((x1 - x0) * d) / len, y0 + ((y1 - y0) * d) / len, a);
+    }
+    carry = (carry + len) % step;
+  }
+}
 
 function sheet(paint) {
   const c = document.createElement('canvas');
@@ -254,6 +301,59 @@ function paintBack(g) {
     for (let y = k.y + 8; y < k.y + k.h - 8; y += 12) g.fillRect(k.x + 5, y, k.w - 10, 7);
   }
 
+  /* Putki piirretään polkuna: runko yhtenä vetona, valoreuna ylävasemmalle
+     toisena, ja haitarille vielä kylkiluut kohtisuoraan polkua vastaan. */
+  for (const q of PIPES) {
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.strokeStyle = STEEL;
+    g.lineWidth = q.w;
+    g.beginPath();
+    q.pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.stroke();
+    g.strokeStyle = LIT;
+    g.lineWidth = Math.max(1.5, q.w * 0.16);
+    g.beginPath();
+    q.pts.forEach(([x, y], i) => (i ? g.lineTo(x - 1.5, y - 1.5) : g.moveTo(x - 1.5, y - 1.5)));
+    g.stroke();
+    if (q.ribs) {
+      g.strokeStyle = STEEL_HI;
+      g.lineWidth = 3;
+      walk(q.pts, q.ribs, (x, y, a) => {
+        const nx = -Math.sin(a) * (q.w * 0.62);
+        const ny = Math.cos(a) * (q.w * 0.62);
+        g.beginPath(); g.moveTo(x - nx, y - ny); g.lineTo(x + nx, y + ny); g.stroke();
+      });
+    }
+    for (const [x, y] of [q.pts[0], q.pts[q.pts.length - 1]]) {
+      g.fillStyle = STEEL_HI;                 // laippa päihin
+      g.fillRect(x - q.w * 0.62, y - q.w * 0.62, q.w * 1.24, q.w * 1.24);
+      g.fillStyle = LIT;
+      g.fillRect(x - q.w * 0.62, y - q.w * 0.62, q.w * 1.24, 1.5);
+    }
+  }
+
+  g.fillStyle = STEEL_HI;                     // hylly ja kannattimet
+  g.fillRect(SHELF.x0, SHELF.y, SHELF.x1 - SHELF.x0, 5);
+  g.fillStyle = LIT;
+  g.fillRect(SHELF.x0, SHELF.y, SHELF.x1 - SHELF.x0, 1.5);
+  g.fillStyle = STEEL;
+  for (const x of [SHELF.x0 + 10, SHELF.x1 - 16]) {
+    g.beginPath();
+    g.moveTo(x, SHELF.y + 5); g.lineTo(x + 6, SHELF.y + 5); g.lineTo(x + 6, SHELF.y + 17);
+    g.closePath(); g.fill();
+  }
+  const BEAK = ['#7bf0a0', '#6fe3ff', '#ff8a3d', '#c58cff'];
+  for (let i = 0; i < 4; i++) {               // pikkubeakerit
+    const x = SHELF.x0 + 16 + i * 28, h = 13 + (i % 2) * 4;
+    g.fillStyle = 'rgba(150,200,240,.13)';
+    g.fillRect(x, SHELF.y - h, 11, h);
+    g.fillStyle = fade(BEAK[i], 0.5);
+    g.fillRect(x + 1, SHELF.y - h * 0.5, 9, h * 0.5 - 1);
+    g.fillStyle = 'rgba(214,232,255,.22)';
+    g.fillRect(x + 1.5, SHELF.y - h + 2, 2, h - 4);
+  }
+
   for (const t of TANKS) {
     const w = 26, top = t.y - t.h;
     g.fillStyle = 'rgba(120,180,230,.09)';    // lasi
@@ -293,32 +393,6 @@ function paintFace(g) {
   }
 }
 
-/** Portin koneisto: kelakaaret ja päätykappaleet. Vain sisäänmenoilla aina —
-    ulostulon koneisto ilmestyy portin mukana, koska muuten se paljastaisi
-    paikan jonka on määrä olla piilossa. */
-function housing(ctx, x, y, r, col, a) {
-  if (a <= 0.01) return;
-  const R = r * 1.5;
-  ctx.save();
-  ctx.globalAlpha = a;
-  ctx.translate(x, y);
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = STEEL_HI;
-  ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.arc(0, 0, R, -2.5, -0.65); ctx.stroke();
-  ctx.beginPath(); ctx.arc(0, 0, R, 0.65, 2.5); ctx.stroke();
-  ctx.strokeStyle = LIT;
-  ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.arc(0, 0, R - 1.8, -2.5, -0.65); ctx.stroke();
-  ctx.fillStyle = STEEL;
-  for (const sgn of [-1, 1]) ctx.fillRect(sgn * R - 6, -8, 12, 16);
-  ctx.fillStyle = col;
-  ctx.shadowColor = col;
-  ctx.shadowBlur = 8;
-  for (const sgn of [-1, 1]) ctx.fillRect(sgn * R - 2, -2, 4, 4);
-  ctx.restore();
-}
-
 /** Elävä osa: räkkien merkkivalot ja lasien sisällöt. */
 function labLive(ctx) {
   for (let i = 0; i < RACKS.length; i++) {
@@ -343,6 +417,29 @@ function labLive(ctx) {
     ctx.beginPath(); ctx.arc(t.x, cy, 22, 0, 6.3); ctx.fill();
     ctx.fillStyle = fade(t.col, 0.85);
     ctx.beginPath(); ctx.ellipse(t.x, cy, 7, 5.5, u * 3, 0, 6.3); ctx.fill();
+  }
+
+  /* Pisaralamput: johto katosta ja hohtava pisara sen päässä. Hohde elää, itse
+     lamppu ei — vilkkuva työvalo tarkoittaisi jotain muuta kuin valaistusta. */
+  for (let i = 0; i < DROPS.length; i++) {
+    const l = DROPS[i];
+    ctx.strokeStyle = 'rgba(20,26,38,.9)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(l.x, l.y0); ctx.lineTo(l.x, l.y1 - 7); ctx.stroke();
+    const glow = 0.5 + Math.sin(clock / 900 + i * 1.7) * 0.08;
+    const g = ctx.createRadialGradient(l.x, l.y1, 0, l.x, l.y1, 34);
+    g.addColorStop(0, fade(l.col, glow * 0.5));
+    g.addColorStop(1, fade(l.col, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(l.x, l.y1, 34, 0, 6.3); ctx.fill();
+    ctx.fillStyle = fade(l.col, 0.95);        // pisara: kärki ylös, pallo alas
+    ctx.beginPath();
+    ctx.moveTo(l.x, l.y1 - 12);
+    ctx.quadraticCurveTo(l.x + 7, l.y1 - 2, l.x, l.y1 + 6);
+    ctx.quadraticCurveTo(l.x - 7, l.y1 - 2, l.x, l.y1 - 12);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.5)';
+    ctx.beginPath(); ctx.arc(l.x - 1.8, l.y1 - 2, 1.8, 0, 6.3); ctx.fill();
   }
 }
 
@@ -455,16 +552,12 @@ function drawBack(ctx) {
     const busy = trip && trip.p === p && trip.phase === 'in';
     const pull = busy ? 1 - clamp01(trip.t / WARP.suck) : 1;
     const pulse = 1 + Math.sin(spin * 2.2 + p.a.x) * 0.05;
-    housing(ctx, p.a.x, p.a.y, p.a.r, p.col, 1);
     portal(ctx, p.a.x, p.a.y, p.a.r * pulse * lerp(1, 1.4, 1 - pull), p.col,
            spin * (busy ? 5 : 1.4), busy ? 1 : 0.8);
 
-    /* Ulostulo vain silloin kun siitä tullaan — koneistoineen, koska pelkkä
-       koneisto paljastaisi paikan jonka on määrä olla piilossa. */
+    /* Ulostulo vain silloin kun siitä tullaan. */
     if (p.b.open > 0) {
-      const u = ease(p.b.open);
-      housing(ctx, p.b.x, p.b.y, p.b.r * u, p.col, u);
-      portal(ctx, p.b.x, p.b.y, p.b.r * u, p.col, -spin * 4, 1);
+      portal(ctx, p.b.x, p.b.y, p.b.r * ease(p.b.open), p.col, -spin * 4, 1);
     }
   }
 }
