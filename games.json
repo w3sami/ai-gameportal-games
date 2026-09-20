@@ -328,5 +328,34 @@
     "sizeBytes": 18357,
     "createdAt": "2026-09-19T16:00:10.254Z",
     "updatedAt": "2026-09-19T19:16:43.136Z"
+  },
+  {
+    "id": "161e37b9-dbf2-4775-bf2f-ce85149c2355",
+    "slug": "thruster-lb-study-scratch",
+    "title": "Thruster LB study (scratch)",
+    "description": "A cave-flying time attack with shared leaderboards and ghosts. Thrust and steer a rocket through ten cavern levels, from the launch pad to the green landing pad, as fast as you can. Gravity never lets up; touching anything but a pad ends the run. Every level has its own board: land, put your name up once, and the fastest pilots are there in the menu and on the finish screen. Every posted time carries the run that flew it, so any row can be watched from the outside or raced as a ghost beside you. Touch, keyboard and controller all fly it: the touch stick steers relative to the rocket's heading, a controller's stick and d-pad turn it the way the arrow keys do, and a gamepad walks the menus too. Everything (levels, art, sound) is generated in code. A fork of Thruster by Carl Vuorinen, with the portal's leaderboard and gamepad plugins added.",
+    "author": "Carl Vuorinen",
+    "tags": [
+      "arcade",
+      "physics",
+      "time-attack",
+      "cave-flyer",
+      "mobile",
+      "tulostaulu",
+      "ohjain"
+    ],
+    "status": "draft",
+    "ownerId": "00467d4f-580d-4f75-882e-24ae9b02a0a4",
+    "ownerFolder": "carl-vuorinen",
+    "entryFile": "index.html",
+    "forkedFrom": {
+      "gameId": "cb902f16-8749-47d0-bd6f-399f06bcf15d",
+      "title": "Thruster Time Attack",
+      "author": "Sami Lehtilä"
+    },
+    "revision": 0,
+    "sizeBytes": 73465,
+    "createdAt": "2026-09-20T11:57:16.125Z",
+    "updatedAt": "2026-09-20T11:57:16.167Z"
   }
 ]
