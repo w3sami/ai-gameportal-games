@@ -149,7 +149,7 @@
   },
   {
     "name": "portal-events",
-    "description": "Se mitä pelin ympärillä oleva sivu tietää, annettuna pelille, ja molempiin suuntiin: portaalin kieli (fi/en) ja debug-tila. onPortal-käsittelijä ajetaan kerran nykyisellä arvolla ja sen jälkeen jokaisesta muutoksesta, ja setPortal kertoo portaalille mitä pelaaja valitsi pelin sisällä — jolloin kieltä ei ole kahta vaan yksi. Arvo muuttuu vasta kun portaali vahvistaa, joten peli piirtää käsittelijästä. portal.ready ratkeaa aina, myös portaalia vasten joka ei tunne tätä pluginia. Suoraan avatussa pelissä arvot ovat arvauksia: selaimen kieli, ja debugille ?debug tai localStorage.debug === \"1\".\n\n1.2.0: savePortalFile(file, content) tallentaa pelin omat säätöarvot sen config-kansioon draftiin, jolloin julkaisu vie ne mukanaan oletuksiksi kaikille. Peli ei kirjoita itse vaan pyytää emosivulta, joka tarkistaa omistajuuden palvelimella — onnistuu siis vain tekijän omalla pelisivulla, ja portal.canWrite kertoo kummalla ollaan. Polku on config/*.json, katot 64 kt tiedosto sekä 256 kt ja 20 tiedostoa koko kansiolle. Lupaus ratkeaa aina: { saved, reason } eikä koskaan hylkäystä.",
+    "description": "Se mitä pelin ympärillä oleva sivu tietää, annettuna pelille, ja molempiin suuntiin: portaalin kieli (fi/en), debug-tila ja tauko. onPortal-käsittelijä ajetaan kerran nykyisellä arvolla ja sen jälkeen jokaisesta muutoksesta, ja setPortal kertoo portaalille mitä pelaaja valitsi pelin sisällä — jolloin kieltä ei ole kahta vaan yksi. Arvo muuttuu vasta kun portaali vahvistaa, joten peli piirtää käsittelijästä. portal.ready ratkeaa aina, myös portaalia vasten joka ei tunne tätä pluginia. Suoraan avatussa pelissä arvot ovat arvauksia: selaimen kieli, ja debugille ?debug tai localStorage.debug === \"1\".\n\n1.2.0: savePortalFile(file, content) tallentaa pelin omat säätöarvot sen config-kansioon draftiin, jolloin julkaisu vie ne mukanaan oletuksiksi kaikille. Peli ei kirjoita itse vaan pyytää emosivulta, joka tarkistaa omistajuuden palvelimella — onnistuu siis vain tekijän omalla pelisivulla, ja portal.canWrite kertoo kummalla ollaan. Polku on config/*.json, katot 64 kt tiedosto sekä 256 kt ja 20 tiedostoa koko kansiolle. Lupaus ratkeaa aina: { saved, reason } eikä koskaan hylkäystä.\n\n1.3.0: pause. Sivu pyytää peliä pysymään paikallaan — peli piirtää mutta ei etene — ja kytkin on pelin omalla sivulla debug-kytkimen vieressä. Liikkuvaa kenttää ei voi lukea liikkeestä, eikä taksin tarvitse ajelehtia seinään sillä aikaa kun tekijä katsoo mittoja. Kulkee molempiin suuntiin kuten kieli: pelin oma tauko kertoo itsestään setPortalilla ja sivun kytkin seuraa, joten tauko on yksi eikä kaksi.",
     "author": "Sami Lehtilä",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
@@ -205,12 +205,28 @@
         "sizeBytes": 20063,
         "entryFile": "index.js",
         "publishedAt": "2026-09-20T11:03:09.158Z"
+      },
+      {
+        "version": "1.3.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 12681
+          },
+          {
+            "path": "README.md",
+            "sizeBytes": 9128
+          }
+        ],
+        "sizeBytes": 21809,
+        "entryFile": "index.js",
+        "publishedAt": "2026-09-20T12:29:26.195Z"
       }
     ],
     "aliases": {
-      "v1": "1.2.1"
+      "v1": "1.3.0"
     },
     "createdAt": "2026-09-19T16:39:55.099Z",
-    "updatedAt": "2026-09-20T11:03:09.158Z"
+    "updatedAt": "2026-09-20T12:29:26.195Z"
   }
 ]
