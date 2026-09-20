@@ -7,13 +7,16 @@
 .lb-note{margin:0;font-size:13px;color:var(--dim);line-height:1.45}
 .lb-note.good{color:var(--good)}
 .lbrows{list-style:none;margin:0;padding:0}
-.lbrow{display:flex;align-items:baseline;gap:10px;padding:5px 8px;border-radius:6px;font-size:14px;line-height:1.3}
+.lbrow{display:flex;align-items:center;gap:10px;padding:5px 8px;border-radius:6px;font-size:14px;line-height:1.3;min-height:34px}
 .lbrow:nth-child(odd){background:rgba(255,255,255,.03)}
 .lbrow.top .t{color:var(--accent)}
 .lbrow.me{background:rgba(227,162,60,.14);box-shadow:inset 0 0 0 1px rgba(227,162,60,.35)}
 .lbrow .r{width:2.2em;flex:none;color:var(--dim);font-variant-numeric:tabular-nums}
 .lbrow .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lbrow .t{flex:none;font-variant-numeric:tabular-nums;font-weight:600}
+.lbgo{flex:none;padding:3px 9px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.06);font-size:11.5px;font-weight:600;letter-spacing:.06em;color:var(--dim)}
+.lbgo:hover{color:var(--ink);border-color:rgba(227,162,60,.6)}
+.lbgo:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .lb-foot{margin-top:10px}
 .lb-ctl{margin-top:6px;font-size:13px;color:var(--dim)}
 .lb-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
