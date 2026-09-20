@@ -449,7 +449,9 @@ export function createEditor(host) {
     }
     for (const p of host.pads()) {
       ctx.strokeStyle = p.fuel ? C.fuel : C.pad;
-      ctx.strokeRect(p.x + 0.7, p.y + 0.7, p.w - 1.4, p.h - 1.4);
+      /* Ääriviiva alustan ulkopuolelle: alustalla on oma punasininen valolista,
+         ja sen sisään piirretty viiva hukkuu siihen. */
+      ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3);
       ctx.setLineDash([3, 3]);                 // tunnuspallo alustan alla
       ctx.beginPath();
       ctx.arc(p.x + p.w / 2, p.y + p.h + 22, 13, 0, 6.3);
@@ -470,6 +472,7 @@ export function createEditor(host) {
     for (const w of warns) if (w.box) ctx.strokeRect(w.box.x - 3, w.box.y - 3, w.box.w + 6, w.box.h + 6);
     ctx.lineWidth = 1.4;
 
+    ctx.globalAlpha = tool === 'move' ? 1 : 0.35;
     for (const it of items()) handle(ctx, it);
     ctx.restore();
   }
@@ -734,20 +737,30 @@ export function createEditor(host) {
     inp.placeholder = isShape(sel) ? 'mitä tähän oli tarkoitus' : 'piirrä tai valitse muoto';
     inp.value = (isShape(sel) && sel.text) || '';
     inp.disabled = !isShape(sel);
-    inp.addEventListener('input', () => { sel.text = inp.value; saveLocal(); });
     row.append(inp);
     box.append(row);
 
     const list = el('ul', 'list');
+    let selName = null;
     for (const s of shapes) {
       const li = el('li', sel === s ? 'on' : null);
       const dot = el('span', 'dot');
       dot.style.background = colOf(s.label);
-      li.append(dot, el('span', 'n', s.text ? s.label + ': ' + s.text : s.label),
-        el('span', 'v', s.kind === 'rect' ? `${s.w}×${s.h}` : s.kind));
+      const name = el('span', 'n', s.text ? s.label + ': ' + s.text : s.label);
+      if (s === sel) selName = name;
+      li.append(name, el('span', 'v', s.kind === 'rect' ? `${s.w}×${s.h}` : s.kind));
+      li.prepend(dot);
       li.addEventListener('click', () => { sel = s; label = s.label; build(); });
       list.append(li);
     }
+    /* Rivi seuraa kirjoittamista suoraan eikä koko laatikkoa rakenneta uusiksi:
+       uudelleenrakennus veisi kohdistuksen kesken sanan. Kangas lukee tekstin
+       joka ruudulla, joten se päivittyy itsestään. */
+    inp.addEventListener('input', () => {
+      sel.text = inp.value;
+      if (selName) selName.textContent = sel.text ? sel.label + ': ' + sel.text : sel.label;
+      saveLocal();
+    });
     if (!shapes.length) list.append(el('li', 'empty', 'ei vielä maalauksia'));
     box.append(list);
     box.append(el('p', 'hint', 'vedä kankaalle · label kertoo mitä tarkoitit, teksti miksi'));
@@ -785,8 +798,8 @@ export function createEditor(host) {
     const mv = moves();
     if (mv.length) {
       box.append(el('p', 'hint',
-        `${mv.length} siirtoa on voimassa vain tässä selaimessa — tallenna luonnos ` +
-        'ja pyydä kirjoittamaan ne kenttätiedostoon'));
+        `${mv.length} ${mv.length === 1 ? 'siirto' : 'siirtoa'} on voimassa vain tässä ` +
+        'selaimessa — tallenna luonnos ja pyydä kirjoittamaan ne kenttätiedostoon'));
     }
 
     const noteEl = el('p', 'note', note);
