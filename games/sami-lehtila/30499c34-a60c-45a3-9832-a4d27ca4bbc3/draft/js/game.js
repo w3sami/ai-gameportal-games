@@ -361,8 +361,8 @@ const sketch = createSketch({
      Sulkeminen palauttaa sen mikä oli. */
   /* saveDev vasta täällä eikä kytkimessä: lehtiö ladataan vasta avattaessa,
      joten kytkin kirjaisi tilan ennen kuin se on totta. */
-  onOpen: () => { sketchPaused = paused; setPaused(true); saveDev(); refreshPanel(); },
-  onClose: () => { setPaused(sketchPaused); saveDev(); refreshPanel(); },
+  onOpen: () => { sketchPaused = paused; setPaused(true); dev.sketch = true; saveDev(); refreshPanel(); },
+  onClose: () => { setPaused(sketchPaused); dev.sketch = false; saveDev(); refreshPanel(); },
 });
 
 /* ---------------------------------------------------------- kehittäjän tila
@@ -377,10 +377,12 @@ const DEV_STORE = 'spacetaxi.dev';
 const dev = { panel: false, sketch: false, level: -1 };
 try { Object.assign(dev, JSON.parse(localStorage.getItem(DEV_STORE) || 'null') || {}); } catch (e) {}
 let devReady = false;                          // vasta palautuksen jälkeen
+/* dev.sketch asetetaan käsin eikä lueta sketch.activesta: onOpen ajetaan ennen
+   kuin paneeli on pystyssä — juuri siksi että peli ehtii mennä tauolle ensin —
+   joten siinä hetkessä active on vielä false. */
 function saveDev() {
   if (!devReady) return;
   dev.panel = panelOpen();
-  dev.sketch = sketch.active;
   dev.level = levelIndex;
   try { localStorage.setItem(DEV_STORE, JSON.stringify(dev)); } catch (e) {}
 }
@@ -2423,7 +2425,6 @@ function buildPanel() {
   pauseSeg.append(pbutton(sketch.active ? 'on' : null, 'luonnos', () => {
     Promise.resolve(sketch.toggle()).then(ok => {
       if (ok === false && !sketch.active) panelNote = 'luonnoslehtiötä ei saatu ladattua';
-      saveDev();
       refreshPanel();
     });
   }));
