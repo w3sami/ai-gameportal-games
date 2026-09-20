@@ -1,8 +1,7 @@
 'use strict';
 // Chapter 2 continued: the wind levels. Loaded after levels.js, so it just appends to LEVELS.
 // Wind forces: {kind:'wind', x,y,w,h, ax:±, period, duty, phase, src}. Horizontal only, no drag; the gust cycle comes from
-// period/duty/phase and runs on sim ticks, so replays stay exact. A gust ramps in and out inside its on-window (see RAMP in
-// game.js); a band may set its own `ramp` in seconds. src is the visual source — 'hollow' (a knot-hole on the
+// period/duty/phase and runs on sim ticks, so replays stay exact. src is the visual source — 'hollow' (a knot-hole on the
 // upwind trunk face), 'fissure' (a crack on the upwind rock face), 'sky' (none: the wind is simply there because the space is
 // open, so only valid where it is). Not read by the engine yet. Opposing gusts always sit in separate vertical bands.
 const EDGE_TRUNKS = w => [{x:-20,y:4000,tx:-20,ty:-200,w:300,taper:0,seed:-340}, {x:260,y:4000,tx:260,ty:-200,w:260,taper:0,seed:1620}, {x:w+20,y:4000,tx:w+20,ty:-200,w:300,taper:0,seed:w*7}, {x:w-260,y:4000,tx:w-260,ty:-200,w:260,taper:0,seed:w*7-1960}];
@@ -49,7 +48,8 @@ LEVELS.push(
    // storey below the two others, then a long gallery out over the roof of the deep chamber. Low road: no wind, but three heavy
    // falls to punch through, and then the whole climb up the deep chamber and the shaft. The two only meet at the pad, which sits
    // on a limb high in the shaft head: the high road arrives level with it, the low road has to climb the last thousand.
-   // Each pool sits at the floor level under its own fall and stops where the ground rises past the surface, so no band ends in mid-air.
+   // Pools: each band sits at the floor under its own fall, runs into the stump at its near end and dies out where the ground
+   // rises past the surface at the far end, so no edge of water ever ends in the open.
    rooms:[{x:700,y:2400,rx:480,ry:600,wob:0.08,seed:761},
           {x:1900,y:1000,rx:650,ry:450,wob:0.08,seed:762}, {x:3200,y:1730,rx:600,ry:420,wob:0.08,seed:763}, {x:4600,y:900,rx:700,ry:470,wob:0.08,seed:764},
           {x:1800,y:2900,rx:850,ry:500,wob:0.08,seed:765}, {x:3200,y:2950,rx:900,ry:500,wob:0.08,seed:766}, {x:4650,y:2820,rx:950,ry:520,wob:0.08,seed:767},
@@ -64,15 +64,15 @@ LEVELS.push(
            {x:6300,y:1300,tx:6280,ty:1620,w:120,seed:776}],
    trunks:EDGE_TRUNKS(7400).concat([{x:1700,y:3500,tx:1700,ty:2900,w:240,taper:0.15,broken:true,seed:777}, {x:3150,y:3500,tx:3150,ty:2900,w:220,taper:0.15,broken:true,seed:778},
            {x:1400,y:2200,tx:2250,ty:2350,w:200,taper:0.1,seed:779}, {x:4300,y:2200,tx:5150,ty:2300,w:200,taper:0.1,seed:780},
-           {x:6900,y:3500,tx:6900,ty:2450,w:220,taper:0.15,broken:true,seed:781}, {x:7300,y:1430,tx:6620,ty:1330,w:230,taper:0.1,seed:790}]),
+           {x:4600,y:3500,tx:4600,ty:3180,w:180,taper:0.15,broken:true,seed:791}, {x:6900,y:3500,tx:6900,ty:2450,w:220,taper:0.15,broken:true,seed:781}, {x:7300,y:1430,tx:6620,ty:1330,w:230,taper:0.1,seed:790}]),
    foliage:[{x:1900,y:420,r:420,ry:140,seed:782,tone:1}, {x:4600,y:340,r:450,ry:140,seed:783,tone:0}, {x:3200,y:1210,r:380,ry:130,seed:784,tone:2}, {x:6900,y:820,r:400,ry:140,seed:785,tone:1}],
    hazards:[{x:2300,y:630,tx:2305,ty:880,w:60,seed:786,kind:'branch'}, {x:3450,y:1350,tx:3455,ty:1600,w:60,seed:787,kind:'branch'}, {x:5000,y:520,tx:5005,ty:770,w:60,seed:788,kind:'branch'}, {x:2900,y:2480,tx:2905,ty:2740,w:60,seed:789,kind:'branch'}],
    forces:[{kind:'wind',x:1300,y:600,w:1200,h:780,ax:280,period:4.5,duty:0.4,phase:0,src:'sky'},
            {kind:'wind',x:2650,y:1390,w:1150,h:700,ax:-280,period:4.5,duty:0.4,phase:1.5,src:'fissure'},
            {kind:'wind',x:3950,y:500,w:1300,h:780,ax:300,period:4.5,duty:0.4,phase:3,src:'sky'},
-           {kind:'water',x:2050,y:2300,w:300,h:1075,ay:340,drag:1.6,pool:{x:1850,w:650,h:70}},
-           {kind:'water',x:3600,y:2400,w:300,h:1015,ay:340,drag:1.6,pool:{x:3520,w:360,h:70}},
-           {kind:'water',x:4950,y:2300,w:300,h:1040,ay:340,drag:1.6,pool:{x:4240,w:910,h:70}}],
+           {kind:'water',x:2050,y:2300,w:300,h:1075,ay:340,drag:1.6,pool:{x:1750,w:750,h:70}},
+           {kind:'water',x:3600,y:2400,w:300,h:1050,ay:340,drag:1.6,pool:{x:3200,w:680,h:120}},
+           {kind:'water',x:4950,y:2300,w:300,h:1040,ay:340,drag:1.6,pool:{x:4600,w:900,h:70}}],
    walls:[],
    pads:{start:{x:640,y:2920,w:120,h:100}, target:{x:6740,y:1180,w:120,h:100,base:'bark'}}},
   {name:'Hollow', theme:'jungle', w:2400, h:3400, groundY:2800, canopyY:500,
@@ -124,7 +124,5 @@ LEVELS.push(
            {kind:'wind',x:4390,y:600,w:680,h:1120,ax:340,period:5,duty:0.5,phase:3.75,src:'sky'},
            {kind:'wind',x:5580,y:600,w:320,h:1120,ax:340,period:5,duty:0.5,phase:0.6,src:'sky'}],
    walls:[],
-   // the two end hollows floor out around y=1750–1780, deeper than the 100 px pedestal reached: both pads sat clear of the ground.
-   // Dropped a little and given a taller plinth, so each one is dug into the floor the way the rest of the chapter's pads are.
-   pads:{start:{x:540,y:1650,w:120,h:150}, target:{x:5940,y:1670,w:120,h:150}}}
+   pads:{start:{x:540,y:1620,w:120,h:100}, target:{x:5940,y:1620,w:120,h:100}}}
 );
