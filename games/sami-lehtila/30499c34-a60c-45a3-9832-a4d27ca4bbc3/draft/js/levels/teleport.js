@@ -244,10 +244,14 @@ const PIPES = [
 const DROPS = [
   { room: ROOMS.TR, x: 443, len: 93, col: '#ffd479' },
   { room: ROOMS.TR, x: 487, len: 58, col: '#ffd479' },
-  { room: ROOMS.BL, x: 130, len: 64, col: '#ffd479' },
-  { room: ROOMS.BR, x: 590, len: 60, col: '#ffd479' },
+  { room: ROOMS.BR, x: 606, len: 138, col: '#ffd479' },
+  { room: ROOMS.BR, x: 660, len: 213, col: '#ffd479' },
 ];
-/* TL:ään ei ripusteta mitään, vaikka se on tyhjin huone: HUD piirtyy ruudun
+/* Paikat ovat Samin vetoja, myös pituudet. Ensimmäisessä yrityksessä keksin
+   kaksi viimeistä itse ja panin toisen BL:ään — hän oli piirtänyt molemmat
+   BR:ään. Luonnos on aina se lähde; sitä pitää katsoa ennen kuin arvaa.
+
+   TL:ään ei ripusteta mitään, vaikka se on tyhjin huone: HUD piirtyy ruudun
    vasempaan ylälaitaan, ja sinne ripustettu lamppu jää rahasumman ja
    polttoainepalkin alle. Sama sääntö on kuukentässä, ja se opittiin siellä. */
 for (const l of DROPS) {
