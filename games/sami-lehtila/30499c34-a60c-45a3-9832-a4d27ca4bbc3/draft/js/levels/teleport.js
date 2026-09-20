@@ -160,53 +160,82 @@ function input(vec) {
 
 /* ------------------------------------------------------------------- piirto
 
-   Portti on pyörivä spiraali hehkun sisällä. Spiraali kääntyy koristekellolla
-   eikä pelin kellolla: pelin kello pysähtyy luukusta tullessa, ja pysähtynyt
-   portti näyttäisi rikkinäiseltä. */
-function spiral(ctx, x, y, r, col, spin, glow) {
-  if (r < 0.5) return;
-  ctx.save();
-  ctx.translate(x, y);
+   Portti on pehmeä pyörre: ei yhtään terävää viivaa eikä reunusta, vaan
+   pelkkiä gradientteja. Sami 21.9.2026: *"ei teräviä viivoja vaan pehmeitä
+   gradientteja, enemmän sakaroita, ei reunusta."*
 
-  const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.1);
-  halo.addColorStop(0, col + '55');
-  halo.addColorStop(0.45, col + '22');
-  halo.addColorStop(1, col + '00');
-  ctx.fillStyle = halo;
-  ctx.beginPath(); ctx.arc(0, 0, r * 2.1, 0, 6.3); ctx.fill();
+   Se piirretään **kerran** omalle kankaalleen ja käännetään joka ruudulla
+   `drawImage`lla. Pehmeä pyörre on seitsemän sakaraa, joista jokainen on
+   kolmisenkymmentä sumeaa täplää kierteen varrella — sellaista ei piirretä
+   joka ruudulla neljälle portille, mutta kerran se on ilmaista. Samalla
+   sakaroita saa olla niin monta kuin haluaa.
 
-  ctx.fillStyle = 'rgba(6,8,20,.85)';         // suppilon suu
-  ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.3); ctx.fill();
+   Piirtyy **drawBackissa eikä drawFrontissa**, jotta taksi jää portin päälle:
+   sisäänmenon ja ulostulon skaalausanimaatio on koko homman pointti, eikä sitä
+   näe jos portti piirtyy sen yli. */
+const SPR = 96;                               // sprite-säde pikseleinä
+const SPR_R = 32;                             // ...vastaa tätä portin sädettä
+const ARMS = 7;
 
-  ctx.rotate(spin);
-  ctx.strokeStyle = col;
-  ctx.lineCap = 'round';
-  for (let arm = 0; arm < 3; arm++) {
-    ctx.globalAlpha = glow;
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    for (let i = 0; i <= 26; i++) {
-      const u = i / 26;
-      const ang = arm * 2.094 + u * 3.5;
-      const rr = r * (0.12 + u * 0.86);
-      const px = Math.cos(ang) * rr;
-      const py = Math.sin(ang) * rr;
-      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+/** Heksaväri läpinäkyvyydellä. Kentän värit ovat kuusinumeroisia. */
+const fade = (c, a) => c + Math.round(clamp01(a) * 255).toString(16).padStart(2, '0');
+
+const sprites = new Map();
+function sprite(col) {
+  const had = sprites.get(col);
+  if (had) return had;
+  const c = document.createElement('canvas');
+  c.width = c.height = SPR * 2;
+  const g = c.getContext('2d');
+  g.translate(SPR, SPR);
+
+  const halo = g.createRadialGradient(0, 0, 0, 0, 0, SPR);
+  halo.addColorStop(0, fade(col, 0.30));
+  halo.addColorStop(0.35, fade(col, 0.13));
+  halo.addColorStop(1, fade(col, 0));
+  g.fillStyle = halo;
+  g.beginPath(); g.arc(0, 0, SPR, 0, 6.3); g.fill();
+
+  /* Sakarat summautuvat päällekkäin, jolloin kierteen tiheät kohdat kirkastuvat
+     itsestään eikä mihinkään jää rajaa. */
+  g.globalCompositeOperation = 'lighter';
+  for (let arm = 0; arm < ARMS; arm++) {
+    for (let i = 0; i < 30; i++) {
+      const u = i / 29;
+      const ang = (arm * 6.2832) / ARMS + u * 3.1;
+      const rr = SPR_R * (0.16 + u * 2.05);
+      const x = Math.cos(ang) * rr;
+      const y = Math.sin(ang) * rr;
+      const size = SPR_R * (0.36 - u * 0.21);
+      const dot = g.createRadialGradient(x, y, 0, x, y, size);
+      dot.addColorStop(0, fade(col, 0.15 * (1 - u) ** 1.3));
+      dot.addColorStop(1, fade(col, 0));
+      g.fillStyle = dot;
+      g.beginPath(); g.arc(x, y, size, 0, 6.3); g.fill();
     }
-    ctx.stroke();
   }
-  ctx.globalAlpha = 1;
 
-  ctx.fillStyle = col;                        // ydin
-  ctx.shadowColor = col;
-  ctx.shadowBlur = 14;
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.16, 0, 6.3); ctx.fill();
-  ctx.shadowBlur = 0;
+  const core = g.createRadialGradient(0, 0, 0, 0, 0, SPR_R * 0.6);
+  core.addColorStop(0, fade(col, 0.9));
+  core.addColorStop(0.3, fade(col, 0.4));
+  core.addColorStop(1, fade(col, 0));
+  g.fillStyle = core;
+  g.beginPath(); g.arc(0, 0, SPR_R * 0.6, 0, 6.3); g.fill();
 
-  ctx.globalAlpha = 0.5;                      // kehä
-  ctx.strokeStyle = col;
-  ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.3); ctx.stroke();
+  sprites.set(col, c);
+  return c;
+}
+
+function portal(ctx, x, y, r, col, spin, glow) {
+  if (r < 0.5 || glow <= 0.01) return;
+  ctx.save();
+  ctx.globalAlpha = glow;
+  ctx.globalCompositeOperation = 'lighter';   // hehku summautuu taustaan
+  ctx.translate(x, y);
+  ctx.rotate(spin);
+  const s = r / SPR_R;
+  ctx.scale(s, s);
+  ctx.drawImage(sprite(col), -SPR, -SPR);
   ctx.restore();
 }
 
@@ -226,21 +255,20 @@ function drawBack(ctx) {
     ctx.fillStyle = t.c;
     ctx.fillRect(t.r.x0, t.r.y0, t.r.x1 - t.r.x0, t.r.y1 - t.r.y0);
   }
-}
 
-function drawFront(ctx) {
   const spin = clock / 1000;
   for (const p of PORTALS) {
-    /* Sisäänmeno on aina ruudulla. Se sykkii hieman, ja imiessään enemmän. */
+    /* Sisäänmeno on aina ruudulla. Se sykkii hieman, ja imiessään se kiihtyy
+       ja kasvaa. */
     const busy = trip && trip.p === p && trip.phase === 'in';
     const pull = busy ? 1 - clamp01(trip.t / WARP.suck) : 1;
-    const pulse = 1 + Math.sin(spin * 2.2 + p.a.x) * 0.04;
-    spiral(ctx, p.a.x, p.a.y, p.a.r * pulse * lerp(1, 1.35, 1 - pull), p.col,
-           spin * (busy ? 5 : 1.4), busy ? 1 : 0.75);
+    const pulse = 1 + Math.sin(spin * 2.2 + p.a.x) * 0.05;
+    portal(ctx, p.a.x, p.a.y, p.a.r * pulse * lerp(1, 1.4, 1 - pull), p.col,
+           spin * (busy ? 5 : 1.4), busy ? 1 : 0.8);
 
     /* Ulostulo vain silloin kun siitä tullaan. */
     if (p.b.open > 0) {
-      spiral(ctx, p.b.x, p.b.y, p.b.r * ease(p.b.open), p.col, -spin * 4, 1);
+      portal(ctx, p.b.x, p.b.y, p.b.r * ease(p.b.open), p.col, -spin * 4, 1);
     }
   }
 }
@@ -291,5 +319,4 @@ export const teleport = {
   update,
   input,
   drawBack,
-  drawFront,
 };
