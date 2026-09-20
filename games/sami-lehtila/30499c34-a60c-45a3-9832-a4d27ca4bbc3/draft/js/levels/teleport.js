@@ -6,8 +6,9 @@
  * opettelua eikä käsien nopeutta — ja juuri siksi se on kuudes kenttä eikä
  * Moonshot, joka on vaikea eri syystä.
  *
- *     TL — 1, tankkaus        TR — 2        Portit kiertävät kehää:
- *     BL — 4                  BR — 3        TL → TR → BR → BL → TL
+ *     TL — 1, tankkaus        TR — 2        TL → BR        BR → BL
+ *     BL — 4                  BR — 3        TR → BR        BR → TR
+ *                                           BL → TL (×2)
  *
  * Kolme päätöstä Samilta 21.9.2026:
  *
@@ -58,16 +59,24 @@ const WALLS = [
    Pari on yksisuuntainen: `a` on sisäänmeno ja `b` ulostulo. Yksisuuntaisuus
    on se mikä tekee kartasta kartan — kaksisuuntaisista tulisi pelkkiä ovia.
 
-   Neljä porttia kiertävät kehää, joten mistä tahansa pääsee kaikkialle
-   kiertämällä. Se on tahallaan anteeksiantava: eksyminen maksaa aikaa eikä
-   keikkaa.
+   Kuusi porttia, ja verkko on Samin sommittelema 21.9.2026 — hän siirsi kahta
+   ulostuloa ja piirsi kaksi uutta paria luonnoslehtiöön nuolina, mikä on
+   nuolelle juuri oikea käyttö: kärki kertoo mihin päin.
+
+   **BR on solmu.** TL:stä pääsee vain sinne, ja sieltä sekä TR:ään että
+   BL:ään. BL:stä on kaksi tietä takaisin TL:ään, eri kohtiin. Verkko on yhä
+   vahvasti yhtenäinen — jokaisesta huoneesta pääsee jokaiseen — mutta reitti
+   ei ole enää kehä vaan valinta, ja se on parempi: kehässä ei ole mitään
+   opittavaa.
 
    r  se etäisyys keskipisteestä jolla portti nappaa taksin */
 const PORTALS = [
-  { col: '#7bf0a0', a: { x: 300, y: 120, r: 26 }, b: { x: 640, y: 150, r: 26 } },
-  { col: '#6fe3ff', a: { x: 640, y: 440, r: 26 }, b: { x: 640, y: 620, r: 26 } },
-  { col: '#ffd479', a: { x: 420, y: 950, r: 26 }, b: { x: 300, y: 950, r: 26 } },
-  { col: '#c58cff', a: { x: 60, y: 600, r: 26 }, b: { x: 60, y: 120, r: 26 } },
+  { col: '#7bf0a0', a: { x: 300, y: 120, r: 26 }, b: { x: 416, y: 620, r: 26 } },  // TL → BR
+  { col: '#6fe3ff', a: { x: 640, y: 440, r: 26 }, b: { x: 640, y: 620, r: 26 } },  // TR → BR
+  { col: '#ffd479', a: { x: 420, y: 950, r: 26 }, b: { x: 300, y: 950, r: 26 } },  // BR → BL
+  { col: '#c58cff', a: { x: 60, y: 600, r: 26 }, b: { x: 284, y: 416, r: 26 } },   // BL → TL
+  { col: '#ff8a3d', a: { x: 524, y: 623, r: 26 }, b: { x: 428, y: 423, r: 26 } },  // BR → TR
+  { col: '#ff5d7a', a: { x: 294, y: 791, r: 26 }, b: { x: 69, y: 140, r: 26 } },   // BL → TL
 ];
 
 /* Matkan kesto ja se miten osat menevät limittäin. Portti aukeaa ennen taksia
@@ -156,6 +165,185 @@ function taxiScale() {
 /** Ohjaus ei toimi matkan aikana — taksi on portin sisällä. */
 function input(vec) {
   return trip ? { x: 0, y: 0 } : vec;
+}
+
+/* -------------------------------------------------------------- laboratorio
+
+   Neljä suljettua huonetta joiden välillä liikutaan koneella on koelaitos, ja
+   kenttä piirretään sen mukaan. Sami 21.9.2026: *"laboratorio kuulostaa
+   hienolta teemalta."*
+
+   Kaikki paikallaan pysyvä piirretään **kerran** omalle kankaalleen ja
+   lyödään joka ruudulla yhtenä kuvana. Kahdessa kerroksessa, koska seinät
+   piirtyvät näiden väliin: `BACK` menee seinien alle ja `FACE` niiden päälle.
+   Elävää on vain se mikä vilkkuu tai kelluu.
+
+   Valo tulee ylävasemmalta, kuten kaikessa muussakin talon grafiikassa. */
+const STEEL = '#2a3446', STEEL_HI = '#39465c';
+const LIT = 'rgba(214,224,240,.22)', DARK = 'rgba(0,0,0,.32)';
+
+const ROOM_LIST = [ROOMS.TL, ROOMS.TR, ROOMS.BL, ROOMS.BR];
+
+/* Näytelasit: lasisylinteri, jossa kelluu jotain. Yksi per huone, ja väri on
+   sen huoneen väri — sekin auttaa tietämään missä ollaan. */
+const TANKS = [
+  { x: 332, y: 504, h: 96, col: '#6fe3ff' },
+  { x: 388, y: 504, h: 110, col: '#7bf0a0' },
+  { x: 336, y: 1008, h: 120, col: '#c58cff' },
+  { x: 684, y: 1008, h: 130, col: '#ffd479' },
+];
+
+/* Laiteräkit. Paikat on valittu niin etteivät ne ole portin suulla eivätkä
+   alustan päällä — sama sääntö kuin kuukentän tolpilla. */
+const RACKS = [
+  { x: 24, y: 32, w: 40, h: 76 },
+  { x: 648, y: 40, w: 40, h: 90 },
+  { x: 90, y: 536, w: 40, h: 84 },
+  { x: 648, y: 700, w: 40, h: 100 },
+];
+
+function sheet(paint) {
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  paint(c.getContext('2d'));
+  return c;
+}
+
+let BACK = null, FACE = null;
+
+/** Seinien alle: laattaruudukko, kansilevyt, kanavat, räkit ja lasit. */
+function paintBack(g) {
+  g.strokeStyle = 'rgba(150,180,255,.035)';   // laattaruudukko koko kentälle
+  g.lineWidth = 1;
+  for (let x = 0; x <= W; x += 48) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  for (let y = 0; y <= H; y += 48) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+
+  for (const r of ROOM_LIST) {
+    const w = r.x1 - r.x0;
+
+    g.fillStyle = STEEL;                      // kansilevy lattiaan
+    g.fillRect(r.x0, r.y1 - 14, w, 14);
+    g.fillStyle = LIT;
+    g.fillRect(r.x0, r.y1 - 14, w, 1.5);
+    g.strokeStyle = DARK;                     // levysaumat
+    g.lineWidth = 1.5;
+    for (let x = r.x0 + 56; x < r.x1; x += 56) {
+      g.beginPath(); g.moveTo(x, r.y1 - 14); g.lineTo(x, r.y1); g.stroke();
+    }
+
+    g.fillStyle = STEEL_HI;                   // ilmakanava kattoon
+    g.fillRect(r.x0, r.y0, w, 12);
+    g.fillStyle = LIT;
+    g.fillRect(r.x0, r.y0, w, 1.5);
+    g.fillStyle = DARK;
+    g.fillRect(r.x0, r.y0 + 10.5, w, 1.5);
+    g.fillStyle = STEEL;                      // kannattimet
+    for (let x = r.x0 + 34; x < r.x1 - 20; x += 68) g.fillRect(x, r.y0 + 12, 6, 7);
+  }
+
+  for (const k of RACKS) {
+    g.fillStyle = STEEL;
+    g.fillRect(k.x, k.y, k.w, k.h);
+    g.fillStyle = LIT;
+    g.fillRect(k.x, k.y, k.w, 1.5);
+    g.fillRect(k.x, k.y, 1.5, k.h);
+    g.fillStyle = DARK;
+    g.fillRect(k.x, k.y + k.h - 1.5, k.w, 1.5);
+    g.fillStyle = 'rgba(10,14,24,.55)';       // korttipaikat
+    for (let y = k.y + 8; y < k.y + k.h - 8; y += 12) g.fillRect(k.x + 5, y, k.w - 10, 7);
+  }
+
+  for (const t of TANKS) {
+    const w = 26, top = t.y - t.h;
+    g.fillStyle = 'rgba(120,180,230,.09)';    // lasi
+    g.fillRect(t.x - w / 2, top, w, t.h);
+    g.fillStyle = 'rgba(214,232,255,.14)';    // kiilto vasemmalle
+    g.fillRect(t.x - w / 2 + 2, top + 6, 3, t.h - 12);
+    g.fillStyle = STEEL_HI;                   // kannet
+    g.fillRect(t.x - w / 2 - 4, top - 9, w + 8, 9);
+    g.fillRect(t.x - w / 2 - 4, t.y - 7, w + 8, 7);
+    g.fillStyle = LIT;
+    g.fillRect(t.x - w / 2 - 4, top - 9, w + 8, 1.5);
+    g.fillStyle = STEEL;                      // putki katosta
+    g.fillRect(t.x - 3, top - 26, 6, 17);
+  }
+}
+
+/** Seinien päälle: väliseinien pinta, saumat ja pultit. */
+function paintFace(g) {
+  for (const w of WALLS) {
+    const across = w.w > w.h;
+    g.fillStyle = LIT;                        // valoreuna ylös
+    g.fillRect(w.x, w.y, w.w, 1.5);
+    g.fillStyle = DARK;
+    g.fillRect(w.x, w.y + w.h - 1.5, w.w, 1.5);
+
+    g.fillStyle = 'rgba(120,160,255,.10)';    // keskisauma
+    if (across) g.fillRect(w.x, w.y + w.h / 2 - 0.75, w.w, 1.5);
+    else g.fillRect(w.x + w.w / 2 - 0.75, w.y, 1.5, w.h);
+
+    g.fillStyle = 'rgba(255,212,121,.30)';    // pultit
+    const len = across ? w.w : w.h;
+    for (let i = 28; i < len - 20; i += 56) {
+      const x = across ? w.x + i : w.x + w.w / 2 - 1.5;
+      const y = across ? w.y + w.h / 2 - 1.5 : w.y + i;
+      g.fillRect(x, y, 3, 3);
+    }
+  }
+}
+
+/** Portin koneisto: kelakaaret ja päätykappaleet. Vain sisäänmenoilla aina —
+    ulostulon koneisto ilmestyy portin mukana, koska muuten se paljastaisi
+    paikan jonka on määrä olla piilossa. */
+function housing(ctx, x, y, r, col, a) {
+  if (a <= 0.01) return;
+  const R = r * 1.5;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.translate(x, y);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = STEEL_HI;
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(0, 0, R, -2.5, -0.65); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, R, 0.65, 2.5); ctx.stroke();
+  ctx.strokeStyle = LIT;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(0, 0, R - 1.8, -2.5, -0.65); ctx.stroke();
+  ctx.fillStyle = STEEL;
+  for (const sgn of [-1, 1]) ctx.fillRect(sgn * R - 6, -8, 12, 16);
+  ctx.fillStyle = col;
+  ctx.shadowColor = col;
+  ctx.shadowBlur = 8;
+  for (const sgn of [-1, 1]) ctx.fillRect(sgn * R - 2, -2, 4, 4);
+  ctx.restore();
+}
+
+/** Elävä osa: räkkien merkkivalot ja lasien sisällöt. */
+function labLive(ctx) {
+  for (let i = 0; i < RACKS.length; i++) {
+    const k = RACKS[i];
+    for (let j = 0, y = k.y + 11; y < k.y + k.h - 8; y += 12, j++) {
+      const on = (clock / (260 + i * 90 + j * 47) | 0) % 2 === 0;
+      ctx.fillStyle = on ? '#7bf0a0' : 'rgba(40,60,52,.9)';
+      ctx.fillRect(k.x + k.w - 11, y, 4, 3);
+    }
+  }
+  for (let i = 0; i < TANKS.length; i++) {
+    const t = TANKS[i];
+    const top = t.y - t.h;
+    const u = (Math.sin(clock / 1400 + i * 2) + 1) / 2;
+    const cy = lerp(top + 26, t.y - 26, u);
+    const pulse = 0.55 + Math.sin(clock / 500 + i) * 0.12;
+    const g = ctx.createRadialGradient(t.x, cy, 0, t.x, cy, 22);
+    g.addColorStop(0, fade(t.col, pulse));
+    g.addColorStop(0.45, fade(t.col, pulse * 0.3));
+    g.addColorStop(1, fade(t.col, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(t.x, cy, 22, 0, 6.3); ctx.fill();
+    ctx.fillStyle = fade(t.col, 0.85);
+    ctx.beginPath(); ctx.ellipse(t.x, cy, 7, 5.5, u * 3, 0, 6.3); ctx.fill();
+  }
 }
 
 /* ------------------------------------------------------------------- piirto
@@ -251,10 +439,14 @@ const TINT = [
 
 function drawBack(ctx) {
   clock = performance.now();
+  if (!BACK) { BACK = sheet(paintBack); FACE = sheet(paintFace); }
+
   for (const t of TINT) {
     ctx.fillStyle = t.c;
     ctx.fillRect(t.r.x0, t.r.y0, t.r.x1 - t.r.x0, t.r.y1 - t.r.y0);
   }
+  ctx.drawImage(BACK, 0, 0);
+  labLive(ctx);
 
   const spin = clock / 1000;
   for (const p of PORTALS) {
@@ -263,14 +455,24 @@ function drawBack(ctx) {
     const busy = trip && trip.p === p && trip.phase === 'in';
     const pull = busy ? 1 - clamp01(trip.t / WARP.suck) : 1;
     const pulse = 1 + Math.sin(spin * 2.2 + p.a.x) * 0.05;
+    housing(ctx, p.a.x, p.a.y, p.a.r, p.col, 1);
     portal(ctx, p.a.x, p.a.y, p.a.r * pulse * lerp(1, 1.4, 1 - pull), p.col,
            spin * (busy ? 5 : 1.4), busy ? 1 : 0.8);
 
-    /* Ulostulo vain silloin kun siitä tullaan. */
+    /* Ulostulo vain silloin kun siitä tullaan — koneistoineen, koska pelkkä
+       koneisto paljastaisi paikan jonka on määrä olla piilossa. */
     if (p.b.open > 0) {
-      portal(ctx, p.b.x, p.b.y, p.b.r * ease(p.b.open), p.col, -spin * 4, 1);
+      const u = ease(p.b.open);
+      housing(ctx, p.b.x, p.b.y, p.b.r * u, p.col, u);
+      portal(ctx, p.b.x, p.b.y, p.b.r * u, p.col, -spin * 4, 1);
     }
   }
+}
+
+/** Väliseinien pinta piirtyy seinien päälle, joten se kuuluu drawFrontiin.
+    Taksi ei voi olla seinän sisällä, joten sen yli ei piirry mitään. */
+function drawFront(ctx) {
+  if (FACE) ctx.drawImage(FACE, 0, 0);
 }
 
 /* ------------------------------------------------------------------ kenttä */
@@ -319,4 +521,5 @@ export const teleport = {
   update,
   input,
   drawBack,
+  drawFront,
 };
