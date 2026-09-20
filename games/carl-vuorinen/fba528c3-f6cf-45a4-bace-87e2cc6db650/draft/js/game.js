@@ -126,17 +126,20 @@ function loadLevel(i){
 //   circle {kind, cx,cy,r, strength}           radial, linear falloff to the edge; positive pulls in, negative pushes out
 //   either may add {period, duty, phase} in seconds to cycle on and off. Timing runs on sim ticks, so replays stay exact.
 //   water adds {pool:{x,w,h}} for the pool it lands in. kind ∈ water | wind | gas, which only changes how it is drawn.
-// A cycling force does not snap on. It builds over `ramp` seconds (RAMP by default), holds, then dies away over half again
-// as long, all inside its own on-window, so a gust can be seen coming and felt arriving rather than hitting like a wall.
-// The envelope is a pure function of the tick — no stored state — so a replay still lands on the same numbers.
+// A cycling force does not snap on. `duty` is the time it spends at full strength; the build and the dying away are added
+// around that, so the window is duty + ramp + 1.5·ramp long and the lull is whatever is left of the period. Ramps are
+// squeezed proportionally if they would not fit. The envelope is a pure function of the tick — no stored state — so a
+// replay still lands on the same numbers.
 const RAMP = 0.6;
 function forceLevel(f, tick){
   if (!f.period) return 1;
   const duty = f.duty === undefined ? 1 : f.duty; if (duty >= 1) return 1;
-  const on = f.period*duty, t = (((tick*DT + (f.phase||0)) % f.period) + f.period) % f.period;
+  const full = f.period*duty, rp = f.ramp === undefined ? RAMP : f.ramp;
+  const sq = Math.min(1, (f.period-full)/(2.5*rp || 1));     // never let build + decay run past the end of the cycle
+  const ri = rp*sq, ro = rp*1.5*sq, on = full+ri+ro;
+  const t = (((tick*DT + (f.phase||0)) % f.period) + f.period) % f.period;
   if (t >= on) return 0;
-  const rp = f.ramp === undefined ? RAMP : f.ramp, ri = Math.min(rp, on*0.4), ro = Math.min(rp*1.5, on*0.4);
-  const u = Math.max(0, Math.min(1, t/ri, (on-t)/ro));
+  const u = Math.max(0, Math.min(1, ri > 0 ? t/ri : 1, ro > 0 ? (on-t)/ro : 1));
   return u*u*(3-2*u);                                        // smoothstep: no kink where the ramp meets the plateau
 }
 const forceOn = (f, tick) => forceLevel(f, tick) > 0;
