@@ -359,8 +359,10 @@ const sketch = createSketch({
   /* Tauko editorin ajaksi: liikkuvaa kenttää ei voi lukea liikkeestä, eikä
      taksin tarvitse ajelehtia seinään sillä aikaa kun mittoja katsotaan.
      Sulkeminen palauttaa sen mikä oli. */
-  onOpen: () => { sketchPaused = paused; setPaused(true); refreshPanel(); },
-  onClose: () => { setPaused(sketchPaused); refreshPanel(); },
+  /* saveDev vasta täällä eikä kytkimessä: lehtiö ladataan vasta avattaessa,
+     joten kytkin kirjaisi tilan ennen kuin se on totta. */
+  onOpen: () => { sketchPaused = paused; setPaused(true); saveDev(); refreshPanel(); },
+  onClose: () => { setPaused(sketchPaused); saveDev(); refreshPanel(); },
 });
 
 /* ---------------------------------------------------------- kehittäjän tila
