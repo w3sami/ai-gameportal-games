@@ -215,7 +215,7 @@ function finish(){
 
 // ---- Hazards: stalactites (or, in the jungle, branches) that shake loose when the rocket comes near, then drop ----
 // Driven only by the real rocket's position at fixed DT, so a run stays deterministic and the ghost replay still holds.
-const HZ = { trigger:200, wiggle:0.5, gravity:1.5 };
+const HZ = { trigger:200, branchTrigger:360, wiggle:0.5, gravity:1.5 };   // branches wake from farther off: the jungle is open
 let hazards = [];
 function buildHazards(){
   hazards = (L.hazards||[]).map(h => {
@@ -234,7 +234,7 @@ function updateHazards(s){
     const h = z.h;
     if (z.state === 'hang'){                                   // distance from the rocket to the spike's axis
       const ax = h.tx-h.x, ay = h.ty-h.y, t = Math.max(0, Math.min(1, ((s.x-h.x)*ax+(s.y-h.y)*ay)/(ax*ax+ay*ay)));
-      if (Math.hypot(s.x-(h.x+ax*t), s.y-(h.y+ay*t)) < (h.trigger || HZ.trigger*(h.kind === 'branch' ? 2 : 1))){ z.state = 'wiggle'; z.t = 0; Snd.crack(); }   // branches shake loose from twice as far: the jungle is open
+      if (Math.hypot(s.x-(h.x+ax*t), s.y-(h.y+ay*t)) < (h.trigger || (h.kind === 'branch' ? HZ.branchTrigger : HZ.trigger))){ z.state = 'wiggle'; z.t = 0; Snd.crack(); }
     } else if (z.state === 'wiggle'){
       z.t += DT; const k = Math.min(1, z.t/HZ.wiggle); z.a = Math.sin(z.t*38)*0.07*k;
       if (Math.round(z.t*120) % 10 === 0) crumbs(h.x+(h.tx-h.x)*0.65, h.y+(h.ty-h.y)*0.65, 2, z.col);
@@ -486,7 +486,7 @@ function showComplete(){
 function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); Snd.init(); Snd.resume(); placeControls(); }
 box.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return; Snd.init(); Snd.click();
-  if (t.dataset.l !== undefined){ const n = +t.dataset.l; if (n === li){ reset(); play(); } else { loadLevel(n); showMenu(); } return; }   // a tap on the selected tile flies it
+  if (t.dataset.l !== undefined){ loadLevel(+t.dataset.l); showMenu(); return; }
   if (t.dataset.ch){ menuCh = Math.max(0, Math.min(CHAPTERS.length-1, menuCh + +t.dataset.ch)); showMenu(); return; }
   if (t.dataset.fs){ toggleFS(); return; }                      // the label is refreshed by onFsChange
   if (t.dataset.set){
