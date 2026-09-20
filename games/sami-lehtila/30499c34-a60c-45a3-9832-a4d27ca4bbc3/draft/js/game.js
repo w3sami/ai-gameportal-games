@@ -374,7 +374,7 @@ const sketch = createSketch({
    Vain tässä selaimessa ja vain kun säätöjä on käytetty; pelaajan kone ei
    kirjoita tähän koskaan mitään. */
 const DEV_STORE = 'spacetaxi.dev';
-const dev = { panel: false, sketch: false, level: -1 };
+const dev = { panel: false, sketch: false, level: -1, watch: true };
 try { Object.assign(dev, JSON.parse(localStorage.getItem(DEV_STORE) || 'null') || {}); } catch (e) {}
 let devReady = false;                          // vasta palautuksen jälkeen
 /* dev.sketch asetetaan käsin eikä lueta sketch.activesta: onOpen ajetaan ennen
@@ -384,6 +384,7 @@ function saveDev() {
   if (!devReady) return;
   dev.panel = panelOpen();
   dev.level = levelIndex;
+  dev.watch = watching;
   try { localStorage.setItem(DEV_STORE, JSON.stringify(dev)); } catch (e) {}
 }
 
@@ -421,6 +422,62 @@ async function reloadLevel() {
   sketch.forget(lv.name);
   beginLevel(levelIndex, false);
   return true;
+}
+
+/* Kenttä uusiksi itsestään kun tiedosto vaihtuu palvelimella.
+ *
+ * Silmukka on nyt: avustaja kirjoittaa kentän ja vie sen draftiin, ja tekijä
+ * näkee muutoksen ilman että koskee mihinkään. Vartija kysyy tiedoston
+ * tunnisteen (ETag, Last-Modified tai koko) muutaman sekunnin välein ja
+ * lataa kentän kun se on eri kuin viimeksi.
+ *
+ * HEAD eikä GET: pelkkä otsake riittää, eikä 38 kt:n kenttää kannata hakea
+ * kolmen sekunnin välein sen selvittämiseksi ettei mikään muuttunut.
+ * no-store ohittaa välimuistin, jota draftilla on viisi minuuttia — ilman sitä
+ * vartija katsoisi vanhaa kopiota eikä huomaisi mitään.
+ *
+ * Päällä vain debug-tilassa, eli pelaajan koneelta ei lähde yhtään pyyntöä. */
+const WATCH_MS = 3000;
+let watchT = 0, watchTag = null, watching = false;
+
+function levelUrl() {
+  const file = LEVEL_FILES[levelIndex];
+  return file ? new URL(`./levels/${file}.js`, import.meta.url).href : null;
+}
+
+async function levelTag() {
+  const url = levelUrl();
+  if (!url) return null;
+  try {
+    const r = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    if (!r.ok) return null;
+    return r.headers.get('etag') || r.headers.get('last-modified')
+      || r.headers.get('content-length') || null;
+  } catch (e) { return null; }
+}
+
+async function watchTick() {
+  if (!watching) return;
+  const tag = await levelTag();
+  if (watching && tag && watchTag && tag !== watchTag) {
+    watchTag = tag;
+    const ok = await reloadLevel();
+    panelNote = ok ? 'kenttä päivittyi itsestään' : 'kentän lataus ei onnistunut';
+    if (panelOpen()) buildPanel();
+  } else if (tag) {
+    watchTag = tag;
+  }
+  if (watching) watchT = setTimeout(watchTick, WATCH_MS);
+}
+
+function setWatch(on) {
+  on = !!on && debugAllowed();
+  if (on === watching) return;
+  watching = on;
+  clearTimeout(watchT);
+  if (!on) { watchTag = null; return; }
+  watchTag = null;                             // ensimmäinen kysely on lähtötaso
+  watchTick();
 }
 
 layout();
@@ -2445,6 +2502,12 @@ function buildPanel() {
     });
   }));
   loadSeg.append(pbutton(null, 'lataa sivu', () => location.reload()));
+  loadSeg.append(pbutton(watching ? 'on' : null, 'seuraa', () => {
+    dev.watch = !watching;
+    setWatch(dev.watch);
+    saveDev();
+    buildPanel();
+  }));
   loadRow.append(el('label', null, 'lataus'), loadSeg);
   panelEl.append(loadRow);
 
@@ -2795,6 +2858,7 @@ function startLevel(i) {
   warmSpeech();
   dev.level = i;
   saveDev();
+  watchTag = null;                           // eri kenttä, eri tiedosto
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
   cut = null; carried = null; hyper = null;
@@ -2814,6 +2878,7 @@ function restoreDev() {
   if (dev.level >= 0 && dev.level < LEVELS.length) startLevel(dev.level);
   if (dev.panel) { if (portal.embedded) setPortal('debug', true); else setPanel(true); }
   if (dev.sketch) Promise.resolve(sketch.open()).then(refreshPanel);
+  setWatch(dev.watch !== false);
 }
 
 /* Kieli, kummasta päästä tahansa.
