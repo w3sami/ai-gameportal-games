@@ -65,7 +65,11 @@ const DOORS = [
   { id: 'TR-MR', axis: 'H', line: 0, at: 596, dir: -1, phase: 0.72 },
   { id: 'ML-C', axis: 'V', line: 0, at: 404, dir: -1, phase: 0.40 },
   { id: 'C-MR', axis: 'V', line: 1, at: 520, dir: -1, phase: 0.12 },
-  { id: 'ML-BL', axis: 'H', line: 1, at: 140, dir: 1, phase: 0.66 },
+  /* Reunimmainen ovi. Auki vetäytyvä luukku menee väliin x -52…40 eli seinän
+     umpiosaan, kehäseinään ja ruudun ulkopuolelle — ei siis sinne missä taksi
+     voi olla, ja siinä on koko vaatimus. Vanha paikka x 140 muuttuu umpeen
+     itsestään, koska segments() laskee umpiosat aukkojen ympärille. */
+  { id: 'ML-BL', axis: 'H', line: 1, at: 40, dir: -1, phase: 0.66 },
   { id: 'C-BM', axis: 'H', line: 1, at: 352, dir: -1, phase: 0.85 },
   { id: 'MR-BR', axis: 'H', line: 1, at: 540, dir: -1, phase: 0.34 },
   { id: 'BM-BR', axis: 'V', line: 1, at: 780, dir: 1, phase: 0.58 },
@@ -224,7 +228,13 @@ function lamp(ctx, l) {
   ctx.restore();
 }
 
-const SOLIDS = [...GRID, ...PANELS];
+/* Irrallinen hylly TR:n oikeassa laidassa. Ruudukon seinät tulevat
+   segments()istä, joten kaikki mikä ei ole lohkorajaa on täällä erikseen. */
+const LEDGES = [
+  { x: 594, y: 240, w: 108, h: 18 },          // TR, oikea laita
+];
+
+const SOLIDS = [...GRID, ...PANELS, ...LEDGES];
 
 /* ----------------------------------------------------------------- alustat
 
@@ -234,14 +244,14 @@ const SOLIDS = [...GRID, ...PANELS];
    220 px ja oviaukko vie siitä 92. Nappien nurkat (x 30…158, y 778…964)
    kierretään: vasemman alalohkon alusta on lohkon yläreunassa. */
 const PADS = [
-  { id: 1, x: 16, y: 238, w: 104, h: 18 },    // TL, vasen kehäseinä
-  { id: 2, x: 483, y: 250, w: 104, h: 18 },   // TR, keskiseinä
-  { id: 3, x: 16, y: 600, w: 104, h: 18 },    // ML, vasen kehäseinä
+  { id: 1, x: 20, y: 240, w: 104, h: 18 },    // TL, vasen kehäseinä
+  { id: 2, x: 488, y: 120, w: 104, h: 18 },   // TR, ylhäällä
+  { id: 3, x: 20, y: 504, w: 104, h: 18 },    // ML, vasen kehäseinä
   { id: 4, x: 483, y: 430, w: 104, h: 18 },   // MR, keskiseinä
-  { id: 5, x: 133, y: 748, w: 104, h: 18 },   // BL, oikea seinä (napit vievät nurkan)
-  { id: 6, x: 253, y: 812, w: 104, h: 18 },   // BM, vasen seinä
+  { id: 5, x: 128, y: 868, w: 104, h: 18 },   // BL, alanurkka nappien päällä
+  { id: 6, x: 304, y: 852, w: 104, h: 18 },   // BM
   { id: 7, x: 483, y: 900, w: 104, h: 18 },   // BR, keskiseinä
-  { id: 0, x: 253, y: 560, w: 104, h: 18, fuel: true },  // keskilohko, vasen seinä
+  { id: 0, x: 256, y: 672, w: 90, h: 18, fuel: true },   // keskilohko, alaseinän päällä
 ];
 
 
@@ -351,7 +361,7 @@ function stars(ctx) {
   ctx.globalAlpha = 1;
 }
 
-const EARTH = { x: 120, y: 150, r: 46 };
+const EARTH = { x: 112, y: 124, r: 70 };
 function earth(ctx) {
   const e = EARTH;
   const halo = ctx.createRadialGradient(e.x, e.y, e.r * 0.9, e.x, e.y, e.r * 2.2);
