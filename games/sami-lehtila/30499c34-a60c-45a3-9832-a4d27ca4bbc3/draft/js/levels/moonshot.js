@@ -126,13 +126,14 @@ const DOMES = [
   { x: 122, base: 1004, r: 62, eave: 0.42 },
   { x: 352, base: 1004, r: 60, eave: 0.42 },
   { x: 600, base: 1004, r: 58, eave: 0.42 },
-  /* kannen päällä */
+  /* kansien päällä. Ylimmän rivin kattoon ei ripusteta mitään: HUD piirtyy
+     ruudun ylälaitaan ja kupoli jäisi rahasumman ja alustalaskurin alle. */
   { x: 200, base: HY[0], r: 38, eave: 0.44 },
-  /* katosta ja kansien alta roikkuen */
-  { x: 74, base: CEIL, r: 46, eave: 0.44, flip: true },
-  { x: 640, base: CEIL, r: 42, eave: 0.44, flip: true },
+  { x: 536, base: HY[0], r: 34, eave: 0.44 },
+  /* kansien alta roikkuen: sama kupoli ylösalaisin */
   { x: 170, base: ROWS[1][0], r: 36, eave: 0.44, flip: true },
   { x: 430, base: ROWS[1][0], r: 34, eave: 0.44, flip: true },
+  { x: 604, base: ROWS[2][0], r: 34, eave: 0.44, flip: true },
 ];
 
 const spanAt = (d, h) => Math.sqrt(Math.max(0, d.r * d.r - h * h));
@@ -469,11 +470,11 @@ function doorLamps(ctx) {
     ctx.fillStyle = col;
     if (p.warn > 0 && blink) { ctx.shadowColor = col; ctx.shadowBlur = 12; }
     if (p.door.axis === 'V') {
-      ctx.fillRect(g.x + 2, g.y - 5, T - 4, 3);
-      ctx.fillRect(g.x + 2, g.y + g.h + 2, T - 4, 3);
+      ctx.fillRect(g.x + 2, g.y - 7, T - 4, 4);
+      ctx.fillRect(g.x + 2, g.y + g.h + 3, T - 4, 4);
     } else {
-      ctx.fillRect(g.x - 5, g.y + 2, 3, T - 4);
-      ctx.fillRect(g.x + g.w + 2, g.y + 2, 3, T - 4);
+      ctx.fillRect(g.x - 7, g.y + 2, 4, T - 4);
+      ctx.fillRect(g.x + g.w + 3, g.y + 2, 4, T - 4);
     }
     ctx.shadowBlur = 0;
   }
