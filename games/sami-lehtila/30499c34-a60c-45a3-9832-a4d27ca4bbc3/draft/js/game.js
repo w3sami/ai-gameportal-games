@@ -420,11 +420,17 @@ async function reloadLevel() {
   }
   applyBody(keep);                             // ja säädetyt arvot takaisin
   sketch.forget(lv.name);
-  /* Luonnos uusiksi samalla: jos kentän muutos oli juuri se että luonnos
-     kirjoitettiin lähteeseen ja tyhjennettiin, tässä selaimessa olevat siirrot
-     ja lisäykset piirtyisivät muuten toiseen kertaan jo kirjoitettujen päälle. */
+  beginLevel(levelIndex, false);               // vasta tässä level on uusi
+  /* Luonnos uusiksi vasta beginLevelin jälkeen. Synkkaus lukee kentän
+     lähtöpaikat, ja ennen beginLeveliä `level` on vielä vanha moduuli — silloin
+     oletukset otettaisiin vanhoista luvuista ja jokainen juuri kirjoitettu luku
+     näyttäisi siirrolta.
+
+     Itse synkkaus on tässä siksi, että jos kentän muutos oli juuri se että
+     luonnos kirjoitettiin lähteeseen ja tyhjennettiin, tässä selaimessa olevat
+     siirrot ja lisäykset piirtyisivät muuten toiseen kertaan jo kirjoitettujen
+     päälle. */
   try { await sketch.sync(); } catch (e) {}
-  beginLevel(levelIndex, false);
   return true;
 }
 
