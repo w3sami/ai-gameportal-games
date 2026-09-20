@@ -2883,10 +2883,12 @@ showCard(menuCard(), 0, null);
 function restoreDev() {
   devReady = true;
   if (!debugAllowed()) return;
+  /* Vartija ensin: kaikki muu täällä kutsuu saveDeviä, ja saveDev lukee
+     vartijan tilan — käynnistämätön vartija tallentuisi pois päältä. */
+  setWatch(dev.watch !== false);
   if (dev.level >= 0 && dev.level < LEVELS.length) startLevel(dev.level);
   if (dev.panel) { if (portal.embedded) setPortal('debug', true); else setPanel(true); }
   if (dev.sketch) Promise.resolve(sketch.open()).then(refreshPanel);
-  setWatch(dev.watch !== false);
 }
 
 /* Kieli, kummasta päästä tahansa.
