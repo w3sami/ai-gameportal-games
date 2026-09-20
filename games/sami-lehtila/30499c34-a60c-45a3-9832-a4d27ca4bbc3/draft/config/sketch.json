@@ -1,0 +1,127 @@
+{
+ "v": 1,
+ "stamp": 1789933026415,
+ "scenes": {
+  "Moonshot": {
+   "paint": [
+    {
+     "kind": "rect",
+     "label": "aukko",
+     "text": "ovi, standardi koko, aukeaa vasemmalle",
+     "x": 39,
+     "y": 679,
+     "w": 94,
+     "h": 17
+    },
+    {
+     "kind": "rect",
+     "label": "pois",
+     "text": "seinä tilalle",
+     "x": 141,
+     "y": 677,
+     "w": 92,
+     "h": 22
+    },
+    {
+     "kind": "rect",
+     "label": "seinä",
+     "text": "",
+     "x": 594,
+     "y": 240,
+     "w": 108,
+     "h": 18
+    }
+   ],
+   "moves": [
+    {
+     "id": "pad:1",
+     "label": "alusta 1",
+     "from": {
+      "x": 16,
+      "y": 238
+     },
+     "to": {
+      "x": 0,
+      "y": 240
+     }
+    },
+    {
+     "id": "pad:2",
+     "label": "alusta 2",
+     "from": {
+      "x": 483,
+      "y": 250
+     },
+     "to": {
+      "x": 488,
+      "y": 120
+     }
+    },
+    {
+     "id": "pad:3",
+     "label": "alusta 3",
+     "from": {
+      "x": 16,
+      "y": 600
+     },
+     "to": {
+      "x": 0,
+      "y": 552
+     }
+    },
+    {
+     "id": "pad:5",
+     "label": "alusta 5",
+     "from": {
+      "x": 133,
+      "y": 748
+     },
+     "to": {
+      "x": 128,
+      "y": 868
+     }
+    },
+    {
+     "id": "pad:6",
+     "label": "alusta 6",
+     "from": {
+      "x": 253,
+      "y": 812
+     },
+     "to": {
+      "x": 304,
+      "y": 852
+     }
+    },
+    {
+     "id": "pad:0",
+     "label": "tankkaus",
+     "from": {
+      "x": 253,
+      "y": 560,
+      "w": 104
+     },
+     "to": {
+      "x": 256,
+      "y": 672,
+      "w": 90
+     }
+    },
+    {
+     "id": "prop:earth",
+     "label": "maapallo",
+     "from": {
+      "x": 120,
+      "y": 150,
+      "r": 46
+     },
+     "to": {
+      "x": 112,
+      "y": 124,
+      "r": 70
+     }
+    }
+   ]
+  }
+ }
+}
