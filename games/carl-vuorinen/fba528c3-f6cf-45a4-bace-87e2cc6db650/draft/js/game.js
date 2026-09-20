@@ -375,6 +375,112 @@ const CAVE_IN = { top:'#0a0b10', bottom:'#030305' };
 const inRockZone = (x, y) => (L.rockZones||[]).some(z => { const dx = (x-z.x)/z.r, dy = (y-z.y)/(z.ry||z.r); return dx*dx+dy*dy <= 1; });
 const mixHex = (a, b, k) => { const A = parseInt(a.slice(1),16), B = parseInt(b.slice(1),16), ch = sh => Math.round(((A>>sh)&255)*(1-k)+((B>>sh)&255)*k); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
 
+// ---- Wind and gas: streaks along the push, with leaves, grit and dust riding them ----
+// Visual only: everything here comes off the wall clock and a per-streak hash, never the sim, so none of it can shift a
+// run or a ghost. Flow distance is integrated (s.flow) rather than taken as wall time times a changing speed — the latter
+// differentiates to spd + t·spd', and with t large a slowing gust drags the whole field backwards.
+const WFX = new WeakMap();                                          // force object -> {k, gp, flow, bits}
+const WIND_LEAF = ['#4e8a3c','#3d7c38','#67a84e','#8a6a34','#a5823f','#2c5a2a'], WIND_GRIT = ['#9aa0a8','#b3ab9c','#7f858d','#c9c2b4'];
+const WIND_DUST = {jungle:['#d7e4a6','#cfe0b4','#e9e3c8','#b9d18e'], cave:['#dcd6c9','#c4cbd4','#eae4d6']};
+const WTIER = [[1,0.15],[2,0.26],[3.4,0.4]];                        // streak weights: line width, alpha at full strength
+const hash2 = (i,k) => { let x = (i*374761393 + k*668265263) | 0; x = Math.imul(x ^ x>>>13, 1274126177); return ((x ^ x>>>16) >>> 0) / 4294967296; };
+const isAir = f => f.r === undefined && (f.kind === 'wind' || f.kind === 'gas');
+function windState(f){ let s = WFX.get(f); if (!s){ s = {k:forceOn(f,0) ? 1 : 0, gp:hash2((f.x|0)+1,(f.y|0)+3)*6.283, flow:0, bits:[]}; WFX.set(f,s); } return s; }
+const gustAt = (s,t) => 0.72 + 0.34*Math.sin(t*0.37 + s.gp) + 0.16*Math.sin(t*1.06 + s.gp*2.1);   // two octaves, seeded per zone so two fields never pulse together
+const windSpd = (s,g) => (40 + 310*s.k)*(0.55+0.5*g);
+// One airborne bit. dust: tiny, never sinks, still drifting through the lull. Otherwise a leaf (jungle) or a grit sliver (cave).
+function windBit(f, ux, uy, x0, y0, x1, y1, scatter, dust){
+  const R = Math.random, jungle = L.theme === 'jungle';
+  let x, y;
+  if (scatter){ x = x0+R()*(x1-x0); y = y0+R()*(y1-y0); }
+  else {                                                            // blown in from whichever edge the wind comes from
+    x = ux > 0 ? x0-30-R()*140 : ux < 0 ? x1+30+R()*140 : x0+R()*(x1-x0);
+    y = uy > 0 ? y0-30-R()*140 : uy < 0 ? y1+30+R()*140 : y0+R()*(y1-y0);
+    if (ux && uy){ if (R() < 0.5) y = y0+R()*(y1-y0); else x = x0+R()*(x1-x0); }
+  }
+  if (dust){
+    const cols = f.kind === 'gas' ? ['#bfe79c','#d8f0bc'] : WIND_DUST[jungle ? 'jungle' : 'cave'], a = R()*6.283, idl = 5+R()*13;
+    return {x, y, vx:0, vy:0, dust:true, ph:R()*6.283, pr:0.5+R()*1.3, fa:5+R()*14, g:0.85+R()*0.5, dr:2.2+R()*2.2,
+            ix:Math.cos(a)*idl, iy:Math.sin(a)*idl*0.5, sz:1+R()*1.6, al:0.3+R()*0.45, col:cols[(R()*cols.length)|0]};
+  }
+  const cols = f.kind === 'gas' ? ['#a9dd85','#87c45f','#c7e8a6'] : jungle ? WIND_LEAF : WIND_GRIT;
+  const leaf = jungle && f.kind !== 'gas' ? R() < 0.82 : R() < 0.15;
+  return {x, y, vx:0, vy:0, a:R()*6.283, sp:(R()<0.5?-1:1)*(0.7+R()*2.3), ph:R()*6.283, pr:1.5+R()*3, fa:14+R()*34,
+          g:0.7+R()*0.65, dr:1.3+R()*1.8, sz:(leaf?5:3)+R()*(leaf?7:5), col:cols[(R()*cols.length)|0], leaf};
+}
+// Populations are sized from the visible part of the zone, so a 6000 px wide field is no denser on screen than a small one.
+function updateWindFx(dt, t){
+  for (const f of L.forces||[]){
+    if (!isAir(f)) continue;
+    const s = windState(f), on = forceOn(f, ticks) ? 1 : 0;
+    s.k += (on - s.k)*(1-Math.exp(-(on ? 2.6 : 1.1)*dt));           // a gust arrives quickly and dies away slowly
+    const am = Math.hypot(f.ax||0, f.ay||0) || 1, ux = (f.ax||0)/am, uy = (f.ay||0)/am;
+    const x0 = Math.max(f.x, cam.x-160), y0 = Math.max(f.y, cam.y-160), x1 = Math.min(f.x+f.w, cam.x+vw/Z+160), y1 = Math.min(f.y+f.h, cam.y+vh/Z+160);
+    if (x1 <= x0 || y1 <= y0){ s.bits.length = 0; continue; }       // off screen: let the field empty out
+    const gust = gustAt(s,t);
+    s.flow += windSpd(s, Math.max(0.15, Math.min(1.45, gust)))*dt;
+    const spd = (75 + am*0.42)*(0.25+0.75*s.k)*Math.max(0.3, gust); // the debris trails the air a little
+    for (const b of s.bits){
+      b.ph += b.pr*dt;
+      const fl = Math.sin(b.ph), m = 1-Math.exp(-b.dr*dt);
+      if (b.dust){ const ds = spd*b.g*0.85;                         // motes ride the air and keep drifting through the lull
+        b.vx += (ux*ds - uy*fl*b.fa + b.ix*(1-0.6*s.k) - b.vx)*m;
+        b.vy += (uy*ds + ux*fl*b.fa + b.iy*(1-0.6*s.k) - b.vy)*m;
+      } else {
+        b.vx += (ux*spd*b.g - uy*fl*b.fa - b.vx)*m;
+        b.vy += (uy*spd*b.g + ux*fl*b.fa + (1-s.k)*150 - b.vy)*m;   // leaves sag as the gust drops
+        b.a += b.sp*dt*(0.35 + Math.hypot(b.vx,b.vy)/520);
+      }
+      b.x += b.vx*dt; b.y += b.vy*dt;
+    }
+    let nd = 0, nu = 0;
+    for (let i=s.bits.length-1;i>=0;i--){ const b = s.bits[i];
+      if (b.x < x0-240 || b.x > x1+240 || b.y < y0-240 || b.y > y1+240) s.bits.splice(i,1); else if (b.dust) nu++; else nd++; }
+    const area = (x1-x0)*(y1-y0), wantD = Math.round(Math.max(6, Math.min(46, area/24000))*(0.45+0.55*s.k)), wantU = Math.round(Math.max(10, Math.min(80, area/13000)));
+    const edge = () => Math.random() < 0.3+0.7*s.k;                 // in still air they appear where they are, not blown in
+    for (let g=0; nd < wantD && g < 10; g++, nd++) s.bits.push(windBit(f, ux, uy, x0, y0, x1, y1, nd < wantD*0.6 || !edge(), false));
+    for (let g=0; nu < wantU && g < 14; g++, nu++) s.bits.push(windBit(f, ux, uy, x0, y0, x1, y1, nu < wantU*0.7 || !edge(), true));
+  }
+}
+// The bits go in under the main layer, so the terrain occludes them for nothing.
+function drawWindBits(f){
+  const s = WFX.get(f); if (!s) return;
+  for (const b of s.bits){
+    if (b.dust){ ctx.globalAlpha = b.al*(0.75+0.25*Math.sin(b.ph)); ctx.fillStyle = b.col; ctx.fillRect(b.x-b.sz/2, b.y-b.sz/2, b.sz, b.sz); ctx.globalAlpha = 1; continue; }
+    const flat = 0.2+0.8*Math.abs(Math.cos(b.ph));                  // the tumble: a leaf goes edge-on twice a turn
+    ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.a); ctx.fillStyle = b.col;
+    if (b.leaf){ const w = b.sz, h = b.sz*0.52*flat;
+      ctx.beginPath(); ctx.moveTo(-w,0); ctx.lineTo(0,-h); ctx.lineTo(w,0); ctx.lineTo(0,h); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,.26)'; ctx.beginPath(); ctx.moveTo(-w,0); ctx.lineTo(0,h); ctx.lineTo(w,0); ctx.closePath(); ctx.fill();
+    } else ctx.fillRect(-b.sz*0.7, -b.sz*0.18*flat, b.sz*1.4, Math.max(1, b.sz*0.36*flat));
+    ctx.restore();
+  }
+}
+// Streaks: three weights, one stroke each. Every streak gets its own lane, phase, speed, length and meander from the hash.
+function drawWindStreaks(f, t){
+  const s = windState(f), am = Math.hypot(f.ax||0, f.ay||0) || 1, ux = (f.ax||0)/am, uy = (f.ay||0)/am, nx = -uy, ny = ux;
+  const span = Math.abs(ux)*f.w + Math.abs(uy)*f.h, cross = Math.abs(nx)*f.w + Math.abs(ny)*f.h;
+  const bx = f.x + ((ux < 0 || nx < 0) ? f.w : 0), by = f.y + ((uy < 0 || ny < 0) ? f.h : 0);
+  const gust = Math.max(0.15, Math.min(1.45, gustAt(s,t))), k = s.k;
+  const CX = v => Math.max(f.x, Math.min(f.x+f.w, v)), CY = v => Math.max(f.y, Math.min(f.y+f.h, v));
+  const base = f.kind === 'gas' ? '170,225,130' : '225,232,240', n = Math.max(24, Math.min(240, Math.round(f.w*f.h/9000)));
+  angular(ctx); ctx.lineCap = 'butt';
+  for (let ti=0; ti<3; ti++){
+    const g2 = ti === 2 ? gust*gust*0.8 : 1;                        // the heavy lines only show at the top of a gust
+    ctx.lineWidth = WTIER[ti][0]; ctx.strokeStyle = `rgba(${base},${(WTIER[ti][1]*(0.12+0.88*k)*g2).toFixed(3)})`;
+    ctx.beginPath();
+    for (let i=ti; i<n; i+=3){
+      const c = hash2(i,1)*cross, ph = hash2(i,2), sf = 0.6+hash2(i,3)*0.85, sl = 26+hash2(i,4)*(ti === 2 ? 150 : 80),
+            wl = 0.002+hash2(i,5)*0.005, wa = 5+hash2(i,6)*22, d = (s.flow*sf + ph*span*3.7) % span;
+      const Q = dd => { const o = c + Math.sin(ph*6.283 + t*0.12 + dd*wl)*wa; return [bx+ux*dd+nx*o, by+uy*dd+ny*o]; };   // the lane meanders in space; the streak slides along it
+      const p1 = Q(d), p2 = Q(d-sl*0.45), p3 = Q(d-sl);
+      if (!inRect(f,p1[0],p1[1]) && !inRect(f,p3[0],p3[1])) continue;
+      ctx.moveTo(CX(p3[0]),CY(p3[1])); ctx.lineTo(CX(p2[0]),CY(p2[1])); ctx.lineTo(CX(p1[0]),CY(p1[1]));
+    }
+    ctx.stroke();
+  }
+}
+
 // Force fields. Pools go under the terrain (so the floor clips them), the curtains over the rocket (a waterfall half-hides what is inside it). Animation is
 // visual only and runs on wall time; the force itself runs on sim ticks. Everything drawn is a rect, in keeping with the level art.
 function drawForces(t, over){
@@ -396,14 +502,8 @@ function drawForces(t, over){
       ctx.fillStyle = 'rgba(235,245,255,.4)'; ctx.fillRect(f.x-6, f.y, f.w+12, 10);                    // the lip
       for (let i=0;i<10;i++){ const ph = (t*0.7 + i*0.1) % 1, mx = f.x+f.w/2+(i-4.5)*(f.w+80)*0.11, my = f.y+f.h-40-ph*110, ms = 44*(1-ph)+10;   // mist billowing up from the foot
         ctx.fillStyle = `rgba(225,240,255,${0.32*(1-ph)})`; ctx.fillRect(mx-ms/2, my-ms*0.3, ms, ms*0.6); }
-    } else if (over){                                                                                   // wind, gas: streaks along the push, faint when off
-      const on = forceOn(f, ticks), len = Math.hypot(f.ax||0, f.ay||0) || 1, ux = (f.ax||0)/len, uy = (f.ay||0)/len, span = Math.abs(ux)*f.w + Math.abs(uy)*f.h;
-      ctx.strokeStyle = f.kind === 'gas' ? `rgba(170,225,130,${on?.4:.08})` : `rgba(225,232,240,${on?.35:.07})`; ctx.lineWidth = 2; ctx.beginPath();
-      const n = Math.floor(f.w*f.h/9000);
-      for (let i=0;i<n;i++){ const hx = ((i*7919)%1000)/1000, hy = ((i*104729)%1000)/1000, d = ((t*(on?420:60) + hx*span*3) % span), sl = 30+hy*40;
-        let px = f.x + (ux < 0 ? f.w : 0) + (uy !== 0 ? hx*f.w : 0) + ux*d, py = f.y + (uy < 0 ? f.h : 0) + (ux !== 0 ? hy*f.h : 0) + uy*d;
-        if (!inRect(f, px, py)) continue; const qx = Math.max(f.x, Math.min(f.x+f.w, px+ux*sl)), qy = Math.max(f.y, Math.min(f.y+f.h, py+uy*sl)); ctx.moveTo(px,py); ctx.lineTo(qx,qy); }
-      ctx.stroke();
+    } else if (isAir(f)){                                                                               // wind, gas: bits under the terrain, streaks over it
+      if (over) drawWindStreaks(f, t); else drawWindBits(f);
     }
   }
 }
@@ -454,7 +554,8 @@ function render(dt){
     ctx.restore();
   }
   const tsec = performance.now()/1000;
-  ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z); drawForces(tsec, false); ctx.restore();   // pools, under the terrain
+  if (L.forces) updateWindFx(dt, tsec);                                                                 // wind fields: visual state only, wall time
+  ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z); drawForces(tsec, false); ctx.restore();   // pools and airborne bits, under the terrain
   drawLayer(ctx, mainC, -cam.x*Z+sx, -cam.y*Z+sy, Z, vw, vh);
 
   ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
