@@ -126,17 +126,30 @@ function loadLevel(i){
 //   circle {kind, cx,cy,r, strength}           radial, linear falloff to the edge; positive pulls in, negative pushes out
 //   either may add {period, duty, phase} in seconds to cycle on and off. Timing runs on sim ticks, so replays stay exact.
 //   water adds {pool:{x,w,h}} for the pool it lands in. kind ∈ water | wind | gas, which only changes how it is drawn.
-const forceOn = (f, tick) => !f.period || (((tick*DT + (f.phase||0)) % f.period) / f.period) < (f.duty === undefined ? 1 : f.duty);
+// A cycling force does not snap on. It builds over `ramp` seconds (RAMP by default), holds, then dies away over half again
+// as long, all inside its own on-window, so a gust can be seen coming and felt arriving rather than hitting like a wall.
+// The envelope is a pure function of the tick — no stored state — so a replay still lands on the same numbers.
+const RAMP = 0.6;
+function forceLevel(f, tick){
+  if (!f.period) return 1;
+  const duty = f.duty === undefined ? 1 : f.duty; if (duty >= 1) return 1;
+  const on = f.period*duty, t = (((tick*DT + (f.phase||0)) % f.period) + f.period) % f.period;
+  if (t >= on) return 0;
+  const rp = f.ramp === undefined ? RAMP : f.ramp, ri = Math.min(rp, on*0.4), ro = Math.min(rp*1.5, on*0.4);
+  const u = Math.max(0, Math.min(1, t/ri, (on-t)/ro));
+  return u*u*(3-2*u);                                        // smoothstep: no kink where the ramp meets the plateau
+}
+const forceOn = (f, tick) => forceLevel(f, tick) > 0;
 const inRect = (f, x, y) => x >= f.x && x <= f.x+f.w && y >= f.y && y <= f.y+f.h;
 function applyForces(s, tick, fs){
   for (const f of fs || L.forces || []){
-    if (!forceOn(f, tick)) continue;
+    const k = forceLevel(f, tick); if (k <= 0) continue;
     if (f.r !== undefined){
       const dx = f.cx-s.x, dy = f.cy-s.y, d = Math.hypot(dx,dy); if (d > f.r || d < 1) continue;
-      const a = (f.strength||0)*(1-d/f.r)/d; s.vx += dx*a*DT; s.vy += dy*a*DT;
+      const a = (f.strength||0)*k*(1-d/f.r)/d; s.vx += dx*a*DT; s.vy += dy*a*DT;
     } else if (inRect(f, s.x, s.y)){
-      s.vx += (f.ax||0)*DT; s.vy += (f.ay||0)*DT;
-      if (f.drag){ const k = Math.exp(-f.drag*DT); s.vx *= k; s.vy *= k; }
+      s.vx += (f.ax||0)*k*DT; s.vy += (f.ay||0)*k*DT;
+      if (f.drag){ const q = Math.exp(-f.drag*k*DT); s.vx *= q; s.vy *= q; }
     }
   }
 }
@@ -376,16 +389,19 @@ const inRockZone = (x, y) => (L.rockZones||[]).some(z => { const dx = (x-z.x)/z.
 const mixHex = (a, b, k) => { const A = parseInt(a.slice(1),16), B = parseInt(b.slice(1),16), ch = sh => Math.round(((A>>sh)&255)*(1-k)+((B>>sh)&255)*k); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
 
 // ---- Wind and gas: streaks along the push, with leaves, grit and dust riding them ----
-// Visual only: everything here comes off the wall clock and a per-streak hash, never the sim, so none of it can shift a
-// run or a ghost. Flow distance is integrated (s.flow) rather than taken as wall time times a changing speed — the latter
-// differentiates to spd + t·spd', and with t large a slowing gust drags the whole field backwards.
+// The field's strength is the force's own envelope (forceLevel), read a beat early so the air visibly stirs just before it
+// pushes — what you see is what the rocket is about to get. Everything else here comes off the wall clock and a per-streak
+// hash, never the sim, so none of it can shift a run or a ghost. Flow distance is integrated (s.flow) rather than taken as
+// wall time times a changing speed — the latter differentiates to spd + t·spd', and with t large a slowing gust drags the
+// whole field backwards.
 const WFX = new WeakMap();                                          // force object -> {k, gp, flow, bits}
+const WLEAD = Math.round(0.25/DT);                                  // ticks the visuals run ahead of the push
 const WIND_LEAF = ['#4e8a3c','#3d7c38','#67a84e','#8a6a34','#a5823f','#2c5a2a'], WIND_GRIT = ['#9aa0a8','#b3ab9c','#7f858d','#c9c2b4'];
 const WIND_DUST = {jungle:['#d7e4a6','#cfe0b4','#e9e3c8','#b9d18e'], cave:['#dcd6c9','#c4cbd4','#eae4d6']};
 const WTIER = [[1,0.15],[2,0.26],[3.4,0.4]];                        // streak weights: line width, alpha at full strength
 const hash2 = (i,k) => { let x = (i*374761393 + k*668265263) | 0; x = Math.imul(x ^ x>>>13, 1274126177); return ((x ^ x>>>16) >>> 0) / 4294967296; };
 const isAir = f => f.r === undefined && (f.kind === 'wind' || f.kind === 'gas');
-function windState(f){ let s = WFX.get(f); if (!s){ s = {k:forceOn(f,0) ? 1 : 0, gp:hash2((f.x|0)+1,(f.y|0)+3)*6.283, flow:0, bits:[]}; WFX.set(f,s); } return s; }
+function windState(f){ let s = WFX.get(f); if (!s){ s = {k:forceLevel(f,0), gp:hash2((f.x|0)+1,(f.y|0)+3)*6.283, flow:0, bits:[]}; WFX.set(f,s); } return s; }
 const gustAt = (s,t) => 0.72 + 0.34*Math.sin(t*0.37 + s.gp) + 0.16*Math.sin(t*1.06 + s.gp*2.1);   // two octaves, seeded per zone so two fields never pulse together
 const windSpd = (s,g) => (40 + 310*s.k)*(0.55+0.5*g);
 // One airborne bit. dust: tiny, never sinks, still drifting through the lull. Otherwise a leaf (jungle) or a grit sliver (cave).
@@ -412,8 +428,8 @@ function windBit(f, ux, uy, x0, y0, x1, y1, scatter, dust){
 function updateWindFx(dt, t){
   for (const f of L.forces||[]){
     if (!isAir(f)) continue;
-    const s = windState(f), on = forceOn(f, ticks) ? 1 : 0;
-    s.k += (on - s.k)*(1-Math.exp(-(on ? 2.6 : 1.1)*dt));           // a gust arrives quickly and dies away slowly
+    const s = windState(f);
+    s.k = Math.max(forceLevel(f, ticks), forceLevel(f, ticks+WLEAD));   // same envelope as the push, a quarter second early
     const am = Math.hypot(f.ax||0, f.ay||0) || 1, ux = (f.ax||0)/am, uy = (f.ay||0)/am;
     const x0 = Math.max(f.x, cam.x-160), y0 = Math.max(f.y, cam.y-160), x1 = Math.min(f.x+f.w, cam.x+vw/Z+160), y1 = Math.min(f.y+f.h, cam.y+vh/Z+160);
     if (x1 <= x0 || y1 <= y0){ s.bits.length = 0; continue; }       // off screen: let the field empty out
@@ -508,7 +524,7 @@ function drawForces(t, over){
   }
 }
 function drawRadial(f, t){                                                                             // a magnet: sparks converging (pull) or leaving (push)
-  const on = forceOn(f, ticks); ctx.strokeStyle = `rgba(255,200,120,${on?.45:.08})`; ctx.lineWidth = 2; ctx.beginPath();
+  const k = forceLevel(f, ticks); ctx.strokeStyle = `rgba(255,200,120,${(0.08+0.37*k).toFixed(3)})`; ctx.lineWidth = 2; ctx.beginPath();
   for (let i=0;i<14;i++){ const a = i/14*6.283 + t*0.3, ph = ((t*0.8 + i*0.13) % 1), d = (f.strength >= 0 ? 1-ph : ph)*f.r, d2 = Math.max(0, d-18); ctx.moveTo(f.cx+Math.cos(a)*d, f.cy+Math.sin(a)*d); ctx.lineTo(f.cx+Math.cos(a)*d2, f.cy+Math.sin(a)*d2); }
   ctx.stroke();
 }
