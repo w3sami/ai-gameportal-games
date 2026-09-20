@@ -49,7 +49,7 @@ import { liftFor, bounceNorm } from './bounce.js';
 import { drawGateGlow } from './gate.js';
 import { createCut } from './cutscene.js';
 import { createHyperspace } from './hyperspace.js';
-import { LEVELS } from './levels.js';
+import { LEVELS, LEVEL_FILES } from './levels.js';
 import { createSketch } from './sketch.js';
 import { mountBoard } from './leaderboard.js';
 import { LANG, setLang, t, voiceFor, numWord } from './i18n.js';
@@ -362,6 +362,62 @@ const sketch = createSketch({
   onOpen: () => { sketchPaused = paused; setPaused(true); refreshPanel(); },
   onClose: () => { setPaused(sketchPaused); refreshPanel(); },
 });
+
+/* ---------------------------------------------------------- kehittäjän tila
+
+   Kenttää rakentaessa sivu ladataan kymmeniä kertoja, ja joka kerta piti etsiä
+   kolme kytkintä uudestaan: säätöpaneeli auki, luonnoslehtiö auki, oikea
+   kenttä. Se on pieni työ kerrallaan ja iso silmukassa, joten se muistetaan.
+
+   Vain tässä selaimessa ja vain kun säätöjä on käytetty; pelaajan kone ei
+   kirjoita tähän koskaan mitään. */
+const DEV_STORE = 'spacetaxi.dev';
+const dev = { panel: false, sketch: false, level: -1 };
+try { Object.assign(dev, JSON.parse(localStorage.getItem(DEV_STORE) || 'null') || {}); } catch (e) {}
+let devReady = false;                          // vasta palautuksen jälkeen
+function saveDev() {
+  if (!devReady) return;
+  dev.panel = panelOpen();
+  dev.sketch = sketch.active;
+  dev.level = levelIndex;
+  try { localStorage.setItem(DEV_STORE, JSON.stringify(dev)); } catch (e) {}
+}
+
+/* Kenttä uusiksi ilman sivun latausta.
+ *
+ * Sivun lataus pudottaa kokoruututilan — kokoruutu on selaimen dokumentin
+ * ominaisuus ja lataus vaihtaa dokumentin — ja se on juuri se mitä kentän
+ * kanssa työskennellessä ei haluta. Kenttä on kuitenkin oma moduulinsa, joten
+ * sen voi tuoda uudestaan: kyselyparametri tekee siitä eri osoitteen, ja eri
+ * osoite on selaimelle eri moduuli.
+ *
+ * Kolme asiaa pitää siirtää vanhasta uuteen, ja kaikki kolme siksi että uusi
+ * moduuli on pelille tuntematon: kentän omat säätöarvot (jotka ovat kentän
+ * omassa oliossa eivätkä missään muualla), niiden oletukset, ja se mitä
+ * luonnoslehtiö piti kentän lähtöpaikkoina. Ilman viimeistä jokainen muuttunut
+ * luku näyttäisi siltä että joku raahasi sen. */
+async function reloadLevel() {
+  const file = LEVEL_FILES[levelIndex];
+  if (!file) return false;
+  const keep = tuneBody();                     // kentän omat arvot vanhasta oliosta
+  let lv;
+  try {
+    const m = await import(`./levels/${file}.js?v=${Date.now()}`);
+    lv = m[file];
+  } catch (e) { return false; }
+  if (!lv || !lv.name) return false;
+  LEVELS[levelIndex] = lv;
+  for (const g of lv.tune || []) {             // uudet oletukset uusista olioista
+    if (!g.obj || !g.sliders) continue;
+    const d = {};
+    for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
+    LEVEL_DEF.set(lv.name + '\u0000' + g.name, d);
+  }
+  applyBody(keep);                             // ja säädetyt arvot takaisin
+  sketch.forget(lv.name);
+  beginLevel(levelIndex, false);
+  return true;
+}
 
 layout();
 loadTune();
@@ -2365,11 +2421,29 @@ function buildPanel() {
   pauseSeg.append(pbutton(sketch.active ? 'on' : null, 'luonnos', () => {
     Promise.resolve(sketch.toggle()).then(ok => {
       if (ok === false && !sketch.active) panelNote = 'luonnoslehtiötä ei saatu ladattua';
+      saveDev();
       refreshPanel();
     });
   }));
   pauseRow.append(el('label', null, 'peli'), pauseSeg);
   panelEl.append(pauseRow);
+
+  /* Kaksi latausta, koska ne maksavat eri verran. Kenttä tulee uusiksi ilman
+     että kokoruutu, paneelit tai kenttävalinta katoavat; sivu on sitä varten
+     kun muukin kuin kenttä on muuttunut. */
+  const loadRow = el('div', 'row');
+  const loadSeg = el('div', 'seg');
+  loadSeg.append(pbutton(null, 'lataa kenttä', () => {
+    panelNote = 'ladataan kenttää…';
+    buildPanel();
+    reloadLevel().then(ok => {
+      panelNote = ok ? 'kenttä ladattu uudestaan' : 'kentän lataus ei onnistunut';
+      buildPanel();
+    });
+  }));
+  loadSeg.append(pbutton(null, 'lataa sivu', () => location.reload()));
+  loadRow.append(el('label', null, 'lataus'), loadSeg);
+  panelEl.append(loadRow);
 
   const langRow = el('div', 'row');
   const langSeg = el('div', 'seg');
@@ -2587,6 +2661,7 @@ function setPanel(on) {
   if (on === panelOpen()) return;
   if (on) { buildPanel(); panelEl.classList.remove('hidden'); }
   else panelEl.classList.add('hidden');
+  saveDev();
   /* Ja portaalille, jotta sen kytkin näyttää sen mikä on auki. */
   setPortal('debug', on);
 }
@@ -2715,6 +2790,8 @@ function start() {
 
 function startLevel(i) {
   warmSpeech();
+  dev.level = i;
+  saveDev();
   money = 40; lives = 3; runT = 0;
   bag = []; lastKind = -1;
   cut = null; carried = null; hyper = null;
@@ -2724,6 +2801,17 @@ function startLevel(i) {
 
 newRun();                                  // valikon takana näkyy oikea kenttä
 showCard(menuCard(), 0, null);
+
+/* Takaisin siihen mistä edellinen lataus jäi. Vain tekijälle: debugAllowed on
+   kehyksessä portaalin myöntämä, ja julkaistulla sivulla tätä ei tapahdu
+   vaikka avaimet sattuisivat olemaan selaimessa. */
+function restoreDev() {
+  devReady = true;
+  if (!debugAllowed()) return;
+  if (dev.level >= 0 && dev.level < LEVELS.length) startLevel(dev.level);
+  if (dev.panel) { if (portal.embedded) setPortal('debug', true); else setPanel(true); }
+  if (dev.sketch) Promise.resolve(sketch.open()).then(refreshPanel);
+}
 
 /* Kieli, kummasta päästä tahansa.
  *
@@ -2760,7 +2848,10 @@ if (portal.embedded) {
        setPaused palaa heti jos arvo on jo se — silmukkaa ei synny. */
     onPortal('pause', setPaused);
     onPortal('canWrite', () => { if (state === MENU) showCard(menuCard(), 0, null); });
+    restoreDev();                            // vasta kun canWrite on tiedossa
   });
+} else {
+  restoreDev();
 }
 
 /* Liput osoitteesta: ?debug=1 säätöpaneeli, ?test=1 pompputesti, ?lang=fi|en. */
@@ -2769,7 +2860,7 @@ try {
   for (const [k, v] of q) {
     const key = k.toLowerCase();
     const on = v !== '0' && v !== 'false';
-    if (key === 'debug' && on) togglePanel();
+    if (key === 'debug' && on && !panelOpen()) togglePanel();
     if (key === 'test' && on) import('./bouncetest.js').then(m => m.run(P)).catch(() => {});
   }
 } catch (e) {}

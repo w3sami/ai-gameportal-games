@@ -171,6 +171,7 @@ const POLES = [
 
    x, y on telineen jalka kannen pinnalla. */
 const ROCKET = { x: 198, y: HY[0], h: 128 };
+const ROCKETS = [ROCKET];                     // taulukkona, jotta niitä saa lisää
 
 /* ---------------------------------------------------------- valonheittimet
 
@@ -678,7 +679,7 @@ function moonBack(ctx, api) {
        koko on kupolilla nimenomaan r eikä transformin skaala. */
   }
   for (const d of DOMES) dome(ctx, d);
-  rocket(ctx, ROCKET);
+  for (const k of ROCKETS) rocket(ctx, k);
   for (const p of POLES) pole(ctx, p);
   for (const p of api.pads) mount(ctx, p);
   doorLamps(ctx);
@@ -766,6 +767,47 @@ const EDIT = [
   })),
 ];
 
+/* ------------------------------------------------------------- valmiit palat
+
+   Mitä kentästä saa panna lisää kenttäeditorilla. Editori ei osaa piirtää
+   uutta lajia — propsi on piirtofunktio eli koodia — mutta se osaa panna
+   lisää sitä mitä tämä kenttä jo piirtää, kun kenttä kertoo miten yksi
+   tehdään ja miten se otetaan pois.
+
+   Lisätyt elävät vain siinä selaimessa jossa ne pantiin, kuten siirrotkin, ja
+   päätyvät luonnokseen omana osionaan (`adds`). Sieltä ne kirjoitetaan tähän
+   tiedostoon käsin — kentän luvut ovat aina ne joita peli käyttää. */
+const drop = (arr) => (obj) => { const i = arr.indexOf(obj); if (i >= 0) arr.splice(i, 1); };
+
+const SPAWN = [
+  {
+    key: 'pole', label: 'tolppa',
+    make: at => { const p = { x: at.x, y: at.y, h: 60, hz: 0.6, col: '#7bf0a0' }; POLES.push(p); return p; },
+    drop: drop(POLES),
+    transform: { rot: true },
+    knob: { key: 'h', label: 'korkeus', min: 16, max: 200, step: 2 },
+  },
+  {
+    key: 'lamp', label: 'valo',
+    make: at => { const l = { x: at.x, y: at.y, rot: 0, h: 120, col: '#ffd479' }; LAMPS.push(l); return l; },
+    drop: drop(LAMPS),
+    transform: { rot: true },
+    knob: { key: 'h', label: 'kantama', min: 20, max: 320, step: 2 },
+  },
+  {
+    key: 'dome', label: 'kupoli',
+    make: at => { const d = { x: at.x, y: at.y, r: 56 }; DOMES.push(d); return d; },
+    drop: drop(DOMES),
+    knob: { key: 'r', label: 'säde', min: 24, max: 140, step: 1 },
+  },
+  {
+    key: 'rocket', label: 'raketti',
+    make: at => { const k = { x: at.x, y: at.y, h: 128 }; ROCKETS.push(k); return k; },
+    drop: drop(ROCKETS),
+    transform: true,
+  },
+];
+
 /* ------------------------------------------------------------------ kenttä */
 
 export const moonshot = {
@@ -789,6 +831,7 @@ export const moonshot = {
   walls: SOLIDS,
   pads: PADS,
   edit: EDIT,
+  spawn: SPAWN,
   mul: { grav: 0.3 },
   tune: [
     {

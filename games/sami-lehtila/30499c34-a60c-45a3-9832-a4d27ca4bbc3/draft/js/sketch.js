@@ -197,6 +197,7 @@ export function createSketch(host) {
     size: { w: W, h: H },
     scene: () => host.level().name,
     items: movable,
+    spawn: () => host.level().spawn || [],
     solids,
     check,
     kinds: KINDS,
