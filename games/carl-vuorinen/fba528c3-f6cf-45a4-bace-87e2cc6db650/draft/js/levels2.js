@@ -6,7 +6,9 @@
 // upwind trunk face), 'fissure' (a crack on the upwind rock face), 'sky' (none: the wind is simply there because the space is
 // open, so only valid where it is). Not read by the engine yet. Opposing gusts always sit in separate vertical bands.
 // A band's upwind edge should sit inside solid mass — a trunk, a rock face, the edge trunks — so the field is never seen to
-// begin in open air. The downwind edge may end in the open: that reads as the gale dying out, which is fine.
+// begin in open air, and the edge across the wind should line up with the end of that solid: a band coming off a standing
+// stump starts at the stump's top, one coming off hanging deadwood stops at its tip. The gap left over is the calm way past.
+// The downwind edge may end in the open: that reads as the gale dying out, which is fine.
 const EDGE_TRUNKS = w => [{x:-20,y:4000,tx:-20,ty:-200,w:300,taper:0,seed:-340}, {x:260,y:4000,tx:260,ty:-200,w:260,taper:0,seed:1620}, {x:w+20,y:4000,tx:w+20,ty:-200,w:300,taper:0,seed:w*7}, {x:w-260,y:4000,tx:w-260,ty:-200,w:260,taper:0,seed:w*7-1960}];
 LEVELS.push(
   {name:'Treetops', theme:'jungle', w:5600, h:2600, groundY:2300, canopyY:350,
@@ -121,12 +123,15 @@ LEVELS.push(
    foliage:[{x:1000,y:520,r:420,ry:140,seed:994,tone:1}, {x:3400,y:480,r:520,ry:150,seed:995,tone:0}, {x:5800,y:520,r:420,ry:140,seed:996,tone:2},
             {x:2300,y:1780,r:320,ry:130,seed:997,tone:0}, {x:4700,y:1790,r:320,ry:130,seed:998,tone:1}],
    hazards:[{x:1200,y:560,tx:1205,ty:800,w:60,seed:999,kind:'branch'}, {x:2300,y:540,tx:2305,ty:790,w:60,seed:1000,kind:'branch'}, {x:3500,y:530,tx:3505,ty:800,w:70,seed:1001,kind:'branch'}, {x:4700,y:550,tx:4705,ty:800,w:60,seed:1002,kind:'branch'}, {x:5700,y:560,tx:5705,ty:790,w:60,seed:1003,kind:'branch'}],
-   // the first band runs from x=0, so the gale comes out of the edge trunks rather than starting in mid-air over the launch pad.
+   // every band starts inside the wood upwind of it, so none of them is seen to begin in open air: band 1 out of the edge trunks,
+   // then each of the four stumps in turn. A band off a standing stump (988, 990) has its top at that stump's broken top, leaving
+   // the gap up to the canopy calm; a band off hanging deadwood (989, 991) stops at the tip, leaving the gap down to the ground
+   // calm. So the quiet way through alternates high, low, high, low, and the run is a weave rather than a straight blast.
    forces:[{kind:'wind',x:0,y:600,w:1470,h:1120,ax:290,period:5,duty:0.5,phase:0,src:'sky'},
-           {kind:'wind',x:1980,y:600,w:690,h:1120,ax:290,period:5,duty:0.5,phase:1.25,src:'sky'},
-           {kind:'wind',x:3180,y:600,w:680,h:1120,ax:290,period:5,duty:0.5,phase:2.5,src:'sky'},
-           {kind:'wind',x:4390,y:600,w:680,h:1120,ax:290,period:5,duty:0.5,phase:3.75,src:'sky'},
-           {kind:'wind',x:5580,y:600,w:320,h:1120,ax:290,period:5,duty:0.5,phase:0.6,src:'sky'}],
+           {kind:'wind',x:1600,y:880,w:1070,h:840,ax:290,period:5,duty:0.5,phase:1.25,src:'sky'},
+           {kind:'wind',x:2800,y:600,w:1060,h:720,ax:290,period:5,duty:0.5,phase:2.5,src:'sky'},
+           {kind:'wind',x:4000,y:860,w:1070,h:860,ax:290,period:5,duty:0.5,phase:3.75,src:'sky'},
+           {kind:'wind',x:5200,y:600,w:700,h:740,ax:290,period:5,duty:0.5,phase:0.6,src:'sky'}],
    walls:[],
    // the two end hollows floor out around y=1750–1780, deeper than the 100 px pedestal reached: both pads sat clear of the ground.
    // Dropped a little and given a taller plinth, so each one is dug into the floor the way the rest of the chapter's pads are.
