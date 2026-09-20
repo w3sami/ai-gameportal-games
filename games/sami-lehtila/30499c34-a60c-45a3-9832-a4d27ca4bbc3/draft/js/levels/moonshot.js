@@ -26,7 +26,11 @@
  *   2. Valo tulee ylävasemmalta. Kraatterien valoreunat, kupolien kiillot ja
  *      katosten yläsärmät ovat kaikki samalla puolella.
  */
-import { W, H, CEIL, HATCH } from './shared.js';
+/* applyTransform on shared.js:ssä eikä tuotuna pluginista, koska tämä tiedosto
+   ajetaan myös nodessa (tools/check-grid.mjs) eikä node hae https-tuonteja.
+   Kulissien skaala, kierto ja peilaus tulevat sen kautta kenttäeditorista; ks.
+   edit-taulu tiedoston lopussa. */
+import { W, H, CEIL, HATCH, applyTransform } from './shared.js';
 
 /* ---------------------------------------------------------------- ruudukko
 
@@ -398,7 +402,7 @@ function plain(ctx) {
    ei mitään kupolin poikki menevää palkkia. */
 function dome(ctx, d) {
   ctx.save();
-  ctx.translate(d.x, d.y);
+  applyTransform(ctx, d);
 
   ctx.save();
   ctx.beginPath();
@@ -479,60 +483,70 @@ function interior(ctx, d) {
 
 /* Tolppa: ohut suora masto, päässä neliövalo joka vilkkuu omalla jaksollaan.
    Kello on performance.now(), koska pelin runT pysähtyy luukusta tullessa. */
+/* Origo on tolpan jalka, ja kaikki piirtyy sen ympärille: silloin editorin
+   kierto kääntää tolpan jalkansa varassa eikä ruudun nurkan ympäri. */
 function pole(ctx, p) {
-  const top = p.y - p.h;
+  ctx.save();
+  applyTransform(ctx, p);
+  const top = -p.h;
   ctx.fillStyle = 'rgba(146,160,182,.75)';
-  ctx.fillRect(p.x - 1.5, top, 3, p.h);
+  ctx.fillRect(-1.5, top, 3, p.h);
   ctx.fillStyle = 'rgba(120,134,156,.8)';     // jalka
-  ctx.fillRect(p.x - 5, p.y - 4, 10, 4);
+  ctx.fillRect(-5, -4, 10, 4);
 
   const on = (clock / 1000 / Math.max(0.15, p.hz)) % 2 < 1;
   ctx.fillStyle = on ? p.col : 'rgba(40,48,62,.85)';
   if (on) { ctx.shadowColor = p.col; ctx.shadowBlur = 10; }
-  ctx.fillRect(p.x - 3, top - 6, 6, 6);
-  ctx.shadowBlur = 0;
+  ctx.fillRect(-3, top - 6, 6, 6);
+  ctx.restore();
 }
 
 /* Raketti telineessä: runko, kärki, evät ja ristikkotorni kylkeen. Kulissia. */
+/* Origo on telineen jalka. Raketti on ainoa kentän kulissi jolla koko
+   transformi on käytössä, koska se on ainoa jolla kierrolla on mieltä: pystyssä
+   se odottaa laukaisua, kyljellään se on siirrossa. */
 function rocket(ctx, k) {
-  const top = k.y - k.h, wRoc = 17;
+  ctx.save();
+  applyTransform(ctx, k);
+  const top = -k.h, wRoc = 17;
   ctx.fillStyle = '#7d8798';                  // ristikkotorni kylkeen
-  ctx.fillRect(k.x + 20, top + 12, 3, k.h - 12);
-  ctx.fillRect(k.x + 34, top + 12, 3, k.h - 12);
+  ctx.fillRect(20, top + 12, 3, k.h - 12);
+  ctx.fillRect(34, top + 12, 3, k.h - 12);
   ctx.strokeStyle = 'rgba(125,135,152,.85)';
   ctx.lineWidth = 1.6;
-  for (let y = top + 20; y < k.y; y += 20) {
-    ctx.beginPath(); ctx.moveTo(k.x + 23, y); ctx.lineTo(k.x + 34, y + 10); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(k.x + 23, y + 10); ctx.lineTo(k.x + 34, y); ctx.stroke();
+  for (let y = top + 20; y < 0; y += 20) {
+    ctx.beginPath(); ctx.moveTo(23, y); ctx.lineTo(34, y + 10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(23, y + 10); ctx.lineTo(34, y); ctx.stroke();
   }
 
   ctx.fillStyle = '#2a3140';                  // evät
   ctx.beginPath();
-  ctx.moveTo(k.x - wRoc, k.y); ctx.lineTo(k.x - wRoc - 11, k.y);
-  ctx.lineTo(k.x - wRoc, k.y - 34); ctx.closePath(); ctx.fill();
+  ctx.moveTo(-wRoc, 0); ctx.lineTo(-wRoc - 11, 0);
+  ctx.lineTo(-wRoc, -34); ctx.closePath(); ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(k.x + wRoc, k.y); ctx.lineTo(k.x + wRoc + 11, k.y);
-  ctx.lineTo(k.x + wRoc, k.y - 34); ctx.closePath(); ctx.fill();
+  ctx.moveTo(wRoc, 0); ctx.lineTo(wRoc + 11, 0);
+  ctx.lineTo(wRoc, -34); ctx.closePath(); ctx.fill();
 
-  const g = ctx.createLinearGradient(k.x - wRoc, 0, k.x + wRoc, 0);
+  const g = ctx.createLinearGradient(-wRoc, 0, wRoc, 0);
   g.addColorStop(0, '#cfd6e4');
   g.addColorStop(0.45, '#f2f5fa');
   g.addColorStop(1, '#79839a');
   ctx.fillStyle = g;
-  ctx.fillRect(k.x - wRoc, top + 26, wRoc * 2, k.h - 26);
+  ctx.fillRect(-wRoc, top + 26, wRoc * 2, k.h - 26);
 
   ctx.beginPath();                            // kärki
-  ctx.moveTo(k.x - wRoc, top + 28);
-  ctx.quadraticCurveTo(k.x, top - 12, k.x + wRoc, top + 28);
+  ctx.moveTo(-wRoc, top + 28);
+  ctx.quadraticCurveTo(0, top - 12, wRoc, top + 28);
   ctx.closePath();
   ctx.fillStyle = '#e9edf5'; ctx.fill();
   ctx.fillStyle = '#c8324a';
-  ctx.fillRect(k.x - wRoc, top + 44, wRoc * 2, 7);
+  ctx.fillRect(-wRoc, top + 44, wRoc * 2, 7);
   ctx.fillStyle = 'rgba(12,18,28,.55)';       // ikkuna
-  ctx.beginPath(); ctx.arc(k.x, top + 66, 5, 0, 6.3); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, top + 66, 5, 0, 6.3); ctx.fill();
 
   ctx.fillStyle = 'rgba(20,26,36,.7)';        // suutin
-  ctx.fillRect(k.x - 9, k.y - 6, 18, 6);
+  ctx.fillRect(-9, -6, 18, 6);
+  ctx.restore();
 }
 
 /* Oviaukon karmi ja lamppurivi. Lamput ovat aukon molemmin puolin seinässä,
@@ -594,6 +608,8 @@ function moonBack(ctx, api) {
   for (const d of DOMES) {
     ctx.fillStyle = 'rgba(10,12,18,.4)';
     ctx.beginPath(); ctx.ellipse(d.x + 14, d.y + 5, d.r * 1.05, 10, 0, 0, 6.3); ctx.fill();
+    /* Varjo piirtyy kupolin ulkopuolella, joten se lukee r:n itse — editorin
+       koko on kupolilla nimenomaan r eikä transformin skaala. */
   }
   for (const d of DOMES) dome(ctx, d);
   rocket(ctx, ROCKET);
@@ -644,16 +660,34 @@ function moonFront(ctx, api) {
    tänne. Kentän luvut ovat siis aina ne joita peli oikeasti käyttää — myös
    tools/check-grid.mjs:lle, joka lukee tämän moduulin. */
 const EDIT = [
+  /* Alusta saa knobin eikä transformia, ja se on se ero joka ratkaisee: alusta
+     on törmäyslaatikko, ja transformin skaala muuttaisi vain sen miltä se
+     näyttää — fysiikka laskisi yhä vanhalla leveydellä. w on se luku jota peli
+     oikeasti lukee, joten sitä säädetään. */
   ...PADS.map(p => ({
     id: 'pad:' + p.id,
     kind: 'pad',
     obj: p,
     label: p.fuel ? 'tankkaus' : 'alusta ' + p.id,
+    knob: { key: 'w', label: 'leveys', min: 60, max: 220, step: 2 },
   })),
-  { id: 'prop:rocket', kind: 'prop', obj: ROCKET, label: 'raketti' },
-  { id: 'prop:earth', kind: 'prop', obj: EARTH, label: 'maapallo' },
-  ...DOMES.map((d, i) => ({ id: `prop:dome-${i + 1}`, kind: 'prop', obj: d, label: `kupoli ${i + 1}` })),
-  ...POLES.map((p, i) => ({ id: `prop:pole-${i + 1}`, kind: 'prop', obj: p, label: `tolppa ${i + 1}` })),
+  /* Kulissit saavat transformin, koska niissä ei ole törmäystä lainkaan.
+     Raketilla koko transformi: kyljelleen käännetty raketti on siirrossa.
+     Tolpalla kierto ja korkeus — kierretty tolppa on seinään pultattu varsi. */
+  { id: 'prop:rocket', kind: 'prop', obj: ROCKET, label: 'raketti', transform: true },
+  /* Maapallolla vain koko: se on valonlähde jonka terminaattori tulee
+     ylävasemmalta, ja kääntäminen rikkoisi kentän toisen piirtosäännön. */
+  { id: 'prop:earth', kind: 'prop', obj: EARTH, label: 'maapallo',
+    knob: { key: 'r', label: 'säde', min: 18, max: 120, step: 1 } },
+  ...DOMES.map((d, i) => ({
+    id: `prop:dome-${i + 1}`, kind: 'prop', obj: d, label: `kupoli ${i + 1}`,
+    knob: { key: 'r', label: 'säde', min: 24, max: 140, step: 1 },
+  })),
+  ...POLES.map((p, i) => ({
+    id: `prop:pole-${i + 1}`, kind: 'prop', obj: p, label: `tolppa ${i + 1}`,
+    transform: { rot: true },
+    knob: { key: 'h', label: 'korkeus', min: 16, max: 200, step: 2 },
+  })),
 ];
 
 /* ------------------------------------------------------------------ kenttä */

@@ -333,6 +333,9 @@ function syncPads() {
     if (!src) continue;
     p.x = p.bx = src.x;
     p.y = p.by = src.y;
+    /* Myös leveys: alusta on törmäyslaatikko, joten sen koko säädetään sillä
+       luvulla jota fysiikka lukee eikä piirron skaalalla. */
+    if (typeof src.w === 'number') p.w = src.w;
   }
 }
 
