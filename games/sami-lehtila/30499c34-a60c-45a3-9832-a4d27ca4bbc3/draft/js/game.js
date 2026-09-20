@@ -443,7 +443,11 @@ async function reloadLevel() {
  * no-store ohittaa välimuistin, jota draftilla on viisi minuuttia — ilman sitä
  * vartija katsoisi vanhaa kopiota eikä huomaisi mitään.
  *
- * Päällä vain debug-tilassa, eli pelaajan koneelta ei lähde yhtään pyyntöä. */
+ * Käy vain kun säätöpaneeli on auki. debugAllowed yksin ei riitä ehdoksi:
+ * pelin omassa osoitteessa se on tosi kenelle tahansa, ja silloin vartija
+ * hakisi 38 kt kolmen sekunnin välein pelaajalle joka ei ole avannut mitään.
+ * Paneeli auki on se hetki jolloin kenttää rakennetaan, ja se on myös hetki
+ * jonka pelaaja ei vahingossa saa aikaan. */
 const WATCH_MS = 3000;
 let watchT = 0, watchTag = null, watching = false;
 
@@ -482,8 +486,11 @@ async function watchTick() {
   if (watching) watchT = setTimeout(watchTick, WATCH_MS);
 }
 
+/** Onko vartijan syytä käydä: sallittu, päälle kytketty ja paneeli auki. */
+const wantWatch = () => debugAllowed() && dev.watch !== false && panelOpen();
+
 function setWatch(on) {
-  on = !!on && debugAllowed();
+  on = !!on;
   if (on === watching) return;
   watching = on;
   clearTimeout(watchT);
@@ -2516,7 +2523,7 @@ function buildPanel() {
   loadSeg.append(pbutton(null, 'lataa sivu', () => location.reload()));
   loadSeg.append(pbutton(watching ? 'on' : null, 'seuraa', () => {
     dev.watch = !watching;
-    setWatch(dev.watch);
+    setWatch(wantWatch());
     saveDev();
     buildPanel();
   }));
@@ -2740,6 +2747,7 @@ function setPanel(on) {
   if (on) { buildPanel(); panelEl.classList.remove('hidden'); }
   else panelEl.classList.add('hidden');
   saveDev();
+  setWatch(wantWatch());                       // vartija seuraa paneelia
   /* Ja portaalille, jotta sen kytkin näyttää sen mikä on auki. */
   setPortal('debug', on);
 }
@@ -2889,10 +2897,10 @@ function restoreDev() {
   if (!debugAllowed()) return;
   /* Vartija ensin: kaikki muu täällä kutsuu saveDeviä, ja saveDev lukee
      vartijan tilan — käynnistämätön vartija tallentuisi pois päältä. */
-  setWatch(dev.watch !== false);
   if (dev.level >= 0 && dev.level < LEVELS.length) startLevel(dev.level);
   if (dev.panel) { if (portal.embedded) setPortal('debug', true); else setPanel(true); }
   if (dev.sketch) Promise.resolve(sketch.open()).then(refreshPanel);
+  setWatch(wantWatch());
 }
 
 /* Kieli, kummasta päästä tahansa.
