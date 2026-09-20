@@ -24,6 +24,9 @@ function facets(x, r, x0, y0, W, H, n, smin, smax, amp){
 const shade = (hex, k) => { const n = parseInt(hex.slice(1),16); return `rgb(${(n>>16)*k|0},${((n>>8)&255)*k|0},${(n&255)*k|0})`; };
 const shadePal = (pal, k) => { const o = {}; for (const [n,v] of Object.entries(pal)) o[n] = Array.isArray(v) ? v.map(c => shade(c,k)) : shade(v,k); return o; };
 const angular = (ctx) => { ctx.lineJoin = 'miter'; ctx.lineCap = 'square'; ctx.miterLimit = 4; };
+// The mass a level is cut out of. Rock by default; levels set inside a tree take wallMat:'wood' and get pal.wood plus the
+// grain pass in woodGrain, so the walls read as the inside of a trunk rather than a cave.
+const massCol = pal => (L.wallMat === 'wood' && pal.wood) || pal.rock;
 // The pad surface is drawn on the depth layers too (darker as they recede), so when the pad sits far from the
 // screen centre the pedestal's top face reads as a receding landing deck rather than a lid over the rocket.
 function drawPad(x,p,col,k){
@@ -84,7 +87,7 @@ function renderLayer(q, st, padX, padY){
   const W = Math.ceil((L.w+2*padX)*q), H = Math.ceil((L.h+2*padY)*q), pal = st.pal, out = {w:W, h:H, tiles:[], mask:st.captureMask ? new Uint8Array(L.w*L.h) : null};
   for (let ty=0; ty<H; ty+=TILE) for (let tx=0; tx<W; tx+=TILE){
     const tw = Math.min(TILE, W-tx), th = Math.min(TILE, H-ty), c = mkCanvas(tw+2*TM,th+2*TM), x = c.getContext('2d'), r = rng(L.rooms[0].seed*31+7);
-    x.fillStyle = pal.rock; x.fillRect(0,0,tw+2*TM,th+2*TM);
+    x.fillStyle = massCol(pal); x.fillRect(0,0,tw+2*TM,th+2*TM);
     x.translate(padX*q-tx+TM, padY*q-ty+TM); x.scale(q,q);
     if (STYLE.terrain) STYLE.terrain(x, rng(L.rooms[0].seed*47+11), pal, -400, -400, L.w+800, L.h+800);
     facets(x, r, -400, -400, L.w+800, L.h+800, Math.round(L.w*L.h/60000), 260, 800, st.amp);
@@ -143,6 +146,21 @@ function renderSpikeSprite(pts, seed, kind, axis){
 }
 
 // ---- Themes ----
+// Wood mass: for a level cut into a tree rather than into rock. Long vertical grain in flat parallel bands, a knot here
+// and there where the fibres part, painted over the whole mass before the terrain bands go on, so only the wall band
+// between canopy and ground keeps it. Straight edges only, like everything else.
+function woodGrain(x, r, pal, X, Y, W, H){
+  const n = Math.max(14, Math.round(W/55));
+  for (let i=0;i<n;i++){
+    const cx = X+(i+(r()-0.5)*0.9)*W/n, w = 9+r()*34, lean = (r()-0.5)*110, y0 = Y-H*0.1+r()*H*0.55, y1 = y0+H*(0.3+r()*0.75);
+    poly(x, [[cx-w/2,y0],[cx+w/2,y0],[cx+w/2+lean,y1],[cx-w/2+lean,y1]]);
+    x.fillStyle = r()<0.66 ? `rgba(0,0,0,${(0.09+r()*0.15).toFixed(3)})` : `rgba(255,255,255,${(0.04+r()*0.07).toFixed(3)})`; x.fill();
+  }
+  for (let i=0, k=Math.max(4, Math.round(W*H/900000)); i<k; i++){     // knots: rings of hard grain round a dark core
+    const kx = X+r()*W, ky = Y+r()*H, kr = 28+r()*56, sd = Math.floor(r()*1e6);
+    for (let j=3;j>=1;j--){ poly(x, polyPts(kx, ky, kr*j/3, kr*j/3*0.72, 0.24, sd+j)); x.fillStyle = j === 2 ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.24)'; x.fill(); }
+  }
+}
 // Jungle terrain: the solid mass is painted in bands before the cave is cut, so room ceilings come out as layered
 // canopy, walls as rock face and floors as earth. Band edges are jagged polylines; nothing here is curved either.
 function jungleTerrain(x, r, pal, X, Y, W, H){
@@ -160,15 +178,16 @@ function jungleTerrain(x, r, pal, X, Y, W, H){
     band(cy, 70, 95, pal.leaf[1], true);
     band(cy-100, 60, 85, pal.leaf[2], true);
   };
+  if (L.wallMat === 'wood') woodGrain(x, r, pal, X, Y, W, H);   // the mass is a tree: grain first, bands over it
   bands(L.groundY !== undefined ? L.groundY : L.h*0.8, L.canopyY !== undefined ? L.canopyY : L.h*0.3, X, L.plateau ? L.plateau.x0 : X+W);
   // plateau: a second band pair from x0 rightwards, for a high jungle beyond a cliff. The seam should sit inside a rock zone.
-  if (L.plateau){ const p = L.plateau; x.fillStyle = pal.rock; x.fillRect(p.x0, Y, X+W-p.x0, H); bands(p.groundY, p.canopyY, p.x0, X+W); }
+  if (L.plateau){ const p = L.plateau; x.fillStyle = massCol(pal); x.fillRect(p.x0, Y, X+W-p.x0, H); if (L.wallMat === 'wood') woodGrain(x, r, pal, p.x0, Y, X+W-p.x0, H); bands(p.groundY, p.canopyY, p.x0, X+W); }
   // rock zones: cave rock painted over the bands, exactly the cave theme's fill. Cut rooms inside read as cave, and game.js
   // crossfades the backdrop to the cave theme's while the rocket is inside one.
   for (const z of L.rockZones||[]){ poly(x, polyPts(z.x, z.y, z.r, z.ry||z.r, z.wob||0.12, z.seed)); x.fillStyle = pal.rock; x.fill(); }
 }
 const DEPTH_F = [0.98,0.96,0.94,0.92,0.90,0.88];
-const JUNGLE_PAL = { rock:'#8f959d', earth:'#b08a58', earthDark:'#8e6b42', bark:'#4b3320', leaf:['#2c5a2a','#3d7c38','#559c47','#74b85a'] };
+const JUNGLE_PAL = { rock:'#8f959d', wood:'#775532', earth:'#b08a58', earthDark:'#8e6b42', bark:'#4b3320', leaf:['#2c5a2a','#3d7c38','#559c47','#74b85a'] };
 const THEMES = {
   cave: {
     main:  { pal:{rock:'#8f959d', bark:JUNGLE_PAL.bark, leaf:JUNGLE_PAL.leaf}, amp:0.07, edge:10, pads:true, captureMask:true },   // bark and leaf so a cave level can show a glimpse of jungle
