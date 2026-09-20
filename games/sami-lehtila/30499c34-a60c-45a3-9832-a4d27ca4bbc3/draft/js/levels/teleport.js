@@ -294,6 +294,26 @@ const BUBBLES = [
 
 /** Kävelee polkua pitkin ja kutsuu takaisin joka `step` pikselin välein,
     mukana paikallinen suunta. Haitariputken kylkiluut tarvitsevat sen. */
+/* Putken polku pehmeänä kaarena eikä murtoviivana.
+
+   Sami: *"piirrokset toki vain suuntaa antavia, ilman kunnon spline
+   työkalua."* Juuri niin, joten veto luetaan suunnaksi eikä jäljeksi:
+   pisteiden välipisteiden kautta kulkeva neliökäyrä tasoittaa käsivaran
+   tärinän mutta jättää sen muodon jonka hän tarkoitti. */
+function pipePath(ctx, pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x, y] = pts[i];
+    const [nx, ny] = pts[i + 1];
+    ctx.quadraticCurveTo(x, y, (x + nx) / 2, (y + ny) / 2);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last[0], last[1]);
+}
+
+/** Kävelee polkua pitkin ja kutsuu takaisin joka `step` pikselin välein,
+    mukana paikallinen suunta. Haitariputken kylkiluut tarvitsevat sen. */
 function walk(pts, step, fn) {
   let carry = 0;
   for (let i = 1; i < pts.length; i++) {
