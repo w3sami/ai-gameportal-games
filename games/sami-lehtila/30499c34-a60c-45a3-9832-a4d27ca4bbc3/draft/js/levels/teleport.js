@@ -235,6 +235,12 @@ const PIPES = [
                 [432, 399], [435, 425], [436, 456], [438, 490]] },
   { w: 7, pts: [[372, 257], [405, 257], [436, 258], [457, 279], [461, 312],
                 [461, 338], [461, 367], [461, 394], [461, 427], [461, 453], [461, 490]] },
+  /* BL: kehäseinästä vaakaan, sitten kaarre ylös ja väliseinään. Kulkee
+     alustan 4 takaa — putki on taustatasossa, joten alusta piirtyy sen yli ja
+     se näyttää menevän sen takaa niin kuin putken kuuluukin. */
+  { w: 18, ribs: 11, pts: [[19, 729], [52, 729], [80, 729], [106, 729], [136, 729],
+                           [167, 727], [193, 724], [223, 712], [240, 686], [242, 657],
+                           [246, 631], [268, 606], [300, 589], [334, 586], [342, 586]] },
 ];
 
 /* Pisaralamput johdon päässä. Neljä, yksi lisää kahteen pimeimpään huoneeseen.
