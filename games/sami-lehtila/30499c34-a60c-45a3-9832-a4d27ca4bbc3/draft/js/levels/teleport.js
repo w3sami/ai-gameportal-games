@@ -303,6 +303,31 @@ const VATS = [];
   }
 }
 
+/* -------------------------------------------------------------- alien-sikiö
+
+   Sami maalasi 21.9.2026 laatikon 39 × 101 täsmälleen oikeanpuoleisen
+   ylätankin keskelle ja kirjoitti viereen: *"tehdää alien sikiö, ei liian
+   pelottava."* Laatikko on siis sekä paikka että koko, ja sen yläosa on
+   napanuoraa: nuora nousee tankin syöttöputkeen, mikä tekee oliosta näytteen
+   eikä hirviötä.
+
+   **"Ei liian pelottava" on piirto-ohje, ei sävy.** Silmät ovat kiinni ja
+   luomet kaartuvat alas — nukkuva ei tuijota takaisin — pää on iso ja pyöreä,
+   raajat kääriytyneet sisään, eikä missään ole terävää kulmaa.
+
+   Kirkkaus tulee tankiston `DIM`:stä kuten kaikella muullakin lasin takana, ja
+   sikiö piirtyy kuplien ja etuhohteen **alle**: se on huoneessa oleva asia
+   eikä huoneen aihe. Sama perustelu kuin vesitankeilla yllä — tausta ei saa
+   varastaa katsetta portilta.
+
+   Tankki päätellään paikasta eikä kirjoiteta indeksinä, jotta nuora löytää
+   oikean kannen myös silloin kun sikiö raahataan editorissa toiseen
+   tankkiin. */
+const FETUS = { x: 655, y: 188, s: 1 };
+const FET_COL = '#cfe9ff';
+const fetusVat = () => VATS.find((v) => FETUS.x > v.x && FETUS.x < v.x + v.w &&
+                                        FETUS.y > v.y && FETUS.y < v.y + v.h);
+
 /* Kuplat: paikka leveydellä 0…1, säde, nousunopeus ja oma vaihe. Vaiheet ovat
    eri, jottei rivi nouse yhtenä ryhmänä — yhtä aikaa nouseva joukko näyttää
    animaatiolta eikä vedeltä. */
@@ -520,6 +545,53 @@ function paintFace(g) {
   }
 }
 
+/** Alien-sikiö tankin nesteessä: iso pää, kääriytyneet raajat, silmät kiinni.
+    Kelluu hitaasti ja keinuu hieman — neste liikuttaa sitä, se ei itse liiku. */
+function alienFetus(ctx, t) {
+  const v = fetusVat();
+  const y = FETUS.y + Math.sin(t / 2.9) * 3.2;
+
+  if (v) {                                    /* napanuora kannen syöttöputkeen */
+    const sway = Math.sin(t / 3.1) * 7;
+    ctx.strokeStyle = fade(FET_COL, DIM * 2.0);
+    ctx.lineWidth = 3.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(v.x + v.w / 2, v.y + 2);
+    ctx.quadraticCurveTo(v.x + v.w / 2 + sway, (v.y + y) / 2, FETUS.x + 3, y + 1);
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.translate(FETUS.x, y);
+  ctx.rotate(Math.sin(t / 3.7) * 0.05);
+  ctx.scale(FETUS.s, FETUS.s);
+
+  const glow = ctx.createRadialGradient(0, -6, 2, 0, -6, 46);
+  glow.addColorStop(0, fade(VAT_COL, DIM * 2.2));
+  glow.addColorStop(1, fade(VAT_COL, 0));
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(0, -6, 46, 0, 6.3); ctx.fill();
+
+  const skin = ctx.createLinearGradient(-14, -32, 14, 20);
+  skin.addColorStop(0, fade(FET_COL, DIM * 3.6));
+  skin.addColorStop(1, fade(FET_COL, DIM * 2.2));
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.ellipse(-1, 13, 11.5, 8.5, -0.25, 0, 6.3); ctx.fill();   // jalat kippurassa
+  ctx.beginPath(); ctx.ellipse(1, 1, 12.5, 13.5, 0.1, 0, 6.3); ctx.fill();      // vartalo
+  ctx.beginPath(); ctx.ellipse(-8, -6, 5.5, 4.2, 0.7, 0, 6.3); ctx.fill();      // kädet leuan alla
+  ctx.beginPath(); ctx.ellipse(8, -4, 5, 4, -0.6, 0, 6.3); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, -18, 15.5, 14.5, 0, 0, 6.3); ctx.fill();      // iso pyöreä pää
+
+  ctx.fillStyle = `rgba(255,255,255,${DIM * 2.2})`;   // valoreuna ylävasemmalle
+  ctx.beginPath(); ctx.ellipse(-5, -23, 7, 4.6, -0.5, 0, 6.3); ctx.fill();
+
+  ctx.fillStyle = `rgba(18,30,48,${DIM * 3.4})`;      // luomet kiinni, kaari alas
+  ctx.beginPath(); ctx.ellipse(-6.5, -16, 4.2, 1.5, 0.3, 0, 6.3); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(6.5, -16, 4.2, 1.5, -0.3, 0, 6.3); ctx.fill();
+  ctx.restore();
+}
+
 /** Elävä osa: räkkien merkkivalot ja lasien sisällöt. */
 function labLive(ctx) {
   for (let i = 0; i < RACKS.length; i++) {
@@ -550,6 +622,7 @@ function labLive(ctx) {
      elää sen verran että sen huomaa, ei niin että sitä katsoo. */
   {
     const t = clock / 1000;
+    alienFetus(ctx, t);           // kuplat ja etuhohde piirtyvät tämän yli
     for (const v of VATS) {
       for (let i = 0; i < BUBBLES.length; i++) {
         const [px, r, spd, bp] = BUBBLES[(i + v.ph * 2) % BUBBLES.length];
@@ -751,6 +824,8 @@ const EDIT = [
     label: p.fuel ? 'tankkaus' : 'alusta ' + p.id,
     knob: { key: 'w', label: 'leveys', min: 60, max: 260, step: 2 },
   })),
+  { id: 'fetus', kind: 'prop', obj: FETUS, label: 'sikiö',
+    knob: { key: 's', label: 'koko', min: 0.5, max: 1.8, step: 0.05 } },
   ...PORTALS.flatMap((p, i) => [
     { id: `portal:${i + 1}:in`, kind: 'prop', obj: p.a, label: `portti ${i + 1} sisään`,
       knob: { key: 'r', label: 'säde', min: 12, max: 60, step: 1 } },
