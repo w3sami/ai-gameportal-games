@@ -114,14 +114,16 @@ function burnAt(m, t) {
    Samasta syystä aurinko piirretään täällä eikä level.sun-kentässä: peli
    piirtää sen ennen drawBackia, ja tähtiä peittävä maali hautaisi sen alleen.
 
-   HUDin rahasumma on vaaleaa tekstiä. Taivas on yläreunassa jo valmiiksi
-   syvä, ja lisäksi ylälaitaan tulee vaimea vinjetti — korjaus on kentän
-   puolella, ei HUDin värissä.
+   HUDin rahasumma on vaaleaa tekstiä ja kosketusnappien kehykset on viritetty
+   tummaa vastaan. Molempien korjaus on kentän puolella eikä pelin väreissä:
+   ylälaitaan tulee vaimea vinjetti ja alalaitaan iltahämärä, joka tummentaa
+   sen kaistan jolla napit ovat. Vaalealla hiekalla nappien ääriviivat
+   katosivat kokonaan, ja sen näki vasta ajamalla.
 
    Iltapäivä eikä keskipäivä: liekki on yökuva ja hohtaisi kirkkaassa
    päivänvalossa turhaan. Sininen syvenee ylöspäin ja lämpenee alaspäin. */
-const SKY = ['#14345f', '#2e6398', '#8aa8bf', '#caa07a'];
-const SUN = { x: 224, y: 232, r: 54, col: '255,207,143' };
+const SKY = ['#14345f', '#2e6398', '#8aa8bf', '#c2926a'];
+const SUN = { x: 246, y: 200, r: 50, col: '255,207,143' };
 
 function sky(ctx) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -135,17 +137,23 @@ function sky(ctx) {
   halo.addColorStop(1, `rgba(${SUN.col},0)`);
   ctx.fillStyle = halo;
   ctx.beginPath(); ctx.arc(SUN.x, SUN.y, SUN.r * 3.6, 0, 6.3); ctx.fill();
-  ctx.fillStyle = `rgba(${SUN.col},.9)`;
+  ctx.fillStyle = `rgba(${SUN.col},.82)`;
   ctx.beginPath(); ctx.arc(SUN.x, SUN.y, SUN.r, 0, 6.3); ctx.fill();
 }
 
-/** Vinjetti ylälaitaan, jotta rahasumma ja polttoainepalkki erottuvat. */
+/** Vinjetti ylälaitaan HUDin alle ja iltahämärä alalaitaan nappien taakse. */
 function vignette(ctx) {
-  const g = ctx.createLinearGradient(0, 0, 0, 190);
-  g.addColorStop(0, 'rgba(6,14,32,.42)');
-  g.addColorStop(1, 'rgba(6,14,32,0)');
-  ctx.fillStyle = g;
+  const top = ctx.createLinearGradient(0, 0, 0, 190);
+  top.addColorStop(0, 'rgba(6,14,32,.42)');
+  top.addColorStop(1, 'rgba(6,14,32,0)');
+  ctx.fillStyle = top;
   ctx.fillRect(0, 0, W, 190);
+
+  const low = ctx.createLinearGradient(0, 700, 0, H);
+  low.addColorStop(0, 'rgba(22,16,38,0)');
+  low.addColorStop(1, 'rgba(20,14,34,.34)');
+  ctx.fillStyle = low;
+  ctx.fillRect(0, 700, W, H - 700);
 }
 
 /* ------------------------------------------------------------------- pilvet
