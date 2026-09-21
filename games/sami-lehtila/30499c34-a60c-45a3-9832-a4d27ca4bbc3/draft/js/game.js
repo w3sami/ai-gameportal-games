@@ -1680,7 +1680,16 @@ function leavePad() {
   taxi.landed = null;
   taxi.offPad = p;
   taxi.offT = PAD_LEAVE;
+  /* Nosto vain jos se mahtuu. Alusta voi olla matalan katon alla — Moonshotin
+     lohkoissa ja Highrisen ylärivissä on sellaisia — ja tarkistamaton nosto
+     työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
+     oikein. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
+  const y0 = taxi.y;
   taxi.y -= P.bounceLift;
+  const b = taxiBox(taxi);
+  for (const r of solids()) {
+    if (r !== p && hit(b, r)) { taxi.y = y0; break; }
+  }
 }
 
 /* Juuri jätetty alusta kannattelee taksia, se ei tapa sitä.
