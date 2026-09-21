@@ -26,6 +26,14 @@ window.PAD = pad;
 
 let stamp = 0, polled = -1, live = false, lock = false, sel = null, seenState = '';
 function poll(){ if (polled === stamp) return; polled = stamp; pad.poll(); }
+// The plugin has already taken its own dead zone out and rescaled what is left. The curve on top is S.expo, the same
+// shaping the touch stick gets, so the first millimetre of a real stick is a nudge exactly as it is under a thumb.
+// A d-pad reads as a full tilt and comes through the curve unchanged, which is what an arrow key is.
+function steer(){
+  if (!pad.connected) return 0;
+  const x = Math.max(-1, Math.min(1, pad.x));
+  return x ? Math.sign(x)*Math.pow(Math.abs(x), S.expo) : 0;
+}
 // The button that dismissed a menu must not also light the engine: thrust stays off until it is let go once.
 function thrust(){ const h = pad.held('thrust'); if (lock){ if (h) return false; lock = false; } return h; }
 
@@ -36,7 +44,7 @@ function thrust(){ const h = pad.held('thrust'); if (lock){ if (h) return false;
 const _readInput = readInput;
 window.readInput = function(){
   poll();
-  const px = pad.connected ? Math.max(-1, Math.min(1, pad.x)) : 0, pt = pad.connected && thrust();
+  const px = steer(), pt = pad.connected && thrust();
   if ((px || pt) && window.Thruster) window.Thruster.noteDevice();
   const inp = _readInput();
   if (pt) inp.thrust = 1;
