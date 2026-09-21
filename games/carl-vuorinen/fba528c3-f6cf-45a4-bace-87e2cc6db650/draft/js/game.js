@@ -12,6 +12,18 @@ try { const s = localStorage.getItem(SKEY); if (s){ const o = JSON.parse(s); sto
 const S = store.settings;
 delete S.relative;                                            // retired: steering is always relative to the rocket
 function save(){ try { localStorage.setItem(SKEY, JSON.stringify(store)); } catch (e) {} }
+// A new best is recorded on the frame the rocket touches the pad, which is also the frame the confetti spawns. Stringifying
+// the whole store and handing it to localStorage is a synchronous write of tens of kilobytes, right where the eye is. The
+// store is already correct in memory, so the write only has to happen soon: idle time, or on the way out of the page.
+let savePend = false;
+function saveSoon(){
+  if (savePend) return; savePend = true;
+  const run = () => { savePend = false; save(); };
+  if (window.requestIdleCallback) requestIdleCallback(run, {timeout:1500}); else setTimeout(run, 400);
+}
+function saveNow(){ if (savePend){ savePend = false; save(); } }
+addEventListener('pagehide', saveNow);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
 let li = 0;
 
 
@@ -271,7 +283,7 @@ function finish(){
     store.bests[li] = {ticks, path:GP.b64(GP.encode(gRec, GP.STEP, tail))};
   }
   if (li >= store.unlocked) store.unlocked = Math.min(LEVELS.length-1, li+1);
-  save(); Snd.finish();
+  saveSoon(); Snd.finish();
   lastResult = {ticks, prev: prev ? prev.ticks : null, isBest};
 }
 
@@ -316,24 +328,24 @@ function updateHazards(s){
 function emitThrust(s){
   const dx = -Math.sin(s.a), dy = Math.cos(s.a), ox = s.x+dx*11, oy = s.y+dy*11;
   for (let i=0;i<2;i++){ const sp = 160+Math.random()*180, j = (Math.random()-0.5)*70;
-    particles.push({x:ox,y:oy,vx:dx*sp+dy*j+s.vx*0.5,vy:dy*sp-dx*j+s.vy*0.5,life:0.22+Math.random()*0.18,max:0.4,sz:2.5+Math.random()*2,kind:0}); }
+    particles.push({x:ox,y:oy,vx:dx*sp+dy*j+s.vx*0.5,vy:dy*sp-dx*j+s.vy*0.5,life:0.22+Math.random()*0.18,max:0.4,sz:2.5+Math.random()*2,kind:0,col:null}); }
 }
 function explode(px,py){
-  for (let i=0;i<50;i++){ const a = Math.random()*6.283, sp = 60+Math.random()*260; particles.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,life:0.8+Math.random()*1.2,max:2,sz:1.5+Math.random()*3,kind:1}); }
-  for (let i=0;i<40;i++){ const a = Math.random()*6.283, sp = 120+Math.random()*420; particles.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.3+Math.random()*0.5,max:0.8,sz:2+Math.random()*3,kind:0}); }
-  particles.push({x:px,y:py,vx:0,vy:0,life:0.45,max:0.45,sz:0,kind:2});
+  for (let i=0;i<50;i++){ const a = Math.random()*6.283, sp = 60+Math.random()*260; particles.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,life:0.8+Math.random()*1.2,max:2,sz:1.5+Math.random()*3,kind:1,col:null}); }
+  for (let i=0;i<40;i++){ const a = Math.random()*6.283, sp = 120+Math.random()*420; particles.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.3+Math.random()*0.5,max:0.8,sz:2+Math.random()*3,kind:0,col:null}); }
+  particles.push({x:px,y:py,vx:0,vy:0,life:0.45,max:0.45,sz:0,kind:2,col:null});
 }
 function celebrate(px,py){
-  const cols = ['#5ad46e','#b8f5c2','#ffffff','#e3a23c'];
+  const cols = ['90,212,110','184,245,194','255,255,255','227,162,60'];   // rgb triples: the alpha is quantised and cached, see PFX
   for (let i=0;i<140;i++){ const a = -Math.PI*(0.1+0.8*Math.random()), sp = 180+Math.random()*420;
     particles.push({x:px+(Math.random()-0.5)*40,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1.0+Math.random()*1.4,max:2.4,sz:2.5+Math.random()*3.5,kind:3,col:cols[i%4]}); }
   for (let i=0;i<3;i++) particles.push({x:px,y:py,vx:0,vy:0,life:0.7+i*0.2,max:0.7+i*0.2,sz:160+i*90,kind:2,col:'rgba(120,235,150,'});
 }
 function crumbs(px,py,n,col){
-  for (let i=0;i<n;i++) particles.push({x:px+(Math.random()-0.5)*24,y:py,vx:(Math.random()-0.5)*30,vy:20+Math.random()*50,life:0.4+Math.random()*0.4,max:0.8,sz:1.5+Math.random()*2,kind:1,col});
+  for (let i=0;i<n;i++) particles.push({x:px+(Math.random()-0.5)*24,y:py,vx:(Math.random()-0.5)*30,vy:20+Math.random()*50,life:0.4+Math.random()*0.4,max:0.8,sz:1.5+Math.random()*2,kind:1,col:col||null});
 }
 function shatter(px,py,v,col){
-  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); particles.push({x:px+(Math.random()-0.5)*20,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.7,max:1.2,sz:2+Math.random()*4,kind:1,col}); }
+  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); particles.push({x:px+(Math.random()-0.5)*20,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.7,max:1.2,sz:2+Math.random()*4,kind:1,col:col||null}); }
 }
 function spray(s){
   const a = Math.random()*6.283, v = 40+Math.random()*120;
@@ -347,14 +359,14 @@ function froth(){                                                               
   }
 }
 function puff(px,py,sp){
-  for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v*0.4,life:0.3+Math.random()*0.4,max:0.7,sz:2+Math.random()*3,kind:1}); }
+  for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v*0.4,life:0.3+Math.random()*0.4,max:0.7,sz:2+Math.random()*3,kind:1,col:null}); }
 }
 function updateParticles(){
   for (let i=particles.length-1;i>=0;i--){ const p = particles[i]; p.life -= DT;
     if (p.kind === 1){ p.vy += P.gravity*0.6*DT; p.x += p.vx*DT; p.y += p.vy*DT; if (isSolid(p.x,p.y)) p.life = 0; }
     else if (p.kind === 3){ p.vy += P.gravity*0.9*DT; p.vx *= 0.995; p.x += p.vx*DT; p.y += p.vy*DT; if (isSolid(p.x,p.y)){ p.vy *= -0.45; p.vx *= 0.6; p.y -= p.vy*DT*2; if (Math.abs(p.vy) < 20) p.life = Math.min(p.life, 0.3); } }
     else if (p.kind === 0){ p.vx *= 0.97; p.vy *= 0.97; p.x += p.vx*DT; p.y += p.vy*DT; }
-    if (p.life <= 0) particles.splice(i,1);
+    if (p.life <= 0){ particles[i] = particles[particles.length-1]; particles.pop(); }   // swap-remove: what moves down was already stepped this frame
   }
 }
 
@@ -378,13 +390,42 @@ function drawShip(s, isGhost){
   if (!isGhost){ ctx.fillStyle = PAL.glass; ctx.beginPath(); ctx.arc(0,-3,2.6,0,6.283); ctx.fill(); }
   ctx.restore();
 }
-function drawParticles(){
-  for (const p of particles){ const t = Math.max(0, p.life/p.max);
-    if (p.kind === 0){ ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `hsla(${20+40*t},100%,${55+35*t}%,${t})`; ctx.beginPath(); ctx.arc(p.x,p.y,p.sz*t+0.5,0,6.283); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
-    else if (p.kind === 1){ ctx.fillStyle = `rgba(${p.col||'236,230,218'},${t*0.9})`; ctx.fillRect(p.x-p.sz/2,p.y-p.sz/2,p.sz,p.sz); }
-    else if (p.kind === 3){ ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(1, t*1.5); ctx.fillStyle = p.col; ctx.fillRect(p.x-p.sz/2,p.y-p.sz/2,p.sz,p.sz*0.6); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
-    else { ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = (p.col||'rgba(255,190,120,')+t+')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x,p.y,(1-t)*(p.sz||110),0,6.283); ctx.stroke(); ctx.globalCompositeOperation = 'source-over'; }
+// Particle paint kit. Two things here are only about cost. Colours come out of a table quantised to 16 steps of alpha, so
+// no rgba() string is built or re-parsed while a burst is alive. And a fire spark is a pre-rendered disc blitted at size
+// rather than an arc path filled in a colour mixed per particle per frame — hue, lightness and alpha all ride the spark's
+// life, so a single step index covers the lot.
+const PFX = (() => {
+  const STEPS = 16, tab = new Map(), DEF = '236,230,218', R = 16, GLOW = [];
+  for (let i=0;i<12;i++){
+    const t = i/11, c = mkCanvas(2*R+2, 2*R+2), x = c.getContext('2d');
+    x.fillStyle = `hsla(${20+40*t},100%,${55+35*t}%,${t})`;
+    x.beginPath(); x.arc(R+1, R+1, R, 0, 6.283); x.fill(); GLOW.push(c);
   }
+  const col = (rgb, a) => { let v = tab.get(rgb); if (!v){ v = []; for (let i=0;i<=STEPS;i++) v.push(`rgba(${rgb},${(i/STEPS).toFixed(3)})`); tab.set(rgb, v); } return v[(a*STEPS + 0.5)|0]; };
+  return {col, DEF, GLOW, k:(R+1)/R};
+})();
+// Drawn in two passes, plain then additive, so the composite mode is set twice a frame rather than twice per particle.
+// A 140-piece celebration used to cost some 560 canvas state changes in the frame it spawned, and each one breaks the
+// batch the driver was building; even ordinary flight was flipping it a hundred-odd times a frame for the exhaust. The
+// picture is the same: additive blending does not care what order things are added in, and nothing here is opaque.
+function drawParticles(){
+  let additive = 0;
+  for (const p of particles){                                        // pass one: matte grit, spray, froth, debris
+    if (p.kind !== 1){ additive++; continue; }
+    const t = Math.max(0, p.life/p.max);
+    ctx.fillStyle = PFX.col(p.col || PFX.DEF, t*0.9);
+    ctx.fillRect(p.x-p.sz/2, p.y-p.sz/2, p.sz, p.sz);
+  }
+  if (!additive) return;
+  ctx.globalCompositeOperation = 'lighter';                          // pass two: sparks, confetti, shockwave rings
+  for (const p of particles){
+    if (p.kind === 1) continue;
+    const t = Math.max(0, p.life/p.max);
+    if (p.kind === 0){ const r = (p.sz*t+0.5)*PFX.k; ctx.drawImage(PFX.GLOW[(t*11 + 0.5)|0], p.x-r, p.y-r, 2*r, 2*r); }
+    else if (p.kind === 3){ ctx.fillStyle = PFX.col(p.col, Math.min(1, t*1.5)); ctx.fillRect(p.x-p.sz/2, p.y-p.sz/2, p.sz, p.sz*0.6); }
+    else { ctx.strokeStyle = (p.col||'rgba(255,190,120,')+t+')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, (1-t)*(p.sz||110), 0, 6.283); ctx.stroke(); }
+  }
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 const CAVE_IN = { top:'#0a0b10', bottom:'#030305' };
