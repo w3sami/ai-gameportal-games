@@ -1,20 +1,5 @@
 {
  "v": 1,
- "stamp": 1789990799891,
- "scenes": {
-  "Lab Experiment": {
-   "paint": [
-    {
-     "kind": "rect",
-     "label": "propsi",
-     "text": "tehdää aline sikiö, ei liian pelottava",
-     "x": 636,
-     "y": 111,
-     "w": 39,
-     "h": 101
-    }
-   ],
-   "moves": []
-  }
- }
+ "stamp": 1789991362952,
+ "scenes": {}
 }
