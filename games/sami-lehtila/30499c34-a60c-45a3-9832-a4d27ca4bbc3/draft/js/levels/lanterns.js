@@ -149,11 +149,12 @@ function vignette(ctx) {
   ctx.fillStyle = top;
   ctx.fillRect(0, 0, W, 190);
 
-  const low = ctx.createLinearGradient(0, 700, 0, H);
-  low.addColorStop(0, 'rgba(22,16,38,0)');
-  low.addColorStop(1, 'rgba(20,14,34,.34)');
+  const low = ctx.createLinearGradient(0, 620, 0, H);
+  low.addColorStop(0, 'rgba(26,18,44,0)');
+  low.addColorStop(0.55, 'rgba(24,16,40,.26)');
+  low.addColorStop(1, 'rgba(20,14,34,.48)');
   ctx.fillStyle = low;
-  ctx.fillRect(0, 700, W, H - 700);
+  ctx.fillRect(0, 620, W, H - 620);
 }
 
 /* ------------------------------------------------------------------- pilvet
