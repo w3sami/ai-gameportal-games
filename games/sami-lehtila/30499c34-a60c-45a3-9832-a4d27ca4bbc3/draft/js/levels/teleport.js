@@ -558,9 +558,11 @@ function alienFetus(ctx, t) {
   const s = FETUS.s;
 
   if (v) {
-    /* Napanuora kannen syöttöputkeen. Piirtyy ennen vartaloa eli sen alle, ja
-       tulee sivulta vatsan korkeudelle — päähän päättyvä nuora näyttäisi
-       hihnalta josta olento roikkuu. */
+    /* Napanuora kannen syöttöputkeen. Se **pysähtyy vartalon reunaan** eikä
+       jatka sen alle: vartalo on läpikuultavaa, joten alle piirretty nuora
+       näkyisi läpi ja näyttäisi seipäältä joka lävistää olennon. Kiinnityskohta
+       on kyljessä vatsan korkeudella — päähän päättyvä nuora näyttäisi
+       hihnalta josta se roikkuu. */
     const sway = Math.sin(t / 3.1) * 7;
     ctx.strokeStyle = fade(FET_COL, DIM * 1.7);
     ctx.lineWidth = 3;
@@ -568,7 +570,7 @@ function alienFetus(ctx, t) {
     ctx.beginPath();
     ctx.moveTo(v.x + v.w / 2, v.y + 2);
     ctx.quadraticCurveTo(v.x + v.w / 2 + sway, (v.y + y) / 2,
-                         FETUS.x + 13 * s, y + 6 * s);
+                         FETUS.x + 14 * s, y - 3 * s);
     ctx.stroke();
   }
 
@@ -585,15 +587,24 @@ function alienFetus(ctx, t) {
 
   const body = new Path2D();
   body.ellipse(0, -16, 16.5, 15.5, 0, 0, 6.3);        // iso pyöreä pää
-  body.ellipse(2, 2, 12.5, 12.5, 0.1, 0, 6.3);        // keho, syvällä pään alla
-  body.ellipse(-2, 12, 12, 8.5, -0.2, 0, 6.3);        // jalat kippurassa
-  body.ellipse(-10, -1, 5.5, 3.8, 0.9, 0, 6.3);       // kädet leuan alla
-  body.ellipse(9, 1, 5, 3.6, -0.8, 0, 6.3);
+  body.ellipse(1, 3, 12, 11, 0.1, 0, 6.3);            // keho, syvällä pään alla
+  body.ellipse(-4, 11, 10.5, 7.5, -0.2, 0, 6.3);      // polvet ylös ja vasemmalle
+  body.ellipse(-11, 6, 4.5, 3.4, 0.4, 0, 6.3);        // varpaat
+  body.ellipse(-11, -3, 5.5, 3.8, 0.9, 0, 6.3);       // kädet leuan alla
+  body.ellipse(8, 2, 4.8, 3.4, -0.8, 0, 6.3);
   const skin = ctx.createLinearGradient(-16, -32, 16, 20);
   skin.addColorStop(0, fade(FET_COL, DIM * 3.2));
   skin.addColorStop(1, fade(FET_COL, DIM * 1.9));
   ctx.fillStyle = skin;
   ctx.fill(body);
+
+  /* Leuan varjo erottaa pään kehosta ilman viivaa: yksi täyttö tekee muuten
+     yhdestä siluetista sellaisen jossa ei näy missä pää loppuu. */
+  const chin = ctx.createRadialGradient(1, -1, 1, 1, -1, 13);
+  chin.addColorStop(0, `rgba(12,22,40,${DIM * 1.4})`);
+  chin.addColorStop(1, 'rgba(12,22,40,0)');
+  ctx.fillStyle = chin;
+  ctx.beginPath(); ctx.ellipse(1, -1, 13, 7, 0, 0, 6.3); ctx.fill();
 
   ctx.fillStyle = `rgba(255,255,255,${DIM * 1.8})`;   // valoreuna ylävasemmalle
   ctx.beginPath(); ctx.ellipse(-6, -23, 7.5, 4.6, -0.45, 0, 6.3); ctx.fill();
