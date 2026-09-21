@@ -546,49 +546,69 @@ function paintFace(g) {
 }
 
 /** Alien-sikiö tankin nesteessä: iso pää, kääriytyneet raajat, silmät kiinni.
-    Kelluu hitaasti ja keinuu hieman — neste liikuttaa sitä, se ei itse liiku. */
+    Kelluu hitaasti ja keinuu hieman — neste liikuttaa sitä, se ei itse liiku.
+
+    Koko vartalo on **yksi polku ja yksi täyttö**. Ensimmäisessä versiossa pää,
+    keho ja jalat täytettiin erikseen, ja koska väri on läpikuultava, jokainen
+    limitys kirkastui — kolme palloa lumiukossa eikä yhtä olentoa. Yhdellä
+    täytöllä ääriviiva on yhtenäinen ja sisus tasainen. */
 function alienFetus(ctx, t) {
   const v = fetusVat();
   const y = FETUS.y + Math.sin(t / 2.9) * 3.2;
+  const s = FETUS.s;
 
-  if (v) {                                    /* napanuora kannen syöttöputkeen */
+  if (v) {
+    /* Napanuora kannen syöttöputkeen. Piirtyy ennen vartaloa eli sen alle, ja
+       tulee sivulta vatsan korkeudelle — päähän päättyvä nuora näyttäisi
+       hihnalta josta olento roikkuu. */
     const sway = Math.sin(t / 3.1) * 7;
-    ctx.strokeStyle = fade(FET_COL, DIM * 2.0);
-    ctx.lineWidth = 3.4;
+    ctx.strokeStyle = fade(FET_COL, DIM * 1.7);
+    ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(v.x + v.w / 2, v.y + 2);
-    ctx.quadraticCurveTo(v.x + v.w / 2 + sway, (v.y + y) / 2, FETUS.x + 3, y + 1);
+    ctx.quadraticCurveTo(v.x + v.w / 2 + sway, (v.y + y) / 2,
+                         FETUS.x + 13 * s, y + 6 * s);
     ctx.stroke();
   }
 
   ctx.save();
   ctx.translate(FETUS.x, y);
   ctx.rotate(Math.sin(t / 3.7) * 0.05);
-  ctx.scale(FETUS.s, FETUS.s);
+  ctx.scale(s, s);
 
   const glow = ctx.createRadialGradient(0, -6, 2, 0, -6, 46);
-  glow.addColorStop(0, fade(VAT_COL, DIM * 2.2));
+  glow.addColorStop(0, fade(VAT_COL, DIM * 2.0));
   glow.addColorStop(1, fade(VAT_COL, 0));
   ctx.fillStyle = glow;
   ctx.beginPath(); ctx.arc(0, -6, 46, 0, 6.3); ctx.fill();
 
-  const skin = ctx.createLinearGradient(-14, -32, 14, 20);
-  skin.addColorStop(0, fade(FET_COL, DIM * 3.6));
-  skin.addColorStop(1, fade(FET_COL, DIM * 2.2));
+  const body = new Path2D();
+  body.ellipse(0, -16, 16.5, 15.5, 0, 0, 6.3);        // iso pyöreä pää
+  body.ellipse(2, 2, 12.5, 12.5, 0.1, 0, 6.3);        // keho, syvällä pään alla
+  body.ellipse(-2, 12, 12, 8.5, -0.2, 0, 6.3);        // jalat kippurassa
+  body.ellipse(-10, -1, 5.5, 3.8, 0.9, 0, 6.3);       // kädet leuan alla
+  body.ellipse(9, 1, 5, 3.6, -0.8, 0, 6.3);
+  const skin = ctx.createLinearGradient(-16, -32, 16, 20);
+  skin.addColorStop(0, fade(FET_COL, DIM * 3.2));
+  skin.addColorStop(1, fade(FET_COL, DIM * 1.9));
   ctx.fillStyle = skin;
-  ctx.beginPath(); ctx.ellipse(-1, 13, 11.5, 8.5, -0.25, 0, 6.3); ctx.fill();   // jalat kippurassa
-  ctx.beginPath(); ctx.ellipse(1, 1, 12.5, 13.5, 0.1, 0, 6.3); ctx.fill();      // vartalo
-  ctx.beginPath(); ctx.ellipse(-8, -6, 5.5, 4.2, 0.7, 0, 6.3); ctx.fill();      // kädet leuan alla
-  ctx.beginPath(); ctx.ellipse(8, -4, 5, 4, -0.6, 0, 6.3); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(0, -18, 15.5, 14.5, 0, 0, 6.3); ctx.fill();      // iso pyöreä pää
+  ctx.fill(body);
 
-  ctx.fillStyle = `rgba(255,255,255,${DIM * 2.2})`;   // valoreuna ylävasemmalle
-  ctx.beginPath(); ctx.ellipse(-5, -23, 7, 4.6, -0.5, 0, 6.3); ctx.fill();
+  ctx.fillStyle = `rgba(255,255,255,${DIM * 1.8})`;   // valoreuna ylävasemmalle
+  ctx.beginPath(); ctx.ellipse(-6, -23, 7.5, 4.6, -0.45, 0, 6.3); ctx.fill();
 
-  ctx.fillStyle = `rgba(18,30,48,${DIM * 3.4})`;      // luomet kiinni, kaari alas
-  ctx.beginPath(); ctx.ellipse(-6.5, -16, 4.2, 1.5, 0.3, 0, 6.3); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(6.5, -16, 4.2, 1.5, -0.3, 0, 6.3); ctx.fill();
+  /* Silmät kiinni: luomi on alaspäin kaartuva kaari eikä pallo. Nukkuva ei
+     tuijota takaisin, ja se on koko "ei liian pelottava" yhdessä piirteessä. */
+  ctx.strokeStyle = `rgba(18,30,48,${DIM * 3.6})`;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  for (const ex of [-6.8, 6.8]) {
+    ctx.beginPath();
+    ctx.moveTo(ex - 4, -16);
+    ctx.quadraticCurveTo(ex, -12.6, ex + 4, -16);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
