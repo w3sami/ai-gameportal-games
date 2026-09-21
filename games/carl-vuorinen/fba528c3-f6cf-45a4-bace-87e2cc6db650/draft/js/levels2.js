@@ -9,6 +9,7 @@
 // begin in open air, and the edge across the wind should line up with the end of that solid: a band coming off a standing
 // stump starts at the stump's top, one coming off hanging deadwood stops at its tip. The gap left over is the calm way past.
 // The downwind edge may end in the open: that reads as the gale dying out, which is fine.
+// wallMat:'wood' paints the level's solid mass as the inside of a tree (pal.wood plus the grain pass in art.js) instead of rock face.
 const EDGE_TRUNKS = w => [{x:-20,y:4000,tx:-20,ty:-200,w:300,taper:0,seed:-340}, {x:260,y:4000,tx:260,ty:-200,w:260,taper:0,seed:1620}, {x:w+20,y:4000,tx:w+20,ty:-200,w:300,taper:0,seed:w*7}, {x:w-260,y:4000,tx:w-260,ty:-200,w:260,taper:0,seed:w*7-1960}];
 LEVELS.push(
   {name:'Treetops', theme:'jungle', w:5600, h:2600, groundY:2300, canopyY:350,
@@ -80,8 +81,11 @@ LEVELS.push(
            {kind:'water',x:4950,y:2300,w:300,h:1040,ay:340,drag:1.6,pool:{x:4600,w:900,h:70}}],
    walls:[],
    pads:{start:{x:640,y:2920,w:120,h:100}, target:{x:6740,y:1180,w:120,h:100,base:'bark'}}},
-  {name:'Hollow', theme:'jungle', w:2400, h:3400, groundY:2800, canopyY:500,
+  {name:'Hollow', theme:'jungle', wallMat:'wood', w:2400, h:3400, groundY:2800, canopyY:500,
    // the inside of a hollow tree: a climb between two trunk faces, knot-holes gusting across the shaft, branch stubs for ledges.
+   // wallMat:'wood' makes the mass itself wood, so the shaft walls read as heartwood rather than rock face.
+   // The gusts are long: 3.5 s on, 3.5 s off, the three knot-holes a third of a cycle apart, so a gust outlasts the climb
+   // through its own band and you fly the shaft leaning into the wind rather than darting between puffs.
    rooms:[{x:400,y:3150,rx:330,ry:230,wob:0.1,seed:901}, {x:1200,y:1750,rx:450,ry:1400,wob:0.04,seed:902}, {x:1300,y:450,rx:900,ry:330,wob:0.08,seed:903}],
    corridors:[{pts:[[650,3100],[850,3050],[1000,3000]],w:190}],
    rocks:[],
@@ -89,7 +93,7 @@ LEVELS.push(
    trunks:[{x:560,y:2900,tx:540,ty:500,w:380,taper:0,broken:true,seed:908}, {x:1840,y:3400,tx:1860,ty:620,w:380,taper:0,seed:909}],
    foliage:[{x:250,y:350,r:320,ry:130,seed:910,tone:1}, {x:2200,y:320,r:320,ry:130,seed:911,tone:0}],
    hazards:[{x:1500,y:120,tx:1505,ty:340,w:60,seed:912,kind:'branch'}],
-   forces:[{kind:'wind',x:760,y:2250,w:880,h:300,ax:260,period:4,duty:0.4,phase:0,src:'hollow'}, {kind:'wind',x:760,y:1550,w:880,h:300,ax:-260,period:4,duty:0.4,phase:1.33,src:'hollow'}, {kind:'wind',x:760,y:850,w:880,h:300,ax:260,period:4,duty:0.4,phase:2.67,src:'hollow'}],
+   forces:[{kind:'wind',x:760,y:2250,w:880,h:300,ax:260,period:7,duty:0.5,phase:0,src:'hollow'}, {kind:'wind',x:760,y:1550,w:880,h:300,ax:-260,period:7,duty:0.5,phase:2.33,src:'hollow'}, {kind:'wind',x:760,y:850,w:880,h:300,ax:260,period:7,duty:0.5,phase:4.67,src:'hollow'}],
    walls:[],
    pads:{start:{x:340,y:3300,w:120,h:100}, target:{x:1780,y:620,w:120,h:100,base:'bark'}}},
   {name:'Behind the falls', theme:'jungle', w:7000, h:3600, groundY:3100, canopyY:700,
