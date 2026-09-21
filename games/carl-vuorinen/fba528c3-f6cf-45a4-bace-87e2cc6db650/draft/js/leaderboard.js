@@ -34,7 +34,7 @@ const NOTE = {
 // simply has none. Like the time itself, this is what the pilot's browser says happened.
 const DEV = {
   keys:  ['keyboard', '<rect x="2" y="6" width="20" height="12" rx="2.5"/><path d="M7.5 14.5h9M6 10h.01M10 10h.01M14 10h.01M18 10h.01"/>'],
-  touch: ['touch',    '<path d="M9 11.5V5.4a1.5 1.5 0 0 1 3 0v5M12 10.4V9a1.5 1.5 0 0 1 3 0v2M15 11v-.4a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-.7a5 5 0 0 1-4.2-2.3l-2.2-3.4a1.5 1.5 0 0 1 2.4-1.8L9 15.2"/>'],
+  touch: ['touch',    '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M10.2 18.8h3.6"/>'],
   mouse: ['mouse',    '<rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 6.5v3.5"/>'],
   pad:   ['gamepad',  '<rect x="2" y="7" width="20" height="11" rx="5.5"/><path d="M6.5 10.5v4M4.5 12.5h4"/><path d="M16 11.4h.01M18.4 13.6h.01"/>'],
 };
