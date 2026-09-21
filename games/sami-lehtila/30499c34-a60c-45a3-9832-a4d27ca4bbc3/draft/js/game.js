@@ -77,6 +77,7 @@ const END_CARD_DELAY = 2600;
 const LAND_WARN_FROM = 0.75;               // varoitus jo ennen laskurajaa
 const PAD_WARN_LEAD = 1.0;                 // sekuntia pudotusta ennen kuin alusta vilkkuu
 const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
+const PAD_LEAVE = 0.5;                     // näin kauan lähtöalusta vielä kannattelee
 const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
 const PAD_WARN_HOT = '#ff5d7a', PAD_WARN_COLD = '#6fe3ff';
 
@@ -1214,6 +1215,7 @@ function touchdown(pad, b) {
 
   t2.y = pad.y - (TH / 2 + GEAR * t2.gear);
   t2.vx = 0; t2.vy = 0; t2.landed = pad; t2.gearWant = true;
+  t2.offPad = null;
   bounces = 0;
   sfx.land();
   onLanded(pad);
@@ -1530,6 +1532,7 @@ function update(dt) {
 
   taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * 4, dt * 4);
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
+  else carryOff(dt);
 
   warnings(dt);                              // piippaukset myös alustalla
 
@@ -1544,7 +1547,7 @@ function update(dt) {
     /* Tankilla kuolee myös: tyhjä tankki ja tyhjä kassa ei ratkea istumalla,
        joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
     if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
-    if (raw.y < -0.2 && fuel > 0) taxi.landed = null;
+    if (raw.y < -0.2 && fuel > 0) { taxi.offPad = taxi.landed; taxi.offT = PAD_LEAVE; taxi.landed = null; }
     else { jobStep(dt); return; }
   }
 
@@ -1589,7 +1592,36 @@ function move(dt) {
       }
     }
   }
-  for (const r of solids()) if (hit(b, r)) return crash();
+  for (const r of solids()) if (r !== taxi.offPad && hit(b, r)) return crash();
+}
+
+/* Juuri jätetty alusta kannattelee taksia, se ei tapa sitä.
+ *
+ * Nouseva alusta on lähtöhetkellä nopeampi kuin vasta kiihtyvä taksi, ja
+ * alustat ovat kiinteitä: ilman tätä lähtö ylöspäin menevältä alustalta oli
+ * varma kuolema, koska ylöspäin liikkuva taksi ei voi "laskeutua" mihinkään
+ * eikä kosketus ole silloin mitään muuta kuin seinä. Nyt alusta työntää taksia
+ * edellään, niin kuin lattia työntää: taksi pysyy pinnalla kunnes se kiihtyy
+ * alustaa nopeammaksi, ja sen jälkeen suoja raukeaa itsestään.
+ *
+ * Suoja koskee vain sitä yhtä alustaa jolta juuri lähdettiin, joten muu kenttä
+ * tappaa niin kuin ennenkin. PAD_LEAVE on vähimmäisaika; kosketuksen ajan suoja
+ * on voimassa senkin jälkeen, eli pinnalla leijuminen on sama asia kuin sillä
+ * seisominen. Alustan alle jäänyt taksi menettää suojan heti: sinne pääsee vain
+ * lentämällä, ja ylhäältä tuleva alusta on oikeasti este. */
+function carryOff(dt) {
+  const p = taxi.offPad;
+  if (!p) return;
+  taxi.offT -= dt;
+  const b = taxiBox(taxi);
+  const touch = b.x + b.w > p.x && b.x < p.x + p.w &&
+                b.y + b.h > p.y && b.y + b.h <= p.y + p.h + 4;
+  if (touch) {
+    taxi.y = p.y - (TH / 2 + GEAR * taxi.gear);
+    if (taxi.vy > (p.vy || 0)) taxi.vy = p.vy || 0;
+  } else if (taxi.offT <= 0 || b.y + b.h > p.y + p.h + 4) {
+    taxi.offPad = null;
+  }
 }
 
 /** Saako tankista vielä bensaa? Ilmainen bensa ei koskaan lopu kassan takia. */
