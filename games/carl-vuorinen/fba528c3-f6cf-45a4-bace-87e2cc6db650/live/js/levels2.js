@@ -9,6 +9,7 @@
 // begin in open air, and the edge across the wind should line up with the end of that solid: a band coming off a standing
 // stump starts at the stump's top, one coming off hanging deadwood stops at its tip. The gap left over is the calm way past.
 // The downwind edge may end in the open: that reads as the gale dying out, which is fine.
+// wallMat:'wood' paints the level's solid mass as the inside of a tree (pal.wood plus the grain pass in art.js) instead of rock face.
 const EDGE_TRUNKS = w => [{x:-20,y:4000,tx:-20,ty:-200,w:300,taper:0,seed:-340}, {x:260,y:4000,tx:260,ty:-200,w:260,taper:0,seed:1620}, {x:w+20,y:4000,tx:w+20,ty:-200,w:300,taper:0,seed:w*7}, {x:w-260,y:4000,tx:w-260,ty:-200,w:260,taper:0,seed:w*7-1960}];
 LEVELS.push(
   {name:'Treetops', theme:'jungle', w:5600, h:2600, groundY:2300, canopyY:350,
@@ -80,8 +81,11 @@ LEVELS.push(
            {kind:'water',x:4950,y:2300,w:300,h:1040,ay:340,drag:1.6,pool:{x:4600,w:900,h:70}}],
    walls:[],
    pads:{start:{x:640,y:2920,w:120,h:100}, target:{x:6740,y:1180,w:120,h:100,base:'bark'}}},
-  {name:'Hollow', theme:'jungle', w:2400, h:3400, groundY:2800, canopyY:500,
+  {name:'Hollow', theme:'jungle', wallMat:'wood', w:2400, h:3400, groundY:2800, canopyY:500,
    // the inside of a hollow tree: a climb between two trunk faces, knot-holes gusting across the shaft, branch stubs for ledges.
+   // wallMat:'wood' makes the mass itself wood, so the shaft walls read as heartwood rather than rock face.
+   // The gusts are long: 3.5 s on, 3.5 s off, the three knot-holes a third of a cycle apart, so a gust outlasts the climb
+   // through its own band and you fly the shaft leaning into the wind rather than darting between puffs.
    rooms:[{x:400,y:3150,rx:330,ry:230,wob:0.1,seed:901}, {x:1200,y:1750,rx:450,ry:1400,wob:0.04,seed:902}, {x:1300,y:450,rx:900,ry:330,wob:0.08,seed:903}],
    corridors:[{pts:[[650,3100],[850,3050],[1000,3000]],w:190}],
    rocks:[],
@@ -89,7 +93,7 @@ LEVELS.push(
    trunks:[{x:560,y:2900,tx:540,ty:500,w:380,taper:0,broken:true,seed:908}, {x:1840,y:3400,tx:1860,ty:620,w:380,taper:0,seed:909}],
    foliage:[{x:250,y:350,r:320,ry:130,seed:910,tone:1}, {x:2200,y:320,r:320,ry:130,seed:911,tone:0}],
    hazards:[{x:1500,y:120,tx:1505,ty:340,w:60,seed:912,kind:'branch'}],
-   forces:[{kind:'wind',x:760,y:2250,w:880,h:300,ax:260,period:4,duty:0.4,phase:0,src:'hollow'}, {kind:'wind',x:760,y:1550,w:880,h:300,ax:-260,period:4,duty:0.4,phase:1.33,src:'hollow'}, {kind:'wind',x:760,y:850,w:880,h:300,ax:260,period:4,duty:0.4,phase:2.67,src:'hollow'}],
+   forces:[{kind:'wind',x:760,y:2250,w:880,h:300,ax:260,period:7,duty:0.5,phase:0,src:'hollow'}, {kind:'wind',x:760,y:1550,w:880,h:300,ax:-260,period:7,duty:0.5,phase:2.33,src:'hollow'}, {kind:'wind',x:760,y:850,w:880,h:300,ax:260,period:7,duty:0.5,phase:4.67,src:'hollow'}],
    walls:[],
    pads:{start:{x:340,y:3300,w:120,h:100}, target:{x:1780,y:620,w:120,h:100,base:'bark'}}},
   {name:'Behind the falls', theme:'jungle', w:7000, h:3600, groundY:3100, canopyY:700,
@@ -97,17 +101,17 @@ LEVELS.push(
    // through the shaft you have to climb, and the way out onto the plateau runs straight through a third.
    plateau:{x0:4750,groundY:1600,canopyY:400},
    rockZones:[{x:3600,y:1900,r:1050,ry:1750,seed:951}],
-   rooms:[{x:1500,y:2300,rx:1300,ry:750,wob:0.07,seed:952}, {x:3100,y:2350,rx:380,ry:450,wob:0.1,seed:953}, {x:3600,y:1900,rx:350,ry:700,wob:0.09,seed:954}, {x:4200,y:1150,rx:400,ry:450,wob:0.1,seed:955}, {x:5900,y:1050,rx:1050,ry:560,wob:0.07,seed:956}],
-   corridors:[{pts:[[2500,2330],[2800,2350],[3000,2350]],w:190}, {pts:[[3300,2250],[3500,2100],[3600,1950]],w:180}, {pts:[[3650,1450],[3900,1300],[4100,1200]],w:180}, {pts:[[4450,1080],[4750,1100],[5050,1110]],w:200}],
+   rooms:[{x:1500,y:2300,rx:1300,ry:750,wob:0.07,seed:952}, {x:3060,y:2330,rx:200,ry:150,wob:0.1,seed:953}, {x:3600,y:1900,rx:350,ry:700,wob:0.09,seed:954}, {x:4200,y:1150,rx:400,ry:450,wob:0.1,seed:955}, {x:5900,y:1050,rx:1050,ry:560,wob:0.07,seed:956}],
+   corridors:[{pts:[[2500,2330],[2800,2350],[3000,2350]],w:190}, {pts:[[3120,2280],[3300,2130],[3480,1990]],w:160}, {pts:[[3650,1450],[3900,1300],[4100,1200]],w:180}, {pts:[[4450,1080],[4750,1100],[5050,1110]],w:200}],
    rocks:[],
    spikes:[{x:2750,y:1700,tx:2550,ty:1820,w:130,seed:957}, {x:3350,y:1500,tx:3500,ty:1620,w:110,seed:958}, {x:3900,y:2300,tx:3750,ty:2150,w:110,seed:959}, {x:800,y:1400,tx:805,ty:1680,w:90,seed:960,kind:'branch'}, {x:6300,y:520,tx:6305,ty:800,w:100,seed:961,kind:'branch'}],
    trunks:EDGE_TRUNKS(7000).concat([{x:1700,y:3100,tx:1700,ty:2550,w:200,taper:0.15,broken:true,seed:962}, {x:900,y:3100,tx:1600,ty:2800,w:150,taper:0.1,seed:963},
            {x:5600,y:1700,tx:5600,ty:1200,w:180,taper:0.15,broken:true,seed:964}, {x:6850,y:1700,tx:6600,ty:1180,w:140,taper:0.15,seed:965}]),
    foliage:[{x:900,y:1400,r:480,ry:150,seed:966,tone:1}, {x:1900,y:1450,r:400,ry:130,seed:967,tone:0}, {x:5300,y:420,r:520,ry:150,seed:968,tone:0}, {x:6500,y:400,r:450,ry:140,seed:969,tone:1}],
-   hazards:[{x:1300,y:1520,tx:1305,ty:1790,w:60,seed:970,kind:'branch'}, {x:2200,y:1530,tx:2205,ty:1800,w:60,seed:971,kind:'branch'}, {x:3550,y:1300,tx:3555,ty:1480,w:70,seed:972}, {x:5000,y:480,tx:5005,ty:730,w:60,seed:973,kind:'branch'}],
-   forces:[{kind:'water',x:2560,y:1250,w:260,h:1750,ay:300,drag:1.5,pool:{x:2150,w:750,h:70}},
-           {kind:'water',x:3520,y:1200,w:170,h:1300,ay:300,drag:1.5,pool:{x:3300,w:520,h:60}},
-           {kind:'water',x:4620,y:760,w:180,h:940,ay:300,drag:1.5,pool:{x:4450,w:520,h:60}}],
+   hazards:[{x:1300,y:1520,tx:1305,ty:1790,w:60,seed:970,kind:'branch'}, {x:2200,y:1530,tx:2205,ty:1800,w:60,seed:971,kind:'branch'}, {x:3550,y:1180,tx:3555,ty:1460,w:70,seed:972}, {x:5000,y:480,tx:5005,ty:730,w:60,seed:973,kind:'branch'}],
+   forces:[{kind:'water',x:2510,y:1250,w:360,h:1750,ay:300,drag:1.5,pool:{x:2150,w:750,h:70}},
+           {kind:'water',x:3520,y:1200,w:170,h:1400,ay:300,drag:1.5,pool:{x:3440,w:360,h:60}},
+           {kind:'water',x:4580,y:760,w:260,h:940,ay:300,drag:1.5,pool:{x:4450,w:520,h:60}}],
    walls:[],
    pads:{start:{x:600,y:2890,w:120,h:100}, target:{x:6300,y:1490,w:120,h:100}}},
   {name:'Squall', theme:'jungle', w:6600, h:2200, groundY:1750, canopyY:450,
