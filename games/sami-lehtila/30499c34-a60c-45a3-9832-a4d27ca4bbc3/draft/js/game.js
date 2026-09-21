@@ -118,6 +118,52 @@ const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
 let gearSide = DEFAULT_SIDE;
 
+/* Nappien puoli on pelaajan asia, ei tekijän. tune.json antaa oletuksen, mutta
+   kerran tehty valinta voittaa sen eikä katoa kun tekijä julkaisee uuden
+   virityksen. Omassa avaimessaan siksi, ettei pelaajan napinpainallus kulkisi
+   saveTunen kautta: se leimaisi koko virityksen hänen selaimessaan julkaistua
+   uudemmaksi, eivätkä peliin tallennetut arvot pääsisi enää koskaan perille. */
+const SIDE_STORE = 'spacetaxi.side';
+let sidePick = null;
+try {
+  const s = localStorage.getItem(SIDE_STORE);
+  if (s === 'left' || s === 'right') sidePick = s;
+} catch (e) {}
+
+function setSide(side) {
+  if (side !== 'left' && side !== 'right' || side === gearSide) return;
+  sidePick = side;
+  gearSide = side;
+  layout();
+  try { localStorage.setItem(SIDE_STORE, side); } catch (e) {}
+}
+
+/* Vaikeustaso on pelaajan asetus, ja se on yksi luku: sillä kerrotaan sekä
+   painovoima että työntö. Koska molemmat muuttuvat yhtä paljon, leijumiseen
+   tarvittava kaasu pysyy samana ja vain koko pystyakseli hidastuu — sama peli
+   hitaammin, ei eri peli. Aikaa on enemmän, ja siksi se on helpompi.
+ *
+ * Tippiin ei kosketa. Se on kiinni ajasta, joten hitaammalla tasolla tienaa
+ * itsestään vähemmän eikä palkkiota tarvitse erikseen porrastaa.
+ *
+ * Kertoimia on nyt kolme päällekkäin: globaali viritys, kentän oma kerroin ja
+ * tämä. Siksi tulolle on pohja MUL_MINissä — ne ovat samat luvut jotka
+ * Moonshotilla on, eli kuun painovoima on se raja josta pidemmälle peli ei
+ * enää tunnu Space Taxilta. */
+const DIFFS = [
+  { id: 'calm', mul: 0.45 },
+  { id: 'easy', mul: 0.7 },
+  { id: 'normal', mul: 1 },
+];
+const MUL_MIN = { grav: 0.2, thrust: 0.25 };
+const DIFF_STORE = 'spacetaxi.diff';
+let diff = 'normal';
+try {
+  const d = localStorage.getItem(DIFF_STORE);
+  if (DIFFS.some(x => x.id === d)) diff = d;
+} catch (e) {}
+const diffMul = () => (DIFFS.find(d => d.id === diff) || DIFFS[DIFFS.length - 1]).mul;
+
 /* Viritys kahdessa kerroksessa.
  *
  * BASE on globaali viritys: säätimet kirjoittavat siihen ja tallennus lukee
@@ -147,11 +193,21 @@ let MUL = {};
 let stickReady = false;
 
 function applyMul() {
+  const d = diffMul();
   for (const k of Object.keys(DEFAULTS)) {
     const m = MUL[k];
-    P[k] = BASE[k] * (typeof m === 'number' && isFinite(m) ? m : 1);
+    let mul = typeof m === 'number' && isFinite(m) ? m : 1;
+    if (k in MUL_MIN) mul = Math.max(MUL_MIN[k], mul * d);
+    P[k] = BASE[k] * mul;
   }
   if (stickReady) stick.gain = P.stick;
+}
+
+function setDiff(id) {
+  if (!DIFFS.some(x => x.id === id) || id === diff) return;
+  diff = id;
+  try { localStorage.setItem(DIFF_STORE, id); } catch (e) {}
+  applyMul();
 }
 
 /* Koko viritys yhtenä oliona: globaali pohja ja jokaisen kentän omat arvot.
@@ -191,7 +247,10 @@ function applyAll(raw) {
   for (const k of Object.keys(DEFAULTS)) {
     if (typeof g[k] === 'number' && isFinite(g[k])) BASE[k] = g[k];
   }
-  if (raw.gearSide === 'left' || raw.gearSide === 'right') { gearSide = raw.gearSide; layout(); }
+  if (raw.gearSide === 'left' || raw.gearSide === 'right') {
+    gearSide = sidePick || raw.gearSide;     // pelaajan valinta voittaa tiedoston
+    layout();
+  }
   for (const lv of LEVELS) {
     const e = (raw.levels || {})[lv.name];
     if (!e) continue;
@@ -280,15 +339,16 @@ function loadGameTune() {
     .catch(() => {});
 }
 
-let GEAR_BOX, MUTE_BOX, COG_BOX, FULL_BOX, HORN_BOX;
+/* Nurkassa on yksi ratas eikä kolmea kuvaketta. Ääni, koko ruutu, nappien
+   puoli, kieli ja vaikeustaso ovat kaikki sen takana samassa valikossa: kolme
+   kuvaketta oli kolme asiaa joista kaksi oli arvattava, ja loput asetukset
+   olivat vain kehittäjän paneelissa jonne pelaaja ei pääse. */
+let GEAR_BOX, COG_BOX, HORN_BOX;
 function layout() {
   const right = gearSide === 'right';
   GEAR_BOX = { x: right ? W - 158 : 30, y: H - 172, w: 128, h: 96 };
   HORN_BOX = { x: right ? W - 158 : 30, y: H - 262, w: 128, h: 78 };
-  const col = i => right ? 24 + i * 54 : W - 70 - i * 54;
-  MUTE_BOX = { x: col(0), y: H - 74, w: 46, h: 46 };
-  COG_BOX = { x: col(1), y: H - 74, w: 46, h: 46 };
-  FULL_BOX = { x: col(2), y: H - 74, w: 46, h: 46 };
+  COG_BOX = { x: right ? 24 : W - 70, y: H - 74, w: 46, h: 46 };
 }
 /* Kenttien omat lähtöarvot talteen ennen kuin tallennettu viritys kirjoittaa
    niiden päälle. Kentän olio on ainoa paikka jossa ne elävät, joten ilman tätä
@@ -925,8 +985,7 @@ function toLogical(clientX, clientY) {
 }
 const inBox = (p, b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 const onButtons = p =>
-  inBox(p, GEAR_BOX) || inBox(p, HORN_BOX) ||
-  inBox(p, MUTE_BOX) || (debugAllowed() && inBox(p, COG_BOX)) || inBox(p, FULL_BOX);
+  inBox(p, GEAR_BOX) || inBox(p, HORN_BOX) || inBox(p, COG_BOX);
 
 function toggleGear() {
   if (state !== PLAY || dead) return;
@@ -965,9 +1024,9 @@ canvas.addEventListener('pointerdown', e => {
   if (sketch.active && !inBox(p, COG_BOX)) return;
   if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
   if (inBox(p, HORN_BOX)) { honk(); return; }
-  if (inBox(p, MUTE_BOX)) { toggleMute(); return; }
-  if (debugAllowed() && inBox(p, COG_BOX)) { togglePanel(); return; }
-  if (inBox(p, FULL_BOX)) toggleFullscreen();
+  /* Luonnostyökalun ollessa auki ratas on sen oma ulospääsy säätöpaneeliin,
+     niin kuin ennenkin: pelaajan valikko ei auta siinä tilanteessa. */
+  if (inBox(p, COG_BOX)) { sketch.active ? togglePanel() : openMenu(); }
 });
 
 /* Näppäimistöllä pärjää ilman hiirtä: kortin napit ovat omilla näppäimillään,
@@ -975,6 +1034,15 @@ canvas.addEventListener('pointerdown', e => {
 addEventListener('keydown', e => {
   if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
   if (e.repeat) return;
+  /* Valikko on päällimmäisenä myös näppäimistölle: peli ei saa ottaa vastaan
+     ohjausta sen takaa, ja enter tai esc sulkee. */
+  if (menuOpen()) {
+    if (e.code === 'Escape' || e.code === 'Enter' || e.code === 'NumpadEnter') {
+      e.preventDefault();
+      closeMenu();
+    }
+    return;
+  }
   KEY[e.code] = true;
 
   if (!card.classList.contains('hidden')) {
@@ -1548,7 +1616,7 @@ function update(dt) {
     /* Tankilla kuolee myös: tyhjä tankki ja tyhjä kassa ei ratkea istumalla,
        joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
     if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
-    if (raw.y < -0.2 && fuel > 0) { taxi.offPad = taxi.landed; taxi.offT = PAD_LEAVE; taxi.landed = null; }
+    if (raw.y < -0.2 && fuel > 0) leavePad();
     else { jobStep(dt); return; }
   }
 
@@ -1594,6 +1662,25 @@ function move(dt) {
     }
   }
   for (const r of solids()) if (r !== taxi.offPad && hit(b, r)) return crash();
+}
+
+/* Irtoaminen alustasta: sama nykäisy kuin pompussa.
+ *
+ * Taksi nostetaan P.bounceLift verran irti pinnasta samalla hetkellä kun se
+ * lähtee. Pompussa se on ollut alusta asti, ja siellä syy on sama: kosketuksen
+ * jälkeen ei saa jäädä pintaan kiinni. Lähtö oli ainoa paikka jossa sitä ei
+ * tehty, ja se näkyi kuolemina kaikissa kentissä — alustan reunalta nouseva
+ * taksi raapaisi alustaa, ja alusta on kiinteä. Sama nuppi säätää molemmat,
+ * koska kyse on samasta asiasta.
+ *
+ * Liikkuvalla alustalla tämä ei yksin riitä: 10 px on nousevalta alustalta
+ * reilu kymmenesosa sekuntia. Siksi carryOff sen lisäksi. */
+function leavePad() {
+  const p = taxi.landed;
+  taxi.landed = null;
+  taxi.offPad = p;
+  taxi.offT = PAD_LEAVE;
+  taxi.y -= P.bounceLift;
 }
 
 /* Juuri jätetty alusta kannattelee taksia, se ei tapa sitä.
@@ -2294,44 +2381,16 @@ function drawButtons() {
   ctx.fillText(t('ui.horn'), hx, hb.y + hb.h - 12);
   ctx.restore();
 
-  smallBox(MUTE_BOX, (mx, my) => {
-    ctx.beginPath();
-    ctx.moveTo(mx - 9, my - 4); ctx.lineTo(mx - 5, my - 4); ctx.lineTo(mx - 1, my - 8);
-    ctx.lineTo(mx - 1, my + 8); ctx.lineTo(mx - 5, my + 4); ctx.lineTo(mx - 9, my + 4);
-    ctx.closePath(); ctx.fill();
-    if (muted) {
-      ctx.beginPath();
-      ctx.moveTo(mx + 3, my - 5); ctx.lineTo(mx + 11, my + 5);
-      ctx.moveTo(mx + 11, my - 5); ctx.lineTo(mx + 3, my + 5);
-      ctx.stroke();
-    } else {
-      ctx.beginPath(); ctx.arc(mx - 1, my, 7, -0.9, 0.9); ctx.stroke();
-      ctx.beginPath(); ctx.arc(mx - 1, my, 12, -0.8, 0.8); ctx.stroke();
-    }
-  });
-
-  if (debugAllowed()) smallBox(COG_BOX, (mx, my) => {
+  /* Yksi ratas, ja se on aina siinä: sen takaa löytyvät ääni, koko ruutu,
+     nappien puoli, kieli ja vaikeustaso. Kehittäjän säätöpaneeli on sama
+     ratas yhden rivin syvemmällä. */
+  smallBox(COG_BOX, (mx, my) => {
     ctx.beginPath(); ctx.arc(mx, my, 6, 0, 6.3); ctx.stroke();
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2;
       ctx.beginPath();
       ctx.moveTo(mx + Math.cos(a) * 8, my + Math.sin(a) * 8);
       ctx.lineTo(mx + Math.cos(a) * 12, my + Math.sin(a) * 12);
-      ctx.stroke();
-    }
-  });
-
-  const out = !fsElement();
-  smallBox(FULL_BOX, (mx, my) => {
-    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-      const ox = mx + sx * 11, oy = my + sy * 11;
-      const ix = mx + sx * 4, iy = my + sy * 4;
-      ctx.beginPath();
-      if (out) {
-        ctx.moveTo(ox - sx * 7, oy); ctx.lineTo(ox, oy); ctx.lineTo(ox, oy - sy * 7);
-      } else {
-        ctx.moveTo(ix - sx * 7, iy); ctx.lineTo(ix, iy); ctx.lineTo(ix, iy - sy * 7);
-      }
       ctx.stroke();
     }
   });
@@ -2620,12 +2679,25 @@ function buildPanel() {
   langRow.append(el('label', null, 'kieli'), langSeg);
   panelEl.append(langRow);
 
+  /* Vaikeustaso on pelaajan asetus eikä viritystä, mutta se kertoo painovoiman
+     ja työnnön — eli ilman tätä riviä säätimen luku ja pelin tuntuma voivat olla
+     eri mieltä, eikä paneelista näkisi miksi. */
+  const diffRow = el('div', 'row');
+  const diffSeg = el('div', 'seg');
+  for (const d of DIFFS) {
+    diffSeg.append(pbutton(diff === d.id ? 'on' : null, t('set.diff.' + d.id, null, 'fi'), () => {
+      setDiff(d.id); buildPanel();
+    }));
+  }
+  diffRow.append(el('label', null, 'vaikeustaso'), diffSeg);
+  panelEl.append(diffRow);
+
   const sideRow = el('div', 'row');
   const seg = el('div', 'seg');
   const mk = (side, text) => pbutton(gearSide === side ? 'on' : null, text, () => {
     if (gearSide === side) return;
     snapUndo();
-    gearSide = side; layout(); saveTune(); buildPanel();
+    setSide(side); saveTune(); buildPanel();
   });
   seg.append(mk('left', 'vasen'), mk('right', 'oikea'));
   sideRow.append(el('label', null, 'napit'), seg);
@@ -2755,7 +2827,7 @@ function buildPanel() {
     snapUndo();
     Object.assign(BASE, DEFAULTS);
     resetLevelTune();                          // myös kenttien omat arvot
-    gearSide = DEFAULT_SIDE; layout();
+    sidePick = null; gearSide = DEFAULT_SIDE; layout();
     applyMul();
     saveTune();
     panelNote = 'oletukset palautettu — kumoa palauttaa entiset';
@@ -2863,6 +2935,135 @@ function togglePanel() {
   setPanel(want);
 }
 
+/* ------------------------------------------------------------------ valikko
+ *
+ * Pelaajan asetukset. Alanurkan ratas avaa tämän, ja kaikki mitä pelaaja saa
+ * säätää on täällä. Ennen nurkassa oli kolme kuvaketta — ääni, säädöt, koko
+ * ruutu — ja kaikki muu oli vain kehittäjän paneelissa, jonne pelaaja ei pääse
+ * lainkaan.
+ *
+ * DOMia eikä kangasta, koska tämä on lomake eikä peliä: kosketusalueet,
+ * rivitys ja vieritys tulevat selaimelta ilmaiseksi. Tyylit ovat tässä eivätkä
+ * style.css:ssä, jotta valikko on yksi pala jonka voi lukea ja siirtää
+ * koskematta toiseen tiedostoon.
+ *
+ * Peli menee tauolle valikon ajaksi, samasta syystä kuin luonnostyökalussa:
+ * taksi ajelehtii seinään sillä välin kun asetuksia luetaan. Tauko puretaan
+ * vain jos valikko sen asetti — jos peli oli jo tauolla, se jää tauolle. */
+let menuEl = null, menuPaused = false;
+
+const menuOpen = () => !!menuEl && menuEl.style.display !== 'none';
+const css = (node, style) => { Object.assign(node.style, style); return node; };
+const MENU_FONT = '500 15px/1.5 system-ui, -apple-system, sans-serif';
+
+function menuNode() {
+  if (menuEl) return menuEl;
+  menuEl = css(el('div'), {
+    position: 'fixed', inset: '0', zIndex: '40', display: 'none',
+    alignItems: 'center', justifyContent: 'center',
+    padding: '16px', boxSizing: 'border-box',
+    background: 'rgba(5,9,22,.72)', backdropFilter: 'blur(3px)',
+    font: MENU_FONT, color: '#e9edff',
+  });
+  menuEl.id = 'menu';
+  /* Taustan painallus sulkee. Kohde on tarkistettava, koska nappien painallukset
+     kuplivat tänne asti. */
+  menuEl.addEventListener('pointerdown', e => { if (e.target === menuEl) closeMenu(); });
+  /* Koko ruutu vaihtuu vasta selaimen ehdoilla, joten napin tila piirretään
+     vastauksesta eikä toiveesta. */
+  const sync = () => { if (menuOpen()) buildMenu(); };
+  document.addEventListener('fullscreenchange', sync);
+  document.addEventListener('webkitfullscreenchange', sync);
+  (card.parentElement || document.body).append(menuEl);
+  return menuEl;
+}
+
+function mpick(on, text, fn) {
+  return css(pbutton(null, text, fn), {
+    font: MENU_FONT, padding: '7px 13px', borderRadius: '9px', cursor: 'pointer',
+    border: on ? '1px solid #6fe3ff' : '1px solid rgba(159,176,216,.35)',
+    background: on ? 'rgba(111,227,255,.16)' : 'rgba(255,255,255,.04)',
+    color: on ? '#6fe3ff' : '#e9edff',
+  });
+}
+
+function mrow(label, ...picks) {
+  const row = css(el('div'), {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    gap: '10px', flexWrap: 'wrap', margin: '0 0 14px',
+  });
+  const seg = css(el('div'), { display: 'flex', gap: '6px', flexWrap: 'wrap' });
+  seg.append(...picks);
+  row.append(css(el('span', null, label), { color: '#9fb0d8' }), seg);
+  return row;
+}
+
+function buildMenu() {
+  const box = css(el('div'), {
+    width: 'min(380px, 100%)', maxHeight: '100%', overflowY: 'auto',
+    boxSizing: 'border-box', padding: '20px 22px 16px', borderRadius: '16px',
+    background: '#0b1226', border: '1px solid rgba(120,160,255,.25)',
+    boxShadow: '0 18px 60px rgba(0,0,0,.55)',
+  });
+  box.append(css(el('h2', null, t('set.title')), {
+    margin: '0 0 18px', font: '700 20px system-ui, sans-serif', letterSpacing: '.05em',
+  }));
+
+  box.append(mrow(t('set.diff'), ...DIFFS.map(d =>
+    mpick(diff === d.id, t('set.diff.' + d.id), () => { setDiff(d.id); buildMenu(); }))));
+  box.append(css(el('p', null, t('set.diffHint')), {
+    margin: '-8px 0 16px', font: '500 12px/1.5 system-ui, sans-serif',
+    color: 'rgba(233,237,255,.45)',
+  }));
+
+  box.append(mrow(t('set.sound'),
+    mpick(!muted, t('set.on'), () => { if (muted) toggleMute(); buildMenu(); }),
+    mpick(muted, t('set.off'), () => { if (!muted) toggleMute(); buildMenu(); })));
+
+  box.append(mrow(t('set.side'),
+    mpick(gearSide === 'left', t('set.left'), () => { setSide('left'); buildMenu(); }),
+    mpick(gearSide === 'right', t('set.right'), () => { setSide('right'); buildMenu(); })));
+
+  box.append(mrow(t('set.lang'),
+    mpick(LANG === 'fi', 'suomi', () => { applyLang('fi'); setPortal('lang', 'fi'); buildMenu(); }),
+    mpick(LANG === 'en', 'english', () => { applyLang('en'); setPortal('lang', 'en'); buildMenu(); })));
+
+  box.append(mrow(t('set.screen'),
+    mpick(!fsElement(), t('set.window'), () => { if (fsElement()) toggleFullscreen(); }),
+    mpick(!!fsElement(), t('set.full'), () => { if (!fsElement()) toggleFullscreen(); })));
+
+  if (debugAllowed()) {
+    box.append(mrow(t('set.tune'),
+      mpick(false, t('set.open'), () => { closeMenu(); togglePanel(); })));
+  }
+
+  const foot = css(el('div'), { display: 'flex', justifyContent: 'flex-end', marginTop: '6px' });
+  foot.append(css(pbutton(null, t('set.close'), closeMenu), {
+    font: '600 15px system-ui, sans-serif', padding: '9px 20px', borderRadius: '10px',
+    cursor: 'pointer', border: '1px solid rgba(111,227,255,.5)',
+    background: 'rgba(111,227,255,.14)', color: '#6fe3ff',
+  }));
+  box.append(foot);
+
+  menuNode().replaceChildren(box);
+}
+
+function openMenu() {
+  if (menuOpen()) return;
+  buildMenu();
+  menuNode().style.display = 'flex';
+  for (const k of Object.keys(KEY)) KEY[k] = false;   // pohjaan jäänyt näppäin ei jää päälle
+  menuPaused = (state === PLAY || state === ENTER) && !paused;
+  if (menuPaused) setPaused(true);
+}
+
+function closeMenu() {
+  if (!menuOpen()) return;
+  menuEl.style.display = 'none';
+  if (menuPaused) setPaused(false);
+  menuPaused = false;
+}
+
 /* ------------------------------------------------------------------ kortti */
 function hideCard() {
   clearTimeout(endTimer);
@@ -2899,11 +3100,13 @@ function showCard(html, pending, meta, fade) {
   if (set) set.addEventListener('click', togglePanel);
   const fs = card.querySelector('#fs');
   if (fs) fs.addEventListener('click', toggleFullscreen);
+  const opt = card.querySelector('#opt');
+  if (opt) opt.addEventListener('click', openMenu);
 }
 
 const buttons = label => `
   <button id="go" class="btn">${label}</button>
-  <button id="fs" class="btn ghost">${t('card.full')}</button>
+  <button id="opt" class="btn ghost">${t('card.opt')}</button>
   ${debugAllowed() ? `<button id="set" class="btn ghost">${t('card.tune')}</button>` : ''}
   <p class="hint">${t('card.keys')}</p>
   <p class="hint" id="padstate"></p>`;
