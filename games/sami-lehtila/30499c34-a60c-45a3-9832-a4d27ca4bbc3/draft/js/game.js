@@ -1152,8 +1152,17 @@ function solids() {
   return list;
 }
 
-/** Kuinka lähellä laskurajaa ollaan: yli 1 hajottaa taksin. */
-const landRatio = () => Math.max(taxi.vy / P.landVY, Math.abs(taxi.vx) / P.landVX);
+/** Kuinka lähellä laskurajaa ollaan: yli 1 hajottaa taksin.
+
+    Alusta annetaan silloin kun kysytään nimenomaan siihen laskeutumisesta.
+    Nouseva alusta tulee taksia vastaan, joten törmäysnopeus on taksin vauhti
+    plus alustan vauhti — nouseva alusta syö laskeutumisbudjetista. Laskeutuva
+    alusta pakenee alaspäin, mutta sitä ei lasketa hyväksi: pakeneva alusta ei
+    tee laskusta kovempaa, ja pehmennys olisi ilmainen. Ilman alustaa tämä on
+    taksin oma vauhti, niin kuin ennenkin. */
+const landRatio = (p) => Math.max(
+  (taxi.vy - Math.min(0, (p && p.vy) || 0)) / P.landVY,
+  Math.abs(taxi.vx) / P.landVX);
 
 /* Kolari vie taksin ja kyydissä olleen asiakkaan — syytä ei selitetä, romu
    kertoo sen itse. Kaikki muu kentän tilanne jää koskematta. */
@@ -1183,7 +1192,7 @@ function crash() {
 
 function touchdown(pad, b) {
   const t2 = taxi;
-  const ratio = landRatio();
+  const ratio = landRatio(pad);
 
   if (t2.gear < 0.85) return crash();
   if (b.x < pad.x - 2 || b.x + b.w > pad.x + pad.w + 2) return crash();
@@ -1367,7 +1376,17 @@ const targetId = () => {
   return job.shown ? job.from : null;
 };
 
-function movePads() {
+/* dt on tässä siksi, että pystysuunnassa liikkuva alusta ei ole taksille vain
+   paikka vaan myös nopeus. Molemmat jäävät alustaan talteen:
+
+     p.dy   paljonko alusta liikkui tällä ruudulla, ylöspäin negatiivinen
+     p.vy   sama px/s, samaan suuntaan kuin taksin oma vy
+
+   Näitä tarvitaan kahteen asiaan, ja molemmat olivat väärin niin kauan kuin
+   yksikään kenttä ei liikuttanut alustoja pystysuunnassa (ks. move() ja
+   landRatio). Vaakaliikkeelle nämä ovat nollia, joten mikään vanha kenttä ei
+   muutu. */
+function movePads(dt) {
   for (const p of PADS) {
     if (!p.move) continue;
     const m = p.move;
@@ -1375,6 +1394,7 @@ function movePads() {
     const nx = p.bx + (m.x || 0) * a, ny = p.by + (m.y || 0) * a;
     const dx = nx - p.x, dy = ny - p.y;
     p.x = nx; p.y = ny;
+    p.dy = dy; p.vy = dt > 0 ? dy / dt : 0;
     if (taxi.landed === p) { taxi.x += dx; taxi.y += dy; }
     if (job && job.from === p.id && job.phase === 'wait') job.x += dx;
     for (const g of graves) if (g.pad === p.id) g.x += dx;
@@ -1402,7 +1422,6 @@ function clearWarnings() {
    alustan yläpuolella sattuu kiitämään. */
 function warnPad() {
   if (dead || state !== PLAY || !taxi || taxi.landed || taxi.vy <= 0) return null;
-  if (landRatio() <= P.bounceFrom) return null;
   const b = taxiBox(taxi);
   const reach = Math.max(PAD_WARN_NEAR, taxi.vy * PAD_WARN_LEAD);
   let best = null, bestGap = Infinity;
@@ -1410,6 +1429,9 @@ function warnPad() {
     if (b.x + b.w <= p.x || b.x >= p.x + p.w) continue;
     const gap = p.y - (b.y + b.h);
     if (gap < 0 || gap > reach || gap >= bestGap) continue;
+    /* Raja kysytään alustalta eikä taksilta: nousevaan alustaan lasketaan
+       alustan vauhti mukaan, joten hitaastikin tuleva taksi saa valon. */
+    if (landRatio(p) <= P.bounceFrom) continue;
     best = p; bestGap = gap;
   }
   return best;
@@ -1421,7 +1443,10 @@ function warnings(dt) {
     if (lowWarn <= 0) { sfx.warn(); lowWarn = 0.25 + fuel / 45; }
   } else lowWarn = 0;
 
-  const r = !dead && taxi && !taxi.landed ? landRatio() : 0;
+  /* Alusta ensin, koska sekä piippaus että vilkku kysyvät sen rajaa: lasku
+     luetaan siitä alustasta johon ollaan tulossa, joten varoituskin. */
+  padWarn = warnPad();
+  const r = !dead && taxi && !taxi.landed ? landRatio(padWarn) : 0;
   if (!dead && taxi && !taxi.landed && taxi.gear > 0.5 && r > LAND_WARN_FROM) {
     fastWarn -= dt;
     if (fastWarn <= 0) {
@@ -1432,9 +1457,8 @@ function warnings(dt) {
 
   /* Vilkun tahti kertyy vaiheeseen eikä kellonaikaan, jotta se voi kiihtyä
      kesken pudotuksen ilman että väri hyppää. */
-  padWarn = warnPad();
   if (padWarn) {
-    const n = bounceNorm(landRatio(), P);
+    const n = bounceNorm(r, P);
     padBlink += (PAD_BLINK_SLOW + (PAD_BLINK_FAST - PAD_BLINK_SLOW) * n) * dt;
   } else padBlink = 0;
 }
@@ -1447,7 +1471,7 @@ function updateEnter(dt) {
   if (hornFx > 0) hornFx -= dt;
   stepBits(dt);
   stepSquish(dt);
-  movePads();
+  movePads(dt);
 
   const d = ENTER_Y - taxi.y;
   taxi.vy = clamp(d * 2.6, 0, 300);
@@ -1474,7 +1498,7 @@ function update(dt) {
   if (hornFx > 0) hornFx -= dt;
   stepBits(dt);
   stepSquish(dt);
-  movePads();
+  movePads(dt);
   if (level.update) level.update(dt, api());
 
   if (dead) {
@@ -1553,7 +1577,14 @@ function move(dt) {
 
   if (taxi.vy >= 0) {
     for (const p of PADS) {
-      if (b.x + b.w > p.x && b.x < p.x + p.w && b.y + b.h > p.y && prevBottom <= p.y + 1) {
+      /* Alustan yläreuna ruudun alussa, ei sen jälkeen kun movePads on jo
+         nostanut sitä: nouseva alusta ehtii muuten yhden ruudun aikana nousta
+         taksin alareunan ohi, jolloin lasku jää lukematta ja alusta lasketaan
+         seinäksi. Se näkyisi satunnaisena kolarina alustaan joka oli tulossa
+         vastaan. Paikallaan olevalla ja vaakaan liikkuvalla dy on nolla, eli
+         ehto on sama kuin ennen. */
+      const top = p.y - (p.dy || 0);
+      if (b.x + b.w > p.x && b.x < p.x + p.w && b.y + b.h > p.y && prevBottom <= top + 1) {
         return touchdown(p, b);
       }
     }
