@@ -29,6 +29,10 @@ const NOTE = {
   'unknown-game': 'This time could not be posted.',
 };
 
+// What flew the run, shown beside the time. Anything the game does not recognise is left off rather than printed:
+// the tag is self-reported, like the time itself, and a row that says nothing is better than a row that guesses.
+const DEV = {touch:'touch', keys:'keys', mouse:'mouse', pad:'pad', mixed:'mixed'};
+
 /** Fills every leaderboard placeholder in a freshly built menu. */
 export function mount(root){
   for (const host of root.querySelectorAll('[data-lb-level]')){
@@ -62,13 +66,14 @@ async function send(lv, ms, status){
   status.className = 'lb-note';
   status.textContent = 'Posting your time…';
   const post = { score: ms, board: BOARD, level: levelOf(lv) };
-  // The ghost rides along with the time. The game packs it and the board never looks inside; if it will not fit,
-  // the time goes up without one and the row is simply not raceable.
-  const path = window.Thruster && window.Thruster.replay(lv);
-  if (path){
-    const data = {v:1, r:path};
-    if (JSON.stringify(data).length <= 1980) post.data = data;
-  }
+  // The ghost and what flew it ride along with the time. The game packs them and the board never looks inside. If
+  // the ghost will not fit the tag still goes up on its own: it is a handful of bytes and always fits.
+  const T = window.Thruster, data = {v:1};
+  const path = T && T.replay(lv), dev = T && T.device(lv);
+  if (path) data.r = path;
+  if (dev) data.d = dev;
+  if (data.r && JSON.stringify(data).length > 1980) delete data.r;
+  if (data.r || data.d) post.data = data;
   const r = await submit(post);
   if (r.kept){
     mine[lv] = {ms, id: r.entry.id}; remember();
@@ -89,7 +94,10 @@ async function draw(lv, body, sub, title){
   const list = el('ol', 'lbrows');
   for (const e of page.entries){
     const row = el('li', `lbrow${e.rank <= 3 ? ' top' : ''}${e.id === highlight ? ' me' : ''}`);
-    row.append(el('span', 'r', e.rank), el('span', 'n', e.name), el('span', 't', clock(e.score)));
+    row.append(el('span', 'r', e.rank), el('span', 'n', e.name));
+    const d = e.data && e.data.v === 1 ? DEV[e.data.d] : null;
+    if (d) row.append(el('span', 'd', d));
+    row.append(el('span', 't', clock(e.score)));
     const go = raceButton(lv, e); if (go) row.append(go);
     list.append(row);
   }
