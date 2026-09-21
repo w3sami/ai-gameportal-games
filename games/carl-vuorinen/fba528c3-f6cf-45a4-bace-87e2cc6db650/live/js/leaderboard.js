@@ -29,6 +29,29 @@ const NOTE = {
   'unknown-game': 'This time could not be posted.',
 };
 
+// What flew the run, shown beside the time as one small icon per device: a run flown with a thumb and a keyboard
+// gets both. Unknown tags are skipped rather than drawn, and a row from before the game recorded any of this
+// simply has none. Like the time itself, this is what the pilot's browser says happened.
+const DEV = {
+  keys:  ['keyboard', '<rect x="2" y="6" width="20" height="12" rx="2.5"/><path d="M7.5 14.5h9M6 10h.01M10 10h.01M14 10h.01M18 10h.01"/>'],
+  touch: ['touch',    '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M10.2 18.8h3.6"/>'],
+  mouse: ['mouse',    '<rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 6.5v3.5"/>'],
+  pad:   ['gamepad',  '<rect x="2" y="7" width="20" height="11" rx="5.5"/><path d="M6.5 10.5v4M4.5 12.5h4"/><path d="M16 11.4h.01M18.4 13.6h.01"/>'],
+};
+const ICON = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${DEV[k][1]}</svg>`;
+
+// One badge for however many devices the entry names, in the order the game listed them.
+function devBadge(entry){
+  if (!entry.data || entry.data.v !== 1 || !entry.data.d) return null;
+  const kinds = String(entry.data.d).split(',').filter(k => DEV[k]);
+  if (!kinds.length) return null;
+  const n = el('span', 'd');
+  n.innerHTML = kinds.map(ICON).join('');
+  const names = kinds.map(k => DEV[k][0]);
+  n.title = names.length > 1 ? `${names.slice(0,-1).join(', ')} and ${names[names.length-1]}` : names[0];
+  return n;
+}
+
 /** Fills every leaderboard placeholder in a freshly built menu. */
 export function mount(root){
   for (const host of root.querySelectorAll('[data-lb-level]')){
@@ -62,13 +85,14 @@ async function send(lv, ms, status){
   status.className = 'lb-note';
   status.textContent = 'Posting your time…';
   const post = { score: ms, board: BOARD, level: levelOf(lv) };
-  // The ghost rides along with the time. The game packs it and the board never looks inside; if it will not fit,
-  // the time goes up without one and the row is simply not raceable.
-  const path = window.Thruster && window.Thruster.replay(lv);
-  if (path){
-    const data = {v:1, r:path};
-    if (JSON.stringify(data).length <= 1980) post.data = data;
-  }
+  // The ghost and what flew it ride along with the time. The game packs them and the board never looks inside. If
+  // the ghost will not fit the tag still goes up on its own: it is a handful of bytes and always fits.
+  const T = window.Thruster, data = {v:1};
+  const path = T && T.replay(lv), dev = T && T.device(lv);
+  if (path) data.r = path;
+  if (dev) data.d = dev;
+  if (data.r && JSON.stringify(data).length > 1980) delete data.r;
+  if (data.r || data.d) post.data = data;
   const r = await submit(post);
   if (r.kept){
     mine[lv] = {ms, id: r.entry.id}; remember();
@@ -89,7 +113,9 @@ async function draw(lv, body, sub, title){
   const list = el('ol', 'lbrows');
   for (const e of page.entries){
     const row = el('li', `lbrow${e.rank <= 3 ? ' top' : ''}${e.id === highlight ? ' me' : ''}`);
-    row.append(el('span', 'r', e.rank), el('span', 'n', e.name), el('span', 't', clock(e.score)));
+    row.append(el('span', 'r', e.rank), el('span', 'n', e.name));
+    const d = devBadge(e); if (d) row.append(d);
+    row.append(el('span', 't', clock(e.score)));
     const go = raceButton(lv, e); if (go) row.append(go);
     list.append(row);
   }
