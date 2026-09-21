@@ -558,19 +558,19 @@ function alienFetus(ctx, t) {
   const s = FETUS.s;
 
   if (v) {
-    /* Napanuora kannen syöttöputkeen. Se **pysähtyy vartalon reunaan** eikä
-       jatka sen alle: vartalo on läpikuultavaa, joten alle piirretty nuora
-       näkyisi läpi ja näyttäisi seipäältä joka lävistää olennon. Kiinnityskohta
-       on kyljessä vatsan korkeudella — päähän päättyvä nuora näyttäisi
-       hihnalta josta se roikkuu. */
-    const sway = Math.sin(t / 3.1) * 7;
-    ctx.strokeStyle = fade(FET_COL, DIM * 1.7);
-    ctx.lineWidth = 3;
+    /* Napanuora kannen syöttöputkeen. Se **kaartaa pään ohi oikealta** ja
+       päättyy kyljelle vatsan korkeudelle. Kumpikin on korjaus: suoraan
+       alas tuleva nuora näkyi läpikuultavan vartalon läpi kuin seiväs joka
+       lävistää olennon, ja päähän päättyvä näyttäisi hihnalta josta se
+       roikkuu. Vaimeampi ja ohuempi kuin lasi, jottei se lue teräsputkeksi. */
+    const sway = Math.sin(t / 3.1) * 5;
+    ctx.strokeStyle = fade(FET_COL, DIM * 1.2);
+    ctx.lineWidth = 2.6;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(v.x + v.w / 2, v.y + 2);
-    ctx.quadraticCurveTo(v.x + v.w / 2 + sway, (v.y + y) / 2,
-                         FETUS.x + 14 * s, y - 3 * s);
+    ctx.quadraticCurveTo(v.x + v.w / 2 + 22 + sway, (v.y + y) / 2 + 10,
+                         FETUS.x + 16 * s, y + 6 * s);
     ctx.stroke();
   }
 
@@ -606,8 +606,8 @@ function alienFetus(ctx, t) {
   ctx.fillStyle = chin;
   ctx.beginPath(); ctx.ellipse(1, -1, 13, 7, 0, 0, 6.3); ctx.fill();
 
-  ctx.fillStyle = `rgba(255,255,255,${DIM * 1.8})`;   // valoreuna ylävasemmalle
-  ctx.beginPath(); ctx.ellipse(-6, -23, 7.5, 4.6, -0.45, 0, 6.3); ctx.fill();
+  ctx.fillStyle = `rgba(255,255,255,${DIM * 1.1})`;   // valoreuna ylävasemmalle
+  ctx.beginPath(); ctx.ellipse(-7, -24, 8.5, 3.6, -0.5, 0, 6.3); ctx.fill();
 
   /* Silmät kiinni: luomi on alaspäin kaartuva kaari eikä pallo. Nukkuva ei
      tuijota takaisin, ja se on koko "ei liian pelottava" yhdessä piirteessä. */
