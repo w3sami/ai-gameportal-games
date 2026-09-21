@@ -393,7 +393,15 @@ function sync() {
 const S = { t: 0 };
 
 function lanternsInit(api) { S.t = api.t; sync(); }
-function lanternsUpdate(dt, api) { S.t = api.t; sync(); }
+const LOG = [];
+function lanternsUpdate(dt, api) {
+  S.t = api.t; sync();
+  const t = api.taxi, p3 = api.pads.find(p => p.id === 3);
+  LOG.push([+api.t.toFixed(2), Math.round(t.y), Math.round(t.vy), t.landed ? t.landed.id : -1,
+            Math.round(p3.y), Math.round(p3.vy || 0), t.offPad ? t.offPad.id : -1, +t.gear.toFixed(2)]);
+  if (LOG.length > 1500) LOG.shift();
+  window.__lt = LOG;
+}
 
 function lanternsBack(ctx, api) {
   const time = animStep();
