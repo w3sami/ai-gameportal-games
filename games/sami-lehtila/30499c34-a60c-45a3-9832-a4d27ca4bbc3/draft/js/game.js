@@ -78,6 +78,7 @@ const LAND_WARN_FROM = 0.75;               // varoitus jo ennen laskurajaa
 const PAD_WARN_LEAD = 1.0;                 // sekuntia pudotusta ennen kuin alusta vilkkuu
 const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
 const PAD_LEAVE = 0.5;                     // näin kauan lähtöalusta vielä kannattelee
+const PAD_LEAVE_GAP = 8;                   // ...ja tätä lähempänä niin kauan kuin siinä ollaan
 const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
 const PAD_WARN_HOT = '#ff5d7a', PAD_WARN_COLD = '#6fe3ff';
 
@@ -1613,15 +1614,18 @@ function carryOff(dt) {
   const p = taxi.offPad;
   if (!p) return;
   taxi.offT -= dt;
-  const b = taxiBox(taxi);
-  const touch = b.x + b.w > p.x && b.x < p.x + p.w &&
-                b.y + b.h > p.y && b.y + b.h <= p.y + p.h + 4;
-  if (touch) {
+  const b = taxiBox(taxi), foot = b.y + b.h;
+  const under = foot > p.y + p.h + 4;                  // taksi on jo alustan alla
+  const over = !under && b.x + b.w > p.x && b.x < p.x + p.w;
+  /* Lähellä pintaa suoja ei raukea vaikka aika loppuisi: muuten se voisi
+     loppua juuri sillä ruudulla jolla alusta koskettaa, ja seuraava ruutu
+     olisi kolari. Aika ratkaisee vasta kun taksi on irronnut pinnasta. */
+  const near = over && foot > p.y - PAD_LEAVE_GAP;
+  if (near && foot > p.y) {
     taxi.y = p.y - (TH / 2 + GEAR * taxi.gear);
     if (taxi.vy > (p.vy || 0)) taxi.vy = p.vy || 0;
-  } else if (taxi.offT <= 0 || b.y + b.h > p.y + p.h + 4) {
-    taxi.offPad = null;
   }
+  if (under || (taxi.offT <= 0 && !near)) taxi.offPad = null;
 }
 
 /** Saako tankista vielä bensaa? Ilmainen bensa ei koskaan lopu kassan takia. */
