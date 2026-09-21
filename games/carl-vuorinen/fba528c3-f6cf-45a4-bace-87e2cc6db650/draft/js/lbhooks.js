@@ -9,33 +9,43 @@
 (() => {
   const msOf = t => Math.round(t*1000/120);                   // a board holds whole numbers; for a time attack that is milliseconds
 
-  const _showMenu = showMenu, _showComplete = showComplete, _reset = reset, _loadLevel = loadLevel;
+  const _showMenu = showMenu, _showComplete = showComplete, _reset = reset, _loadLevel = loadLevel, _readInput = readInput;
   let rival = null;                                           // {name, path} taken from the board
 
-  // What flew the run. Watched here rather than in game.js because the events are the same ones the game listens
-  // for, one layer further out: a control key pressed, or a finger or a mouse on the control surface. A future
-  // gamepad reader has nothing to observe from outside, so it calls Thruster.noteDevice('pad') itself.
+  // ---- What flew the run ----
+  // Read off readInput(), the one place where a key, a thumb or a pad becomes a steer and a thrust. Watching events
+  // instead would count a key that did nothing: a pause, a stray arrow in a menu, a tap on the wrong half. Here a
+  // device is only credited on a tick where it was actually driving the rocket.
   const DEVKEY = 'thruster-dev-v1';
-  const CTRL_KEYS = new Set(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyW','KeyS','Space']);
+  const ORDER = ['keys','touch','mouse','pad'];
   let devs = {}; try { devs = JSON.parse(localStorage.getItem(DEVKEY)) || {}; } catch (e) {}
   const runDev = new Set();
-  const bestSeen = {};                                        // level -> best ticks as of the last finish, so a new best is visible
+  let ptrKind = 'touch';                                      // a pointer is a finger until one says otherwise
+  let padTick = -1;
+  const bestSeen = {};                                        // level -> best ticks at the last finish, so a new best is visible
   for (const k in store.bests) if (store.bests[k]) bestSeen[k] = store.bests[k].ticks;
+  const devTag = () => ORDER.filter(d => runDev.has(d)).join(',') || null;
 
-  function note(kind){ if (mode === 'play') runDev.add(kind); }
-  const devTag = () => runDev.size === 0 ? null : runDev.size === 1 ? [...runDev][0] : 'mixed';
+  addEventListener('pointerdown', e => { if (e.pointerType) ptrKind = e.pointerType === 'mouse' ? 'mouse' : 'touch'; }, true);
 
-  window.addEventListener('keydown', e => {
-    if (e.target && e.target.tagName === 'INPUT') return;
-    if (CTRL_KEYS.has(e.code)) note('keys');
-  }, true);
-  window.addEventListener('pointerdown', e => note(e.pointerType === 'mouse' ? 'mouse' : 'touch'), true);
+  window.readInput = function(){
+    const inp = _readInput();
+    if (running && mode === 'play'){
+      const pad = padTick === ticks;
+      if (pad) runDev.add('pad');
+      // A pad plugin that drives the game by filling `keys` would otherwise read as a keyboard, so a tick the pad
+      // claimed is not also credited to one. Drop this line if a pad and a keyboard should both count.
+      else if (keys.thrust || keys.left || keys.right) runDev.add('keys');
+      if (stick.active || thrTouch.active || arrows.size) runDev.add(ptrKind);
+    }
+    return inp;
+  };
 
-  function attach(ticks){
+  function attach(ticksBest){
     const d = document.createElement('div');
     d.dataset.lbLevel = li;
     d.dataset.lbTitle = `${li+1}. ${L.name}`;
-    if (ticks) d.dataset.lbPost = msOf(ticks);
+    if (ticksBest) d.dataset.lbPost = msOf(ticksBest);
     const settings = box.querySelector('.settings');
     if (settings) box.insertBefore(d, settings); else box.append(d);
     if (window.LB) window.LB.mount(box);                      // before the module lands there simply is no board
@@ -73,7 +83,7 @@
   window.Thruster = {
     replay(lv){ const b = store.bests[lv]; return b && b.path ? GP.fit(b.path) : null; },
     device(lv){ return devs[lv] || null; },
-    noteDevice(kind){ note(kind); },                          // for a reader the window cannot see, gamepad being the one coming
+    noteDevice(){ padTick = ticks; },                         // a pad is polled, not evented: its reader says so itself
     ticksOf(path){ return GP.ticks(path); },
     race(lv, name, path){
       if (!path || GP.ticks(path) < 1) return false;          // nothing is flown rather than something wrong
