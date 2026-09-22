@@ -303,6 +303,31 @@ const VATS = [];
   }
 }
 
+/* -------------------------------------------------------------- alien-sikiö
+
+   Sami maalasi 21.9.2026 laatikon 39 × 101 täsmälleen oikeanpuoleisen
+   ylätankin keskelle ja kirjoitti viereen: *"tehdää alien sikiö, ei liian
+   pelottava."* Laatikko on siis sekä paikka että koko, ja sen yläosa on
+   napanuoraa: nuora nousee tankin syöttöputkeen, mikä tekee oliosta näytteen
+   eikä hirviötä.
+
+   **"Ei liian pelottava" on piirto-ohje, ei sävy.** Silmät ovat kiinni ja
+   luomet kaartuvat alas — nukkuva ei tuijota takaisin — pää on iso ja pyöreä,
+   raajat kääriytyneet sisään, eikä missään ole terävää kulmaa.
+
+   Kirkkaus tulee tankiston `DIM`:stä kuten kaikella muullakin lasin takana, ja
+   sikiö piirtyy kuplien ja etuhohteen **alle**: se on huoneessa oleva asia
+   eikä huoneen aihe. Sama perustelu kuin vesitankeilla yllä — tausta ei saa
+   varastaa katsetta portilta.
+
+   Tankki päätellään paikasta eikä kirjoiteta indeksinä, jotta nuora löytää
+   oikean kannen myös silloin kun sikiö raahataan editorissa toiseen
+   tankkiin. */
+const FETUS = { x: 655, y: 188, s: 1 };
+const FET_COL = '#cfe9ff';
+const fetusVat = () => VATS.find((v) => FETUS.x > v.x && FETUS.x < v.x + v.w &&
+                                        FETUS.y > v.y && FETUS.y < v.y + v.h);
+
 /* Kuplat: paikka leveydellä 0…1, säde, nousunopeus ja oma vaihe. Vaiheet ovat
    eri, jottei rivi nouse yhtenä ryhmänä — yhtä aikaa nouseva joukko näyttää
    animaatiolta eikä vedeltä. */
@@ -520,6 +545,84 @@ function paintFace(g) {
   }
 }
 
+/** Alien-sikiö tankin nesteessä: iso pää, kääriytyneet raajat, silmät kiinni.
+    Kelluu hitaasti ja keinuu hieman — neste liikuttaa sitä, se ei itse liiku.
+
+    Koko vartalo on **yksi polku ja yksi täyttö**. Ensimmäisessä versiossa pää,
+    keho ja jalat täytettiin erikseen, ja koska väri on läpikuultava, jokainen
+    limitys kirkastui — kolme palloa lumiukossa eikä yhtä olentoa. Yhdellä
+    täytöllä ääriviiva on yhtenäinen ja sisus tasainen. */
+function alienFetus(ctx, t) {
+  const v = fetusVat();
+  const y = FETUS.y + Math.sin(t / 2.9) * 3.2;
+  const s = FETUS.s;
+
+  if (v) {
+    /* Napanuora kannen syöttöputkeen. Se **kaartaa pään ohi oikealta** ja
+       päättyy kyljelle vatsan korkeudelle. Kumpikin on korjaus: suoraan
+       alas tuleva nuora näkyi läpikuultavan vartalon läpi kuin seiväs joka
+       lävistää olennon, ja päähän päättyvä näyttäisi hihnalta josta se
+       roikkuu. Vaimeampi ja ohuempi kuin lasi, jottei se lue teräsputkeksi. */
+    const sway = Math.sin(t / 3.1) * 5;
+    ctx.strokeStyle = fade(FET_COL, DIM * 1.2);
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(v.x + v.w / 2, v.y + 2);
+    ctx.quadraticCurveTo(v.x + v.w / 2 + 22 + sway, (v.y + y) / 2 + 10,
+                         FETUS.x + 16 * s, y + 6 * s);
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.translate(FETUS.x, y);
+  ctx.rotate(Math.sin(t / 3.7) * 0.05);
+  ctx.scale(s, s);
+
+  const glow = ctx.createRadialGradient(0, -6, 2, 0, -6, 46);
+  glow.addColorStop(0, fade(VAT_COL, DIM * 2.0));
+  glow.addColorStop(1, fade(VAT_COL, 0));
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(0, -6, 46, 0, 6.3); ctx.fill();
+
+  const body = new Path2D();
+  body.ellipse(0, -16, 16.5, 15.5, 0, 0, 6.3);        // iso pyöreä pää
+  body.ellipse(1, 3, 12, 11, 0.1, 0, 6.3);            // keho, syvällä pään alla
+  body.ellipse(-4, 11, 10.5, 7.5, -0.2, 0, 6.3);      // polvet ylös ja vasemmalle
+  body.ellipse(-11, 6, 4.5, 3.4, 0.4, 0, 6.3);        // varpaat
+  body.ellipse(-11, -3, 5.5, 3.8, 0.9, 0, 6.3);       // kädet leuan alla
+  body.ellipse(8, 2, 4.8, 3.4, -0.8, 0, 6.3);
+  const skin = ctx.createLinearGradient(-16, -32, 16, 20);
+  skin.addColorStop(0, fade(FET_COL, DIM * 3.2));
+  skin.addColorStop(1, fade(FET_COL, DIM * 1.9));
+  ctx.fillStyle = skin;
+  ctx.fill(body);
+
+  /* Leuan varjo erottaa pään kehosta ilman viivaa: yksi täyttö tekee muuten
+     yhdestä siluetista sellaisen jossa ei näy missä pää loppuu. */
+  const chin = ctx.createRadialGradient(1, -1, 1, 1, -1, 13);
+  chin.addColorStop(0, `rgba(12,22,40,${DIM * 1.4})`);
+  chin.addColorStop(1, 'rgba(12,22,40,0)');
+  ctx.fillStyle = chin;
+  ctx.beginPath(); ctx.ellipse(1, -1, 13, 7, 0, 0, 6.3); ctx.fill();
+
+  ctx.fillStyle = `rgba(255,255,255,${DIM * 1.1})`;   // valoreuna ylävasemmalle
+  ctx.beginPath(); ctx.ellipse(-7, -24, 8.5, 3.6, -0.5, 0, 6.3); ctx.fill();
+
+  /* Silmät kiinni: luomi on alaspäin kaartuva kaari eikä pallo. Nukkuva ei
+     tuijota takaisin, ja se on koko "ei liian pelottava" yhdessä piirteessä. */
+  ctx.strokeStyle = `rgba(18,30,48,${DIM * 3.6})`;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  for (const ex of [-6.8, 6.8]) {
+    ctx.beginPath();
+    ctx.moveTo(ex - 4, -16);
+    ctx.quadraticCurveTo(ex, -12.6, ex + 4, -16);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** Elävä osa: räkkien merkkivalot ja lasien sisällöt. */
 function labLive(ctx) {
   for (let i = 0; i < RACKS.length; i++) {
@@ -550,6 +653,7 @@ function labLive(ctx) {
      elää sen verran että sen huomaa, ei niin että sitä katsoo. */
   {
     const t = clock / 1000;
+    alienFetus(ctx, t);           // kuplat ja etuhohde piirtyvät tämän yli
     for (const v of VATS) {
       for (let i = 0; i < BUBBLES.length; i++) {
         const [px, r, spd, bp] = BUBBLES[(i + v.ph * 2) % BUBBLES.length];
@@ -751,6 +855,8 @@ const EDIT = [
     label: p.fuel ? 'tankkaus' : 'alusta ' + p.id,
     knob: { key: 'w', label: 'leveys', min: 60, max: 260, step: 2 },
   })),
+  { id: 'fetus', kind: 'prop', obj: FETUS, label: 'sikiö',
+    knob: { key: 's', label: 'koko', min: 0.5, max: 1.8, step: 0.05 } },
   ...PORTALS.flatMap((p, i) => [
     { id: `portal:${i + 1}:in`, kind: 'prop', obj: p.a, label: `portti ${i + 1} sisään`,
       knob: { key: 'r', label: 'säde', min: 12, max: 60, step: 1 } },
