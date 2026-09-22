@@ -7,7 +7,10 @@
 // 1 and only ever grows by one, it is also which level continues it: the level at index `store.streak`. Fly any
 // other level, crash, or walk away from an attempt part-flown, and it is zero again and the next one starts at
 // level 1. `store.streakMs` is what the runs that built it added up to — not the sum of the level bests, but the
-// clock on the actual clean runs, which is what separates two pilots who both got the same distance.
+// clock on the actual clean runs, which is what would separate two pilots who got the same distance.
+//
+// Local only, on purpose: none of this is posted anywhere. A shared board for it wants a tie-break packed into the
+// single integer a board sorts on, and that decision is not made yet.
 (() => {
   if (typeof store.streak !== 'number') store.streak = 0;           // saves from before this existed
   if (typeof store.streakMs !== 'number') store.streakMs = 0;
@@ -99,24 +102,13 @@
     if (store.streakBest) d.append(span('sk-best', `Best ${store.streakBest} · ${clk(store.streakBestMs)}`));
     return d;
   }
-  // The board's placeholder, filled by leaderboard.js if it is there. Same shape as the one lbhooks leaves behind,
-  // and inserted at the same point, which puts it after that one.
-  function slot(){
-    const d = document.createElement('div');
-    d.dataset.lbStreak = store.streakBest;
-    d.dataset.lbStreakMs = store.streakBestMs;
-    const settings = box.querySelector('.settings');
-    if (settings) box.insertBefore(d, settings); else box.append(d);
-    if (window.LB) window.LB.mount(box);
-  }
-  function dressMenu(){
+
+  window.showMenu = function(){
+    _showMenu();
     crowns();
     const grid = box.querySelector('.grid');
     if (grid) grid.after(bar());
-    slot();
-  }
-
-  window.showMenu = function(){ _showMenu(); dressMenu(); };
+  };
   window.showComplete = function(){
     _showComplete();
     const r = lastResult;
@@ -128,9 +120,12 @@
                                        : `Streak ${r.streak} · ${clk(r.streakMs)}. Level ${r.streak+1} keeps it going.`);
     const sub = box.querySelector('.sub');
     if (sub) sub.after(p); else box.prepend(p);
-    slot();
   };
 
   hudLine();
-  if (mode === 'menu') dressMenu();                                 // game.js opened the first menu before this file ran
+  if (mode === 'menu'){                                             // game.js opened the first menu before this file ran
+    crowns();
+    const grid = box.querySelector('.grid');
+    if (grid) grid.after(bar());
+  }
 })();
