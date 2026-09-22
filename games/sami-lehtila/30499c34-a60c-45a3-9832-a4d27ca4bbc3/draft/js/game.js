@@ -1193,12 +1193,14 @@ function padInput() {
     return;
   }
 
-  /* Start on pelissä yksi toiminto: se pysäyttää ja avaa asetukset, koska
-     valikko pysäyttää joka tapauksessa. Debug-tilassa se on pelkkä tauko —
-     silloin ruudulla on jo ratas ja liu'ut, ja tarve on nopea pysäytys keskellä
-     mittaamista. Sami 22.9.2026. */
+  /* Start on yksi toiminto: se pysäyttää ja avaa asetukset, koska valikko
+     pysäyttää joka tapauksessa. Poikkeus on **säätöpaneeli auki** — silloin
+     ollaan mittaamassa, ja tarve on nopea pysäytys ilman että mitään menee
+     valikon alle. Ehto on paneelin tila eikä debug-oikeus: pelin omassa
+     osoitteessa debug on tosi kenelle tahansa, jolloin asetukset eivät olisi
+     auenneet Startista koskaan. Sami 22.9.2026. */
   if (gamepad.pressed('menu')) {
-    if (debugAllowed()) togglePause(); else openMenu(true);
+    if (panelOpen()) togglePause(); else openMenu(true);
     return;
   }
   /* Select avaa säätöpaneelin. Pelaajalla sitä ei ole, joten hänelle sama
