@@ -63,6 +63,7 @@ import { stormport } from './levels/stormport.js';
 import { troublefactory } from './levels/troublefactory.js';
 import { teleport } from './levels/teleport.js';
 import { moonshot } from './levels/moonshot.js';
+import { shootingstars } from './levels/shootingstars.js';
 
 /* Sky Lanterns on neljäntenä, koska se on arviolta helpompi kuin Stormport:
    pystysuunnassa heiluvat alustat ovat yhtä ajoitusta eikä siihen tule mitään
@@ -72,11 +73,14 @@ import { moonshot } from './levels/moonshot.js';
    Teleport on Moonshotin edellä, koska Moonshot on liian vaikea kuudenneksi:
    Sami pääsi kolmella taksilla neljään keikkaan seitsemästä. Teleport on
    kartan opettelua eikä käsien nopeutta, ja järjestys on tässä yksi rivi. */
-export const LEVELS = [intro, highrise, funfair, lanterns, stormport, troublefactory, teleport, moonshot];
+/* Shooting Stars on toistaiseksi viimeisenä. Paikka on arvaus: kenttä on
+   ajoitusta ja väistöä eikä kartan opettelua, joten se voi hyvin kuulua
+   aiemmaksikin — järjestys on tässä yksi rivi. */
+export const LEVELS = [intro, highrise, funfair, lanterns, stormport, troublefactory, teleport, moonshot, shootingstars];
 
 /* Sama järjestys tiedostoniminä. Tämä on vain sitä varten, että säätöpaneelin
    "lataa kenttä" saa tuotua kentän uudestaan ilman koko sivun latausta —
    kenttää rakentaessa sivu ladataan kymmeniä kertoja, ja sivun lataus pudottaa
    kokoruututilan ja avoimet paneelit. Kentän vaihtaminen ei koske tätä riviä
    sen enempää kuin LEVELS-riviäkään. */
-export const LEVEL_FILES = ['intro', 'highrise', 'funfair', 'lanterns', 'stormport', 'troublefactory', 'teleport', 'moonshot'];
+export const LEVEL_FILES = ['intro', 'highrise', 'funfair', 'lanterns', 'stormport', 'troublefactory', 'teleport', 'moonshot', 'shootingstars'];
