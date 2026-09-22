@@ -139,6 +139,13 @@ const SKY = {
 };
 const TRAIL = { rate: 44, life: 0.4, size: 3.4, spread: 10 };
 
+/* Tähden nopeus on verrannollinen painovoimaan. Sami 22.9.2026: helpolla
+   vaikeustasolla taksi liikkuu hitaammin, ja silloin samalla vauhdilla putoava
+   tähti on suhteessa nopeampi — helppo taso vaikeutti peliä. 250 on pelin oma
+   painovoiman oletus (DEFAULTS.grav), ja kerroin luetaan elävästä P:stä, joten
+   sekä vaikeustaso että kentän oma kerroin menevät perille itsestään. */
+const GRAV_REF = 250;
+
 /* Taksi on 54 px leveä: suurin tähti on sen kokoinen, pienin puolet siitä. */
 const R_BIG = 27, R_SMALL = 13.5;
 const BOX = 0.62;                  // törmäyslaatikko tähden piirrosta
@@ -148,7 +155,7 @@ const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
 const between = (a, b) => a + rnd() * (b - a);
 
 const S = {
-  stars: [], bits: [], spawn: 0, walls: null, count: 0,
+  stars: [], bits: [], spawn: 0, walls: null, count: 0, gscale: 1, wasDead: false,
   domes: GRASS_PADS.map(id => ({ id, a: 0 })),
 };
 
@@ -216,7 +223,7 @@ function launch() {
   if (!pool.length) return;
   const s = pool[Math.floor(rnd() * pool.length)];
   s.state = 'wind'; s.t = 0;
-  s.v = between(SKY.vmin, SKY.vmax);
+  s.v = between(SKY.vmin, SKY.vmax) * S.gscale;
   /* Kulma arvotaan lähtöhetkellä ja se pysyy: tähti on suora viiva, ei kaari.
      Pystysuora oli ensimmäinen versio, ja Sami halusi siihen ±20°. */
   const a = between(-SKY.tilt, SKY.tilt) * Math.PI / 180;
@@ -228,8 +235,28 @@ function launch() {
    nurmikon ainoa suoja: alustalla saa seistä rauhassa, muualla ei. */
 const domeR = (pad, d) => pad.w * 0.62 * d.a;
 
+/* Tähti rauhoittuu eikä nykäise: jarrutus paikallaan, sitten häivytys ja
+   paluu kotiin. Sitä käytetään kun taksi kuolee — silloin koko taivas
+   hiljenee, ja uusi 7 s alkaa vasta kun taksi on taas ehjä. */
+function calm(s) {
+  if (s.state !== 'wind' && s.state !== 'fall') return;
+  if (S.walls) {
+    const i = S.walls.indexOf(s.box);
+    if (i >= 0) S.walls.splice(i, 1);           // jarruttava tähti ei enää tapa
+  }
+  s.state = 'calm'; s.t = 0;
+}
+
 function update(dt, api) {
   S.walls = api.walls;
+  if (api.P && isFinite(api.P.grav)) S.gscale = api.P.grav / GRAV_REF;
+
+  /* Kuoleman hetkellä taivas hiljenee, ja tauko alkaa vasta kun taksi on taas
+     ehjä: muuten seitsemästä sekunnista olisi kulunut kolme kuolinanimaatioon
+     ennen kuin pelaaja on edes alustalla. */
+  if (api.dead && !S.wasDead) for (const s of S.stars) calm(s);
+  if (!api.dead && S.wasDead) S.spawn = SKY.grace;
+  S.wasDead = !!api.dead;
   /* Kentän alussa tähdet ovat hiljaa, jotta luukusta ehtii pois tähdistön
      seasta. Sisääntulon aikana tätä koukkua ei ajeta lainkaan, joten tauko
      alkaa vasta GO:sta — se on juuri se hetki josta se lasketaan. */
@@ -242,10 +269,12 @@ function update(dt, api) {
     if (d.a < 0.002) d.a = 0;
   }
 
-  S.spawn -= dt;
-  while (S.spawn <= 0) {
-    S.spawn += 1 / Math.max(0.05, SKY.freq);
-    launch();
+  if (!api.dead) {
+    S.spawn -= dt;
+    while (S.spawn <= 0) {
+      S.spawn += 1 / Math.max(0.05, SKY.freq);
+      launch();
+    }
   }
 
   for (const s of S.stars) {
@@ -257,6 +286,25 @@ function update(dt, api) {
       s.t += dt;
       s.rot += s.dir * dt * 0.6;
       if (s.t > 0.7) { s.state = 'sky'; s.t = 0; }
+      continue;
+    }
+
+    if (s.state === 'calm') {                   // jarruttaa siihen mihin jäi
+      s.t += dt;
+      const k = Math.exp(-dt / 0.42);
+      s.vx *= k; s.vy *= k; s.v *= k;
+      s.spin *= Math.exp(-dt / 0.55);
+      s.cx += s.vx * dt; s.cy += s.vy * dt;
+      s.rot += s.spin * dt;
+      if (s.v < 26 && Math.abs(s.spin) < 0.6) { s.state = 'gone'; s.t = 0; }
+      continue;
+    }
+
+    if (s.state === 'gone') {                   // häipyy paikalleen ja palaa kotiin
+      s.t += dt;
+      s.rot += s.spin * dt;
+      s.spin *= Math.exp(-dt / 0.55);
+      if (s.t > 0.38) home(s);
       continue;
     }
 
@@ -563,7 +611,7 @@ function starShape(ctx, s, alpha, glow) {
    valinta ja siksi tässä kirjoitettuna. */
 function sky(ctx) {
   for (const s of S.stars) {
-    if (s.state === 'fall') continue;
+    if (s.state === 'fall' || s.state === 'calm' || s.state === 'gone') continue;
     const twinkle = 0.82 + Math.sin(s.tw) * 0.1;
     if (s.state === 'sky') starShape(ctx, s, twinkle, true);
     else if (s.state === 'back') starShape(ctx, s, twinkle * Math.min(1, s.t / 0.7), true);
@@ -629,7 +677,10 @@ function front(ctx, api) {
     if (pad && d.a > 0.01) dome(ctx, pad, d);
   }
   bits(ctx);
-  for (const s of S.stars) if (s.state === 'fall') starShape(ctx, s, 1, true);
+  for (const s of S.stars) {
+    if (s.state === 'fall' || s.state === 'calm') starShape(ctx, s, 1, true);
+    else if (s.state === 'gone') starShape(ctx, s, Math.max(0, 1 - s.t / 0.38), true);
+  }
 }
 
 /* ------------------------------------------------------------------ kenttä */
