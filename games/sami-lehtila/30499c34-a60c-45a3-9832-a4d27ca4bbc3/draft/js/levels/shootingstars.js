@@ -198,23 +198,10 @@ function shapeCheck() {
   shape();
 }
 
-/* Luolan tippukivet. Isot ovat samaa kiveä kuin katto ja niissä on törmäys:
-   ne tekevät luolasta ahtaan. Porrastus on sama ratkaisu kuin kuusessa —
-   piirto on täsmälleen se laatikko joka on myös törmäys. */
-const SPIKES = [];
-function spike(cx, len, top) {
-  const steps = 4, out = [];
-  for (let i = 0; i < steps; i++) {
-    const w = top * (1 - i / steps) + 14 * (i / steps);
-    out.push(add({
-      x: cx - w / 2, y: CAVE_TOP + (len / steps) * i, w, h: len / steps + 0.5, spike: true,
-    }));
-  }
-  SPIKES.push({ cx, len, top, parts: out });
-}
-spike(232, 86, 96);
-spike(488, 86, 96);
-spike(360, 52, 70);
+/* Luolassa oli 22.9.2026 kolme isoa, törmäävää tippukiveä tekemässä siitä
+   ahtaan. **Sami poisti ne luonnoksella samana päivänä** ("pois"), eli luola
+   on nyt auki: hengähdyspaikka ilman esteitä. Taustan tippukivet jäivät, ks.
+   DRIP — ne ovat perällä eikä niissä ole törmäystä. */
 
 /* ------------------------------------------------------------------ alustat
 
@@ -608,25 +595,82 @@ function spruce(ctx, t) {
   }
 }
 
-/* Kaukametsä nurmikon takana: matala kontrasti, ei reunaviivaa, ei törmäystä. */
+/* Kaukametsä nurmikon takana. **Sama muoto kuin isolla kuusella**, koska se
+   saadaan halvalla: helmojen luvut lasketaan samalla kaavalla yksikkökokoiseen
+   puuhun, siitä tehdään yksi Path2D kerran, ja jokainen puu on sen siirto ja
+   skaalaus. Sami luonnoksella 22.9.2026: koko oli hyvä mutta muoto väärä, ja
+   korkeutta 2,5-kertaisesti.
+
+   Path2D rakennetaan vasta piirrossa eikä moduulin latauksessa, koska
+   kenttätiedostot ajetaan myös nodessa eikä siellä ole Path2D:tä. */
 const FAR = [];
-for (let x = -20; x < W + 40; x += 34) {
-  FAR.push({ x, h: 52 + ((x * 29) % 44), w: 28 + ((x * 11) % 14) });
+for (let x = -30; x < W + 50; x += 31) {
+  const h = (52 + ((x * 29) % 44)) * 2.5;
+  FAR.push({ x, h, w: h * 0.46 });
 }
+
+/* Helmojen luvut mille tahansa kuuselle samalla kaavalla kuin masterissa. */
+function skirtsFor(top, bot, width, n) {
+  const out = [], step = (bot - top) / n;
+  let prev = 0;
+  for (let i = 0; i < n; i++) {
+    const hw1 = Math.max(0.001, width * Math.pow((i + 1) / n, SK.taper));
+    const y1 = top + step * (i + 1);
+    out.push({
+      y1, y0: y1 - step * (1 + SK.lap),
+      hw1, hw0: Math.min(hw1 * 0.9, i === 0 ? width * 0.04 : prev * SK.pinch),
+      drop: SK.arc * (bot - top) / 400,
+    });
+    prev = hw1;
+  }
+  return out;
+}
+
+let farPath = null;
+function farTreePath() {
+  if (farPath) return farPath;
+  const p = new Path2D();
+  for (const s of skirtsFor(0, 1, 0.5, 3)) {     // yksikköpuu: leveys 1, korkeus 1
+    const N = 18;
+    p.moveTo(-s.hw1, skBot(s, -s.hw1));
+    for (let i = 0; i <= N; i++) { const x = -s.hw1 + 2 * s.hw1 * (i / N); p.lineTo(x, skTop(s, x)); }
+    for (let i = N; i >= 0; i--) { const x = -s.hw1 + 2 * s.hw1 * (i / N); p.lineTo(x, skBot(s, x)); }
+    p.closePath();
+  }
+  p.moveTo(-0.03, 0.86); p.lineTo(0.03, 0.86); p.lineTo(0.03, 1); p.lineTo(-0.03, 1);
+  farPath = p;
+  return p;
+}
+
 function farForest(ctx) {
+  const p = farTreePath();
   ctx.fillStyle = '#12202a';
   for (const f of FAR) {
-    ctx.beginPath();
-    ctx.moveTo(f.x, GRASS.y);
-    ctx.lineTo(f.x + f.w / 2, GRASS.y - f.h);
-    ctx.lineTo(f.x + f.w, GRASS.y);
-    ctx.closePath(); ctx.fill();
+    ctx.save();
+    ctx.translate(f.x, GRASS.y - f.h);
+    ctx.scale(f.w, f.h);
+    ctx.fill(p);
+    ctx.restore();
   }
-  const g = ctx.createLinearGradient(0, GRASS.y - 90, 0, GRASS.y);
+  const g = ctx.createLinearGradient(0, GRASS.y - 150, 0, GRASS.y);
   g.addColorStop(0, 'rgba(20,38,58,0)');
   g.addColorStop(1, 'rgba(20,38,58,.5)');
   ctx.fillStyle = g;
-  ctx.fillRect(0, GRASS.y - 90, W, 90);
+  ctx.fillRect(0, GRASS.y - 150, W, 150);
+}
+
+/* Maakerroksen ja ilman raja. Kuilujen suista näkyi ennen sama yötaivas kuin
+   ylhäällä, jolloin nurmikko näytti ilmassa leijuvalta lohkareelta. Sami
+   luonnoksella 22.9.2026: *"gradient tai alakerran väri"* — eli kuilun suu on
+   näkymä alakertaan, ja se tummenee alaspäin luolan väriksi. */
+function groundFade(ctx) {
+  const y0 = GRASS.y - 34, y1 = CAVE_TOP + 12;
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  g.addColorStop(0, 'rgba(12,18,30,0)');
+  g.addColorStop(0.5, 'rgba(12,18,30,.72)');
+  g.addColorStop(1, '#111a2c');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, y0, W, y1 - y0);
 }
 
 /* ------------------------------------------------------------------- luola */
@@ -700,23 +744,6 @@ function bat(ctx, x, y, s, flap, dir) {
   ctx.quadraticCurveTo(9, -6 - flap * 7, 0, 0);
   ctx.closePath(); ctx.fill();
   ctx.restore();
-}
-
-/* Isot tippukivet: samaa kiveä kuin katto, eli niihin osuu. */
-function spikes(ctx) {
-  for (const sp of SPIKES) {
-    for (const r of sp.parts) {
-      ctx.fillStyle = '#1b2440';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.fillStyle = 'rgba(120,160,255,.16)';
-      ctx.fillRect(r.x, r.y, r.w, 2);
-      ctx.fillStyle = 'rgba(0,0,0,.28)';
-      ctx.fillRect(r.x + r.w - 3, r.y, 3, r.h);
-    }
-    const last = sp.parts[sp.parts.length - 1];
-    ctx.fillStyle = 'rgba(150,190,255,.14)';   // kostea kärki
-    ctx.fillRect(last.x + last.w / 2 - 2, last.y + last.h - 3, 4, 3);
-  }
 }
 
 /* --------------------------------------------------------- tähdet ja kupoli */
@@ -814,7 +841,6 @@ function back(ctx) {
   spruce(ctx, TREE);
   rock(ctx, TURF);
   turf(ctx, TURF);
-  spikes(ctx);
 }
 
 function front(ctx, api) {
