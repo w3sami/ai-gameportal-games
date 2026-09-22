@@ -18,7 +18,8 @@
 .lbrow .d{flex:none;display:flex;gap:4px;color:var(--dim);opacity:.65}
 .lbrow .d svg{display:block;width:15px;height:15px}
 .lbrow .t{flex:none;font-variant-numeric:tabular-nums;font-weight:600}
-.lbrow .t.st{display:flex;align-items:center;gap:5px}
+.lbrow .t.st{display:flex;align-items:center;gap:5px;min-width:2.6em;justify-content:flex-end}
+.lbrow .tm{flex:none;font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums}
 .lbgo{flex:none;padding:3px 9px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.06);font-size:11.5px;font-weight:600;letter-spacing:.06em;color:var(--dim)}
 .lbgo:hover{color:var(--ink);border-color:rgba(227,162,60,.6)}
 .lbgo:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
