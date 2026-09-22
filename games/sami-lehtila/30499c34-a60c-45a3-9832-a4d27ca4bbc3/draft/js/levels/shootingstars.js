@@ -218,11 +218,16 @@ function shapeCheck() {
    raosta tai oksan alta vaakalentona. Sami 22.9.2026: *"siirretään yläalusta
    lähemmäs runkoa, niin kupoleitakaan ei varmaan tarvi, oksat suojaa."* */
 const PADS = [
-  { id: 1, x: 234, y: GRASS.y - PAD_H + 6, w: 110 },
-  { id: 2, x: 376, y: GRASS.y - PAD_H + 6, w: 110 },
-  { id: 3, x: 56, y: 986, w: 124 },
+  /* Alustat ovat 1,5-kertaisia 22.9.2026 lähtien, tankkausta lukuun ottamatta.
+     **Yläalustat levisivät ulospäin ja luolan alustat sisäänpäin**: ylhäällä
+     sisäpää on rungon kyljessä ja ulompi pää on se josta laskeudutaan, joten
+     kasvu kuuluu ulos; luolassa reunat ovat kuilujen alla, joten kasvu kuuluu
+     keskelle. Sami 22.9.2026. */
+  { id: 1, x: 179, y: GRASS.y - PAD_H + 6, w: 165 },
+  { id: 2, x: 376, y: GRASS.y - PAD_H + 6, w: 165 },
+  { id: 3, x: 56, y: 986, w: 186 },
   { id: 0, x: 298, y: 986, w: 124, fuel: true },
-  { id: 4, x: 540, y: 986, w: 124 },
+  { id: 4, x: 478, y: 986, w: 186 },
 ];
 
 /* --------------------------------------------------------------- tähtitaivas
