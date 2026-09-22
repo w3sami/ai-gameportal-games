@@ -538,6 +538,23 @@ function ground(ctx, r) {
   }
 }
 
+/* Helma piirretään samasta käyrästä josta törmäysportaat ladottiin: kylki
+   ylhäältä ulos kärkeen, kärjestä alareunaa pitkin toiselle puolelle. */
+function skirtPath(ctx, s, cx) {
+  const N = 26;
+  ctx.beginPath();
+  ctx.moveTo(cx - s.hw1, skBot(s, -s.hw1));
+  for (let i = 0; i <= N; i++) {
+    const x = -s.hw1 + (2 * s.hw1) * (i / N);
+    ctx.lineTo(cx + x, skTop(s, x));
+  }
+  for (let i = N; i >= 0; i--) {
+    const x = -s.hw1 + (2 * s.hw1) * (i / N);
+    ctx.lineTo(cx + x, skBot(s, x));
+  }
+  ctx.closePath();
+}
+
 function spruce(ctx, t) {
   const tw = SK.trunk / 2;                      // runko: kapeneva tyvi
   ctx.fillStyle = '#3b2a1b';
