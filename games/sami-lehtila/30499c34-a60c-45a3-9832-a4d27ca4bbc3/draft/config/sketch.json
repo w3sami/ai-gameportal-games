@@ -1,20 +1,5 @@
 {
  "v": 1,
- "stamp": 1790108464098,
- "scenes": {
-  "Shooting Stars": {
-   "paint": [
-    {
-     "kind": "rect",
-     "label": "huomio",
-     "text": "",
-     "x": 108,
-     "y": 778,
-     "w": 505,
-     "h": 42
-    }
-   ],
-   "moves": []
-  }
- }
+ "stamp": 1790111725128,
+ "scenes": {}
 }
