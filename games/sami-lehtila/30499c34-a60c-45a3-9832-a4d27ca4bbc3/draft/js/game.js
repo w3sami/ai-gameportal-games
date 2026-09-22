@@ -130,6 +130,18 @@ try {
   if (s === 'left' || s === 'right') sidePick = s;
 } catch (e) {}
 
+/* Kosketusnapit pois. Näppäimistöllä ja ohjaimella ne ovat pelkkää kuvaa
+   ruudun alalaidassa, ja alanurkat vapautuvat kentälle. Puoli jää muistiin,
+   joten takaisin kytkettynä ne ovat siellä missä ennenkin. */
+const TOUCH_STORE = 'spacetaxi.touch';
+let touchBtns = true;
+try { touchBtns = localStorage.getItem(TOUCH_STORE) !== '0'; } catch (e) {}
+
+function setTouch(on) {
+  touchBtns = !!on;
+  try { localStorage.setItem(TOUCH_STORE, touchBtns ? '1' : '0'); } catch (e) {}
+}
+
 function setSide(side) {
   if (side !== 'left' && side !== 'right' || side === gearSide) return;
   sidePick = side;
@@ -143,26 +155,30 @@ function setSide(side) {
    tarvittava kaasu pysyy samana ja vain koko pystyakseli hidastuu — sama peli
    hitaammin, ei eri peli. Aikaa on enemmän, ja siksi se on helpompi.
  *
- * Tippiin ei kosketa. Se on kiinni ajasta, joten hitaammalla tasolla tienaa
- * itsestään vähemmän eikä palkkiota tarvitse erikseen porrastaa.
+ * Normaali on oletus ja se on se peli jota viritetään; helppo antaa aikaa ja
+ * pro vie sitä. Tippiin ei kosketa, koska se on kiinni ajasta: hitaammalla
+ * tasolla tienaa itsestään vähemmän ja prolla paremmin, eikä palkkiota tarvitse
+ * erikseen porrastaa.
  *
  * Kertoimia on nyt kolme päällekkäin: globaali viritys, kentän oma kerroin ja
  * tämä. Siksi tulolle on pohja MUL_MINissä — ne ovat samat luvut jotka
  * Moonshotilla on, eli kuun painovoima on se raja josta pidemmälle peli ei
  * enää tunnu Space Taxilta. */
 const DIFFS = [
-  { id: 'calm', mul: 0.45 },
   { id: 'easy', mul: 0.7 },
   { id: 'normal', mul: 1 },
+  { id: 'pro', mul: 1.3 },
 ];
+const DIFF_DEF = 'normal';
 const MUL_MIN = { grav: 0.2, thrust: 0.25 };
 const DIFF_STORE = 'spacetaxi.diff';
-let diff = 'normal';
+let diff = DIFF_DEF;
 try {
   const d = localStorage.getItem(DIFF_STORE);
-  if (DIFFS.some(x => x.id === d)) diff = d;
+  if (DIFFS.some(x => x.id === d)) diff = d;     // tuntematon jää oletukseksi
 } catch (e) {}
-const diffMul = () => (DIFFS.find(d => d.id === diff) || DIFFS[DIFFS.length - 1]).mul;
+const diffMul = () =>
+  (DIFFS.find(d => d.id === diff) || DIFFS.find(d => d.id === DIFF_DEF)).mul;
 
 /* Viritys kahdessa kerroksessa.
  *
@@ -988,7 +1004,7 @@ function toLogical(clientX, clientY) {
 }
 const inBox = (p, b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 const onButtons = p =>
-  inBox(p, GEAR_BOX) || inBox(p, HORN_BOX) || inBox(p, COG_BOX) ||
+  (touchBtns && (inBox(p, GEAR_BOX) || inBox(p, HORN_BOX))) || inBox(p, COG_BOX) ||
   (debugAllowed() && inBox(p, TUNE_BOX));
 
 function toggleGear() {
@@ -1028,8 +1044,8 @@ canvas.addEventListener('pointerdown', e => {
   /* Luonnostyökalun päältä kuunnellaan vain nurkan kahta kuvaketta: kangas on
      silloin työkalun, mutta asetuksiin ja säätöpaneeliin on päästävä. */
   if (sketch.active && !inBox(p, TUNE_BOX) && !inBox(p, COG_BOX)) return;
-  if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
-  if (inBox(p, HORN_BOX)) { honk(); return; }
+  if (touchBtns && inBox(p, GEAR_BOX)) { toggleGear(); return; }
+  if (touchBtns && inBox(p, HORN_BOX)) { honk(); return; }
   if (inBox(p, COG_BOX)) { openMenu(); return; }
   /* Kehittäjän liuku on oma kuvakkeensa. Se on myös luonnostyökalun ulospääsy
      säätöpaneeliin, joten se on ainoa jota työkalun päältä kuunnellaan. */
@@ -2341,6 +2357,14 @@ function smallBox(b, draw) {
 }
 
 function drawButtons() {
+  if (touchBtns) drawTouchPads();
+  drawCorner();
+}
+
+/* Teline ja töötti sormelle. Pelaaja voi ottaa ne pois asetuksista: ilman
+   kosketusnäyttöä ne ovat pelkkää kuvaa, ja pois otettuina alanurkat ovat
+   kentän käytössä. */
+function drawTouchPads() {
   const b = GEAR_BOX, down = taxi && taxi.gear > 0.5;
   // punainen vasta kun vauhti oikeasti hajottaisi taksin, ei jo varoitusalueella
   const hot = taxi && !taxi.landed && taxi.gear > 0.5 && !dead && landRatio() > 1;
@@ -2397,8 +2421,12 @@ function drawButtons() {
   ctx.fillText(t('ui.horn'), hx, hb.y + hb.h - 12);
   ctx.restore();
 
-  /* Ratas on aina siinä: sen takaa löytyvät ääni, koko ruutu, nappien puoli,
-     kieli ja vaikeustaso. */
+}
+
+/* Nurkan kuvakkeet piirtyvät aina, myös kosketusnapit pois otettuina. */
+function drawCorner() {
+  /* Ratas: sen takaa löytyvät ääni, koko ruutu, nappien puoli, kieli ja
+     vaikeustaso. */
   smallBox(COG_BOX, (mx, my) => {
     ctx.beginPath(); ctx.arc(mx, my, 6, 0, 6.3); ctx.stroke();
     for (let i = 0; i < 6; i++) {
@@ -3053,8 +3081,11 @@ function buildMenu() {
     mpick(muted, t('set.off'), () => { if (!muted) toggleMute(); buildMenu(); })));
 
   box.append(mrow(t('set.side'),
-    mpick(gearSide === 'left', t('set.left'), () => { setSide('left'); buildMenu(); }),
-    mpick(gearSide === 'right', t('set.right'), () => { setSide('right'); buildMenu(); })));
+    mpick(touchBtns && gearSide === 'left', t('set.left'),
+      () => { setTouch(true); setSide('left'); buildMenu(); }),
+    mpick(touchBtns && gearSide === 'right', t('set.right'),
+      () => { setTouch(true); setSide('right'); buildMenu(); }),
+    mpick(!touchBtns, t('set.off'), () => { setTouch(false); buildMenu(); })));
 
   box.append(mrow(t('set.lang'),
     mpick(LANG === 'fi', 'suomi', () => { applyLang('fi'); setPortal('lang', 'fi'); buildMenu(); }),
