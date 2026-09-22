@@ -2973,6 +2973,11 @@ function menuNode() {
     padding: '16px', boxSizing: 'border-box',
     background: 'rgba(5,9,22,.72)', backdropFilter: 'blur(3px)',
     font: MENU_FONT, color: '#e9edff',
+    /* Valikko asuu #hudissa kortin vieressä, ja #hud on pointer-events: none
+       jotta ohjaussauva saa kosketukset kortin ulkopuolelta. Ilman tätä riviä
+       valikko näkyy mutta ei ota osumia: napit ovat kuvia ja painallukset
+       menevät läpi kankaalle. Kortti tekee saman asian style.css:ssä. */
+    pointerEvents: 'auto',
   });
   menuEl.id = 'menu';
   /* Taustan painallus sulkee. Kohde on tarkistettava, koska nappien painallukset
