@@ -877,7 +877,10 @@ function nextAlien() {
   return lastKind;
 }
 
-const api = () => ({ P, taxi, pads: PADS, walls: WALLS, t: runT, rand, say, level: levelIndex });
+/* dead on mukana, jotta kenttä osaa sammuttaa oman suojansa romun päältä:
+   crash ei nollaa taxi.landedia, joten ilman tätä Shooting Starsin kupoli jäi
+   hohtamaan tyhjän alustan päälle koko kuolinanimaation ajan. */
+const api = () => ({ P, taxi, pads: PADS, walls: WALLS, t: runT, rand, say, level: levelIndex, dead });
 
 /** Kentän tilanne nollataan vain tässä — ei koskaan kolarissa. */
 function loadLevel(i) {
