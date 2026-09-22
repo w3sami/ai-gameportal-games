@@ -56,26 +56,37 @@ const CAVE_BOT = H - 16;
 
 /* Kuusi keskellä: latvus 300…700, runko siitä nurmikkoon.
 
-   Kuusi on kahdeksan oksakerrosta, ja **jokainen oksakerros nuokkuu ulospäin
-   alas ja nousee kärjestä takaisin ylös** — ne viikset. Kerrosten väliin jää
-   runkoa näkyviin, mikä on koko koristeellisuus: yhtenäinen kartio näyttää
-   pensaalta, erilliset kerrokset kuuselta. Sami 22.9.2026. */
-const TREE = { cx: 360, top: 300, bot: 700, foot: GRASS.y, wTop: 26, wBot: 112 };
-const TIERS = 9;
-const TRUNK = 22;
+   Kuusi on neljä helmaa, ja ne menevät limittäin: siluetti on yhtenäinen
+   kartio, ei erillisiä oksia joiden välistä näkyy runko. **Jokaisen helman
+   alareuna nuokkuu ulos ja alas kärjistä** — ne viikset — ja seuraava helma
+   alkaa kapeampana sen alta, jolloin reunaan jää se lovi joka tekee kuusesta
+   kuusen. Sami antoi mallikuvan 22.9.2026; lumet jätettiin pois.
 
-/* Oksan muoto yhtenä käyränä, yksikkönä kerroksen korkeus. `mid` on oksan
-   keskilinja etäisyydellä u (0 = runko, 1 = kärki), `th` sen paksuus. Sama
-   käyrä sekä piirtoon että törmäykseen: portaat ladotaan käyrän sisään, eli
-   **törmäys on aina hitusen piirrettyä pienempi** — oksan uloin neulanen ei
-   tapa, ja se on tarkoituksellisesti anteeksiantava suunta. */
-const BR = { drop: 0.16, curve: 1.45, reach: 0.60, flickAt: 0.78, flick: 0.24, th0: 0.54, th1: 0.24 };
-const brMid = u => BR.drop + BR.reach * Math.pow(u, BR.curve)
-  - (u > BR.flickAt ? BR.flick * Math.pow((u - BR.flickAt) / (1 - BR.flickAt), 2) : 0);
-const brTh = u => BR.th0 + (BR.th1 - BR.th0) * u;
-const brTop = u => brMid(u) - brTh(u) / 2;
-const brBot = u => brMid(u) + brTh(u) / 2;
-const BR_STEPS = 7;
+   Yksi helma: ylhäällä `hw0` leveä, alhaalla `hw1`, ja kylki kaartuu näiden
+   välillä. Alareuna on keskeltä `drop` verran ylempänä kuin kärjissä. */
+const TREE = { cx: 360, top: 300, bot: 700, foot: GRASS.y };
+const SKIRTS = [
+  { y0: 300, y1: 430, hw0: 4,  hw1: 56,  drop: 16 },
+  { y0: 392, y1: 520, hw0: 30, hw1: 82,  drop: 18 },
+  { y0: 482, y1: 610, hw0: 46, hw1: 100, drop: 20 },
+  { y0: 572, y1: 700, hw0: 60, hw1: 116, drop: 22 },
+];
+const SK_POW = 1.35;                 // kyljen kaarevuus
+const SK_STEP = 12;                  // törmäysportaan leveys
+const TRUNK = 26;
+
+/* Helman reunat paikan x funktiona, mitattuna rungon keskeltä. Sama kaava
+   sekä piirtoon että törmäykseen, ja portaat ladotaan käyrän sisään: törmäys
+   on hitusen piirrettyä pienempi, eli uloin neulanen ei tapa. */
+const skTop = (s, x) => {
+  const t = Math.abs(x) <= s.hw0 ? 0
+    : Math.pow((Math.abs(x) - s.hw0) / (s.hw1 - s.hw0), 1 / SK_POW);
+  return s.y0 + (s.y1 - s.y0) * t;
+};
+const skBot = (s, x) => {
+  const u = Math.min(1, Math.abs(x) / s.hw1);
+  return s.y1 - s.drop * (1 - u * u);
+};
 
 const PAD_H = 18;
 
@@ -94,33 +105,19 @@ const TURF = add({ x: GRASS.x, y: GRASS.y, w: GRASS.w, h: GRASS.h, rock: true, t
 /* Latvus on pino laatikoita, ja se on myös se muoto joka piirretään. Porras on
    tahallaan näkyvä: kuusi jonka siluetti on pehmeämpi kuin sen törmäys olisi
    juuri se epäselvyys jota README kieltää. */
-TREE.layers = [];
 {
-  const step = (TREE.bot - TREE.top) / TIERS;
-  for (let i = 0; i < TIERS; i++) {
-    const y0 = TREE.top + i * step;
-    const hw = (TREE.wTop + (TREE.wBot - TREE.wTop) * ((i + 1) / TIERS));
-    const layer = { y0, h: step, hw, parts: [] };
-    for (const sgn of [-1, 1]) {
-      for (let k = 0; k < BR_STEPS; k++) {
-        const u0 = k / BR_STEPS, u1 = (k + 1) / BR_STEPS;
-        const top = Math.max(brTop(u0), brTop(u1)) * step + y0 + 1;
-        const bot = Math.min(brBot(u0), brBot(u1)) * step + y0 - 1;
-        if (bot - top < 4) continue;            // porras jäisi käyrän ulkopuolelle
-        const xa = TREE.cx + sgn * u0 * hw, xb = TREE.cx + sgn * u1 * hw;
-        layer.parts.push(add({
-          x: Math.min(xa, xb), y: top, w: Math.abs(xb - xa), h: bot - top, tree: true,
-        }));
-      }
+  for (const s of SKIRTS) {
+    for (let x = -s.hw1; x < s.hw1 - 0.5; x += SK_STEP) {
+      const xa = x, xb = Math.min(s.hw1, x + SK_STEP);
+      const top = Math.max(skTop(s, xa), skTop(s, xb)) + 1;   // portaan sisin kohta
+      const bot = Math.min(skBot(s, xa), skBot(s, xb)) - 1;
+      if (bot - top < 4) continue;
+      add({ x: TREE.cx + xa, y: top, w: xb - xa, h: bot - top, tree: true });
     }
-    TREE.layers.push(layer);
   }
-  /* Latva: pieni piikki ylimmän kerroksen yllä, ja sillä on oma laatikkonsa —
-     näkyvä kärki jonka läpi lentäisi olisi juuri se epäselvyys jota README
-     kieltää. */
-  TREE.tip = add({ x: TREE.cx - 8, y: TREE.top - 34, w: 16, h: 38, tree: true });
   TREE.stem = add({
-    x: TREE.cx - TRUNK / 2, y: TREE.top, w: TRUNK, h: TREE.foot - TREE.top, stem: true,
+    x: TREE.cx - TRUNK / 2, y: TREE.bot - 8, w: TRUNK,
+    h: TREE.foot - TREE.bot + 8, stem: true,
   });
 }
 
@@ -464,66 +461,60 @@ function turf(ctx, r) {
   }
 }
 
-/* Oksakerros piirretään samasta käyrästä josta törmäysportaat ladottiin:
-   yläreuna ulos kärkeen, kärki pyöreänä, alareuna takaisin runkoon. */
-function branch(ctx, cx, y0, h, hw, sgn) {
+/* Helma piirretään samasta käyrästä josta törmäysportaat ladottiin: kylki
+   ylhäältä ulos kärkeen, kärjestä alareunaa pitkin toiselle puolelle. */
+function skirtPath(ctx, s, cx) {
+  const N = 26;
   ctx.beginPath();
-  ctx.moveTo(cx, y0 + brTop(0) * h);
-  for (let k = 0; k <= 24; k++) {
-    const u = k / 24;
-    ctx.lineTo(cx + sgn * u * hw, y0 + brTop(u) * h);
+  ctx.moveTo(cx - s.hw1, skBot(s, -s.hw1));
+  for (let i = 0; i <= N; i++) {                // vasen kylki ylös, oikea alas
+    const x = -s.hw1 + (2 * s.hw1) * (i / N);
+    ctx.lineTo(cx + x, skTop(s, x));
   }
-  for (let k = 24; k >= 0; k--) {
-    const u = k / 24;
-    ctx.lineTo(cx + sgn * u * hw, y0 + brBot(u) * h);
+  for (let i = N; i >= 0; i--) {
+    const x = -s.hw1 + (2 * s.hw1) * (i / N);
+    ctx.lineTo(cx + x, skBot(s, x));
   }
   ctx.closePath();
 }
 
 function spruce(ctx, t) {
-  ctx.fillStyle = '#2b2119';                    // runko ensin, oksat sen päälle
-  ctx.fillRect(t.stem.x, t.stem.y, t.stem.w, t.stem.h);
-  ctx.fillStyle = 'rgba(150,190,255,.10)';
-  ctx.fillRect(t.stem.x, t.stem.y, 3, t.stem.h);
-  ctx.fillStyle = 'rgba(0,0,0,.35)';
-  ctx.fillRect(t.stem.x + t.stem.w - 4, t.stem.y, 4, t.stem.h);
-
-  ctx.fillStyle = '#16321f';                    // latva
+  ctx.fillStyle = '#3b2a1b';                    // runko: kapeneva tyvi
   ctx.beginPath();
-  ctx.moveTo(t.cx, t.tip.y);
-  ctx.lineTo(t.cx + 8, t.tip.y + t.tip.h);
-  ctx.lineTo(t.cx - 8, t.tip.y + t.tip.h);
+  ctx.moveTo(t.cx - 10, t.stem.y);
+  ctx.lineTo(t.cx + 10, t.stem.y);
+  ctx.lineTo(t.cx + 13, t.foot);
+  ctx.lineTo(t.cx - 13, t.foot);
   ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(150,190,255,.10)';
+  ctx.fillRect(t.cx - 10, t.stem.y, 3, t.foot - t.stem.y);
 
-  for (let i = t.layers.length - 1; i >= 0; i--) {
-    const L = t.layers[i];
-    const shade = i / Math.max(1, t.layers.length - 1);
-    for (const sgn of [-1, 1]) {
-      branch(ctx, t.cx, L.y0, L.h, L.hw, sgn);
-      const g = ctx.createLinearGradient(t.cx, L.y0, t.cx + sgn * L.hw, L.y0 + L.h);
-      g.addColorStop(0, sgn < 0 ? '#275433' : '#1f452a');   // valo ylävasemmalta
-      g.addColorStop(1, '#122b1b');
-      ctx.fillStyle = g;
-      ctx.fill();
+  for (let i = SKIRTS.length - 1; i >= 0; i--) {  // alin ensin, ylimmät päälle
+    const s = SKIRTS[i];
+    skirtPath(ctx, s, t.cx);
+    const g = ctx.createLinearGradient(t.cx - s.hw1, s.y0, t.cx + s.hw1, s.y1);
+    g.addColorStop(0, '#2b5c33');                // valo ylävasemmalta
+    g.addColorStop(1, '#16351d');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = '#0d2312';                 // sama tumma ääriviiva kuin mallissa
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
-      ctx.save();                               // neulaset oksan sisään
-      ctx.clip();
-      ctx.strokeStyle = `rgba(132,190,142,${0.2 - shade * 0.07})`;
-      ctx.lineWidth = 1;
-      for (let k = 1; k < 26; k++) {
-        const u = k / 26, x = t.cx + sgn * u * L.hw;
-        ctx.beginPath();
-        ctx.moveTo(x, L.y0 + brTop(u) * L.h);
-        ctx.lineTo(x - sgn * 5, L.y0 + brBot(u) * L.h + 2);
-        ctx.stroke();
+    ctx.save();                                  // vaaleat mutkat helman sisään
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(126,196,136,.28)';
+    ctx.lineWidth = 3.4;
+    for (let k = 1; k <= 3; k++) {
+      const yy = s.y0 + (s.y1 - s.y0) * (0.34 + k * 0.17);
+      ctx.beginPath();
+      for (let x = -s.hw1 + 8; x <= s.hw1 - 8; x += 7) {
+        const y = yy + Math.sin((x + k * 31) / 9) * 2.6;
+        if (x === -s.hw1 + 8) ctx.moveTo(t.cx + x, y); else ctx.lineTo(t.cx + x, y);
       }
-      ctx.restore();
-
-      branch(ctx, t.cx, L.y0, L.h, L.hw, sgn);  // kuunvalo yläsärmälle
-      ctx.strokeStyle = 'rgba(160,205,255,.09)';
-      ctx.lineWidth = 1.4;
       ctx.stroke();
     }
+    ctx.restore();
   }
 }
 
