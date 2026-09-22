@@ -149,7 +149,9 @@ function master() {
     s.y1 = y1 + d.y1;
     s.y0 = y1 - step * (1 + SK.lap) + d.y0;
     s.hw1 = Math.max(6, hw1 + d.hw1);
-    s.hw0 = Math.max(0, (i === 0 ? 4 : prev * SK.pinch) + d.hw0);
+    /* Yläleveys ei saa ohittaa kärkileveyttä: silloin kylki kääntyisi
+       nurin ja helma luhistuisi yhdeksi viivaksi. */
+    s.hw0 = Math.min(s.hw1 - 6, Math.max(0, (i === 0 ? 4 : prev * SK.pinch) + d.hw0));
     s.drop = SK.arc + d.arc;
     prev = hw1;                                 // seuraava helma seuraa masteria
   }
@@ -871,16 +873,10 @@ export const shootingstars = {
       { key: 'pow', label: 'kyljen kaarevuus', min: 0.6, max: 3, step: 0.05 },
       { key: 'trunk', label: 'rungon paksuus', min: 8, max: 60, step: 1 },
     ] },
-    ...NUDGE.map((d, i) => ({
-      name: 'helma ' + (i + 1), obj: d, open: false,
-      sliders: [
-        { key: 'y0', label: 'Δ yläreuna', min: -160, max: 160, step: 2 },
-        { key: 'y1', label: 'Δ alareuna', min: -160, max: 160, step: 2 },
-        { key: 'hw0', label: 'Δ puolileveys ylhäällä', min: -120, max: 120, step: 2 },
-        { key: 'hw1', label: 'Δ puolileveys kärjessä', min: -120, max: 120, step: 2 },
-        { key: 'arc', label: 'Δ alareunan kaari', min: -70, max: 70, step: 1 },
-      ],
-    })),
+    /* Helmakohtaiset säätimet ovat pois 22.9.2026: ne eivät toimineet
+       odotetusti, ja Sami pyysi ottamaan ne hetkeksi pois. Koneisto on
+       tallella (NUDGE, poikkeama masterin päälle), eli takaisin ne saa
+       lisäämällä ryhmät tähän. */
     { name: 'kentän kertoimet', open: false, mul: ['grav', 'thrust', 'landVX'] },
   ],
   init,
