@@ -339,16 +339,19 @@ function loadGameTune() {
     .catch(() => {});
 }
 
-/* Nurkassa on yksi ratas eikä kolmea kuvaketta. Ääni, koko ruutu, nappien
-   puoli, kieli ja vaikeustaso ovat kaikki sen takana samassa valikossa: kolme
-   kuvaketta oli kolme asiaa joista kaksi oli arvattava, ja loput asetukset
-   olivat vain kehittäjän paneelissa jonne pelaaja ei pääse. */
-let GEAR_BOX, COG_BOX, HORN_BOX;
+/* Nurkassa on ratas ja sen vieressä kehittäjän liuku, joka näkyy vain
+   debug-tilassa. Ääni, koko ruutu, nappien puoli, kieli ja vaikeustaso ovat
+   rattaan takana samassa valikossa; säätöpaneeli on eri asia eikä sen kuulu
+   olla pelaajan asetusten sisällä. Aiemmin kuvakkeita oli kolme — ääni,
+   säädöt, koko ruutu — ja kaksi niistä oli arvattava. */
+let GEAR_BOX, COG_BOX, TUNE_BOX, HORN_BOX;
 function layout() {
   const right = gearSide === 'right';
   GEAR_BOX = { x: right ? W - 158 : 30, y: H - 172, w: 128, h: 96 };
   HORN_BOX = { x: right ? W - 158 : 30, y: H - 262, w: 128, h: 78 };
-  COG_BOX = { x: right ? 24 : W - 70, y: H - 74, w: 46, h: 46 };
+  const col = i => right ? 24 + i * 54 : W - 70 - i * 54;
+  COG_BOX = { x: col(0), y: H - 74, w: 46, h: 46 };
+  TUNE_BOX = { x: col(1), y: H - 74, w: 46, h: 46 };
 }
 /* Kenttien omat lähtöarvot talteen ennen kuin tallennettu viritys kirjoittaa
    niiden päälle. Kentän olio on ainoa paikka jossa ne elävät, joten ilman tätä
@@ -985,7 +988,8 @@ function toLogical(clientX, clientY) {
 }
 const inBox = (p, b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 const onButtons = p =>
-  inBox(p, GEAR_BOX) || inBox(p, HORN_BOX) || inBox(p, COG_BOX);
+  inBox(p, GEAR_BOX) || inBox(p, HORN_BOX) || inBox(p, COG_BOX) ||
+  (debugAllowed() && inBox(p, TUNE_BOX));
 
 function toggleGear() {
   if (state !== PLAY || dead) return;
@@ -1021,12 +1025,13 @@ canvas.addEventListener('pointerdown', e => {
   /* Luonnoslehtiö omistaa kankaan niin kauan kuin se on auki: sen kahvat ovat
      nappien päällä eikä teline saa napsahtaa siitä että alustaa siirretään.
      Ratas jää auki, koska säätöpaneeli ja editori ovat eri työkalut. */
-  if (sketch.active && !inBox(p, COG_BOX)) return;
+  if (sketch.active && !inBox(p, TUNE_BOX)) return;
   if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
   if (inBox(p, HORN_BOX)) { honk(); return; }
-  /* Luonnostyökalun ollessa auki ratas on sen oma ulospääsy säätöpaneeliin,
-     niin kuin ennenkin: pelaajan valikko ei auta siinä tilanteessa. */
-  if (inBox(p, COG_BOX)) { sketch.active ? togglePanel() : openMenu(); }
+  if (inBox(p, COG_BOX)) { openMenu(); return; }
+  /* Kehittäjän liuku on oma kuvakkeensa. Se on myös luonnostyökalun ulospääsy
+     säätöpaneeliin, joten se on ainoa jota työkalun päältä kuunnellaan. */
+  if (debugAllowed() && inBox(p, TUNE_BOX)) togglePanel();
 });
 
 /* Näppäimistöllä pärjää ilman hiirtä: kortin napit ovat omilla näppäimillään,
@@ -2390,9 +2395,8 @@ function drawButtons() {
   ctx.fillText(t('ui.horn'), hx, hb.y + hb.h - 12);
   ctx.restore();
 
-  /* Yksi ratas, ja se on aina siinä: sen takaa löytyvät ääni, koko ruutu,
-     nappien puoli, kieli ja vaikeustaso. Kehittäjän säätöpaneeli on sama
-     ratas yhden rivin syvemmällä. */
+  /* Ratas on aina siinä: sen takaa löytyvät ääni, koko ruutu, nappien puoli,
+     kieli ja vaikeustaso. */
   smallBox(COG_BOX, (mx, my) => {
     ctx.beginPath(); ctx.arc(mx, my, 6, 0, 6.3); ctx.stroke();
     for (let i = 0; i < 6; i++) {
@@ -2401,6 +2405,18 @@ function drawButtons() {
       ctx.moveTo(mx + Math.cos(a) * 8, my + Math.sin(a) * 8);
       ctx.lineTo(mx + Math.cos(a) * 12, my + Math.sin(a) * 12);
       ctx.stroke();
+    }
+  });
+
+  /* Kehittäjän säätöpaneeli on eri asia kuin pelaajan asetukset, joten se on
+     eri kuvake eikä rivi valikon pohjalla: liu'ut, koska sitä se on. Näkyy
+     vain kun debug on sallittu, eli pelaajalle nurkassa on vain ratas. */
+  if (debugAllowed()) smallBox(TUNE_BOX, (mx, my) => {
+    for (const [dy, kx] of [[-7, -3], [0, 5], [7, -1]]) {
+      ctx.beginPath();
+      ctx.moveTo(mx - 11, my + dy); ctx.lineTo(mx + 11, my + dy);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx + kx, my + dy, 2.6, 0, 6.3); ctx.fill();
     }
   });
 }
@@ -3045,11 +3061,6 @@ function buildMenu() {
   box.append(mrow(t('set.screen'),
     mpick(!fsElement(), t('set.window'), () => { if (fsElement()) toggleFullscreen(); }),
     mpick(!!fsElement(), t('set.full'), () => { if (!fsElement()) toggleFullscreen(); })));
-
-  if (debugAllowed()) {
-    box.append(mrow(t('set.tune'),
-      mpick(false, t('set.open'), () => { closeMenu(); togglePanel(); })));
-  }
 
   const foot = css(el('div'), { display: 'flex', justifyContent: 'flex-end', marginTop: '6px' });
   foot.append(css(pbutton(null, t('set.close'), closeMenu), {
