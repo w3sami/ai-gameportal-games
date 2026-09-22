@@ -37,7 +37,7 @@
  * Kenttä alkaa aina ilmasta: taksi tulee sisään katon luukusta, jarruttaa
  * paikalleen, luukku sulkeutuu ja peli käynnistyy READY–GO:lla.
  *
- * Koukut (kaikki valinnaisia), api = {P, taxi, pads, walls, t, rand, say}:
+ * Koukut (kaikki valinnaisia), api = {P, taxi, pads, walls, t, rand, say, dead}:
  *   init(api)                 kentän alussa
  *   update(dt, api)           joka ruudulla ennen fysiikkaa
  *   input(vec, api) -> vec    ohjausvektorin muokkaus ennen suuttimia
