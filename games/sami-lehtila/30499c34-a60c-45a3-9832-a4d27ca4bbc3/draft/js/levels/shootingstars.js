@@ -337,6 +337,18 @@ function launch() {
    kaksi suojaa samaan paikkaan on yksi liikaa, ja oksa on niistä se jonka
    pelaaja näkee ilman selitystä. */
 
+/* Tähti rauhoittuu eikä nykäise: jarrutus paikallaan, sitten häivytys ja
+   paluu kotiin. Sitä käytetään kun taksi kuolee — silloin koko taivas
+   hiljenee, ja uusi tauko alkaa vasta kun taksi on taas ehjä. */
+function calm(s) {
+  if (s.state !== 'wind' && s.state !== 'fall') return;
+  if (S.walls) {
+    const i = S.walls.indexOf(s.box);
+    if (i >= 0) S.walls.splice(i, 1);           // jarruttava tähti ei enää tapa
+  }
+  s.state = 'calm'; s.t = 0;
+}
+
 /* Säätimet luetaan piirrossa eikä päivityksessä. Syy on se, että **peli ajaa
    kentän `update`-koukun vain PLAY-tilassa**: tauolla, korttiruudussa ja
    sisääntulossa piirto jatkuu mutta päivitys ei. Kun muoto laskettiin vain
