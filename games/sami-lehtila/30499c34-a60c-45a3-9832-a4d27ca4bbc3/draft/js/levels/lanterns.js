@@ -111,8 +111,14 @@ function burnAt(m, t) {
    paikasta olisi kaksi totuutta, joten se on yksi taulukko jota molemmat
    lukevat.
 
-   Samasta syystä aurinko piirretään täällä eikä level.sun-kentässä: peli
-   piirtää sen ennen drawBackia, ja tähtiä peittävä maali hautaisi sen alleen.
+   Aurinkoa ei ole, vaikka ensin oli: lämmin kiekko haloineen ylälaidassa.
+   Sami tyrmäsi sen ajamalla — "se on hämäävä, samanvärinen kuin alustat" —
+   ja se on juuri niin. Kenttä on täynnä vaakasuoria lämpimänkeltaisia
+   laikkuja joihin pitää laskeutua, ja taustalle maalattu yhdeksäs oli yksi
+   liikaa. Taivas lämpenee alaspäin niin kuin ennenkin, joten iltapäivä on
+   tallella ilman kiekkoa. Jos aurinko joskus palaa, se kuuluu tänne eikä
+   level.sun-kenttään: peli piirtää sen ennen drawBackia ja tähtiä peittävä
+   maali hautaisi sen alleen.
 
    HUDin rahasumma on vaaleaa tekstiä ja kosketusnappien kehykset on viritetty
    tummaa vastaan. Molempien korjaus on kentän puolella eikä pelin väreissä:
@@ -123,22 +129,12 @@ function burnAt(m, t) {
    Iltapäivä eikä keskipäivä: liekki on yökuva ja hohtaisi kirkkaassa
    päivänvalossa turhaan. Sininen syvenee ylöspäin ja lämpenee alaspäin. */
 const SKY = ['#14345f', '#2e6398', '#8aa8bf', '#c2926a'];
-const SUN = { x: 246, y: 200, r: 50, col: '255,207,143' };
 
 function sky(ctx) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   SKY.forEach((c, i) => g.addColorStop(i / (SKY.length - 1), c));
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
-
-  const halo = ctx.createRadialGradient(SUN.x, SUN.y, 0, SUN.x, SUN.y, SUN.r * 3.6);
-  halo.addColorStop(0, `rgba(${SUN.col},.55)`);
-  halo.addColorStop(0.3, `rgba(${SUN.col},.18)`);
-  halo.addColorStop(1, `rgba(${SUN.col},0)`);
-  ctx.fillStyle = halo;
-  ctx.beginPath(); ctx.arc(SUN.x, SUN.y, SUN.r * 3.6, 0, 6.3); ctx.fill();
-  ctx.fillStyle = `rgba(${SUN.col},.82)`;
-  ctx.beginPath(); ctx.arc(SUN.x, SUN.y, SUN.r, 0, 6.3); ctx.fill();
 }
 
 /** Vinjetti ylälaitaan HUDin alle ja iltahämärä alalaitaan nappien taakse. */
@@ -173,37 +169,85 @@ const PUFFS = [
   [[-70, 4, 20], [-34, -8, 28], [0, -16, 32], [34, -6, 30], [66, 6, 24], [-6, 10, 28], [40, 12, 22]],
 ];
 
-/* Rivi kerrallaan ylhäältä alas: muoto, korkeus, koko, nopeus px/s, peitto ja
-   lähtökohta. Ylimmät ovat himmeimpiä, koska taivas on siellä tummin ja
-   kontrasti kasvaisi muuten liikaa. */
-const CLOUDS = [
-  { i: 2, y: 108, s: 1.20, sp: 3.2, a: 0.11, x0: 120 },
-  { i: 0, y: 196, s: 0.85, sp: 5.0, a: 0.10, x0: 470 },
-  { i: 1, y: 330, s: 1.05, sp: 4.0, a: 0.14, x0: 250 },
-  { i: 2, y: 452, s: 0.80, sp: 6.5, a: 0.13, x0: 620 },
-  { i: 0, y: 596, s: 1.25, sp: 3.6, a: 0.16, x0: 60 },
-  { i: 1, y: 742, s: 0.95, sp: 5.4, a: 0.15, x0: 430 },
-  { i: 2, y: 886, s: 1.10, sp: 2.8, a: 0.17, x0: 180 },
-  { i: 0, y: 968, s: 0.75, sp: 7.2, a: 0.14, x0: 660 },
-];
+/* Pilvet arvotaan, koska käsin kirjoitettu lista vastaa väärään kysymykseen.
+   Sami katsoi kahdeksaa ja sanoi että se kohta jossa niitä sattui olemaan
+   neljä näytti paljon paremmalta: kysymys on määrästä eikä siitä missä kukin
+   yksittäinen on. Siksi määrä on säädin ja taivas arpa — mutta kiinteällä
+   siemenellä, jotta sama kenttä näyttää joka ajolla samalta ja tune.jsoniin
+   tallennettu luku tarkoittaa huomenna samaa.
 
-function clouds(ctx, time) {
-  for (const c of CLOUDS) {
-    const span = W + 320;
-    const x = ((c.x0 + time * c.sp) % span + span) % span - 160;
+   Lista arvotaan kerran säätimen ylärajalle asti ja sekoitetaan, ja piirto
+   ottaa siitä n ensimmäistä. Sekoitus on se mikä tekee tästä toimivan:
+   järjestämättömästä listasta alkupää olisi ruudun ylälaita. Näin tiheyden
+   nostaminen lisää pilviä liikuttamatta niitä jotka jo ovat.
+
+   `dens` oletus on 2 eli kaksinkertainen entiseen, `vis` ja `wind` ovat
+   kertoimia joilla oletus on 1 — ne ovat säätimiä siksi että kumpikin on
+   maku, ja maku katsotaan ruudulta eikä lasketa täällä. */
+const AIR = { dens: 2, vis: 1, wind: 1 };
+const CLOUD_N = 8;                             // dens 1 = entinen määrä
+const POOL = CLOUD_N * 3;                      // dens 3 = säätimen yläraja
+
+const lcg = seed => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+
+const SKY_CLOUDS = (() => {
+  const rnd = lcg(20260922);
+  const band = H / POOL;
+  const all = [];
+  for (let i = 0; i < POOL; i++) {
+    const y = (i + 0.5) * band + (rnd() - 0.5) * band * 1.6;
+    all.push({
+      puff: (rnd() * PUFFS.length) | 0,
+      flip: rnd() < 0.5 ? -1 : 1,              // sama muoto peilattuna on eri pilvi
+      y,
+      s: 0.75 + rnd() * 0.60,
+      /* Ylimmät ovat himmeimpiä, koska taivas on siellä tummin ja kontrasti
+         kasvaisi muuten liikaa. Koko asteikko nousi kerran: Sami pyysi
+         näkyvyyttä hieman lisää, ja hieman on tässä 0,10…0,17 → 0,13…0,22. */
+      a: 0.13 + (y / H) * 0.09,
+      x0: rnd() * (W + 320),
+    });
+  }
+  for (let i = all.length - 1; i > 0; i--) {   // Fisher–Yates samalla arvalla
+    const j = (rnd() * (i + 1)) | 0;
+    [all[i], all[j]] = [all[j], all[i]];
+  }
+  return all;
+})();
+
+/* Tuuli puhaltaa yhteen suuntaan, mutta iso pilvi kulkee hitaammin kuin pieni.
+   Se on Samin pyyntö ja se on myös se mikä tekee syvyyden: nopeuseron näkee
+   vaikka kaikki muu on samanväristä, ja kahdeksan eri vauhtia on kahdeksan
+   etäisyyttä. Nopeus on WIND/s², eli kolmanneksen isompi pilvi kulkee noin
+   puolta hitaammin. WIND on viritetty niin että nopeinkin (pienin, s 0.75)
+   jää entisiin rajoihin — 7,1 px/s vastaan entinen 7,2 — eli oletus liikkuu
+   vain hitaampaan suuntaan. Säädin saa nostaa siitä; oletus ei nosta. */
+const WIND = 4.0;
+const baseSpeed = c => WIND / (c.s * c.s);
+
+function clouds(ctx) {
+  const n = Math.min(SKY_CLOUDS.length, Math.round(CLOUD_N * AIR.dens));
+  const span = W + 320;
+  /* Yksi liuku kaikille pilville. Se on pilven omissa koordinaateissa, mikä
+     toimii siksi että liu'un koordinaatit luetaan vasta maalattaessa eli
+     kulloisenkin muunnoksen läpi. */
+  const g = ctx.createLinearGradient(0, -46, 0, 34);
+  g.addColorStop(0, 'rgba(255,246,228,.95)');
+  g.addColorStop(0.55, 'rgba(226,236,246,.8)');
+  g.addColorStop(1, 'rgba(146,174,204,.5)');
+  ctx.fillStyle = g;
+
+  for (let k = 0; k < n; k++) {
+    const c = SKY_CLOUDS[k];
+    const x = ((c.x0 + drift * baseSpeed(c)) % span + span) % span - 160;
     for (const rep of [x, x - span]) {         // sama pilvi kahdesti, jotta kierto ei näy
       if (rep > W + 170 || rep < -170) continue;
       ctx.save();
       ctx.translate(rep, c.y);
-      ctx.scale(c.s, c.s);
-      ctx.globalAlpha = c.a;
+      ctx.scale(c.s * c.flip, c.s);
+      ctx.globalAlpha = Math.min(0.45, c.a * AIR.vis);
       ctx.beginPath();
-      for (const [dx, dy, r] of PUFFS[c.i]) { ctx.moveTo(dx + r, dy); ctx.arc(dx, dy, r, 0, 6.3); }
-      const g = ctx.createLinearGradient(0, -46, 0, 34);
-      g.addColorStop(0, 'rgba(255,246,228,.95)');
-      g.addColorStop(0.55, 'rgba(226,236,246,.8)');
-      g.addColorStop(1, 'rgba(146,174,204,.5)');
-      ctx.fillStyle = g;
+      for (const [dx, dy, r] of PUFFS[c.puff]) { ctx.moveTo(dx + r, dy); ctx.arc(dx, dy, r, 0, 6.3); }
       ctx.fill();
       ctx.restore();
     }
@@ -215,11 +259,15 @@ function clouds(ctx, time) {
    jälkeen, ja pysähtynyt pilvi näyttäisi rikkinäiseltä. Lyhdyt sen sijaan
    lukevat runT:n, koska ne kertovat missä alusta on — mittari ei saa käydä
    silloin kun se mitä se näyttää seisoo. */
-let animT = 0, animLast = 0;
+let animT = 0, animLast = 0, drift = 0;
 function animStep() {
   const now = performance.now() / 1000;
-  animT += animLast ? Math.min(0.05, now - animLast) : 0;
+  const dt = animLast ? Math.min(0.05, now - animLast) : 0;
   animLast = now;
+  animT += dt;
+  /* Tuuli on oma matkalukunsa eikä kello kertaa kerrointa: jälkimmäinen
+     siirtäisi koko taivaan sillä hetkellä kun säädintä liikutetaan. */
+  drift += dt * AIR.wind;
   return animT;
 }
 
@@ -399,7 +447,7 @@ function lanternsBack(ctx, api) {
   const time = animStep();
   ctx.save();
   sky(ctx);
-  clouds(ctx, time);
+  clouds(ctx);
   vignette(ctx);
   for (const p of api.pads) lantern(ctx, p, api.t, time);
   ctx.restore();
@@ -494,6 +542,19 @@ export const lanterns = {
         { key: 'amp', label: 'matka × (myös nopeus)', min: 0.2, max: 2, step: 0.05 },
         { key: 'pace', label: 'kierroksen kesto ×', min: 0.4, max: 2.5, step: 0.05 },
         { key: 'warn', label: 'liekki syttyy s ennen nousua', min: 0.2, max: 3, step: 0.05 },
+      ],
+    },
+    {
+      /* Taivas on makuasia eikä mitoitusta, joten se on säätimissä eikä
+         luvuissa: määrä ja näkyvyys ovat kumpikin sellaisia joista Sami sanoi
+         "hieman lisää", ja hieman katsotaan ruudulta. Tuulen kerroin on
+         mukana samasta syystä — oletus on entistä hitaampi, ja jos se on
+         liian hidas, sen näkee nopeammin säätimestä kuin täältä. */
+      name: 'pilvet', obj: AIR, open: false,
+      sliders: [
+        { key: 'dens', label: 'määrä ×', min: 0.5, max: 3, step: 0.25 },
+        { key: 'vis', label: 'näkyvyys ×', min: 0.3, max: 2.5, step: 0.05 },
+        { key: 'wind', label: 'tuuli ×', min: 0.2, max: 2.5, step: 0.05 },
       ],
     },
     { name: 'kentän kertoimet', open: false, mul: ['grav', 'thrust', 'burn', 'landVY'] },
