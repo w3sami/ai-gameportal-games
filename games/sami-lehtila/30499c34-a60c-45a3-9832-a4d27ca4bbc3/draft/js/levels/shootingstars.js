@@ -504,54 +504,38 @@ function init(api) {
 
 const fade = (c, a) => c + Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0');
 
-/* Kallio on samaa ainetta kuin pelin omat kehäseinät, jottei kentän oma piirto
-   erotu niistä saumana. */
-function rock(ctx, r) {
-  ctx.fillStyle = '#1b2440';
+/* Kuusen alusta on **kokonaan vihreä**, ei kalliota jonka päällä on nurmea.
+   Sami 22.9.2026: sivureiät näyttivät sitä huonommilta mitä enemmän niiden
+   taustaa sävytti, ja ratkaisu oli tehdä maapalasta yksi selvä esine. Nyt
+   raja on materiaali eikä varjo: vihreä on maata, tumma on reikä. */
+function ground(ctx, r) {
+  const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+  g.addColorStop(0, '#3f7a44');
+  g.addColorStop(0.35, '#2c5c33');
+  g.addColorStop(1, '#17361f');
+  ctx.fillStyle = g;
   ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.fillStyle = 'rgba(120,160,255,.22)';
-  ctx.fillRect(r.x, r.y, r.w, 2);
+
+  ctx.fillStyle = 'rgba(150,215,150,.35)';      // valoreuna ylhäällä
+  ctx.fillRect(r.x, r.y, r.w, 3);
   ctx.fillStyle = 'rgba(0,0,0,.35)';
-  ctx.fillRect(r.x, r.y + r.h - 2, r.w, 2);
+  ctx.fillRect(r.x, r.y + r.h - 3, r.w, 3);
 
-  ctx.save();
+  ctx.save();                                   // tummempia laikkuja sisään
   ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
-  ctx.fillStyle = 'rgba(255,255,255,.035)';
-  for (let x = r.x + 12; x < r.x + r.w; x += 46) {
-    ctx.fillRect(x, r.y + 4 + ((x * 7) % 11), 26, 5 + ((x * 13) % 9));
+  ctx.fillStyle = 'rgba(12,32,18,.3)';
+  for (let x = r.x + 16; x < r.x + r.w; x += 54) {
+    ctx.beginPath();
+    ctx.ellipse(x, r.y + r.h * 0.62 + ((x * 7) % 9), 22, 7, 0, 0, 6.3);
+    ctx.fill();
   }
-  ctx.fillStyle = 'rgba(0,0,0,.18)';
-  for (let x = r.x + 28; x < r.x + r.w; x += 62) ctx.fillRect(x, r.y + r.h * 0.45, 34, 6);
   ctx.restore();
-}
 
-/* Nurmi kiven päällä: metsä jatkuu kallion päällä, ja tästä tietää mille
-   pinnalle ollaan laskeutumassa. */
-function turf(ctx, r) {
-  ctx.fillStyle = 'rgba(58,110,74,.7)';
-  ctx.fillRect(r.x, r.y, r.w, 4);
-  ctx.fillStyle = 'rgba(86,150,100,.45)';
+  ctx.fillStyle = 'rgba(86,150,100,.5)';        // ruohotupsut pinnalle
   for (let x = r.x + 3; x < r.x + r.w - 3; x += 8) {
     const h = 4 + ((x * 17) % 6);
     ctx.fillRect(x, r.y - h, 3, h);
   }
-}
-
-/* Helma piirretään samasta käyrästä josta törmäysportaat ladottiin: kylki
-   ylhäältä ulos kärkeen, kärjestä alareunaa pitkin toiselle puolelle. */
-function skirtPath(ctx, s, cx) {
-  const N = 26;
-  ctx.beginPath();
-  ctx.moveTo(cx - s.hw1, skBot(s, -s.hw1));
-  for (let i = 0; i <= N; i++) {                // vasen kylki ylös, oikea alas
-    const x = -s.hw1 + (2 * s.hw1) * (i / N);
-    ctx.lineTo(cx + x, skTop(s, x));
-  }
-  for (let i = N; i >= 0; i--) {
-    const x = -s.hw1 + (2 * s.hw1) * (i / N);
-    ctx.lineTo(cx + x, skBot(s, x));
-  }
-  ctx.closePath();
 }
 
 function spruce(ctx, t) {
@@ -659,18 +643,22 @@ function farForest(ctx) {
   ctx.fillRect(0, GRASS.y - 150, W, 150);
 }
 
-/* Maakerroksen ja ilman raja. Kuilujen suista näkyi ennen sama yötaivas kuin
-   ylhäällä, jolloin nurmikko näytti ilmassa leijuvalta lohkareelta. Sami
-   luonnoksella 22.9.2026: *"gradient tai alakerran väri"* — eli kuilun suu on
-   näkymä alakertaan, ja se tummenee alaspäin luolan väriksi. */
-function groundFade(ctx) {
-  const y0 = GRASS.y - 34, y1 = CAVE_TOP + 12;
-  const g = ctx.createLinearGradient(0, y0, 0, y1);
-  g.addColorStop(0, 'rgba(12,18,30,0)');
-  g.addColorStop(0.5, 'rgba(12,18,30,.72)');
-  g.addColorStop(1, '#111a2c');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, y0, W, y1 - y0);
+/* Kuilun suu on reikä maassa, ja reiästä näkyy luola. Se maalataan alakerran
+   omalla värillä eikä taivaalla: ilman tätä kuilusta paistoi sama yötaivas
+   kuin ylhäältä. Ensin tässä oli koko leveyden liuku, mutta se vain sotki
+   maapalan reunat — Sami 22.9.2026: *"sivureiät vaan huononi"*. Nyt sävy on
+   vain siellä missä reikä on. */
+function shafts(ctx) {
+  for (const [x0, x1] of [[SHAFT_L.x0, SHAFT_L.x1], [SHAFT_R.x0, SHAFT_R.x1]]) {
+    const g = ctx.createLinearGradient(0, GRASS.y - 6, 0, CAVE_TOP);
+    g.addColorStop(0, '#0a1120');
+    g.addColorStop(1, '#111a2c');
+    ctx.fillStyle = g;
+    ctx.fillRect(x0, GRASS.y - 6, x1 - x0, CAVE_TOP - GRASS.y + 6);
+    ctx.fillStyle = 'rgba(0,0,0,.35)';          // varjo suun reunoilla
+    ctx.fillRect(x0, GRASS.y - 6, 5, CAVE_TOP - GRASS.y + 6);
+    ctx.fillRect(x1 - 5, GRASS.y - 6, 5, CAVE_TOP - GRASS.y + 6);
+  }
 }
 
 /* ------------------------------------------------------------------- luola */
@@ -839,8 +827,7 @@ function back(ctx) {
   farForest(ctx);
   cave(ctx);
   spruce(ctx, TREE);
-  rock(ctx, TURF);
-  turf(ctx, TURF);
+  ground(ctx, TURF);
 }
 
 function front(ctx, api) {
