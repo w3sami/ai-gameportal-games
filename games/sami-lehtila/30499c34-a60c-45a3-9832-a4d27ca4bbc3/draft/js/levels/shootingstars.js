@@ -73,7 +73,15 @@ const SKIRTS = [
 ];
 /* Kuusen muoto on säätimissä, ja siksi nämä ovat oliossa: säädin kirjoittaa
    avaimeen, ja `shape()` lataa luvut uudestaan törmäyslaatikoihin. */
-const SK = { pow: 1.35, trunk: 26 };
+/* Kuusella on kaksi tasoa säätöä. `SK` on koko puun muoto yhtenä oliona:
+   siitä lasketaan kaikkien helmojen luvut kerralla, eli puuta voi skaalata
+   yhdestä paikasta. Helmojen omat luvut ovat sen jälkeen hienosäätöä, ja ne
+   pysyvät kunnes masteria taas liikautetaan. Sami 22.9.2026: *"luulin että on
+   1 säädöt jota sitten vaan skaalataan, voi ne olla erilläänkin."* */
+const SK = {
+  top: 300, bot: 700, width: 116, taper: 0.62, lap: 0.30, pinch: 0.60,
+  arc: -16, pow: 1.35, trunk: 26,
+};
 const SK_STEPS = 22;                 // portaita helmaa kohti, kiinteä määrä
 
 /* Helman reunat paikan x funktiona, mitattuna rungon keskeltä. Sama kaava
@@ -122,6 +130,24 @@ for (const s of SKIRTS) {
 }
 TREE.stem = add({ x: 0, y: 0, w: 0, h: 0, stem: true });
 
+/* Koko puu yhdestä oliosta: helmojen ylä- ja alareunat, leveydet ja kaari.
+   `taper` on se miten nopeasti helmat levenevät alaspäin, `lap` niiden
+   lomitus ja `pinch` se kuinka kapeana helma alkaa edellisen kärjestä. */
+function master() {
+  const n = SKIRTS.length;
+  const h = Math.max(40, SK.bot - SK.top), step = h / n;
+  let prev = 0;
+  for (let i = 0; i < n; i++) {
+    const s = SKIRTS[i];
+    s.y1 = SK.top + step * (i + 1);
+    s.y0 = s.y1 - step * (1 + SK.lap);
+    s.hw1 = Math.max(6, SK.width * Math.pow((i + 1) / n, SK.taper));
+    s.hw0 = i === 0 ? 4 : Math.max(0, prev * SK.pinch);
+    s.drop = SK.arc;
+    prev = s.hw1;
+  }
+}
+
 function shape() {
   for (const s of SKIRTS) {
     for (let i = 0; i < SK_STEPS; i++) {
@@ -143,16 +169,34 @@ function shape() {
   TREE.stem.w = SK.trunk;
   TREE.stem.h = Math.max(0, TREE.foot - last.y1 + 8);
 }
+master();
 shape();
 
 /* Säätimen liikahdus näkyy vasta kun luvut luetaan takaisin laatikoihin.
-   Allekirjoitus on halvempi kuin muodon rakentaminen joka ruudulla. */
-let shapeSig = '';
+   Allekirjoitus on halvempi kuin muodon rakentaminen joka ruudulla.
+
+   Kaksi allekirjoitusta, koska säätöjä on kahdella tasolla: masterin liike
+   laskee helmat uudestaan, helman oma liike ei koske muihin. Ensimmäisellä
+   kerralla kumpaakaan ei lasketa uudestaan — silloin tune.json on juuri
+   palauttanut tallennetut luvut, ja masterin ajaminen pyyhkisi ne. */
+let shapeSig = null, masterSig = null;
+const sigSkirts = () => SKIRTS.map(s => `${s.y0},${s.y1},${s.hw0},${s.hw1},${s.drop}`).join('|')
+  + `|${SK.pow},${SK.trunk}`;
+const sigMaster = () => `${SK.top},${SK.bot},${SK.width},${SK.taper},${SK.lap},${SK.pinch},${SK.arc}`;
+
 function shapeCheck() {
-  const sig = SKIRTS.map(s => `${s.y0},${s.y1},${s.hw0},${s.hw1},${s.drop}`).join('|')
-    + `|${SK.pow},${SK.trunk}`;
-  if (sig === shapeSig) return;
-  shapeSig = sig;
+  const ms = sigMaster();
+  if (masterSig === null) { masterSig = ms; shapeSig = sigSkirts(); return; }
+  if (ms !== masterSig) {
+    masterSig = ms;
+    master();
+    shapeSig = sigSkirts();
+    shape();
+    return;
+  }
+  const ss = sigSkirts();
+  if (ss === shapeSig) return;
+  shapeSig = ss;
   shape();
 }
 
@@ -821,6 +865,13 @@ export const shootingstars = {
        ja alareuna, hw0 ja hw1 sen puolileveys näissä, ja drop se kuinka
        paljon alareunan keskikohta on kärkiä ylempänä — eli viiksien nuokku. */
     { name: 'kuusi', obj: SK, open: false, sliders: [
+      { key: 'top', label: 'latva y', min: 120, max: 700, step: 2 },
+      { key: 'bot', label: 'tyvi y', min: 300, max: 780, step: 2 },
+      { key: 'width', label: 'leveys tyvessä', min: 20, max: 220, step: 2 },
+      { key: 'taper', label: 'kapeneminen ylöspäin', min: 0.2, max: 1.6, step: 0.02 },
+      { key: 'lap', label: 'helmojen lomitus', min: 0, max: 1.2, step: 0.02 },
+      { key: 'pinch', label: 'helman kavennus', min: 0, max: 1, step: 0.02 },
+      { key: 'arc', label: 'alareunan kaari −hymy +nuokku', min: -70, max: 70, step: 1 },
       { key: 'pow', label: 'kyljen kaarevuus', min: 0.6, max: 3, step: 0.05 },
       { key: 'trunk', label: 'rungon paksuus', min: 8, max: 60, step: 1 },
     ] },
@@ -831,7 +882,7 @@ export const shootingstars = {
         { key: 'y1', label: 'alareuna', min: 260, max: 780, step: 2 },
         { key: 'hw0', label: 'puolileveys ylhäällä', min: 0, max: 200, step: 2 },
         { key: 'hw1', label: 'puolileveys kärjessä', min: 6, max: 220, step: 2 },
-        { key: 'drop', label: 'viiksien nuokku', min: 0, max: 70, step: 1 },
+        { key: 'drop', label: 'alareunan kaari −hymy +nuokku', min: -70, max: 70, step: 1 },
       ],
     })),
     { name: 'kentän kertoimet', open: false, mul: ['grav', 'thrust', 'landVX'] },
