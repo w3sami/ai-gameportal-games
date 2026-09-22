@@ -155,19 +155,21 @@ function setSide(side) {
    tarvittava kaasu pysyy samana ja vain koko pystyakseli hidastuu — sama peli
    hitaammin, ei eri peli. Aikaa on enemmän, ja siksi se on helpompi.
  *
- * Normaali on oletus ja se on se peli jota viritetään; helppo antaa aikaa ja
- * pro vie sitä. Tippiin ei kosketa, koska se on kiinni ajasta: hitaammalla
- * tasolla tienaa itsestään vähemmän ja prolla paremmin, eikä palkkiota tarvitse
- * erikseen porrastaa.
+ * Pro on kerroin 1 eli peli ilman kevennystä: se on se jota viritetään ja
+ * jollaisena peli oli ennen tätä säädintä. Oletus on kuitenkin normaali eli
+ * 0,7, koska säädin tehtiin nimenomaan helpottamaan peliä — vihje vaikeudesta
+ * tuli pelaajilta. Tippiin ei kosketa, koska se on kiinni ajasta: kevennetyllä
+ * tasolla tienaa itsestään vähemmän ja prolla parhaiten, eikä palkkiota
+ * tarvitse erikseen porrastaa.
  *
  * Kertoimia on nyt kolme päällekkäin: globaali viritys, kentän oma kerroin ja
  * tämä. Siksi tulolle on pohja MUL_MINissä — ne ovat samat luvut jotka
  * Moonshotilla on, eli kuun painovoima on se raja josta pidemmälle peli ei
  * enää tunnu Space Taxilta. */
 const DIFFS = [
-  { id: 'easy', mul: 0.7 },
-  { id: 'normal', mul: 1 },
-  { id: 'pro', mul: 1.3 },
+  { id: 'easy', mul: 0.45 },
+  { id: 'normal', mul: 0.7 },
+  { id: 'pro', mul: 1 },
 ];
 const DIFF_DEF = 'normal';
 const MUL_MIN = { grav: 0.2, thrust: 0.25 };
