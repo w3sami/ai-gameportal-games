@@ -48,7 +48,11 @@ import { W, H, CEIL } from './shared.js';
    siirtämällä yhtä lukua kerrallaan, ja kaava tekee siitä arvuuttelua. */
 
 const SKY_LOW = 260;               // tähtitaivaan alaraja
-const GRASS = { x: 110, y: 780, w: 500, h: 40 };
+/* Koko kuusikompleksi laskettiin 22.9.2026 alaspäin kaksi taksinkorkeutta
+   (2 × 28 = 56 px): maapala 780 → 836. **Kuusi itse laski 40 px eikä 56**, ja
+   se 16 px:n ero on tahallinen — se on se rako jonka läpi alustalle lennetään
+   oksan alta. */
+const GRASS = { x: 110, y: 836, w: 500, h: 40 };
 const SHAFT_L = { x0: 16, x1: 110 };
 const SHAFT_R = { x0: 610, x1: 704 };
 const CAVE_TOP = GRASS.y + GRASS.h;
@@ -84,7 +88,7 @@ const NUDGE = SKIRTS.map(() => ({ y0: 0, y1: 0, hw0: 0, hw1: 0, arc: 0 }));
 /* Kuusen muoto on säätimissä, ja siksi nämä ovat oliossa: säädin kirjoittaa
    avaimeen, ja `master()` + `shape()` lataavat luvut uudestaan. */
 const SK = {
-  top: 300, bot: 700, width: 116, taper: 0.62, lap: 0.30, pinch: 0.60,
+  top: 340, bot: 740, width: 116, taper: 0.62, lap: 0.30, pinch: 0.60,
   arc: -16, pow: 1.35, trunk: 26,
 };
 const SK_STEPS = 22;                 // portaita helmaa kohti, kiinteä määrä
@@ -208,14 +212,18 @@ function shapeCheck() {
    Nurmikon alustat ovat pinnan tasossa: alapuoli saa olla kiinni maassa,
    merkitystä on vain laskupinnalla. Luolan alustat ovat kaikki samassa
    tasossa, koska luola on hengähdyspaikka eikä sommitelma. */
+/* Yläalustat ovat rungon vieressä **alimman helman alla**: oksa on niiden
+   katto, ja siksi kupoleita ei enää ole. Uloin pää jää helman reunan ulkopuolelle,
+   ja se on se kohta josta alustalle tullaan — joko suoraan ylhäältä siitä
+   raosta tai oksan alta vaakalentona. Sami 22.9.2026: *"siirretään yläalusta
+   lähemmäs runkoa, niin kupoleitakaan ei varmaan tarvi, oksat suojaa."* */
 const PADS = [
-  { id: 1, x: 130, y: GRASS.y - PAD_H + 6, w: 130 },
-  { id: 2, x: 460, y: GRASS.y - PAD_H + 6, w: 130 },
+  { id: 1, x: 234, y: GRASS.y - PAD_H + 6, w: 110 },
+  { id: 2, x: 376, y: GRASS.y - PAD_H + 6, w: 110 },
   { id: 3, x: 56, y: 986, w: 124 },
   { id: 0, x: 298, y: 986, w: 124, fuel: true },
   { id: 4, x: 540, y: 986, w: 124 },
 ];
-const GRASS_PADS = [1, 2];
 
 /* --------------------------------------------------------------- tähtitaivas
 
@@ -250,7 +258,6 @@ const between = (a, b) => a + rnd() * (b - a);
 
 const S = {
   stars: [], bits: [], spawn: 0, walls: null, count: 0, gscale: 1, wasDead: false,
-  domes: GRASS_PADS.map(id => ({ id, a: 0 })),
 };
 
 function field() {
@@ -325,21 +332,10 @@ function launch() {
   s.vy = Math.cos(a) * s.v;
 }
 
-/* Kupoli syttyy laskun hetkellä ja sammuu heti kun taksi on irti. Se on
-   nurmikon ainoa suoja: alustalla saa seistä rauhassa, muualla ei. */
-const domeR = (pad, d) => pad.w * 0.62 * d.a;
-
-/* Tähti rauhoittuu eikä nykäise: jarrutus paikallaan, sitten häivytys ja
-   paluu kotiin. Sitä käytetään kun taksi kuolee — silloin koko taivas
-   hiljenee, ja uusi 7 s alkaa vasta kun taksi on taas ehjä. */
-function calm(s) {
-  if (s.state !== 'wind' && s.state !== 'fall') return;
-  if (S.walls) {
-    const i = S.walls.indexOf(s.box);
-    if (i >= 0) S.walls.splice(i, 1);           // jarruttava tähti ei enää tapa
-  }
-  s.state = 'calm'; s.t = 0;
-}
+/* Alustalla suojaa oksa eikä kupoli. Kupoli oli 22.9.2026 nurmikon alustojen
+   suoja, ja se poistui samana päivänä kun alustat siirtyivät oksien alle:
+   kaksi suojaa samaan paikkaan on yksi liikaa, ja oksa on niistä se jonka
+   pelaaja näkee ilman selitystä. */
 
 /* Säätimet luetaan piirrossa eikä päivityksessä. Syy on se, että **peli ajaa
    kentän `update`-koukun vain PLAY-tilassa**: tauolla, korttiruudussa ja
@@ -367,13 +363,6 @@ function update(dt, api) {
   /* Kentän alussa tähdet ovat hiljaa, jotta luukusta ehtii pois tähdistön
      seasta. Sisääntulon aikana tätä koukkua ei ajeta lainkaan, joten tauko
      alkaa vasta GO:sta — se on juuri se hetki josta se lasketaan. */
-
-  for (const d of S.domes) {
-    const pad = api.pads.find(p => p.id === d.id);
-    const on = pad && api.taxi.landed === pad && !api.dead;
-    d.a += ((on ? 1 : 0) - d.a) * Math.min(1, dt * 9);
-    if (d.a < 0.002) d.a = 0;
-  }
 
   if (!api.dead) {
     S.spawn -= dt;
@@ -447,19 +436,6 @@ function update(dt, api) {
     if (s.cy - s.r > H || s.cx + s.r < 0 || s.cx - s.r > W) { home(s); continue; }
 
     let done = false;
-    for (const d of S.domes) {                  // kupoli ensin: se on suoja
-      if (d.a < 0.25) continue;
-      const pad = api.pads.find(p => p.id === d.id);
-      if (!pad) continue;
-      const r = domeR(pad, d), cx = pad.x + pad.w / 2, cy = pad.y;
-      if (s.cy > cy) continue;
-      const dx = s.cx - cx, dy = s.cy - cy;
-      if (dx * dx + dy * dy < (r + s.r * 0.5) * (r + s.r * 0.5)) {
-        burst(s, 14); home(s); done = true; break;
-      }
-    }
-    if (done) continue;
-
     for (const r of SOLID) {
       if (!hit(s.box, r)) continue;
       burst(s, 10); home(s); done = true; break;
@@ -493,7 +469,6 @@ function init(api) {
   S.walls = api.walls;
   S.bits.length = 0;
   S.spawn = SKY.grace;
-  for (const d of S.domes) d.a = 0;
   for (const s of S.stars) {
     s.state = 'sky'; s.t = 0; s.v = 0; s.vx = 0; s.vy = 0; s.spin = 0;
     s.cx = s.hx; s.cy = s.hy;
@@ -677,7 +652,7 @@ const DRIP = [];
 for (let i = 0; i < 13; i++) {
   DRIP.push({
     x: GRASS.x + 44 + ((i * 137) % (GRASS.w - 120)),
-    h: 26 + ((i * 53) % 54), w: 10 + ((i * 31) % 14),
+    h: 20 + ((i * 53) % 34), w: 10 + ((i * 31) % 14),
   });
 }
 const BATS = [];
@@ -790,37 +765,6 @@ function bits(ctx) {
   ctx.restore();
 }
 
-function dome(ctx, pad, d) {
-  const r = domeR(pad, d);
-  if (r < 4) return;
-  const cx = pad.x + pad.w / 2, cy = pad.y;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(cx - r, cy);
-  ctx.arc(cx, cy, r, Math.PI, 0);
-  ctx.closePath();
-
-  const g = ctx.createLinearGradient(cx - r * 0.6, cy - r, cx + r * 0.7, cy);
-  g.addColorStop(0, fade('#9ad8ff', 0.20 * d.a));
-  g.addColorStop(0.5, fade('#6fe3ff', 0.09 * d.a));
-  g.addColorStop(1, fade('#274a6a', 0.22 * d.a));
-  ctx.fillStyle = g;
-  ctx.fill();
-
-  ctx.strokeStyle = fade('#9ad8ff', 0.55 * d.a);
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.strokeStyle = fade('#d8f2ff', 0.5 * d.a);
-  ctx.lineWidth = 3;
-  /* Math.max, koska kutistuva kupoli kävi säteessä alle viiden ja negatiivinen
-     säde ei ole canvasilla virhearvo vaan poikkeus: se pysäytti koko
-     piirtosilmukan juuri alustalta lähtiessä. */
-  ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, r - 5), Math.PI * 1.08, Math.PI * 1.34); ctx.stroke();
-  ctx.restore();
-}
-
 function back(ctx) {
   panelCheck();                                 // säädin voi liikkua myös tauolla
   sky(ctx);                                     // lepäävät tähdet ovat taustaa
@@ -831,10 +775,6 @@ function back(ctx) {
 }
 
 function front(ctx, api) {
-  for (const d of S.domes) {
-    const pad = api.pads.find(p => p.id === d.id);
-    if (pad && d.a > 0.01) dome(ctx, pad, d);
-  }
   bits(ctx);
   for (const s of S.stars) {
     if (s.state === 'fall' || s.state === 'calm') starShape(ctx, s, 1, true);
