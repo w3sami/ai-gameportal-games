@@ -354,9 +354,21 @@ function calm(s) {
   s.state = 'calm'; s.t = 0;
 }
 
+/* Säätimet luetaan piirrossa eikä päivityksessä. Syy on se, että **peli ajaa
+   kentän `update`-koukun vain PLAY-tilassa**: tauolla, korttiruudussa ja
+   sisääntulossa piirto jatkuu mutta päivitys ei. Kun muoto laskettiin vain
+   päivityksessä, kuusen yhdeksästä säätimestä toimi tauolla kaksi — ne kaksi
+   jotka sattuivat olemaan piirron omia lukuja. Sami 22.9.2026: *"mikäköhän
+   tässä on koko ajan vain 2 alimmaista säädintä vaikuttaa"*. Kentän muotoa
+   sommitellaan nimenomaan tauolla, joten tarkistus kuuluu tänne. */
+function panelCheck() {
+  shapeCheck();
+  if (S.count !== SKY.count) field();
+}
+
 function update(dt, api) {
   S.walls = api.walls;
-  shapeCheck();
+  panelCheck();
   if (api.P && isFinite(api.P.grav)) S.gscale = api.P.grav / GRAV_REF;
 
   /* Kuoleman hetkellä taivas hiljenee, ja tauko alkaa vasta kun taksi on taas
@@ -368,7 +380,6 @@ function update(dt, api) {
   /* Kentän alussa tähdet ovat hiljaa, jotta luukusta ehtii pois tähdistön
      seasta. Sisääntulon aikana tätä koukkua ei ajeta lainkaan, joten tauko
      alkaa vasta GO:sta — se on juuri se hetki josta se lasketaan. */
-  if (S.count !== SKY.count) field();           // säädin muutti tähtien määrää
 
   for (const d of S.domes) {
     const pad = api.pads.find(p => p.id === d.id);
@@ -796,6 +807,7 @@ function dome(ctx, pad, d) {
 }
 
 function back(ctx) {
+  panelCheck();                                 // säädin voi liikkua myös tauolla
   sky(ctx);                                     // lepäävät tähdet ovat taustaa
   farForest(ctx);
   cave(ctx);
