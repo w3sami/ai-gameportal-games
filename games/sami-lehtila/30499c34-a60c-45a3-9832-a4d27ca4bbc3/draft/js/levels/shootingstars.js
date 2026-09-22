@@ -261,8 +261,18 @@ let seed = 20260922;
 const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
 const between = (a, b) => a + rnd() * (b - a);
 
+/* Kupolisuoja on tallella vaikka **tässä kentässä sitä ei käytetä**: alustat
+   ovat oksan alla, ja kaksi suojaa samaan paikkaan on yksi liikaa. Koodi jää
+   siksi, että se on valmis mekaniikka seuraavalle kentälle jossa alusta on
+   avoimen taivaan alla — kupoli nousee laskun hetkellä, syö tähden ennen kuin
+   peli ehtii laskea törmäyksen (kentän update ajetaan ennen fysiikkaa) ja
+   katoaa kun taksi irtoaa. **Päälle se menee lisäämällä alustan id tähän.**
+   Sami 23.9.2026: *"säilytetään suoja vaikka ei käytetä tässä levelissä."* */
+const DOME_PADS = [];
+
 const S = {
   stars: [], bits: [], spawn: 0, walls: null, count: 0, gscale: 1, wasDead: false,
+  domes: DOME_PADS.map(id => ({ id, a: 0 })),
 };
 
 function field() {
@@ -336,6 +346,8 @@ function launch() {
   s.vx = Math.sin(a) * s.v;
   s.vy = Math.cos(a) * s.v;
 }
+
+const domeR = (pad, d) => pad.w * 0.62 * d.a;
 
 /* Alustalla suojaa oksa eikä kupoli. Kupoli oli 22.9.2026 nurmikon alustojen
    suoja, ja se poistui samana päivänä kun alustat siirtyivät oksien alle:
@@ -453,6 +465,19 @@ function update(dt, api) {
     if (s.cy - s.r > H || s.cx + s.r < 0 || s.cx - s.r > W) { home(s); continue; }
 
     let done = false;
+    for (const d of S.domes) {                  // kupoli ensin: se on suoja
+      if (d.a < 0.25) continue;
+      const pad = api.pads.find(p => p.id === d.id);
+      if (!pad) continue;
+      const r = domeR(pad, d), cx = pad.x + pad.w / 2, cy = pad.y;
+      if (s.cy > cy) continue;
+      const dx = s.cx - cx, dy = s.cy - cy;
+      if (dx * dx + dy * dy < (r + s.r * 0.5) * (r + s.r * 0.5)) {
+        burst(s, 14); home(s); done = true; break;
+      }
+    }
+    if (done) continue;
+
     for (const r of SOLID) {
       if (!hit(s.box, r)) continue;
       burst(s, 10); home(s); done = true; break;
@@ -486,6 +511,7 @@ function init(api) {
   S.walls = api.walls;
   S.bits.length = 0;
   S.spawn = SKY.grace;
+  for (const d of S.domes) d.a = 0;
   for (const s of S.stars) {
     s.state = 'sky'; s.t = 0; s.v = 0; s.vx = 0; s.vy = 0; s.spin = 0;
     s.cx = s.hx; s.cy = s.hy;
@@ -782,6 +808,38 @@ function bits(ctx) {
   ctx.restore();
 }
 
+/* Kupoli: puolipallo alustan päällä. Kaari suojataan Math.maxilla, koska
+   kutistuvan kupolin negatiivinen säde ei ole canvasilla virhearvo vaan
+   poikkeus — se pysäytti aikanaan koko piirtosilmukan alustalta lähdettäessä.
+   Ks. README, "Kutistuva muoto on piirtosilmukan tappaja". */
+function dome(ctx, pad, d) {
+  const r = domeR(pad, d);
+  if (r < 4) return;
+  const cx = pad.x + pad.w / 2, cy = pad.y;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx - r, cy);
+  ctx.arc(cx, cy, r, Math.PI, 0);
+  ctx.closePath();
+
+  const g = ctx.createLinearGradient(cx - r * 0.6, cy - r, cx + r * 0.7, cy);
+  g.addColorStop(0, fade('#9ad8ff', 0.20 * d.a));
+  g.addColorStop(0.5, fade('#6fe3ff', 0.09 * d.a));
+  g.addColorStop(1, fade('#274a6a', 0.22 * d.a));
+  ctx.fillStyle = g;
+  ctx.fill();
+
+  ctx.strokeStyle = fade('#9ad8ff', 0.55 * d.a);
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.strokeStyle = fade('#d8f2ff', 0.5 * d.a);
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, r - 5), Math.PI * 1.08, Math.PI * 1.34); ctx.stroke();
+  ctx.restore();
+}
+
 function back(ctx) {
   panelCheck();                                 // säädin voi liikkua myös tauolla
   sky(ctx);                                     // lepäävät tähdet ovat taustaa
@@ -792,6 +850,10 @@ function back(ctx) {
 }
 
 function front(ctx, api) {
+  for (const d of S.domes) {
+    const pad = api.pads.find(p => p.id === d.id);
+    if (pad && d.a > 0.01) dome(ctx, pad, d);
+  }
   bits(ctx);
   for (const s of S.stars) {
     if (s.state === 'fall' || s.state === 'calm') starShape(ctx, s, 1, true);
