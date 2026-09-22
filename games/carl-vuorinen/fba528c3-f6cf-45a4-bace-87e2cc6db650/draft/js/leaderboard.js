@@ -12,11 +12,20 @@ const BOARD = 'fastest-pilots', SBOARD = 'longest-streak';
 const LBKEY = 'thruster-lb-v1', SKKEY = 'thruster-lbstreak-v1';
 const MINSTREAK = 3;                                          // one or two levels is not a streak worth a row
 
+// A board sorts on `score` and on nothing else, so the tie-break has to live inside that one integer: the streak in
+// the high part, the total time subtracted from the low part so that quicker is larger. SCAP is the time ceiling in
+// milliseconds — a streak slower than this shares the floor of its own tier, which at nearly three hours is not a
+// case anybody will meet. Changing SCAP renumbers every row, so it does not change; the readable values travel in
+// `data` beside it, and the decode below is only there for a row posted before that was true.
+const SCAP = 10000000;
+const packStreak = (n, ms) => n*SCAP - Math.min(Math.max(ms|0, 0), SCAP-1);
+const unpackStreak = score => { const n = Math.ceil(score/SCAP); return {n, ms: n*SCAP - score}; };
+
 let mine = {};                                                // level -> {ms, id}: the row this browser owns
 try { mine = JSON.parse(localStorage.getItem(LBKEY)) || {}; } catch (e) {}
 const remember = () => { try { localStorage.setItem(LBKEY, JSON.stringify(mine)); } catch (e) {} };
 
-let mineSk = null;                                            // {n, id}: the streak row this browser owns
+let mineSk = null;                                            // {n, ms, id}: the streak row this browser owns
 try { mineSk = JSON.parse(localStorage.getItem(SKKEY)) || null; } catch (e) {}
 const rememberSk = () => { try { localStorage.setItem(SKKEY, JSON.stringify(mineSk)); } catch (e) {} };
 
@@ -101,7 +110,7 @@ async function timePanel(host){
   p.pending = run && (!mine[lv] || run < mine[lv].ms) ? run : 0;
   p.label = 'Post my time';
   p.idle = 'Land on the green pad to put a time up here.';
-  p.post = (n, status) => send(lv, n, status);
+  p.post = (v, status) => send(lv, v, status);
   p.redraw = () => draw(lv, p.body, p.sub, title);
   PANELS.add(p);
   if (p.pending && getName()){ const n = p.pending; p.pending = 0; await send(lv, n, p.status); }
@@ -168,30 +177,33 @@ function raceButton(lv, entry){
 }
 
 // ---- Longest streaks, one number for the whole game ----
-// There is no ghost to carry and nothing to check it against: a streak is a claim about a sequence of runs, and the
-// board is taking the browser's word for it. Moderation is the backstop, as it is for everything else here.
+// Two pilots who both got eleven levels deep are not level, so the total time of the runs that built the streak
+// breaks the tie — packed into the score, since that is the only thing the board will sort on.
+//
+// There is no ghost to carry and nothing to check any of it against: a streak is a claim about a sequence of runs,
+// and the board is taking the browser's word for it. Moderation is the backstop, as it is for everything else here.
 async function streakPanel(host){
-  const run = +(host.dataset.lbStreak || 0);
+  const n = +(host.dataset.lbStreak || 0), ms = +(host.dataset.lbStreakMs || 0);
   const p = shell(host, 'Longest streaks', 'Levels in a row, clean');
-  p.pending = run >= MINSTREAK && (!mineSk || run > mineSk.n) ? run : 0;
+  p.pending = n >= MINSTREAK && (!mineSk || n > mineSk.n || (n === mineSk.n && ms < mineSk.ms)) ? {n, ms} : 0;
   p.label = 'Post my streak';
   p.idle = `Clear the first ${MINSTREAK} levels in a row, without crashing, to put a streak up here.`;
-  p.post = (n, status) => sendStreak(n, status);
+  p.post = (v, status) => sendStreak(v.n, v.ms, status);
   p.redraw = () => drawStreak(p.body, p.sub);
   PANELS.add(p);
-  if (p.pending && getName()){ const n = p.pending; p.pending = 0; await sendStreak(n, p.status); }
+  if (p.pending && getName()){ const v = p.pending; p.pending = 0; await sendStreak(v.n, v.ms, p.status); }
   await p.redraw();
   controls(p);
 }
 
-async function sendStreak(n, status){
+async function sendStreak(n, ms, status){
   status.className = 'lb-note';
   status.textContent = 'Posting your streak…';
-  const r = await submit({score: n, board: SBOARD});
+  const r = await submit({score: packStreak(n, ms), board: SBOARD, data: {v:1, n, ms}});
   if (r.kept){
-    mineSk = {n, id: r.entry.id}; rememberSk();
+    mineSk = {n, ms, id: r.entry.id}; rememberSk();
     status.className = 'lb-note good';
-    status.textContent = r.rank === 1 ? `Longest streak in the world, ${n} levels.` : `Posted, #${r.rank}.`;
+    status.textContent = r.rank === 1 ? `Longest streak in the world, ${n} levels in ${clock(ms)}.` : `Posted, #${r.rank}.`;
   } else {
     status.textContent = SNOTE[r.reason] || SNOTE.server;
   }
@@ -206,10 +218,12 @@ async function drawStreak(body, sub){
   sub.textContent = `${page.total} ${page.total === 1 ? 'streak' : 'streaks'}`;
   const list = el('ol', 'lbrows');
   for (const e of page.entries){
+    const v = e.data && e.data.v === 1 && typeof e.data.n === 'number' ? e.data : unpackStreak(e.score);
     const row = el('li', `lbrow${e.rank <= 3 ? ' top' : ''}${e.id === highlight ? ' me' : ''}`);
-    row.append(el('span', 'r', e.rank), el('span', 'n', e.name));
+    row.append(el('span', 'r', e.rank), el('span', 'n', e.name), el('span', 'tm', clock(v.ms)));
     const t = el('span', 't st');
-    t.innerHTML = CROWN; t.append(String(e.score));
+    t.innerHTML = CROWN; t.append(String(v.n));
+    t.title = `${v.n} levels in a row, ${clock(v.ms)} in total`;
     row.append(t);
     list.append(row);
   }
@@ -262,8 +276,8 @@ function form(p){
 
 // There is a name now, so whatever this panel was holding can go up.
 async function apply(p){
-  const n = p.pending; p.pending = 0;
-  if (n){ await p.post(n, p.status); await p.redraw(); }
+  const v = p.pending; p.pending = 0;
+  if (v){ await p.post(v, p.status); await p.redraw(); }
   controls(p);
 }
 
