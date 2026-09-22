@@ -373,13 +373,28 @@ function bird(ctx, f, x, y, t) {
   ctx.stroke();
 
   /* Kurjella kaula suorana edessä ja jalat perässä — juuri se erottaa kurjen
-     haikarasta ja lokista, ja se näkyy siluetissa vielä silloinkin kun siivet
-     eivät. Albatrossilla runko on lyhyt tönkkö. */
-  const nose = f.kind === 'crane' ? 13 : 8, tail = f.kind === 'crane' ? 11 : 7;
-  ctx.beginPath();
-  ctx.moveTo(x - f.dir * tail * s, y + 1.5 * s);
-  ctx.lineTo(x + f.dir * nose * s, y - 1 * s);
-  ctx.stroke();
+     haikarasta ja lokista — ja niiden välissä vartalo omana paksumpana
+     vetonaan. Sami ajoi ja pyysi kurjelle bodyä, ja syy näkyy heti: yhtenä
+     ohuena viivana lintu on risti eikä lintu. Kaari ja räpytys kertovat
+     lajin, massan kertoo vartalo. Albatrossilla runko on yhä lyhyt tönkkö —
+     se on liitäjä, ja pitkät siivet ovat sen koko silhuetti. */
+  if (f.kind === 'crane') {
+    ctx.lineWidth = 4.8 * s;                   // vartalo: pyöreät päät = kapseli
+    ctx.beginPath();
+    ctx.moveTo(x - f.dir * 5 * s, y + 1 * s);
+    ctx.lineTo(x + f.dir * 4 * s, y - 0.4 * s);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, 1.7 * s);      // kaula eteen, jalat taakse
+    ctx.beginPath();
+    ctx.moveTo(x - f.dir * 13 * s, y + 2 * s);
+    ctx.lineTo(x + f.dir * 15 * s, y - 1.4 * s);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x - f.dir * 7 * s, y + 1.5 * s);
+    ctx.lineTo(x + f.dir * 8 * s, y - 1 * s);
+    ctx.stroke();
+  }
 }
 
 /* -------------------------------------------------------------------- lyhty
