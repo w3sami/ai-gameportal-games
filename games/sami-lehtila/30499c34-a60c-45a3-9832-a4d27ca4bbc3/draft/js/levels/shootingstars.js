@@ -521,16 +521,6 @@ function ground(ctx, r) {
   ctx.fillStyle = 'rgba(0,0,0,.35)';
   ctx.fillRect(r.x, r.y + r.h - 3, r.w, 3);
 
-  ctx.save();                                   // tummempia laikkuja sisään
-  ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
-  ctx.fillStyle = 'rgba(12,32,18,.3)';
-  for (let x = r.x + 16; x < r.x + r.w; x += 54) {
-    ctx.beginPath();
-    ctx.ellipse(x, r.y + r.h * 0.62 + ((x * 7) % 9), 22, 7, 0, 0, 6.3);
-    ctx.fill();
-  }
-  ctx.restore();
-
   ctx.fillStyle = 'rgba(86,150,100,.5)';        // ruohotupsut pinnalle
   for (let x = r.x + 3; x < r.x + r.w - 3; x += 8) {
     const h = 4 + ((x * 17) % 6);
@@ -660,29 +650,35 @@ function farForest(ctx) {
   ctx.fillRect(0, GRASS.y - 150, W, 150);
 }
 
-/* Kuilun suu on reikä maassa, ja reiästä näkyy luola. Se maalataan alakerran
-   omalla värillä eikä taivaalla: ilman tätä kuilusta paistoi sama yötaivas
-   kuin ylhäältä. Ensin tässä oli koko leveyden liuku, mutta se vain sotki
-   maapalan reunat — Sami 22.9.2026: *"sivureiät vaan huononi"*. Nyt sävy on
-   vain siellä missä reikä on. */
-function shafts(ctx) {
-  for (const [x0, x1] of [[SHAFT_L.x0, SHAFT_L.x1], [SHAFT_R.x0, SHAFT_R.x1]]) {
-    const g = ctx.createLinearGradient(0, GRASS.y - 6, 0, CAVE_TOP);
-    g.addColorStop(0, '#0a1120');
-    g.addColorStop(1, '#111a2c');
-    ctx.fillStyle = g;
-    ctx.fillRect(x0, GRASS.y - 6, x1 - x0, CAVE_TOP - GRASS.y + 6);
-    ctx.fillStyle = 'rgba(0,0,0,.35)';          // varjo suun reunoilla
-    ctx.fillRect(x0, GRASS.y - 6, 5, CAVE_TOP - GRASS.y + 6);
-    ctx.fillRect(x1 - 5, GRASS.y - 6, 5, CAVE_TOP - GRASS.y + 6);
-  }
+/* **Yksi tumma tausta kaukametsästä alaspäin**, ei erillistä väriä luolalle
+   eikä kuilun suulle. Kuilu on reikä vihreässä maassa, ja reiästä näkyy sama
+   tumma kuin kaiken muunkin takana — silloin siihen ei tarvita sävytystä
+   eikä varjoa, ja se lakkaa näyttämästä omalta esineeltään. Tie tähän kulki
+   kahden huonomman kautta: ensin koko leveyden liuku (sotki maapalan reunat),
+   sitten kuilun suu omalla värillään (harmaa palkki maapalan alla). Sami
+   22.9.2026. */
+function backdrop(ctx) {
+  const y0 = GRASS.y - 200;
+  const g = ctx.createLinearGradient(0, y0, 0, GRASS.y - 30);
+  g.addColorStop(0, 'rgba(8,14,26,0)');
+  g.addColorStop(1, '#080e1a');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, y0, W, GRASS.y - 30 - y0);
+  ctx.fillStyle = '#080e1a';
+  ctx.fillRect(0, GRASS.y - 30, W, H - (GRASS.y - 30));
 }
 
 /* ------------------------------------------------------------------- luola */
 
-const DRIP = [];                                // taustan tippukivet, ei törmäystä
-for (let i = 0; i < 16; i++) {
-  DRIP.push({ x: 24 + ((i * 137) % (W - 60)), h: 26 + ((i * 53) % 54), w: 10 + ((i * 31) % 14) });
+/* Taustan tippukivet, ei törmäystä. **Vain vihreän maapalan alta ja siitäkin
+   keskemmältä**: kuilujen suulla ne näyttivät siltä kuin reikä olisi täynnä
+   piikkejä. Sami 22.9.2026. */
+const DRIP = [];
+for (let i = 0; i < 13; i++) {
+  DRIP.push({
+    x: GRASS.x + 44 + ((i * 137) % (GRASS.w - 120)),
+    h: 26 + ((i * 53) % 54), w: 10 + ((i * 31) % 14),
+  });
 }
 const BATS = [];
 for (let i = 0; i < 5; i++) {
@@ -702,12 +698,6 @@ function tick() {
 }
 
 function cave(ctx) {
-  const g = ctx.createLinearGradient(0, CAVE_TOP, 0, CAVE_BOT);
-  g.addColorStop(0, '#111a2c');
-  g.addColorStop(1, '#080d18');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, CAVE_TOP, W, CAVE_BOT - CAVE_TOP);
-
   /* Taustan tippukivet ovat perällä: yksi vaimea sävy, ei reunaa, ei kiiltoa.
      Jos nämä alkavat näyttää esteiltä, ne ovat liian kirkkaita — ei niin että
      niihin pitäisi lisätä törmäys. */
@@ -727,13 +717,6 @@ function cave(ctx) {
         Math.sin(t * 9 + b.phase * 6) * 0.5 + 0.5, Math.cos(a) < 0 ? -1 : 1);
   }
 
-  /* Lampi luolan pohjalla: se antaa alustoille pinnan johon ne heijastuvat,
-     ja se on ainoa kirkas asia perällä — siksi se on matalalla ja himmeä. */
-  const p = ctx.createLinearGradient(0, CAVE_BOT - 26, 0, CAVE_BOT);
-  p.addColorStop(0, 'rgba(70,120,170,.05)');
-  p.addColorStop(1, 'rgba(90,150,210,.16)');
-  ctx.fillStyle = p;
-  ctx.fillRect(16, CAVE_BOT - 26, W - 32, 26);
 }
 
 function bat(ctx, x, y, s, flap, dir) {
