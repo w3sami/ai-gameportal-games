@@ -877,7 +877,10 @@ function nextAlien() {
   return lastKind;
 }
 
-const api = () => ({ P, taxi, pads: PADS, walls: WALLS, t: runT, rand, say, level: levelIndex });
+/* dead on mukana, jotta kenttä osaa sammuttaa oman suojansa romun päältä:
+   crash ei nollaa taxi.landedia, joten ilman tätä Shooting Starsin kupoli jäi
+   hohtamaan tyhjän alustan päälle koko kuolinanimaation ajan. */
+const api = () => ({ P, taxi, pads: PADS, walls: WALLS, t: runT, rand, say, level: levelIndex, dead });
 
 /** Kentän tilanne nollataan vain tässä — ei koskaan kolarissa. */
 function loadLevel(i) {
@@ -2032,6 +2035,13 @@ function startCut(nextIndex) {
 
 /* ------------------------------------------------------------------ piirto */
 function drawWall(r) {
+  /* Kenttä saa piirtää seinänsä itse (hide). Sitä tarvitsee kenttä jonka
+     seinä ei ole laatikon näköinen — Shooting Starsissa kuusen latvus ja
+     putoava tähti ovat molemmat seiniä, ja kumpikin piirretään kentässä
+     täsmälleen sen laatikon muotoisena joka on myös törmäys. Sääntö on yhä
+     se, että umpinaiselta näyttävä on umpinaista: hide siirtää piirron, ei
+     poista sitä. */
+  if (r.hide) return;
   ctx.fillStyle = '#1b2440';
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = 'rgba(120,160,255,.22)';
