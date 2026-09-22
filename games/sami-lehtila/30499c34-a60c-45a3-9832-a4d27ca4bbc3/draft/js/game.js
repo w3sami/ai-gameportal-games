@@ -1142,8 +1142,28 @@ const gamepad = createGamepad({
    kutsun erotus. Kutsutaan myös korttiruuduissa, jotta vuoron saa käyntiin
    ohjaimella — ja jotta ohjain ylipäätään tulee näkyviin, sillä selain
    paljastaa sen vasta kun jotain on painettu. */
+/* Koko ruutu molemmista liipasimista yhtä aikaa: kumpaakaan ei käytetä
+   lentämiseen, joten vahingossa sitä ei paina.
+ *
+ * Selain vaatii kokoruudulle oikean käyttäjän eleen, eikä ohjaimen nappi ole
+ * sellainen — ei suoraan eikä silattuna näppäimeksi, koska synteettinen
+ * tapahtuma on isTrusted: false. **Ele on kuitenkin voimassa hetken sen
+ * jälkeen kun pelaaja on klikannut tai painanut näppäintä**, ja siinä
+ * ikkunassa tämä menee läpi. Siksi tämä on tässä: se on pelaajalle ilmainen
+ * silloin kun se toimii, eikä tee mitään silloin kun ei.
+ *
+ * Ulos pääsee aina, koska poistuminen ei vaadi elettä. */
+let fullArmed = false;
+
+function padFullscreen() {
+  const both = gamepad.held('LT') && gamepad.held('RT');
+  if (both && !fullArmed) toggleFullscreen();
+  fullArmed = both;
+}
+
 function padInput() {
   gamepad.poll();
+  padFullscreen();
 
   if (menuOpen()) { padMenu(); return; }
 
