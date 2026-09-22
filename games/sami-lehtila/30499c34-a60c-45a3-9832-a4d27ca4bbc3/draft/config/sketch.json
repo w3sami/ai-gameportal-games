@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790107081062,
+ "stamp": 1790107165865,
  "scenes": {
   "Shooting Stars": {
    "paint": [
@@ -24,7 +24,7 @@
     },
     {
      "kind": "rect",
-     "label": "pois",
+     "label": "huomio",
      "text": "",
      "x": 436,
      "y": 815,
@@ -48,6 +48,15 @@
      "y": 777,
      "w": 82,
      "h": 44
+    },
+    {
+     "kind": "rect",
+     "label": "huomio",
+     "text": "kuusimetsä, saako halvalla ison kuusen mudon, ja koko muuten hyvä, muuta korkeampia, 2.5x",
+     "x": 16,
+     "y": 664,
+     "w": 686,
+     "h": 117
     }
    ],
    "moves": []
