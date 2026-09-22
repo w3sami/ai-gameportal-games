@@ -618,7 +618,9 @@ export const shootingstars = {
   name: 'Shooting Stars',
   glow: '#ffe6a8',
   sky: ['#060a18', '#0d1630', '#16233f', '#1b2b33'],
-  sun: { x: 596, y: 168, r: 30, color: '#cfe0ff' },   // kuu
+  /* Kuu on tähtikentän alapuolella eikä sen seassa: ylhäällä se olisi yksi
+     kirkas kiekko tähtien joukossa, ja tähtien pitää erottua. */
+  sun: { x: 622, y: 356, r: 34, color: '#cfe0ff' },
   /* Luukku on siirretty vasemmalle: keskimmäisen kuusen latva olisi muuten
      ollut suoraan sisääntulon alla. Kenttä saa oman gaten, peli lukee sen. */
   gate: { x: 150, w: 120 },
