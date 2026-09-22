@@ -184,7 +184,7 @@ const PUFFS = [
    `dens` oletus on 2 eli kaksinkertainen entiseen, `vis` ja `wind` ovat
    kertoimia joilla oletus on 1 — ne ovat säätimiä siksi että kumpikin on
    maku, ja maku katsotaan ruudulta eikä lasketa täällä. */
-const AIR = { dens: 2, vis: 1, wind: 1 };
+const AIR = { dens: 2, vis: 1, wind: 1, birds: 1 };
 const CLOUD_N = 8;                             // dens 1 = entinen määrä
 const POOL = CLOUD_N * 3;                      // dens 3 = säätimen yläraja
 
@@ -259,16 +259,121 @@ function clouds(ctx) {
    jälkeen, ja pysähtynyt pilvi näyttäisi rikkinäiseltä. Lyhdyt sen sijaan
    lukevat runT:n, koska ne kertovat missä alusta on — mittari ei saa käydä
    silloin kun se mitä se näyttää seisoo. */
-let animT = 0, animLast = 0, drift = 0;
+let animT = 0, animLast = 0, animDt = 0, drift = 0;
 function animStep() {
   const now = performance.now() / 1000;
-  const dt = animLast ? Math.min(0.05, now - animLast) : 0;
+  animDt = animLast ? Math.min(0.05, now - animLast) : 0;
   animLast = now;
-  animT += dt;
+  animT += animDt;
   /* Tuuli on oma matkalukunsa eikä kello kertaa kerrointa: jälkimmäinen
      siirtäisi koko taivaan sillä hetkellä kun säädintä liikutetaan. */
-  drift += dt * AIR.wind;
+  drift += animDt * AIR.wind;
   return animT;
+}
+
+/* ------------------------------------------------------------------ linnut
+
+   Yksi parvi kerrallaan ja pitkät välit: albatrossi yksin liitäen, kurkia
+   kolmesta kuuteen kiilassa. Lintu on tässä sama asia kuin pilven vauhtiero,
+   eli syvyyttä — mutta se on myös ainoa asia taivaalla joka elää omaa
+   elämäänsä, ja siksi niitä on harvoin. Aina näkyvä lintu olisi koriste;
+   välillä ohi lipuva on tapahtuma.
+
+   Linnut piirretään pilvien alle. Pilven läpi näkyvä lintu on kauempana kuin
+   pilvi, ja se on koko juju: kentässä ei ole yhtään muuta merkkiä siitä että
+   taivaalla olisi etäisyyksiä.
+
+   Siluetti on viiva eikä täyttö — kaukana oleva lintu on ohut — ja väri on
+   sitä tummempi mitä alempana lintu on, koska taivas vaalenee alaspäin.
+   Siksi myös kaistat: ylimmässä kolmanneksessa taivas on niin tumma ettei
+   siluetti erottuisi siitä lainkaan.
+
+   Lintu ei ole este eikä osu mihinkään. Sama sääntö kuin lyhdyssä, ja tässä
+   se on helppo: lintu on pieni, liikkuu vaakaan ja räpyttelee. Mikään
+   kentässä johon voi osua ei tee yhtäkään noista. */
+const FLOCK = {
+  /* span  kärkiväli, kink  siiven kaari, hz  räpytystä sekunnissa,
+     sweep kärjen nousu, sp  px/s, band  korkeuskaista, n  parven koko. */
+  albatross: { span: 66, kink: 2.5, hz: 0.20, sweep: 0.30, sp: 34, band: [250, 520], n: [1, 1] },
+  crane: { span: 34, kink: 9, hz: 1.70, sweep: 1.00, sp: 52, band: [300, 660], n: [3, 6] },
+};
+
+const birdRnd = lcg(20260921);
+let flight = null, nextFlight = 5;
+
+/** Yksi ylilento: laji, suunta, korkeus, koko ja parven koko kerralla. */
+function flightMake() {
+  const kind = birdRnd() < 0.45 ? 'albatross' : 'crane';
+  const k = FLOCK[kind];
+  const s = 0.72 + birdRnd() * 0.50;
+  const dir = birdRnd() < 0.5 ? 1 : -1;
+  return {
+    kind, k, dir, s,
+    n: k.n[0] + ((birdRnd() * (k.n[1] - k.n[0] + 1)) | 0),
+    y: k.band[0] + birdRnd() * (k.band[1] - k.band[0]),
+    x: dir > 0 ? -120 * s : W + 120 * s,
+    sp: k.sp * s,
+    t: birdRnd() * 10,
+    bob: 5 + birdRnd() * 9,                      // hidas nousu ja lasku matkalla
+    bobHz: 0.10 + birdRnd() * 0.08,
+  };
+}
+
+function birds(ctx) {
+  if (AIR.birds <= 0) { flight = null; nextFlight = animT + 6; return; }
+  if (!flight && animT >= nextFlight) flight = flightMake();
+  if (!flight) return;
+
+  const f = flight;
+  f.t += animDt;
+  f.x += f.dir * f.sp * animDt;
+  if (f.dir > 0 ? f.x > W + 160 * f.s : f.x < -160 * f.s) {
+    flight = null;
+    /* Väli on satunnainen ja pitkä, ja säädin jakaa sen: lintuja × 2 on
+       puolet lyhyempi väli eikä kaksi lintua rinnakkain. */
+    nextFlight = animT + (24 + birdRnd() * 36) / AIR.birds;
+    return;
+  }
+
+  const y = f.y + Math.sin(f.t * f.bobHz * TAU) * f.bob;
+  ctx.save();
+  ctx.strokeStyle = `rgba(22,34,58,${0.24 + (y / H) * 0.30})`;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < f.n; i++) {
+    /* Kiila: joka toinen ylös ja joka toinen alas, kumpikin rivi askeleen
+       verran jäljessä. Räpytys laahaa perässä saman askeleen, jolloin parven
+       läpi kulkee aalto — se on se mikä tekee kiilasta parven eikä kuvion. */
+    const rank = (i + 1) >> 1, side = i % 2 ? 1 : -1;
+    bird(ctx, f, f.x - f.dir * rank * 26 * f.s, y + side * rank * 13 * f.s, f.t - rank * 0.16);
+  }
+  ctx.restore();
+}
+
+/** Yksi lintu: kaksi siipeä kaarena ja runko viivana nokasta jalkoihin. */
+function bird(ctx, f, x, y, t) {
+  const k = f.k, s = f.s, span = k.span * s;
+  const lift = Math.sin(t * k.hz * TAU) * span * 0.20 * k.sweep;
+  ctx.lineWidth = Math.max(1.1, 2.1 * s);
+
+  ctx.beginPath();
+  for (const w of [-1, 1]) {
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(
+      x + w * span * 0.28, y - k.kink * s - lift * 0.6,
+      x + w * span * 0.5, y - lift,
+    );
+  }
+  ctx.stroke();
+
+  /* Kurjella kaula suorana edessä ja jalat perässä — juuri se erottaa kurjen
+     haikarasta ja lokista, ja se näkyy siluetissa vielä silloinkin kun siivet
+     eivät. Albatrossilla runko on lyhyt tönkkö. */
+  const nose = f.kind === 'crane' ? 13 : 8, tail = f.kind === 'crane' ? 11 : 7;
+  ctx.beginPath();
+  ctx.moveTo(x - f.dir * tail * s, y + 1.5 * s);
+  ctx.lineTo(x + f.dir * nose * s, y - 1 * s);
+  ctx.stroke();
 }
 
 /* -------------------------------------------------------------------- lyhty
@@ -447,6 +552,7 @@ function lanternsBack(ctx, api) {
   const time = animStep();
   ctx.save();
   sky(ctx);
+  birds(ctx);
   clouds(ctx);
   vignette(ctx);
   for (const p of api.pads) lantern(ctx, p, api.t, time);
@@ -550,11 +656,12 @@ export const lanterns = {
          "hieman lisää", ja hieman katsotaan ruudulta. Tuulen kerroin on
          mukana samasta syystä — oletus on entistä hitaampi, ja jos se on
          liian hidas, sen näkee nopeammin säätimestä kuin täältä. */
-      name: 'pilvet', obj: AIR, open: false,
+      name: 'pilvet ja linnut', obj: AIR, open: false,
       sliders: [
         { key: 'dens', label: 'määrä ×', min: 0.5, max: 3, step: 0.25 },
         { key: 'vis', label: 'näkyvyys ×', min: 0.3, max: 2.5, step: 0.05 },
         { key: 'wind', label: 'tuuli ×', min: 0.2, max: 2.5, step: 0.05 },
+        { key: 'birds', label: 'lintuja × (0 = ei yhtään)', min: 0, max: 3, step: 0.25 },
       ],
     },
     { name: 'kentän kertoimet', open: false, mul: ['grav', 'thrust', 'burn', 'landVY'] },
