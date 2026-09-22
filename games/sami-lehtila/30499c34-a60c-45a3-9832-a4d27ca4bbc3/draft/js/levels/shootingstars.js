@@ -71,20 +71,22 @@ const SKIRTS = [
   { y0: 482, y1: 610, hw0: 46, hw1: 100, drop: 20 },
   { y0: 572, y1: 700, hw0: 60, hw1: 116, drop: 22 },
 ];
-const SK_POW = 1.35;                 // kyljen kaarevuus
-const SK_STEP = 12;                  // törmäysportaan leveys
-const TRUNK = 26;
+/* Kuusen muoto on säätimissä, ja siksi nämä ovat oliossa: säädin kirjoittaa
+   avaimeen, ja `shape()` lataa luvut uudestaan törmäyslaatikoihin. */
+const SK = { pow: 1.35, trunk: 26 };
+const SK_STEPS = 22;                 // portaita helmaa kohti, kiinteä määrä
 
 /* Helman reunat paikan x funktiona, mitattuna rungon keskeltä. Sama kaava
    sekä piirtoon että törmäykseen, ja portaat ladotaan käyrän sisään: törmäys
    on hitusen piirrettyä pienempi, eli uloin neulanen ei tapa. */
 const skTop = (s, x) => {
+  const span = Math.max(1, s.hw1 - s.hw0);
   const t = Math.abs(x) <= s.hw0 ? 0
-    : Math.pow((Math.abs(x) - s.hw0) / (s.hw1 - s.hw0), 1 / SK_POW);
+    : Math.pow(Math.min(1, (Math.abs(x) - s.hw0) / span), 1 / Math.max(0.2, SK.pow));
   return s.y0 + (s.y1 - s.y0) * t;
 };
 const skBot = (s, x) => {
-  const u = Math.min(1, Math.abs(x) / s.hw1);
+  const u = Math.min(1, Math.abs(x) / Math.max(1, s.hw1));
   return s.y1 - s.drop * (1 - u * u);
 };
 
@@ -93,7 +95,10 @@ const PAD_H = 18;
 /* ------------------------------------------------------------------ seinät */
 
 const SOLID = [];
-const add = r => { SOLID.push(Object.assign({ hide: true }, r)); return r; };
+/* add palauttaa saman olion jonka se työntää listaan eikä kopiota: kuusen
+   laatikoita kirjoitetaan jälkikäteen (shape), ja kopio olisi jäänyt
+   ikuisesti nollan kokoiseksi. */
+const add = r => { r.hide = true; SOLID.push(r); return r; };
 
 const TURF = add({ x: GRASS.x, y: GRASS.y, w: GRASS.w, h: GRASS.h, rock: true, turf: true });
 
@@ -105,20 +110,50 @@ const TURF = add({ x: GRASS.x, y: GRASS.y, w: GRASS.w, h: GRASS.h, rock: true, t
 /* Latvus on pino laatikoita, ja se on myös se muoto joka piirretään. Porras on
    tahallaan näkyvä: kuusi jonka siluetti on pehmeämpi kuin sen törmäys olisi
    juuri se epäselvyys jota README kieltää. */
-{
+/* Laatikot varataan kerran ja ne pysyvät samoina olioina koko pelin ajan.
+   Se on tässä pakko eikä tyylikysymys: peli kopioi `level.walls`in omaan
+   WALLS-taulukkoonsa kentän latauksessa, joten uudet oliot eivät koskaan
+   päätyisi törmäykseen. Kun säädin muuttaa muotoa, `shape()` kirjoittaa
+   vanhojen laatikoiden sisään — ja leveydeltään nolla laatikko ei osu
+   mihinkään, mikä on se tapa jolla liian ohut porras jää pois. */
+for (const s of SKIRTS) {
+  s.parts = [];
+  for (let i = 0; i < SK_STEPS; i++) s.parts.push(add({ x: 0, y: 0, w: 0, h: 0, tree: true }));
+}
+TREE.stem = add({ x: 0, y: 0, w: 0, h: 0, stem: true });
+
+function shape() {
   for (const s of SKIRTS) {
-    for (let x = -s.hw1; x < s.hw1 - 0.5; x += SK_STEP) {
-      const xa = x, xb = Math.min(s.hw1, x + SK_STEP);
+    for (let i = 0; i < SK_STEPS; i++) {
+      const xa = -s.hw1 + (2 * s.hw1) * (i / SK_STEPS);
+      const xb = -s.hw1 + (2 * s.hw1) * ((i + 1) / SK_STEPS);
       const top = Math.max(skTop(s, xa), skTop(s, xb)) + 1;   // portaan sisin kohta
       const bot = Math.min(skBot(s, xa), skBot(s, xb)) - 1;
-      if (bot - top < 4) continue;
-      add({ x: TREE.cx + xa, y: top, w: xb - xa, h: bot - top, tree: true });
+      const r = s.parts[i];
+      r.x = TREE.cx + xa; r.y = top;
+      r.h = Math.max(0, bot - top);
+      r.w = r.h >= 4 ? xb - xa : 0;
     }
   }
-  TREE.stem = add({
-    x: TREE.cx - TRUNK / 2, y: TREE.bot - 8, w: TRUNK,
-    h: TREE.foot - TREE.bot + 8, stem: true,
-  });
+  const last = SKIRTS[SKIRTS.length - 1];
+  TREE.top = SKIRTS[0].y0;
+  TREE.bot = last.y1;
+  TREE.stem.x = TREE.cx - SK.trunk / 2;
+  TREE.stem.y = last.y1 - 8;
+  TREE.stem.w = SK.trunk;
+  TREE.stem.h = Math.max(0, TREE.foot - last.y1 + 8);
+}
+shape();
+
+/* Säätimen liikahdus näkyy vasta kun luvut luetaan takaisin laatikoihin.
+   Allekirjoitus on halvempi kuin muodon rakentaminen joka ruudulla. */
+let shapeSig = '';
+function shapeCheck() {
+  const sig = SKIRTS.map(s => `${s.y0},${s.y1},${s.hw0},${s.hw1},${s.drop}`).join('|')
+    + `|${SK.pow},${SK.trunk}`;
+  if (sig === shapeSig) return;
+  shapeSig = sig;
+  shape();
 }
 
 /* Luolan tippukivet. Isot ovat samaa kiveä kuin katto ja niissä on törmäys:
@@ -279,6 +314,7 @@ function calm(s) {
 
 function update(dt, api) {
   S.walls = api.walls;
+  shapeCheck();
   if (api.P && isFinite(api.P.grav)) S.gscale = api.P.grav / GRAV_REF;
 
   /* Kuoleman hetkellä taivas hiljenee, ja tauko alkaa vasta kun taksi on taas
@@ -479,15 +515,16 @@ function skirtPath(ctx, s, cx) {
 }
 
 function spruce(ctx, t) {
-  ctx.fillStyle = '#3b2a1b';                    // runko: kapeneva tyvi
+  const tw = SK.trunk / 2;                      // runko: kapeneva tyvi
+  ctx.fillStyle = '#3b2a1b';
   ctx.beginPath();
-  ctx.moveTo(t.cx - 10, t.stem.y);
-  ctx.lineTo(t.cx + 10, t.stem.y);
-  ctx.lineTo(t.cx + 13, t.foot);
-  ctx.lineTo(t.cx - 13, t.foot);
+  ctx.moveTo(t.cx - tw * 0.78, t.stem.y);
+  ctx.lineTo(t.cx + tw * 0.78, t.stem.y);
+  ctx.lineTo(t.cx + tw, t.foot);
+  ctx.lineTo(t.cx - tw, t.foot);
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = 'rgba(150,190,255,.10)';
-  ctx.fillRect(t.cx - 10, t.stem.y, 3, t.foot - t.stem.y);
+  ctx.fillRect(t.cx - tw * 0.78, t.stem.y, 3, t.foot - t.stem.y);
 
   for (let i = SKIRTS.length - 1; i >= 0; i--) {  // alin ensin, ylimmät päälle
     const s = SKIRTS[i];
@@ -779,6 +816,24 @@ export const shootingstars = {
         { key: 'spread', label: 'leviämä', min: 0, max: 60, step: 1 },
       ],
     },
+    /* Kuusen muoto säätimiin, Samin pyynnöstä 22.9.2026. Helma kerrallaan,
+       koska juuri niitä lukuja kentässä siirretään: y0 ja y1 ovat helman ylä-
+       ja alareuna, hw0 ja hw1 sen puolileveys näissä, ja drop se kuinka
+       paljon alareunan keskikohta on kärkiä ylempänä — eli viiksien nuokku. */
+    { name: 'kuusi', obj: SK, open: false, sliders: [
+      { key: 'pow', label: 'kyljen kaarevuus', min: 0.6, max: 3, step: 0.05 },
+      { key: 'trunk', label: 'rungon paksuus', min: 8, max: 60, step: 1 },
+    ] },
+    ...SKIRTS.map((sk, i) => ({
+      name: 'helma ' + (i + 1), obj: sk, open: false,
+      sliders: [
+        { key: 'y0', label: 'yläreuna', min: 260, max: 780, step: 2 },
+        { key: 'y1', label: 'alareuna', min: 260, max: 780, step: 2 },
+        { key: 'hw0', label: 'puolileveys ylhäällä', min: 0, max: 200, step: 2 },
+        { key: 'hw1', label: 'puolileveys kärjessä', min: 6, max: 220, step: 2 },
+        { key: 'drop', label: 'viiksien nuokku', min: 0, max: 70, step: 1 },
+      ],
+    })),
     { name: 'kentän kertoimet', open: false, mul: ['grav', 'thrust', 'landVX'] },
   ],
   init,
