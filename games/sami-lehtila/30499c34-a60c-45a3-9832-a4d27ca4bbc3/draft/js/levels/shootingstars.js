@@ -101,10 +101,10 @@ const SK_STEPS = 22;                 // portaita helmaa kohti, kiinteä määrä
 /* Helman reunat paikan x funktiona, mitattuna rungon keskeltä. Sama kaava
    sekä piirtoon että törmäykseen, ja portaat ladotaan käyrän sisään: törmäys
    on hitusen piirrettyä pienempi, eli uloin neulanen ei tapa. */
-const skTop = (s, x) => {
-  const span = Math.max(1, s.hw1 - s.hw0);
+const skTop = (s, x, pow = SK.pow) => {
+  const span = Math.max(1e-6, s.hw1 - s.hw0);
   const t = Math.abs(x) <= s.hw0 ? 0
-    : Math.pow(Math.min(1, (Math.abs(x) - s.hw0) / span), 1 / Math.max(0.2, SK.pow));
+    : Math.pow(Math.min(1, (Math.abs(x) - s.hw0) / span), 1 / Math.max(0.2, pow));
   return s.y0 + (s.y1 - s.y0) * t;
 };
 const skBot = (s, x) => {
@@ -626,30 +626,39 @@ for (let x = -30; x < W + 50; x += 31) {
 }
 
 /* Helmojen luvut mille tahansa kuuselle samalla kaavalla kuin masterissa. */
-function skirtsFor(top, bot, width, n) {
+function skirtsFor(top, bot, width, n, sh = SK) {
   const out = [], step = (bot - top) / n;
   let prev = 0;
   for (let i = 0; i < n; i++) {
-    const hw1 = Math.max(0.001, width * Math.pow((i + 1) / n, SK.taper));
+    const hw1 = Math.max(0.001, width * Math.pow((i + 1) / n, sh.taper));
     const y1 = top + step * (i + 1);
     out.push({
-      y1, y0: y1 - step * (1 + SK.lap),
-      hw1, hw0: Math.min(hw1 * 0.9, i === 0 ? width * 0.04 : prev * SK.pinch),
-      drop: SK.arc * (bot - top) / 400,
+      y1, y0: y1 - step * (1 + sh.lap),
+      hw1, hw0: Math.min(hw1 * 0.9, i === 0 ? width * 0.04 : prev * sh.pinch),
+      drop: sh.arc * (bot - top) / 400,
     });
     prev = hw1;
   }
   return out;
 }
 
+/* **Kaukametsällä on omat muotoluvut, ei etualan kuusen.** Ne olivat ensin
+   samat, ja se meni rikki heti kun Sami haki isolle kuuselle oman muotonsa:
+   iso `pow` litistää helman yläreunan suoraksi ja pieni `lap` jättää portaat
+   näkyviin, mikä isona lukee kuusena mutta 40 px korkeana pinona laatikoita —
+   metsän tilalle tuli kaupunki. Sami 23.9.2026. Taustalla on siis neljä
+   helmaa, loivempi kylki ja reilumpi lomitus: siluetti jonka tunnistaa
+   kuuseksi silloinkin kun siitä ei erotu mitään muuta. */
+const FAR_SHAPE = { taper: 0.62, lap: 0.34, pinch: 0.55, arc: -22, pow: 1.25 };
+
 let farPath = null;
 function farTreePath() {
   if (farPath) return farPath;
   const p = new Path2D();
-  for (const s of skirtsFor(0, 1, 0.5, 3)) {     // yksikköpuu: leveys 1, korkeus 1
+  for (const s of skirtsFor(0, 1, 0.5, 4, FAR_SHAPE)) {   // yksikköpuu: leveys 1, korkeus 1
     const N = 18;
     p.moveTo(-s.hw1, skBot(s, -s.hw1));
-    for (let i = 0; i <= N; i++) { const x = -s.hw1 + 2 * s.hw1 * (i / N); p.lineTo(x, skTop(s, x)); }
+    for (let i = 0; i <= N; i++) { const x = -s.hw1 + 2 * s.hw1 * (i / N); p.lineTo(x, skTop(s, x, FAR_SHAPE.pow)); }
     for (let i = N; i >= 0; i--) { const x = -s.hw1 + 2 * s.hw1 * (i / N); p.lineTo(x, skBot(s, x)); }
     p.closePath();
   }
