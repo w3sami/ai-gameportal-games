@@ -293,8 +293,14 @@ function animStep() {
    kentässä johon voi osua ei tee yhtäkään noista. */
 const FLOCK = {
   /* span  kärkiväli, kink  siiven kaari, hz  räpytystä sekunnissa,
-     sweep kärjen nousu, sp  px/s, band  korkeuskaista, n  parven koko. */
-  albatross: { span: 66, kink: 2.5, hz: 0.20, sweep: 0.30, sp: 34, band: [250, 520], n: [1, 1] },
+     sweep kärjen nousu, sp  px/s, band  korkeuskaista, n  parven koko.
+
+     Albatrossin kaari oli ensin 2,5 px, mikä on liitävän linnun anatomiaa ja
+     ruudulla väärin: siitä tuli vaakasuora viiva, ja vaakasuora viiva on
+     tässä pelissä alustan muoto. 7 px riittää tekemään siitä linnun eikä
+     tikun, ja liito säilyy silti, koska räpytys on viidesosa kurjen
+     tahdista. */
+  albatross: { span: 66, kink: 7, hz: 0.20, sweep: 0.50, sp: 34, band: [250, 520], n: [1, 1] },
   crane: { span: 34, kink: 9, hz: 1.70, sweep: 1.00, sp: 52, band: [300, 660], n: [3, 6] },
 };
 
