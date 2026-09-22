@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1789939389778,
+ "stamp": 1790106893319,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -30,6 +30,21 @@
   "stick": 2.05
  },
  "levels": {
+  "Sky Lanterns": {
+   "own": {
+    "liike": {
+     "amp": 1,
+     "pace": 1,
+     "warn": 1.15
+    },
+    "pilvet ja linnut": {
+     "dens": 2,
+     "vis": 1,
+     "wind": 1,
+     "birds": 1
+    }
+   }
+  },
   "Stormport": {
    "own": {
     "tuuli": {
@@ -76,6 +91,38 @@
      "open": 0.42,
      "move": 0.6,
      "warn": 1.1
+    }
+   }
+  },
+  "Shooting Stars": {
+   "own": {
+    "tähdet": {
+     "count": 24,
+     "freq": 1.3,
+     "warn": 3,
+     "grace": 6.5,
+     "tilt": 20,
+     "vmin": 260,
+     "vmax": 520,
+     "size": 1,
+     "spin": 1.2
+    },
+    "vana": {
+     "rate": 44,
+     "life": 0.4,
+     "size": 3.4,
+     "spread": 10
+    },
+    "kuusi": {
+     "top": 226,
+     "bot": 648,
+     "width": 178,
+     "taper": 0.8,
+     "lap": 0.1,
+     "pinch": 0.58,
+     "arc": -23,
+     "pow": 1.85,
+     "trunk": 46
     }
    }
   }
