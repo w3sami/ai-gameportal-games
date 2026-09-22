@@ -1025,7 +1025,9 @@ canvas.addEventListener('pointerdown', e => {
   /* Luonnoslehtiö omistaa kankaan niin kauan kuin se on auki: sen kahvat ovat
      nappien päällä eikä teline saa napsahtaa siitä että alustaa siirretään.
      Ratas jää auki, koska säätöpaneeli ja editori ovat eri työkalut. */
-  if (sketch.active && !inBox(p, TUNE_BOX)) return;
+  /* Luonnostyökalun päältä kuunnellaan vain nurkan kahta kuvaketta: kangas on
+     silloin työkalun, mutta asetuksiin ja säätöpaneeliin on päästävä. */
+  if (sketch.active && !inBox(p, TUNE_BOX) && !inBox(p, COG_BOX)) return;
   if (inBox(p, GEAR_BOX)) { toggleGear(); return; }
   if (inBox(p, HORN_BOX)) { honk(); return; }
   if (inBox(p, COG_BOX)) { openMenu(); return; }
