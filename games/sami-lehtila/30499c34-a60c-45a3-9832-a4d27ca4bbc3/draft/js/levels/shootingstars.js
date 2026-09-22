@@ -68,13 +68,10 @@ const add = r => { SOLID.push(Object.assign({ hide: true }, r)); return r; };
 
 const TURF = add({ x: GRASS.x, y: GRASS.y, w: GRASS.w, h: GRASS.h, rock: true, turf: true });
 
-/* Kalliohuulet kuilujen suulla. Nämä ovat kentän tärkein este vaikka eivät ole
-   tiellä: ne ovat se katto jonka takia luolaan ei sada. Huuli ulottuu kuilun
-   yli, jotta reunaa hipova tähti osuu siihen eikä livahda ohi. */
-const LIPS = [
-  add({ x: SHAFT_L.x0, y: 680, w: SHAFT_L.x1 - SHAFT_L.x0 + 18, h: 20, rock: true }),
-  add({ x: SHAFT_R.x0 - 18, y: 680, w: SHAFT_R.x1 - SHAFT_R.x0 + 18, h: 20, rock: true }),
-];
+/* Kuilujen suulla oli 22.9. kalliohuulet kattona, jottei luolaan sada.
+   Sami poisti ne samana päivänä: **ne vaikeuttivat luolaan pääsyä liikaa**,
+   eikä luolan tarvitse olla tähdiltä umpisuojassa. Kuiluun eksyvä tähti on
+   nyt osa kenttää, ei vika. */
 
 /* Latvus on pino laatikoita, ja se on myös se muoto joka piirretään. Porras on
    tahallaan näkyvä: kuusi jonka siluetti on pehmeämpi kuin sen törmäys olisi
@@ -136,7 +133,10 @@ const GRASS_PADS = [1, 2];
    suojaa, suojaa siksi että se on jonkin yläpuolella. Viistoon lentävä tähti
    kiertäisi katon, eikä pelaaja voisi lukea suojaa katsomalla. */
 
-const SKY = { count: 34, freq: 1.4, warn: 0.9, vmin: 260, vmax: 520, size: 1, spin: 1.2 };
+const SKY = {
+  count: 24, freq: 1.4, warn: 3, grace: 7, tilt: 20,
+  vmin: 260, vmax: 520, size: 1, spin: 1.2,
+};
 const TRAIL = { rate: 44, life: 0.4, size: 3.4, spread: 10 };
 
 /* Taksi on 54 px leveä: suurin tähti on sen kokoinen, pienin puolet siitä. */
@@ -153,6 +153,12 @@ const S = {
 };
 
 function field() {
+  if (S.walls) {                                // vanha putoava tähti on myös seinä
+    for (const s of S.stars) {
+      const i = S.walls.indexOf(s.box);
+      if (i >= 0) S.walls.splice(i, 1);
+    }
+  }
   S.stars.length = 0;
   S.count = SKY.count;
   const cols = Math.ceil(Math.sqrt(SKY.count * (W / SKY_LOW)));
@@ -166,7 +172,8 @@ function field() {
       S.stars.push({
         hx, hy, cx: hx, cy: hy, r: rr,
         rot: between(0, 6.3), spin: 0, dir: rnd() < 0.5 ? -1 : 1,
-        v: 0, state: 'sky', t: 0, puff: 0, tw: between(0, 6.3), hue: between(0, 1),
+        v: 0, vx: 0, vy: 0, state: 'sky', t: 0, puff: 0,
+        tw: between(0, 6.3), hue: between(0, 1),
         box: { x: 0, y: 0, w: rr * 2 * BOX, h: rr * 2 * BOX, hide: true, star: true },
       });
     }
@@ -199,7 +206,7 @@ function home(s) {
     if (i >= 0) S.walls.splice(i, 1);
   }
   s.state = 'back'; s.t = 0;
-  s.cx = s.hx; s.cy = s.hy; s.v = 0; s.spin = 0;
+  s.cx = s.hx; s.cy = s.hy; s.v = 0; s.vx = 0; s.vy = 0; s.spin = 0;
 }
 
 const launchable = () => S.stars.filter(s => s.state === 'sky');
@@ -210,6 +217,11 @@ function launch() {
   const s = pool[Math.floor(rnd() * pool.length)];
   s.state = 'wind'; s.t = 0;
   s.v = between(SKY.vmin, SKY.vmax);
+  /* Kulma arvotaan lähtöhetkellä ja se pysyy: tähti on suora viiva, ei kaari.
+     Pystysuora oli ensimmäinen versio, ja Sami halusi siihen ±20°. */
+  const a = between(-SKY.tilt, SKY.tilt) * Math.PI / 180;
+  s.vx = Math.sin(a) * s.v;
+  s.vy = Math.cos(a) * s.v;
 }
 
 /* Kupoli syttyy laskun hetkellä ja sammuu heti kun taksi on irti. Se on
@@ -218,6 +230,9 @@ const domeR = (pad, d) => pad.w * 0.62 * d.a;
 
 function update(dt, api) {
   S.walls = api.walls;
+  /* Kentän alussa tähdet ovat hiljaa, jotta luukusta ehtii pois tähdistön
+     seasta. Sisääntulon aikana tätä koukkua ei ajeta lainkaan, joten tauko
+     alkaa vasta GO:sta — se on juuri se hetki josta se lasketaan. */
   if (S.count !== SKY.count) field();           // säädin muutti tähtien määrää
 
   for (const d of S.domes) {
@@ -248,14 +263,18 @@ function update(dt, api) {
     if (s.state === 'wind') {                   // pyörähdys paikallaan = varoitus
       s.t += dt;
       const k = Math.min(1, s.t / Math.max(0.05, SKY.warn));
-      s.spin = s.dir * SKY.spin * 6.3 * k;
+      /* Kiihtyvä pyörähdys: k² eikä k. Tasainen pyöriminen näytti siltä että
+         tähti vain pyörii; kiihtyvä kertoo että jotain on tapahtumassa, ja
+         viimeinen sekunti on selvästi nopeampi kuin ensimmäinen. */
+      s.spin = s.dir * SKY.spin * 6.3 * k * k;
       s.rot += s.spin * dt;
       if (s.t >= SKY.warn) { s.state = 'fall'; s.t = 0; s.puff = 0; }
       continue;
     }
 
     /* putoaa */
-    s.cy += s.v * dt;
+    s.cx += s.vx * dt;
+    s.cy += s.vy * dt;
     s.rot += s.spin * dt;
     boxTo(s);
 
@@ -271,7 +290,7 @@ function update(dt, api) {
       });
     }
 
-    if (s.cy - s.r > H) { home(s); continue; }
+    if (s.cy - s.r > H || s.cx + s.r < 0 || s.cx - s.r > W) { home(s); continue; }
 
     let done = false;
     for (const d of S.domes) {                  // kupoli ensin: se on suoja
@@ -319,10 +338,10 @@ function init(api) {
   }
   S.walls = api.walls;
   S.bits.length = 0;
-  S.spawn = 0;
+  S.spawn = SKY.grace;
   for (const d of S.domes) d.a = 0;
   for (const s of S.stars) {
-    s.state = 'sky'; s.t = 0; s.v = 0; s.spin = 0;
+    s.state = 'sky'; s.t = 0; s.v = 0; s.vx = 0; s.vy = 0; s.spin = 0;
     s.cx = s.hx; s.cy = s.hy;
   }
 }
@@ -538,18 +557,17 @@ function starShape(ctx, s, alpha, glow) {
   ctx.globalAlpha = 1;
 }
 
+/* Lepäävä tähti on tavallinen tähti eikä himmeä kulissi: Sami 22.9.2026,
+   ensimmäisessä versiossa ne olivat liian taustaa. Putoavan erottaa siis
+   liikkeestä, vanasta ja pyörimisestä — ei kirkkaudesta. Se on tietoinen
+   valinta ja siksi tässä kirjoitettuna. */
 function sky(ctx) {
   for (const s of S.stars) {
     if (s.state === 'fall') continue;
-    const twinkle = 0.26 + Math.sin(s.tw) * 0.07;
-    if (s.state === 'sky') starShape(ctx, s, twinkle, false);
-    else if (s.state === 'back') starShape(ctx, s, twinkle * Math.min(1, s.t / 0.7), false);
-    else {
-      /* Pyörähdys ennen lähtöä: tähti kirkastuu paikallaan. Tämä on kentän
-         varoitus, ja se on tahallaan pitkä — vaikeus tulee ajoituksesta. */
-      const k = Math.min(1, s.t / Math.max(0.05, SKY.warn));
-      starShape(ctx, s, twinkle + (1 - twinkle) * k, k > 0.5);
-    }
+    const twinkle = 0.82 + Math.sin(s.tw) * 0.1;
+    if (s.state === 'sky') starShape(ctx, s, twinkle, true);
+    else if (s.state === 'back') starShape(ctx, s, twinkle * Math.min(1, s.t / 0.7), true);
+    else starShape(ctx, s, 1, true);           // pyörähtää: täysi kirkkaus
   }
 }
 
@@ -588,7 +606,10 @@ function dome(ctx, pad, d) {
 
   ctx.strokeStyle = fade('#d8f2ff', 0.5 * d.a);
   ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(cx, cy, r - 5, Math.PI * 1.08, Math.PI * 1.34); ctx.stroke();
+  /* Math.max, koska kutistuva kupoli kävi säteessä alle viiden ja negatiivinen
+     säde ei ole canvasilla virhearvo vaan poikkeus: se pysäytti koko
+     piirtosilmukan juuri alustalta lähtiessä. */
+  ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, r - 5), Math.PI * 1.08, Math.PI * 1.34); ctx.stroke();
   ctx.restore();
 }
 
@@ -599,7 +620,6 @@ function back(ctx) {
   spruce(ctx, TREE);
   rock(ctx, TURF);
   turf(ctx, TURF);
-  for (const l of LIPS) { rock(ctx, l); turf(ctx, l); }
   spikes(ctx);
 }
 
@@ -635,7 +655,9 @@ export const shootingstars = {
       sliders: [
         { key: 'count', label: 'tähtiä taivaalla', min: 6, max: 70, step: 1 },
         { key: 'freq', label: 'lähtöä sekunnissa', min: 0.2, max: 6, step: 0.1 },
-        { key: 'warn', label: 'pyörähdys ennen lähtöä s', min: 0.1, max: 3, step: 0.05 },
+        { key: 'warn', label: 'pyörähdys ennen lähtöä s', min: 0.1, max: 6, step: 0.1 },
+        { key: 'grace', label: 'tauko kentän alussa s', min: 0, max: 20, step: 0.5 },
+        { key: 'tilt', label: 'kulma astetta', min: 0, max: 45, step: 1 },
         { key: 'vmin', label: 'nopeus min', min: 80, max: 900, step: 10 },
         { key: 'vmax', label: 'nopeus max', min: 120, max: 1400, step: 10 },
         { key: 'size', label: 'koko', min: 0.5, max: 1.6, step: 0.05 },
