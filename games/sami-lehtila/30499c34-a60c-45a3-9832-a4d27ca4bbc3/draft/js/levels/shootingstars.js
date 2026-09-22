@@ -60,16 +60,16 @@ const CAVE_BOT = H - 16;
    alas ja nousee kärjestä takaisin ylös** — ne viikset. Kerrosten väliin jää
    runkoa näkyviin, mikä on koko koristeellisuus: yhtenäinen kartio näyttää
    pensaalta, erilliset kerrokset kuuselta. Sami 22.9.2026. */
-const TREE = { cx: 360, top: 300, bot: 700, foot: GRASS.y, wTop: 40, wBot: 108 };
-const TIERS = 8;
-const TRUNK = 30;
+const TREE = { cx: 360, top: 300, bot: 700, foot: GRASS.y, wTop: 26, wBot: 112 };
+const TIERS = 9;
+const TRUNK = 22;
 
 /* Oksan muoto yhtenä käyränä, yksikkönä kerroksen korkeus. `mid` on oksan
    keskilinja etäisyydellä u (0 = runko, 1 = kärki), `th` sen paksuus. Sama
    käyrä sekä piirtoon että törmäykseen: portaat ladotaan käyrän sisään, eli
    **törmäys on aina hitusen piirrettyä pienempi** — oksan uloin neulanen ei
    tapa, ja se on tarkoituksellisesti anteeksiantava suunta. */
-const BR = { drop: 0.20, curve: 1.5, reach: 0.62, flickAt: 0.80, flick: 0.26, th0: 0.34, th1: 0.15 };
+const BR = { drop: 0.16, curve: 1.45, reach: 0.60, flickAt: 0.78, flick: 0.24, th0: 0.54, th1: 0.24 };
 const brMid = u => BR.drop + BR.reach * Math.pow(u, BR.curve)
   - (u > BR.flickAt ? BR.flick * Math.pow((u - BR.flickAt) / (1 - BR.flickAt), 2) : 0);
 const brTh = u => BR.th0 + (BR.th1 - BR.th0) * u;
@@ -118,7 +118,7 @@ TREE.layers = [];
   /* Latva: pieni piikki ylimmän kerroksen yllä, ja sillä on oma laatikkonsa —
      näkyvä kärki jonka läpi lentäisi olisi juuri se epäselvyys jota README
      kieltää. */
-  TREE.tip = add({ x: TREE.cx - 9, y: TREE.top - 30, w: 18, h: 34, tree: true });
+  TREE.tip = add({ x: TREE.cx - 8, y: TREE.top - 34, w: 16, h: 38, tree: true });
   TREE.stem = add({
     x: TREE.cx - TRUNK / 2, y: TREE.top, w: TRUNK, h: TREE.foot - TREE.top, stem: true,
   });
@@ -491,8 +491,8 @@ function spruce(ctx, t) {
   ctx.fillStyle = '#16321f';                    // latva
   ctx.beginPath();
   ctx.moveTo(t.cx, t.tip.y);
-  ctx.lineTo(t.cx + 9, t.tip.y + t.tip.h);
-  ctx.lineTo(t.cx - 9, t.tip.y + t.tip.h);
+  ctx.lineTo(t.cx + 8, t.tip.y + t.tip.h);
+  ctx.lineTo(t.cx - 8, t.tip.y + t.tip.h);
   ctx.closePath(); ctx.fill();
 
   for (let i = t.layers.length - 1; i >= 0; i--) {
@@ -501,8 +501,8 @@ function spruce(ctx, t) {
     for (const sgn of [-1, 1]) {
       branch(ctx, t.cx, L.y0, L.h, L.hw, sgn);
       const g = ctx.createLinearGradient(t.cx, L.y0, t.cx + sgn * L.hw, L.y0 + L.h);
-      g.addColorStop(0, sgn < 0 ? '#20472d' : '#1a3b26');   // valo ylävasemmalta
-      g.addColorStop(1, '#0e2417');
+      g.addColorStop(0, sgn < 0 ? '#275433' : '#1f452a');   // valo ylävasemmalta
+      g.addColorStop(1, '#122b1b');
       ctx.fillStyle = g;
       ctx.fill();
 
