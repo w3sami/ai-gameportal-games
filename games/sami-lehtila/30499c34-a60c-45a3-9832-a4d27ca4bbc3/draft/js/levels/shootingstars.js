@@ -65,19 +65,24 @@ const CAVE_BOT = H - 16;
    Yksi helma: ylhäällä `hw0` leveä, alhaalla `hw1`, ja kylki kaartuu näiden
    välillä. Alareuna on keskeltä `drop` verran ylempänä kuin kärjissä. */
 const TREE = { cx: 360, top: 300, bot: 700, foot: GRASS.y };
-const SKIRTS = [
-  { y0: 300, y1: 430, hw0: 4,  hw1: 56,  drop: 16 },
-  { y0: 392, y1: 520, hw0: 30, hw1: 82,  drop: 18 },
-  { y0: 482, y1: 610, hw0: 46, hw1: 100, drop: 20 },
-  { y0: 572, y1: 700, hw0: 60, hw1: 116, drop: 22 },
-];
+/* SKIRTS on **laskettu** eikä kirjoitettu: siihen kirjoittaa `master()`, ja
+   piirto ja törmäys lukevat sitä. Säätimissä on kaksi tasoa, ja kumpikaan ei
+   ole näitä lukuja:
+
+     SK     koko puun muoto yhtenä oliona — tästä helmat lasketaan
+     NUDGE  helmakohtainen **poikkeama** masterin antamaan lukuun, oletus 0
+
+   Poikkeama eikä yliajo, ja se on tämän kohdan koko pointti. Ensin helmoilla
+   oli omat absoluuttiset lukunsa, ja silloin ne jäivät voimaan ikuisesti:
+   tallennuksen jälkeen masterin luvut eivät enää tarkoittaneet mitään, koska
+   helmat sanoivat aina viimeisen sanan. Sami 22.9.2026: *"no nyt yliajot
+   määräävät aina :D"*. Poikkeamana masterin liike säilyttää hienosäädön ja
+   tallennettu tila on yksikäsitteinen: muoto = master + poikkeama. */
+const SKIRTS = [{}, {}, {}, {}];
+const NUDGE = SKIRTS.map(() => ({ y0: 0, y1: 0, hw0: 0, hw1: 0, arc: 0 }));
+
 /* Kuusen muoto on säätimissä, ja siksi nämä ovat oliossa: säädin kirjoittaa
-   avaimeen, ja `shape()` lataa luvut uudestaan törmäyslaatikoihin. */
-/* Kuusella on kaksi tasoa säätöä. `SK` on koko puun muoto yhtenä oliona:
-   siitä lasketaan kaikkien helmojen luvut kerralla, eli puuta voi skaalata
-   yhdestä paikasta. Helmojen omat luvut ovat sen jälkeen hienosäätöä, ja ne
-   pysyvät kunnes masteria taas liikautetaan. Sami 22.9.2026: *"luulin että on
-   1 säädöt jota sitten vaan skaalataan, voi ne olla erilläänkin."* */
+   avaimeen, ja `master()` + `shape()` lataavat luvut uudestaan. */
 const SK = {
   top: 300, bot: 700, width: 116, taper: 0.62, lap: 0.30, pinch: 0.60,
   arc: -16, pow: 1.35, trunk: 26,
@@ -138,13 +143,15 @@ function master() {
   const h = Math.max(40, SK.bot - SK.top), step = h / n;
   let prev = 0;
   for (let i = 0; i < n; i++) {
-    const s = SKIRTS[i];
-    s.y1 = SK.top + step * (i + 1);
-    s.y0 = s.y1 - step * (1 + SK.lap);
-    s.hw1 = Math.max(6, SK.width * Math.pow((i + 1) / n, SK.taper));
-    s.hw0 = i === 0 ? 4 : Math.max(0, prev * SK.pinch);
-    s.drop = SK.arc;
-    prev = s.hw1;
+    const s = SKIRTS[i], d = NUDGE[i];
+    const hw1 = Math.max(6, SK.width * Math.pow((i + 1) / n, SK.taper));
+    const y1 = SK.top + step * (i + 1);
+    s.y1 = y1 + d.y1;
+    s.y0 = y1 - step * (1 + SK.lap) + d.y0;
+    s.hw1 = Math.max(6, hw1 + d.hw1);
+    s.hw0 = Math.max(0, (i === 0 ? 4 : prev * SK.pinch) + d.hw0);
+    s.drop = SK.arc + d.arc;
+    prev = hw1;                                 // seuraava helma seuraa masteria
   }
 }
 
@@ -172,31 +179,20 @@ function shape() {
 master();
 shape();
 
-/* Säätimen liikahdus näkyy vasta kun luvut luetaan takaisin laatikoihin.
-   Allekirjoitus on halvempi kuin muodon rakentaminen joka ruudulla.
+/* Säätimen liikahdus näkyy vasta kun luvut lasketaan uudestaan. Allekirjoitus
+   on halvempi kuin muodon rakentaminen joka ruudulla.
 
-   Kaksi allekirjoitusta, koska säätöjä on kahdella tasolla: masterin liike
-   laskee helmat uudestaan, helman oma liike ei koske muihin. Ensimmäisellä
-   kerralla kumpaakaan ei lasketa uudestaan — silloin tune.json on juuri
-   palauttanut tallennetut luvut, ja masterin ajaminen pyyhkisi ne. */
-let shapeSig = null, masterSig = null;
-const sigSkirts = () => SKIRTS.map(s => `${s.y0},${s.y1},${s.hw0},${s.hw1},${s.drop}`).join('|')
-  + `|${SK.pow},${SK.trunk}`;
-const sigMaster = () => `${SK.top},${SK.bot},${SK.width},${SK.taper},${SK.lap},${SK.pinch},${SK.arc}`;
-
+   Yksi allekirjoitus riittää, koska helmat ovat poikkeamia: master ja
+   poikkeama lasketaan aina samalla kaavalla, joten laskenta on toistettavissa
+   eikä tallennettuja lukuja voi pyyhkiä vahingossa. */
+let shapeSig = '';
 function shapeCheck() {
-  const ms = sigMaster();
-  if (masterSig === null) { masterSig = ms; shapeSig = sigSkirts(); return; }
-  if (ms !== masterSig) {
-    masterSig = ms;
-    master();
-    shapeSig = sigSkirts();
-    shape();
-    return;
-  }
-  const ss = sigSkirts();
-  if (ss === shapeSig) return;
-  shapeSig = ss;
+  const sig = `${SK.top},${SK.bot},${SK.width},${SK.taper},${SK.lap},${SK.pinch},`
+    + `${SK.arc},${SK.pow},${SK.trunk}|`
+    + NUDGE.map(d => `${d.y0},${d.y1},${d.hw0},${d.hw1},${d.arc}`).join('|');
+  if (sig === shapeSig) return;
+  shapeSig = sig;
+  master();
   shape();
 }
 
@@ -875,14 +871,14 @@ export const shootingstars = {
       { key: 'pow', label: 'kyljen kaarevuus', min: 0.6, max: 3, step: 0.05 },
       { key: 'trunk', label: 'rungon paksuus', min: 8, max: 60, step: 1 },
     ] },
-    ...SKIRTS.map((sk, i) => ({
-      name: 'helma ' + (i + 1), obj: sk, open: false,
+    ...NUDGE.map((d, i) => ({
+      name: 'helma ' + (i + 1), obj: d, open: false,
       sliders: [
-        { key: 'y0', label: 'yläreuna', min: 260, max: 780, step: 2 },
-        { key: 'y1', label: 'alareuna', min: 260, max: 780, step: 2 },
-        { key: 'hw0', label: 'puolileveys ylhäällä', min: 0, max: 200, step: 2 },
-        { key: 'hw1', label: 'puolileveys kärjessä', min: 6, max: 220, step: 2 },
-        { key: 'drop', label: 'alareunan kaari −hymy +nuokku', min: -70, max: 70, step: 1 },
+        { key: 'y0', label: 'Δ yläreuna', min: -160, max: 160, step: 2 },
+        { key: 'y1', label: 'Δ alareuna', min: -160, max: 160, step: 2 },
+        { key: 'hw0', label: 'Δ puolileveys ylhäällä', min: -120, max: 120, step: 2 },
+        { key: 'hw1', label: 'Δ puolileveys kärjessä', min: -120, max: 120, step: 2 },
+        { key: 'arc', label: 'Δ alareunan kaari', min: -70, max: 70, step: 1 },
       ],
     })),
     { name: 'kentän kertoimet', open: false, mul: ['grav', 'thrust', 'landVX'] },
