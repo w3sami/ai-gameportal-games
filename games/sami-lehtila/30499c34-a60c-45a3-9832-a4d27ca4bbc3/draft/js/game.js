@@ -1122,10 +1122,19 @@ const gamepad = createGamepad({
   actions: {
     gear:  ['A', 'LB', 'RB'],
     horn:  ['B', 'X'],
-    sound: ['Back'],
-    go:    ['Start', 'A'],
+    menu:  ['Start'],
+    select: ['Back'],
+    start: ['Start'],
     fleet: ['Y'],
     quit:  ['B'],
+    /* Valikon liikkuminen. Ristiohjain eikä sauva: sauva on jatkuva arvo eikä
+       siitä saa reunaa, ja valikossa yksi painallus on yksi askel. */
+    pick:  ['A'],
+    back:  ['B'],
+    up:    ['Up'],
+    down:  ['Down'],
+    left:  ['Left'],
+    right: ['Right'],
   },
 });
 
@@ -1135,6 +1144,8 @@ const gamepad = createGamepad({
    paljastaa sen vasta kun jotain on painettu. */
 function padInput() {
   gamepad.poll();
+
+  if (menuOpen()) { padMenu(); return; }
 
   if (!card.classList.contains('hidden')) {
     /* Selain ei paljasta ohjainta ennen kuin sen nappia on painettu, joten
@@ -1153,15 +1164,117 @@ function padInput() {
       b.click();
       return true;
     };
-    if (gamepad.pressed('go') && (click('#go') || click('#buy'))) return;
+    padHints();
+    if (gamepad.pressed('start') && (click('#go') || click('#buy'))) return;
     if (gamepad.pressed('fleet') && click('#fleet')) return;
     if (gamepad.pressed('quit') && click('#end')) return;
+    if (!cardPad && gamepad.pressed('pick') && (click('#go') || click('#buy'))) return;
+    padCard();
     return;
   }
 
-  if (gamepad.pressed('sound')) { toggleMute(); return; }
+  /* Start on pelissä yksi toiminto: se pysäyttää ja avaa asetukset, koska
+     valikko pysäyttää joka tapauksessa. Debug-tilassa se on pelkkä tauko —
+     silloin ruudulla on jo ratas ja liu'ut, ja tarve on nopea pysäytys keskellä
+     mittaamista. Sami 22.9.2026. */
+  if (gamepad.pressed('menu')) {
+    if (debugAllowed()) togglePause(); else openMenu(true);
+    return;
+  }
+  /* Select avaa säätöpaneelin. Pelaajalla sitä ei ole, joten hänelle sama
+     nappi on yhä äänen katkaisu niin kuin ennenkin. */
+  if (gamepad.pressed('select')) {
+    if (debugAllowed()) togglePanel(); else toggleMute();
+    return;
+  }
   if (gamepad.pressed('horn')) { honk(); return; }
   if (gamepad.pressed('gear')) toggleGear();
+}
+
+/* Kortin napit ohjaimella: sama ele kuin valikossa, suunta liikuttaa ja A
+   valitsee. Ennen ensimmäistä liikettä A on yhä "aja" — se on se nappi jota
+   kortilla melkein aina halutaan, eikä sitä pidä joutua etsimään. Start, Y ja
+   B ovat suoria oikoteitä aina, ja ne lukevat napin sisällä.
+
+   Lista haetaan joka kerta uudestaan, koska kortin napit vaihtuvat ruudusta
+   toiseen ja tulostaulun oma nappi ilmestyy vasta kun taulu on latautunut. */
+let cardPad = false, cardAt = 0;
+
+const cardButtons = () =>
+  [...card.querySelectorAll('button')].filter(b => !b.disabled && b.offsetParent !== null);
+
+function cardMark(btns) {
+  for (const b of btns) { b.style.outline = ''; b.style.outlineOffset = ''; }
+  const b = btns[cardAt];
+  if (!b) return;
+  b.style.outline = '2px solid #ffd479';
+  b.style.outlineOffset = '2px';
+  try { b.focus({ preventScroll: false }); } catch (e) {}
+}
+
+function padCard() {
+  const btns = cardButtons();
+  if (!btns.length) return;
+  let moved = false;
+  if (gamepad.pressed('up') || gamepad.pressed('left')) { cardAt--; moved = true; }
+  if (gamepad.pressed('down') || gamepad.pressed('right')) { cardAt++; moved = true; }
+  if (moved) {
+    cardPad = true;
+    cardAt = (cardAt + btns.length) % btns.length;
+    cardMark(btns);
+  }
+  if (cardPad && gamepad.pressed('pick')) {
+    const b = btns[clamp(cardAt, 0, btns.length - 1)];
+    if (!b) return;
+    b.click();
+    /* Asetukset voi aueta kortilta, ja silloin kohdistus jatkuu siellä. */
+    if (menuOpen()) { menuPad = true; menuAt.r = 0; menuAt.c = 0; menuFocus(); }
+  }
+}
+
+/* Napin sisään se ohjaimen nappi jolla sen saa — vain kun ohjain näkyy, koska
+   ilman ohjainta kirjain olisi arvoitus. */
+const PAD_TAGS = { '#go': 'A', '#buy': 'A', '#fleet': 'Y', '#end': 'B' };
+
+function padHints() {
+  if (!gamepad.connected) return;
+  for (const sel of Object.keys(PAD_TAGS)) {
+    const b = card.querySelector(sel);
+    if (!b || b.dataset.padTag) continue;
+    b.dataset.padTag = PAD_TAGS[sel];
+    b.append(css(el('span', null, PAD_TAGS[sel]), {
+      marginLeft: '8px', padding: '1px 7px', borderRadius: '6px',
+      border: '1px solid currentColor', opacity: '.6', fontSize: '.78em',
+    }));
+  }
+}
+
+/* Valikko ohjaimella: ristiohjain liikuttaa, A valitsee, B tai Start sulkee.
+ *
+ * Kohdistus on oikea DOM-fokus eikä oma piirto, jolloin näppäimistö saa saman
+ * navigoinnin ilmaiseksi ja selain hoitaa vierityksen. Kehys piirretään vain
+ * kun valikkoa on kosketettu ohjaimella: hiirellä avattuna kehys ensimmäisen
+ * napin ympärillä näyttäisi siltä että jotain on jo valittu.
+ *
+ * Koko ruutu on ainoa jota ohjaimesta ei voi tehdä. Selain vaatii siihen
+ * oikean käyttäjän eleen, eikä ohjaimen nappi ole sellainen missään
+ * selaimessa — mutta valikon nappi kyllä kelpaa, jos sen painaa enterillä,
+ * koska näppäimistö on ele. */
+function padMenu() {
+  if (gamepad.pressed('menu') || gamepad.pressed('back')) { closeMenu(); return; }
+  let moved = false;
+  const rows = menuGrid.length;
+  if (!rows) return;
+  if (gamepad.pressed('up')) { menuAt.r = (menuAt.r - 1 + rows) % rows; menuAt.c = 0; moved = true; }
+  if (gamepad.pressed('down')) { menuAt.r = (menuAt.r + 1) % rows; menuAt.c = 0; moved = true; }
+  if (gamepad.pressed('left')) { menuAt.c--; moved = true; }
+  if (gamepad.pressed('right')) { menuAt.c++; moved = true; }
+  if (moved) { menuPad = true; menuFocus(); }
+  if (gamepad.pressed('pick')) {
+    menuPad = true;
+    const b = menuGrid[menuAt.r] && menuGrid[menuAt.r][menuAt.c];
+    if (b) b.click();
+  }
 }
 
 function inputVector() {
@@ -3012,6 +3125,10 @@ function togglePanel() {
  * taksi ajelehtii seinään sillä välin kun asetuksia luetaan. Tauko puretaan
  * vain jos valikko sen asetti — jos peli oli jo tauolla, se jää tauolle. */
 let menuEl = null, menuPaused = false;
+/* Napit riveittäin ohjainta varten, ja mihin kohtaan se osoittaa. menuPad
+   kertoo onko valikkoa ylipäätään koskettu ohjaimella: hiirellä avattuna
+   kehys ensimmäisen napin ympärillä näyttäisi siltä että jotain on valittu. */
+let menuGrid = [], menuAt = { r: 0, c: 0 }, menuPad = false;
 
 const menuOpen = () => !!menuEl && menuEl.style.display !== 'none';
 const css = (node, style) => { Object.assign(node.style, style); return node; };
@@ -3054,6 +3171,7 @@ function mpick(on, text, fn) {
 }
 
 function mrow(label, ...picks) {
+  menuGrid.push(picks);
   const row = css(el('div'), {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     gap: '10px', flexWrap: 'wrap', margin: '0 0 14px',
@@ -3064,7 +3182,22 @@ function mrow(label, ...picks) {
   return row;
 }
 
+/* Kehys kohdistetun napin ympärille. Fokus on oikea DOM-fokus, jolloin sama
+   navigointi toimii myös näppäimistöltä ja selain hoitaa vierityksen. */
+function menuFocus() {
+  for (const row of menuGrid) for (const b of row) { b.style.outline = ''; b.style.outlineOffset = ''; }
+  if (!menuPad || !menuGrid.length) return;
+  menuAt.r = clamp(menuAt.r, 0, menuGrid.length - 1);
+  menuAt.c = clamp(menuAt.c, 0, menuGrid[menuAt.r].length - 1);
+  const b = menuGrid[menuAt.r][menuAt.c];
+  if (!b) return;
+  b.style.outline = '2px solid #ffd479';
+  b.style.outlineOffset = '2px';
+  try { b.focus({ preventScroll: false }); } catch (e) {}
+}
+
 function buildMenu() {
+  menuGrid = [];
   const box = css(el('div'), {
     width: 'min(380px, 100%)', maxHeight: '100%', overflowY: 'auto',
     boxSizing: 'border-box', padding: '20px 22px 16px', borderRadius: '16px',
@@ -3102,18 +3235,23 @@ function buildMenu() {
     mpick(!!fsElement(), t('set.full'), () => { if (!fsElement()) toggleFullscreen(); })));
 
   const foot = css(el('div'), { display: 'flex', justifyContent: 'flex-end', marginTop: '6px' });
-  foot.append(css(pbutton(null, t('set.close'), closeMenu), {
+  const close = css(pbutton(null, t('set.close'), closeMenu), {
     font: '600 15px system-ui, sans-serif', padding: '9px 20px', borderRadius: '10px',
     cursor: 'pointer', border: '1px solid rgba(111,227,255,.5)',
     background: 'rgba(111,227,255,.14)', color: '#6fe3ff',
-  }));
+  });
+  menuGrid.push([close]);
+  foot.append(close);
   box.append(foot);
 
   menuNode().replaceChildren(box);
+  menuFocus();
 }
 
-function openMenu() {
+function openMenu(byPad) {
   if (menuOpen()) return;
+  menuPad = !!byPad;
+  menuAt.r = 0; menuAt.c = 0;
   buildMenu();
   menuNode().style.display = 'flex';
   for (const k of Object.keys(KEY)) KEY[k] = false;   // pohjaan jäänyt näppäin ei jää päälle
@@ -3123,6 +3261,7 @@ function openMenu() {
 
 function closeMenu() {
   if (!menuOpen()) return;
+  menuPad = false;
   menuEl.style.display = 'none';
   if (menuPaused) setPaused(false);
   menuPaused = false;
@@ -3139,6 +3278,7 @@ function hideCard() {
 function showCard(html, pending, meta, fade) {
   card.classList.remove('hidden');
   card.innerHTML = html;
+  cardPad = false; cardAt = 0;                 // uusi ruutu, uusi kohdistus
   if (fade) {                                // häivytys tähtien päälle
     card.style.transition = 'none';
     card.style.opacity = '0';
