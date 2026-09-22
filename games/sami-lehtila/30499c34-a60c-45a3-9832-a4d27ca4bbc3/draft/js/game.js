@@ -2032,6 +2032,13 @@ function startCut(nextIndex) {
 
 /* ------------------------------------------------------------------ piirto */
 function drawWall(r) {
+  /* Kenttä saa piirtää seinänsä itse (hide). Sitä tarvitsee kenttä jonka
+     seinä ei ole laatikon näköinen — Shooting Starsissa kuusen latvus ja
+     putoava tähti ovat molemmat seiniä, ja kumpikin piirretään kentässä
+     täsmälleen sen laatikon muotoisena joka on myös törmäys. Sääntö on yhä
+     se, että umpinaiselta näyttävä on umpinaista: hide siirtää piirron, ei
+     poista sitä. */
+  if (r.hide) return;
   ctx.fillStyle = '#1b2440';
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = 'rgba(120,160,255,.22)';
