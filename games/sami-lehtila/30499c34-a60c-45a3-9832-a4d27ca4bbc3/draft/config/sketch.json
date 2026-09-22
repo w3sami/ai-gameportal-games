@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790107165865,
+ "stamp": 1790107197283,
  "scenes": {
   "Shooting Stars": {
    "paint": [
@@ -24,7 +24,7 @@
     },
     {
      "kind": "rect",
-     "label": "huomio",
+     "label": "pois",
      "text": "",
      "x": 436,
      "y": 815,
