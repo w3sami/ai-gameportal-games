@@ -87,9 +87,14 @@ const NUDGE = SKIRTS.map(() => ({ y0: 0, y1: 0, hw0: 0, hw1: 0, arc: 0 }));
 
 /* Kuusen muoto on säätimissä, ja siksi nämä ovat oliossa: säädin kirjoittaa
    avaimeen, ja `master()` + `shape()` lataavat luvut uudestaan. */
+/* Nämä ovat **Samin säätöpaneelista hakemat luvut** 22.9.2026, paitsi `top` ja
+   `bot`: hän haki muodon ennen kuin kuusikompleksi laskettiin alas, joten
+   pystypaikka on sovitettu uuteen maahan. Korkeus on hänen (422 px) ja
+   latvuksen alareuna on se 740 joka jättää alustan ja oksan väliin
+   lentokelpoisen raon. */
 const SK = {
-  top: 340, bot: 740, width: 116, taper: 0.62, lap: 0.30, pinch: 0.60,
-  arc: -16, pow: 1.35, trunk: 26,
+  top: 318, bot: 740, width: 178, taper: 0.8, lap: 0.1, pinch: 0.58,
+  arc: -23, pow: 1.85, trunk: 46,
 };
 const SK_STEPS = 22;                 // portaita helmaa kohti, kiinteä määrä
 
@@ -223,8 +228,10 @@ const PADS = [
      sisäpää on rungon kyljessä ja ulompi pää on se josta laskeudutaan, joten
      kasvu kuuluu ulos; luolassa reunat ovat kuilujen alla, joten kasvu kuuluu
      keskelle. Sami 22.9.2026. */
-  { id: 1, x: 179, y: GRASS.y - PAD_H + 6, w: 165 },
-  { id: 2, x: 376, y: GRASS.y - PAD_H + 6, w: 165 },
+  /* Sisäpäät ovat rungon kyljessä, ja runko on Samin säädössä 46 px paksu —
+     siksi 335 ja 385 eivätkä 344 ja 376. */
+  { id: 1, x: 170, y: GRASS.y - PAD_H + 6, w: 165 },
+  { id: 2, x: 385, y: GRASS.y - PAD_H + 6, w: 165 },
   { id: 3, x: 56, y: 986, w: 186 },
   { id: 0, x: 298, y: 986, w: 124, fuel: true },
   { id: 4, x: 478, y: 986, w: 186 },
