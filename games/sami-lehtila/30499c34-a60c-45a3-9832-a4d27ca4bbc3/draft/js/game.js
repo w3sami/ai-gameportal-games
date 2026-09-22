@@ -150,26 +150,30 @@ function setSide(side) {
   try { localStorage.setItem(SIDE_STORE, side); } catch (e) {}
 }
 
-/* Vaikeustaso on pelaajan asetus, ja se on yksi luku: sillä kerrotaan sekä
-   painovoima että työntö. Koska molemmat muuttuvat yhtä paljon, leijumiseen
-   tarvittava kaasu pysyy samana ja vain koko pystyakseli hidastuu — sama peli
-   hitaammin, ei eri peli. Aikaa on enemmän, ja siksi se on helpompi.
+/* Vaikeustaso on pelaajan asetus: kaksi kerrointa, painovoimalle ja työnnölle.
  *
- * Pro on kerroin 1 eli peli ilman kevennystä: se on se jota viritetään ja
- * jollaisena peli oli ennen tätä säädintä. Oletus on kuitenkin normaali eli
- * 0,7, koska säädin tehtiin nimenomaan helpottamaan peliä — vihje vaikeudesta
- * tuli pelaajilta. Tippiin ei kosketa, koska se on kiinni ajasta: kevennetyllä
- * tasolla tienaa itsestään vähemmän ja prolla parhaiten, eikä palkkiota
- * tarvitse erikseen porrastaa.
+ * Ääripäät eivät ole keksittyjä. **Helppo on tasan kuun arvot** — samat 0,2 ja
+ * 0,25 jotka Moonshotilla on — koska se on jo ajettu ja tiedetään pelattavaksi,
+ * ja **pro on kerroin 1** eli peli ilman kevennystä, se jota viritetään ja
+ * jollaisena peli oli ennen tätä säädintä. Normaali on suunnilleen niiden
+ * keskeltä.
  *
- * Kertoimia on nyt kolme päällekkäin: globaali viritys, kentän oma kerroin ja
- * tämä. Siksi tulolle on pohja MUL_MINissä — ne ovat samat luvut jotka
- * Moonshotilla on, eli kuun painovoima on se raja josta pidemmälle peli ei
- * enää tunnu Space Taxilta. */
+ * Kertoimet ovat eri suuret tahallaan: kuussa työntöä jää suhteessa enemmän
+ * kuin painovoimaa, eli kevyemmällä tasolla taksi myös tottelee paremmin eikä
+ * vain putoa hitaammin. Sama suhde säilyy koko asteikon läpi.
+ *
+ * Oletus on normaali, koska säädin tehtiin nimenomaan helpottamaan peliä:
+ * vihje vaikeudesta tuli pelaajilta. Tippiin ei kosketa, koska se on kiinni
+ * ajasta — kevennetyllä tasolla tienaa itsestään vähemmän ja prolla parhaiten,
+ * eikä palkkiota tarvitse erikseen porrastaa.
+ *
+ * Kertoimia on kolme päällekkäin: globaali viritys, kentän oma kerroin ja tämä.
+ * Siksi tulolle on pohja MUL_MINissä, ja se on sama kuu: Moonshot on jo
+ * valmiiksi pohjassa eikä vaikeustaso muuta sitä. */
 const DIFFS = [
-  { id: 'easy', mul: 0.45 },
-  { id: 'normal', mul: 0.7 },
-  { id: 'pro', mul: 1 },
+  { id: 'easy', mul: { grav: 0.2, thrust: 0.25 } },
+  { id: 'normal', mul: { grav: 0.6, thrust: 0.65 } },
+  { id: 'pro', mul: { grav: 1, thrust: 1 } },
 ];
 const DIFF_DEF = 'normal';
 const MUL_MIN = { grav: 0.2, thrust: 0.25 };
@@ -179,7 +183,7 @@ try {
   const d = localStorage.getItem(DIFF_STORE);
   if (DIFFS.some(x => x.id === d)) diff = d;     // tuntematon jää oletukseksi
 } catch (e) {}
-const diffMul = () =>
+const diffMuls = () =>
   (DIFFS.find(d => d.id === diff) || DIFFS.find(d => d.id === DIFF_DEF)).mul;
 
 /* Viritys kahdessa kerroksessa.
@@ -211,11 +215,11 @@ let MUL = {};
 let stickReady = false;
 
 function applyMul() {
-  const d = diffMul();
+  const d = diffMuls();
   for (const k of Object.keys(DEFAULTS)) {
     const m = MUL[k];
     let mul = typeof m === 'number' && isFinite(m) ? m : 1;
-    if (k in MUL_MIN) mul = Math.max(MUL_MIN[k], mul * d);
+    if (k in MUL_MIN) mul = Math.max(MUL_MIN[k], mul * d[k]);
     P[k] = BASE[k] * mul;
   }
   if (stickReady) stick.gain = P.stick;
