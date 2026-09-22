@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790106893319,
+ "stamp": 1790111698668,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -114,8 +114,8 @@
      "spread": 10
     },
     "kuusi": {
-     "top": 226,
-     "bot": 648,
+     "top": 318,
+     "bot": 740,
      "width": 178,
      "taper": 0.8,
      "lap": 0.1,
