@@ -31,10 +31,8 @@ const angular = (ctx) => { ctx.lineJoin = 'miter'; ctx.lineCap = 'square'; ctx.m
 // The mass a level is cut out of. Rock by default; levels set inside a tree take wallMat:'wood' and get pal.wood plus the
 // grain pass in woodGrain, so the walls read as the inside of a trunk rather than a cave.
 const massCol = pal => (L.wallMat === 'wood' && pal.wood) || pal.rock;
-// The pad surface is drawn on the depth layers too (darker as they recede), so when the pad sits far from the
-// screen centre the pedestal's top face reads as a receding landing deck rather than a lid over the rocket.
-function drawPad(x,p,col,k){
-  if (k !== undefined){ x.fillStyle = shade(col,k); x.fillRect(p.x,p.y,p.w,18); return; }
+// The pad's receding deck comes from the depth walls, which take the pad colour along its top edge.
+function drawPad(x,p,col){
   x.fillStyle = p.base === 'bark' ? '#3a2816' : p.base === 'leaf' ? '#2a4d28' : '#4a4f57'; x.fillRect(p.x-6,p.y,p.w+12,12);
   x.fillStyle = col; x.fillRect(p.x,p.y,p.w,6);
   x.fillStyle = 'rgba(255,255,255,.45)'; for (let i=0;i<5;i++) x.fillRect(p.x+8+i*(p.w-16)/4-2, p.y+8, 4, 2);
@@ -84,8 +82,7 @@ function solidGroups(pal){
 // The layer is produced as a grid of tiles no larger than TILE on a side. Big levels would otherwise need one canvas of
 // 20M+ pixels, past the size browsers keep on the GPU, and every frame's drawImage turns into a software blit. Each tile
 // re-runs the same deterministic drawing offset to its corner (off-tile geometry is clipped for free), so the tiles fit
-// seamlessly. The main layer (q=1) also yields the collision mask, assembled tile by tile. Depth layers reuse the same
-// code with a darker palette and a lower q. Returns {w, h, tiles:[{x, y, c}], mask?}.
+// seamlessly. The main layer (q=1) also yields the collision mask, assembled tile by tile. Returns {w, h, tiles:[{x, y, c}], mask?}.
 const TILE = 2048, TM = 2;                                           // TM: tiles overlap by this many pixels so scaled edges never show a seam
 function renderLayer(q, st, padX, padY){
   const W = Math.ceil((L.w+2*padX)*q), H = Math.ceil((L.h+2*padY)*q), pal = st.pal, out = {w:W, h:H, tiles:[], mask:st.captureMask ? new Uint8Array(L.w*L.h) : null};
@@ -124,7 +121,7 @@ function renderLayer(q, st, padX, padY){
       const d = x.getImageData(TM,TM,tw,th).data, m = out.mask;
       for (let j=0;j<th;j++){ const row = (ty+j)*L.w+tx, src = j*tw*4+3; for (let i=0;i<tw;i++) m[row+i] = d[src+i*4] > 100 ? 1 : 0; }
     }
-    if (st.pads){ drawPad(x,L.pads.start,PAL.start,st.padK); drawPad(x,L.pads.target,PAL.target,st.padK); }
+    if (st.pads){ drawPad(x,L.pads.start,PAL.start); drawPad(x,L.pads.target,PAL.target); }
     out.tiles.push({x:tx, y:ty, c});
   }
   tc.width = tc.height = 0;
@@ -152,6 +149,111 @@ function renderSpikeSprite(pts, seed, kind, axis){
   x.restore();
   return {c, ox:x0-pad, oy:y0-pad};
 }
+
+// ---- Depth walls ----
+// The level reads as a slab with depth: every rock, trunk and leaf edge carries a wall face receding toward the screen
+// centre, with the perspective the old parallax layers had (screen = centre + (p - centre)·f, f from 1 back to FBACK).
+// The faces come from the collision mask's outline, traced once per level: it already holds every solid there is, and
+// the level art being straight-edged, it simplifies to a few hundred segments. Each face takes its colour from the main
+// layer just inside the rock, averaged along the outline, so trunks get bark walls and canopy green ones. Drawn every
+// frame as flat quads under the main layer, which hides the half of each face that runs into rock.
+const WALLS = (() => {
+  const S = 4, INSET = 3, EPS = 4.5, FBACK = 0.88, BANDS = 1, K0 = 0.9, K1 = 0.45, SMOOTH = 50;
+  const FB = [], BK = [];                                           // band edges in f, and each band's shade: the value at its middle
+  for (let i=0;i<=BANDS;i++) FB.push(1-(1-FBACK)*i/BANDS);
+  for (let i=0;i<BANDS;i++) BK.push(K0+(K1-K0)*(i+0.5)/BANDS);
+  const LX = -0.35/Math.hypot(0.35,0.94), LY = -0.94/Math.hypot(0.35,0.94);   // light from above, a little left
+  let segs = [];
+  // The main layer shrunk 8×. Transparent pixels average out, so a sample near an edge still reads the solid's colour.
+  function colourMap(){
+    const K = 8, w = Math.ceil(L.w/K), h = Math.ceil(L.h/K), c = mkCanvas(w, h), x = c.getContext('2d', {willReadFrequently:true});
+    for (const t of mainC.tiles) x.drawImage(t.c, TM, TM, t.c.width-2*TM, t.c.height-2*TM, t.x/K, t.y/K, (t.c.width-2*TM)/K, (t.c.height-2*TM)/K);
+    const d = x.getImageData(0, 0, w, h).data; c.width = c.height = 0;
+    return (px, py) => { const i = (Math.max(0, Math.min(h-1, py/K|0))*w + Math.max(0, Math.min(w-1, px/K|0)))*4; return d[i+3] > 20 ? [d[i], d[i+1], d[i+2]] : null; };
+  }
+  function dp(pts, out){                                            // Douglas–Peucker; both ends kept
+    const st = [[0, pts.length-1]], keep = new Uint8Array(pts.length); keep[0] = keep[pts.length-1] = 1;
+    while (st.length){ const [a, b] = st.pop(), A = pts[a], B = pts[b], dx = B[0]-A[0], dy = B[1]-A[1], l = Math.hypot(dx,dy) || 1;
+      let md = 0, mi = -1; for (let i=a+1;i<b;i++){ const d = Math.abs((pts[i][0]-A[0])*dy-(pts[i][1]-A[1])*dx)/l; if (d > md){ md = d; mi = i; } }
+      if (md > EPS){ keep[mi] = 1; st.push([a, mi], [mi, b]); } }
+    for (let i=0;i<pts.length;i++) if (keep[i]) out.push(pts[i]);
+  }
+  function build(){
+    // Coarse grid of the mask with a solid border, then the cell edges between solid and open, oriented so the open
+    // side is on the left of travel: n = (dy, -dx) points into the open.
+    const W = Math.ceil(L.w/S)+2, H = Math.ceil(L.h/S)+2, g = new Uint8Array(W*H).fill(1), m = mask, lw = L.w, lh = L.h;
+    for (let y=1;y<H-1;y++){ const py = Math.min(lh-1, (y-1)*S+S/2|0), row = py*lw;
+      for (let x=1;x<W-1;x++){ const px = (x-1)*S+S/2|0; g[y*W+x] = px >= lw || m[row+px] === 1 ? 1 : 0; } }
+    const VW = W+1, out = new Map(), used = new Set(), E = (a, b) => a*4194304 + b;
+    const add = (a, b) => { let l = out.get(a); if (!l) out.set(a, l = []); l.push(b); };
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++){ if (!g[y*W+x]) continue; const o = y*VW+x;
+      if (y>0   && !g[(y-1)*W+x]) add(o, o+1);
+      if (y<H-1 && !g[(y+1)*W+x]) add(o+VW+1, o+VW);
+      if (x>0   && !g[y*W+x-1])   add(o+VW, o);
+      if (x<W-1 && !g[y*W+x+1])   add(o+1, o+VW+1); }
+    const col = colourMap(), pads = Object.entries(L.pads);
+    segs = [];
+    for (const [start, list] of out) for (const first of list){
+      if (used.has(E(start, first))) continue;
+      const pts = []; let a = start, b = first;
+      for (;;){                                                     // walk the chain; at a saddle take the right-hand turn
+        used.add(E(a, b)); pts.push(a);
+        const nl = (out.get(b) || []).filter(c => !used.has(E(b, c)));
+        if (!nl.length){ pts.push(b); break; }
+        let nb = nl[0];
+        if (nl.length > 1){ const dx = b%VW - a%VW, dy = (b/VW|0) - (a/VW|0), turn = c => dx*((c/VW|0) - (b/VW|0)) - dy*(c%VW - b%VW); nb = nl.reduce((p, q) => turn(q) > turn(p) ? q : p); }
+        a = b; b = nb;
+      }
+      if (pts.length < 8) continue;                                 // under ~32 px of outline: a speck, not a wall
+      const P = pts.map(v => [(v%VW - 1)*S, ((v/VW|0) - 1)*S]), simp = [];
+      if (pts[0] === pts[pts.length-1]){                            // closed loop: split at the far point so DP has two distinct ends
+        let fi = 0, fd = -1; for (let i=1;i<P.length;i++){ const d = (P[i][0]-P[0][0])**2 + (P[i][1]-P[0][1])**2; if (d > fd){ fd = d; fi = i; } }
+        dp(P.slice(0, fi+1), simp); simp.pop(); dp(P.slice(fi), simp);
+      } else dp(P, simp);
+      const chain = [];
+      for (let i=0;i<simp.length-1;i++){
+        const [x0,y0] = simp[i], [x1,y1] = simp[i+1], dx = x1-x0, dy = y1-y0, l = Math.hypot(dx,dy); if (l < 1) continue;
+        const nx = dy/l, ny = -dx/l, ix = -nx*INSET, iy = -ny*INSET, mx = (x0+x1)/2, my = (y0+y1)/2;   // front edge tucked into the rock
+        const cs = [col(mx-nx*14, my-ny*14), col(mx-nx*30, my-ny*30)].filter(Boolean);                  // two depths in, past the edge shadow
+        let pad = null;
+        for (const [k, p] of pads) if (ny < -0.7 && my > p.y-8 && my < p.y+8 && mx > p.x-8 && mx < p.x+p.w+8){ const n = parseInt(PAL[k].slice(1),16); pad = [n>>16, (n>>8)&255, n&255]; }
+        chain.push({x0:x0+ix, y0:y0+iy, x1:x1+ix, y1:y1+iy, nx, ny, l, pad, c: cs.length ? cs.reduce((a, v) => [a[0]+v[0]/cs.length, a[1]+v[1]/cs.length, a[2]+v[2]/cs.length], [0,0,0]) : null,
+                    bx0:Math.min(x0,x1), by0:Math.min(y0,y1), bx1:Math.max(x0,x1), by1:Math.max(y0,y1)});
+      }
+      for (let i=0;i<chain.length;i++){                             // length-weighted colour over SMOOTH px either side, so facets do not stripe the wall
+        const s = chain[i]; let r = 0, gg = 0, bb = 0, w = 0;
+        const acc = j => { const t = chain[j]; if (t.c){ r += t.c[0]*t.l; gg += t.c[1]*t.l; bb += t.c[2]*t.l; w += t.l; } return t.l; };
+        for (let j=i, d=0; j>=0 && d<SMOOTH; j--) d += acc(j);
+        for (let j=i+1, d=0; j<chain.length && d<SMOOTH; j++) d += acc(j);
+        const c = s.pad || (w ? [r/w, gg/w, bb/w] : [110,114,120]), lit = 0.97 + 0.16*(s.nx*-LX + s.ny*-LY);
+        s.keys = BK.map(k => { const q = v => Math.min(255, Math.round(v*lit*k/4)*4); return `rgb(${q(c[0])},${q(c[1])},${q(c[2])})`; });
+        delete s.c; delete s.pad; delete s.l; segs.push(s);
+      }
+    }
+  }
+  // Cull to what the extrusion can reach on screen, skip faces that run into rock, then fill band by band from the back,
+  // one path per colour.
+  function draw(sx, sy){
+    const cx = vw/2, cy = vh/2, mg = 0.14*Math.max(vw, vh)/Z, X0 = cam.x-mg, Y0 = cam.y-mg, X1 = cam.x+vw/Z+mg, Y1 = cam.y+vh/Z+mg, vis = [];
+    for (const s of segs){
+      if (s.bx1 < X0 || s.bx0 > X1 || s.by1 < Y0 || s.by0 > Y1) continue;
+      const ax = (s.x0-cam.x)*Z+sx, ay = (s.y0-cam.y)*Z+sy, bx = (s.x1-cam.x)*Z+sx, by = (s.y1-cam.y)*Z+sy;
+      if (s.nx*(cx-(ax+bx)/2) + s.ny*(cy-(ay+by)/2) <= 0) continue;
+      const ex = bx-ax, ey = by-ay, el = Math.hypot(ex, ey) || 1, ox = ex/el*0.7, oy = ey/el*0.7;   // overlap neighbours by a hair: no AA seams
+      vis.push(s, ax-ox, ay-oy, bx+ox, by+oy);
+    }
+    for (let band = BANDS-1; band >= 0; band--){
+      const fa = FB[band], fb = FB[band+1], paths = new Map();
+      for (let i=0;i<vis.length;i+=5){
+        const key = vis[i].keys[band], ax = vis[i+1], ay = vis[i+2], bx = vis[i+3], by = vis[i+4];
+        let p = paths.get(key); if (!p) paths.set(key, p = new Path2D());
+        p.moveTo(cx+(ax-cx)*fa, cy+(ay-cy)*fa); p.lineTo(cx+(bx-cx)*fa, cy+(by-cy)*fa); p.lineTo(cx+(bx-cx)*fb, cy+(by-cy)*fb); p.lineTo(cx+(ax-cx)*fb, cy+(ay-cy)*fb); p.closePath();
+      }
+      for (const [key, p] of paths){ ctx.fillStyle = key; ctx.fill(p); }
+    }
+  }
+  return {build, draw};
+})();
 
 // ---- Themes ----
 // Wood mass: for a level cut into a tree rather than into rock. Long vertical grain in flat parallel bands, a knot here
@@ -194,18 +296,15 @@ function jungleTerrain(x, r, pal, X, Y, W, H){
   // crossfades the backdrop to the cave theme's while the rocket is inside one.
   for (const z of L.rockZones||[]){ poly(x, polyPts(z.x, z.y, z.r, z.ry||z.r, z.wob||0.12, z.seed)); x.fillStyle = pal.rock; x.fill(); }
 }
-const DEPTH_F = [0.98,0.96,0.94,0.92,0.90,0.88];
 const JUNGLE_PAL = { rock:'#8f959d', wood:'#775532', earth:'#b08a58', earthDark:'#8e6b42', bark:'#4b3320', leaf:['#2c5a2a','#3d7c38','#559c47','#74b85a'] };
 const THEMES = {
   cave: {
     main:  { pal:{rock:'#8f959d', bark:JUNGLE_PAL.bark, leaf:JUNGLE_PAL.leaf}, amp:0.07, edge:10, pads:true, captureMask:true },   // bark and leaf so a cave level can show a glimpse of jungle
-    depth: DEPTH_F.map((f,i) => ({ f, pal:Object.assign({rock:['#7d838b','#727880','#666c74','#5a6068','#4f555d','#454a52'][i]}, shadePal({bark:JUNGLE_PAL.bark, leaf:JUNGLE_PAL.leaf}, 0.87-i*0.075)), amp:0.06, edge:5, edgeAlpha:0.1, pads:true, padK:0.86-i*0.1 })),
     bg: { top:'#14161e', bottom:'#07080b', f:0.35, mote:'rgba(217,211,199,.16)',   // glows live in level space and parallax at 0.35×
       glows:[ {u:.18,v:.28,r:.5,c:'rgba(48,84,150,.42)'}, {u:.62,v:.62,r:.55,c:'rgba(28,120,122,.32)'}, {u:.42,v:.92,r:.45,c:'rgba(110,64,150,.32)'}, {u:.92,v:.14,r:.42,c:'rgba(160,110,60,.26)'}, {u:.85,v:.85,r:.4,c:'rgba(60,110,170,.28)'} ] },
   },
   jungle: {
     main:  { pal:JUNGLE_PAL, amp:0.07, edge:10, pads:true, captureMask:true },
-    depth: DEPTH_F.map((f,i) => ({ f, pal:shadePal(JUNGLE_PAL, 0.87-i*0.075), amp:0.06, edge:5, edgeAlpha:0.1, pads:true, padK:0.86-i*0.1 })),
     bg: { top:'#27391d', bottom:'#150f09', f:0.35, mote:'rgba(225,240,140,.22)',    // green light high up, brown shadow low down
       glows:[ {u:.22,v:.12,r:.5,c:'rgba(140,190,80,.34)'}, {u:.70,v:.10,r:.5,c:'rgba(120,190,90,.26)'}, {u:.5,v:.55,r:.5,c:'rgba(50,100,55,.36)'}, {u:.92,v:.55,r:.45,c:'rgba(35,110,80,.30)'}, {u:.15,v:.88,r:.45,c:'rgba(110,70,38,.46)'}, {u:.8,v:.9,r:.4,c:'rgba(95,62,34,.42)'} ] },
     terrain: jungleTerrain,
