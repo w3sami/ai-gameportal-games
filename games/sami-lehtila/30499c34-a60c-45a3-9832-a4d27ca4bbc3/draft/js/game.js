@@ -1214,7 +1214,11 @@ stick.gain = P.stick;
 const gamepad = createGamepad({
   keys: false,
   actions: {
-    gear:  ['A'],
+    /* Teline on A ja **kumpi tahansa liipasin**. Molemmat liipasimet yhtä
+       aikaa on koko ruutu, ei teline — ks. `padFullscreen`, joka peruu
+       telineen jos ele alkoi siitä. Sami 23.9.2026: *"kumpi tahansa
+       liipasin voi olla, tai siis molemmat, kunhan eri aikaa."* */
+    gear:  ['A', 'LT', 'RT'],
     /* Olkapäät ovat kentänvaihto: vasen aloittaa nykyisen kentän alusta
        kolmella elämällä, oikea siirtyy seuraavaan ja viimeisestä ensimmäiseen.
        Molemmat tekevät saman kuin säätöpaneelin kenttänappi hiirellä. Sami
@@ -1255,10 +1259,23 @@ const gamepad = createGamepad({
  *
  * Ulos pääsee aina, koska poistuminen ei vaadi elettä. */
 let fullArmed = false;
+let trigGearAt = -1e9;                       // milloin teline viimeksi kääntyi liipasimesta
+let fullFired = false;                       // koko ruudun ele laukesi tällä ruudulla
 
 function padFullscreen() {
   const both = gamepad.held('LT') && gamepad.held('RT');
-  if (both && !fullArmed) toggleFullscreen();
+  fullFired = both && !fullArmed;
+  if (fullFired) {
+    toggleFullscreen();
+    /* Koko ruudun ele alkaa toisesta liipasimesta, ja se ehti jo kääntää
+       telineen — kahden napin eleessä ensimmäistä painallusta ei voi tietää
+       eleen aluksi ennen kuin toinen tulee. Perutaan se siis jälkikäteen, jos
+       se tapahtui juuri äsken. Äänettä, koska eleen ei kuulu kuulua
+       telineeltä. */
+    if (state === PLAY && !dead && taxi && performance.now() - trigGearAt < 400) {
+      taxi.gearWant = !taxi.gearWant;
+    }
+  }
   fullArmed = both;
 }
 
@@ -1320,7 +1337,16 @@ function padInput() {
     return;
   }
   if (gamepad.pressed('horn')) { honk(); return; }
-  if (gamepad.pressed('gear')) toggleGear();
+  /* `fullFired` on tämän ruudun koko ruudun ele: sen laukaissut toinen
+     liipasin ei saa kääntää telinettä, ja ensimmäisen kääntö on jo peruttu. */
+  if (gamepad.pressed('gear') && !fullFired) {
+    /* Liipasimesta tullut painallus merkitään muistiin: siitä voi vielä tulla
+       koko ruudun ele, jos toinen liipasin painuu heti perään. */
+    if (state === PLAY && !dead && (gamepad.held('LT') || gamepad.held('RT'))) {
+      trigGearAt = performance.now();
+    }
+    toggleGear();
+  }
 }
 
 /* Kortin napit ohjaimella: sama ele kuin valikossa, suunta liikuttaa ja A
