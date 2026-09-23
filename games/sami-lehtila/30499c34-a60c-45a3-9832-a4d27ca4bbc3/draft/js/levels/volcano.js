@@ -1,19 +1,30 @@
-/* Tulivuori — viidakon keskellä kartio joka purkautuu.
+/* Tulivuori — viidakon yllä leijuva tulivuorisaari.
  *
  * Yksi kenttä per tiedosto, jotta kaksi tekijää voi työstää eri kenttiä
  * yhtä aikaa kirjoittamatta toistensa yli. Kentän muoto on kuvattu
  * ../levels.js:ssä.
  *
- * Kenttä on yksi vuori ruudun keskellä ja kaksi kuilua sen kylkien vieressä:
+ * Saari roikkuu ruudun keskellä eikä nojaa mihinkään, ja sen alta pääsee
+ * lentämään läpi kummaltakin puolelta. Kenttä on siis rengas: kaikki kiertää
+ * yhtä kappaletta kiveä.
  *
- *   kartio        kymmenen kivipenkkaa kraatterista tyveen. Neljä numeroitua
- *                 alustaa on kiilakkeilla kylkiin, kaksi kummallakin puolella
- *                 eri korkeuksilla. Ne ovat avoimen taivaan alla, ja juuri
- *                 niille kivet putoavat.
- *   kraatteri     ruudun keskellä, y 430. Purkaus syöksee 1–4 magmapalloa,
- *                 suurin taksin kokoinen ja pienin 70 % siitä.
- *   luola         vuoren tyven alla, vasemmalta auki. Siellä on bensa, ja se
- *                 on kentän ainoa turvapaikka.
+ *   kraatteri     saaren laella. Purkaus syöksee 1–4 magmapalloa, suurin
+ *                 taksin kokoinen ja pienin 70 % siitä.
+ *   kylkialustat  1 ja 2, kiinni saaressa sen leveimmällä kohdalla.
+ *   kuilualustat  3–6, ruudun laidoilla kahdella korkeudella.
+ *   saaren varjo  lattialla saaren alla kolme alustaa vierekkäin: tankkaus ja
+ *                 7 ja 8 sen kyljessä. **Ne ovat tahallaan suojassa.**
+ *
+ * Kenttä opettaa itse oman sääntönsä: **taivas pään päällä tarkoittaa että
+ * sieltä tulee kiveä.** Kuusi alustaa on sateessa ja kolme saaren varjossa,
+ * ja sen näkee katsomalla ylöspäin. Varjossa saa istua purkauksen yli, ja
+ * juuri siksi siellä on myös bensa.
+ *
+ * Ettei tuo jää arvailuksi: 20 000 lähdön simulaatio antaa alustoille 3–6
+ * kullekin 17–18 %, kylkialustoille 11,6 %, ja varjon kolmelle **nollan**.
+ * Luvut ovat volcano.md:ssä, ja ne on mitattu eikä arvattu — alusta jonka
+ * yläpuolella on toinen alusta ei saa osumia lainkaan, ja se rajoitti tämän
+ * kentän muotoa enemmän kuin mikään muu.
  *
  * Kolme sääntöä joilla tämä pysyy rehellisenä:
  *
@@ -22,114 +33,165 @@
  *      kentän. Peli ei piirrä sitä (`hide`), koska laatikko ei ole pallon
  *      näköinen — piirto on tässä tiedostossa, ja laatikko on tahallaan
  *      hieman piirrettyä pienempi.
- *   2. **Luola on turvassa fysiikan takia, ei säännön.** Pallo lähtee
- *      kraatterista aina *ulospäin*, eli vasemmalla puolella sen vaakanopeus
- *      on vasemmalle. Luolan suu aukeaa vasemmalle, joten sinne pitäisi lentää
- *      oikealle — eikä yksikään pallo tee niin. Katto on lisäksi umpinaista
- *      kiveä koko luolan matkalta. Jos luolaa siirtää, tämä on se mikä pitää
- *      tarkistaa: kumpikaan ehto yksin ei riitä.
+ *   2. **Saaren alla on turvassa fysiikan takia, ei säännön.** Pallo lähtee
+ *      kraatterista aina *ulospäin* eikä sen vaakanopeus vaihda merkkiä
+ *      koskaan. Vasemmalle lähtenyt on siis ikuisesti menossa vasemmalle, eikä
+ *      se voi palata saaren alle sen jälkeen kun se on ohittanut saaren
+ *      kyljen. Saaren runko on lisäksi umpinaista kiveä koko leveydeltään.
+ *      **Kumpikaan ehto yksin ei riitä**, ja jos tankkausta siirtää saaren
+ *      varjon ulkopuolelle, tämä on se mikä menee rikki.
  *   3. **Vain vuori tärisee.** Tärinä on piirron siirto eikä fysiikkaa, ja se
  *      on siksi pidetty pienenä (`quake`, enintään 5 px). Ruutu ja alustat
  *      eivät liiku lainkaan: varoituksen aikana laskeutumisen pitää olla yhtä
  *      tarkkaa kuin muulloin, muuten varoitus rankaisisi siitä että sen
  *      huomasi. Sami 23.9.2026: *"vain vuori tärisee."*
+ *
+ * **Piirto ja törmäys ovat tässä kentässä eri muotoisia, ja se on tahallista.**
+ * Ensimmäinen versio rakensi vuoren kymmenestä laatikosta ja piirsi ne
+ * laatikkoina, ja Sami sanoi mitä se näytti: atsteekkitemppeliltä. Vika ei
+ * ollut moottorissa vaan siinä, että konventiota noudatettiin väärään
+ * suuntaan. Oikea järjestys on se jota Shooting Starsin kuusi jo käyttää:
+ *
+ *   **siluetti piirretään yhtenä käyränä, ja törmäys ladotaan sen sisään.**
+ *
+ * Penkat ovat siis `ISLE.inset` verran kapeampia kuin piirretty reuna joka
+ * kohdassa, ja rosoisuus kuuluu kokonaan piirtoon. Silloin kaikki mikä tappaa
+ * on sen sisällä minkä pelaaja näkee — kallion uloin roso ei tapa — mutta
+ * näkymätöntä seinää ei ole missään. Se on sama anteeksiantava suunta kuin
+ * magmapallon törmäyslaatikko, joka on 0,68 × pallon halkaisija.
+ *
+ * Saaren muoto on siksi laskettu eikä kirjoitettu: sitä sommitellaan muodon
+ * säätimistä (`ISLE`), ja `shape()` lataa luvut samoihin laatikoihin joita
+ * törmäys jo käyttää.
  */
 
 import { W, H, CEIL } from './shared.js';
 
-/* ------------------------------------------------------------------ mitat
+/* ------------------------------------------------------------------ mitat */
 
-   Luvut ovat tässä lukuina eivätkä laskettuina: kenttää sommitellaan
-   siirtämällä yhtä lukua kerrallaan, ja kaava tekee siitä arvuuttelua.
-
-   Kartio on kymmenen 47 px:n penkkaa y 430…900. Porras on tahallaan näkyvä:
-   vuori jonka siluetti on pehmeämpi kuin sen törmäys olisi juuri se
-   epäselvyys jota README kieltää. Penkat piirretään täsmälleen niinä
-   laatikkoina jotka ovat myös törmäys. */
-
-const CRATER_Y = 430;                 // kraatterin suun taso
-const PIT = { x0: 322, x1: 398 };     // kraatterin aukko — taksi ei mahdu
-const BASE_Y = 900;                   // tyvi, tästä alaspäin luola ja jalka
 const FLOOR = H - 16;                 // kehäseinän lattia
+const PAD_H = 18;                     // pelin oletus, ks. game.js loadLevel
 
-/* Penkat: y on yläreuna, h korkeus, x0…x1 leveys. Alaspäin levenevä kartio
-   jonka tyvi on 130…590 — kuilut jäävät silloin 114 px leveiksi vielä
-   alimmillaan, ja taksi on 54 px. Ahtaus ei ole tämän kentän vaikeus. */
-/* Penkkojen korkeudet ja reunat ovat tahallaan epätasaisia. Tasavälinen
-   pino näytti ensimmäisessä ajossa zikkuratilta eikä vuorelta — kivi ei ole
-   muurattu. Yksi ehto ne silti täyttävät: **kukin penkka on vähintään yhtä
-   leveä kuin sen yläpuolinen.** Ylöspäin kapeneva pino ei tee yhtään ulkonevaa
-   hyllyä, ja ulkoneva hylly olisi suoja jota kenttä ei ole luvannut. */
-const CONE = [
-  { y: 430, h: 47, x0: 281, x1: 439, rim: true },   // kraatterin reunat
-  { y: 477, h: 41, x0: 262, x1: 458 },
-  { y: 518, h: 52, x0: 250, x1: 466 },
-  { y: 570, h: 38, x0: 234, x1: 492 },
-  { y: 608, h: 55, x0: 214, x1: 502 },
-  { y: 663, h: 44, x0: 198, x1: 526 },
-  { y: 707, h: 50, x0: 176, x1: 536 },
-  { y: 757, h: 40, x0: 166, x1: 558 },
-  { y: 797, h: 56, x0: 142, x1: 570 },
-  { y: 853, h: 47, x0: 130, x1: 590 },
-];
+/* Saaren muoto yhtenä oliona. Nämä ovat säätimissä, koska saarta sommitellaan
+   kokonaisuutena eikä penkka kerrallaan.
 
-/* Luola on koverrettu tyven vasempaan puoliskoon: kivi jää umpinaiseksi vain
-   440…590, ja sen vasemmalla puolella y 900…1024 on onkalo jonka kattona on
-   ylin penkka. Suu aukeaa vasemmalle kuiluun. */
-const CAVE = { x0: 130, x1: 440, y0: BASE_Y, y1: FLOOR };
-const FOOT = { x: 440, y: BASE_Y, w: 150, h: FLOOR - BASE_Y };
-
-/* Kiilakkeet: alusta seisoo kivihyllyllä joka sulautuu kylkeen. Hylly alkaa
-   alustan alareunasta, joten alustan laskupinta ei ole koskaan seinän sisällä
-   — se on se ainoa asia jonka tarkistin katsoo. */
-const PAD_H = 18;
-const LEDGES = [
-  { x: 155, y: 488, w: 145, h: 36 },    // alustan 1 alla
-  { x: 420, y: 488, w: 145, h: 36 },    // alustan 2 alla
-  { x: 88,  y: 678, w: 152, h: 36 },    // alustan 3 alla
-  { x: 480, y: 658, w: 152, h: 36 },    // alustan 4 alla
-];
+     top…waist   ylärinne: kraatterin reunasta levaimpaan kohtaan
+     waist…bot   köli: levaimmasta kohdasta alas kärkeen, ilman mitään alla
+     rough       reunan rosoisuus **piirrossa**. Törmäys ei tiedä siitä
+                 mitään: se on aina sileän muodon sisällä.
+     inset       kuinka paljon törmäys on piirrettyä kapeampi. Tämän on
+                 katettava rosoisuus, tai roso alkaisi olla näkymätöntä
+                 seinää. */
+const ISLE = {
+  cx: 360, top: 500, waist: 634, bot: 742,
+  hw: 108, rim: 66, chw: 38, pow: 1.6, keel: 2.1, rough: 7, inset: 10,
+};
+const BAND_N = 26;                    // penkkoja, kiinteä määrä
+const RIM_BANDS = 3;                  // ylimmät penkat halkaistaan kraatteriksi
 
 /* ------------------------------------------------------------------ seinät
 
    add palauttaa saman olion jonka se työntää listaan eikä kopiota: peli
-   kopioi `level.walls`in taulukkona mutta jakaa oliot kentän kanssa. */
+   kopioi `level.walls`in taulukkona mutta jakaa oliot kentän kanssa, joten
+   muodon saa vaihtaa vain kirjoittamalla vanhan olion sisään. Uusi olio ei
+   päädy törmäykseen koskaan. */
 
 const SOLID = [];
 const add = r => { r.hide = true; SOLID.push(r); return r; };
 
-/* Kraatterin reunat ovat kaksi laatikkoa eikä yksi: keskelle jäävä 76 px:n
-   aukko on kraatteri. Se on oikea kolo eikä maalattu — umpinaiselta näyttävä
-   on umpinaista, ja aukolta näyttävä on aukko. Taksi (54 px) mahtuisi siihen
-   teoriassa, mutta siellä ei ole alustaa eikä mitään haettavaa, ja purkaus
-   tulee sieltä. */
+/* Penkat varataan kerran. Halkaistuilla on kaksi laatikkoa, muilla yksi ja
+   toinen jää nollan levyiseksi — **nollan levyinen ei osu mihinkään**, ja se
+   on siistimpi tapa jättää laatikko pois kuin poistaa se listalta, joka
+   rikkoisi jaetut viittaukset. */
 const BANDS = [];
-for (const b of CONE) {
-  if (b.rim) {
-    BANDS.push(add({ x: b.x0, y: b.y, w: PIT.x0 - b.x0, h: b.h, rock: true }));
-    BANDS.push(add({ x: PIT.x1, y: b.y, w: b.x1 - PIT.x1, h: b.h, rock: true }));
-  } else {
-    BANDS.push(add({ x: b.x0, y: b.y, w: b.x1 - b.x0, h: b.h, rock: true }));
-  }
+for (let i = 0; i < BAND_N; i++) {
+  BANDS.push({
+    l: add({ x: 0, y: 0, w: 0, h: 0, rock: true }),
+    r: add({ x: 0, y: 0, w: 0, h: 0, rock: true }),
+  });
 }
 
+const bandY = i => ISLE.top + (ISLE.bot - ISLE.top) * (i / BAND_N);
+
+/* Puolileveys korkeudella y. Ylärinne kaartuu ulos, köli kapenee kärkeen. */
+function halfWidth(y) {
+  const { top, waist, bot, hw, rim, pow, keel } = ISLE;
+  if (y <= waist) {
+    const u = Math.max(0, Math.min(1, (y - top) / Math.max(1, waist - top)));
+    return rim + (hw - rim) * Math.pow(u, 1 / Math.max(0.2, pow));
+  }
+  const u = Math.max(0, Math.min(1, (y - waist) / Math.max(1, bot - waist)));
+  return hw * Math.pow(1 - u, 1 / Math.max(0.2, keel));
+}
+
+function shape() {
+  const step = (ISLE.bot - ISLE.top) / BAND_N;
+  for (let i = 0; i < BAND_N; i++) {
+    const y = bandY(i);
+    /* Penkan leveys luetaan sen **kapeimmasta** kohdasta: ylärinteellä
+       yläreunasta, kölissä alareunasta. Yhdessä `inset`in kanssa se pitää
+       laatikon varmasti piirretyn käyrän sisällä myös siellä missä käyrä
+       kaartuu jyrkimmin. */
+    const at = y + step < ISLE.waist ? y : y + step;
+    const half = Math.max(3, halfWidth(at) - ISLE.inset);
+    const x0 = ISLE.cx - half, x1 = ISLE.cx + half;
+    const b = BANDS[i];
+    if (i < RIM_BANDS) {                 // kraatterin reunat, aukko keskellä
+      /* Kraatterin aukko on törmäyksessä leveämpi kuin piirretty: sama
+         sääntö toisin päin, koska tässä kiveä on aukon *ulkopuolella*. */
+      const g0 = ISLE.cx - ISLE.chw - ISLE.inset, g1 = ISLE.cx + ISLE.chw + ISLE.inset;
+      b.l.x = x0; b.l.y = y; b.l.w = Math.max(0, g0 - x0); b.l.h = step;
+      b.r.x = g1; b.r.y = y; b.r.w = Math.max(0, x1 - g1); b.r.h = step;
+    } else {
+      b.l.x = x0; b.l.y = y; b.l.w = x1 - x0; b.l.h = step;
+      b.r.x = 0; b.r.y = 0; b.r.w = 0; b.r.h = 0;
+    }
+  }
+}
+shape();
+
+let shapeSig = '';
+/* Säätimet luetaan piirrossa eikä päivityksessä: peli ajaa kentän `update`in
+   vain PLAY-tilassa, ja saarta sommitellaan nimenomaan tauolla. */
+function panelCheck() {
+  const sig = `${ISLE.top},${ISLE.waist},${ISLE.bot},${ISLE.hw},${ISLE.rim},`
+    + `${ISLE.chw},${ISLE.pow},${ISLE.keel},${ISLE.inset},${ISLE.cx}`;
+  if (sig === shapeSig) return;
+  shapeSig = sig;
+  shape();
+}
+
+/* Kylkialustojen hyllyt. Hylly alkaa alustan alareunasta ja työntyy saaren
+   sisään, joten alustan laskupinta ei ole koskaan seinän sisällä — se on se
+   ainoa asia jonka tarkistin katsoo. */
+const LEDGES = [
+  { x: 96, y: 658, w: 180, h: 30 },     // alustan 1 alla
+  { x: 444, y: 658, w: 180, h: 30 },    // alustan 2 alla
+];
 const SHELVES = LEDGES.map(l => add({ ...l, rock: true, shelf: true }));
-const BASE = add({ ...FOOT, rock: true });
 
 /* ---------------------------------------------------------------- alustat
 
-   Numeroidut alustat ovat kylkien kiilakkeilla, kaksi kummallakin puolella.
-   Jokaisen ulkopuolelle jää vähintään 70 px kuilua, jotta alustan ohi pääsee
-   laskeutumaan alemmas — muuten alin alusta olisi tulppa eikä alusta.
+   Kahdeksan numeroitua: kaksi kiinni saaressa ja kuusi ruudun laidoilla,
+   kolme kummallakin. Leveys 150 px eli 1,25 × entinen — Sami 23.9.2026.
 
-   Tankkaus on luolassa. Se on koko kentän lupaus: ulkona ei ole turvaa,
-   sisällä ei ole keikkoja. */
+   Tankkaus on lattialla suoraan saaren alla. Se on koko kentän lupaus:
+   ulkona ei ole turvaa, sisällä ei ole keikkoja. */
 const PADS = [
-  { id: 1, x: 155, y: 470, w: 120 },
-  { id: 2, x: 445, y: 470, w: 120 },
-  { id: 3, x: 88,  y: 660, w: 120 },
-  { id: 4, x: 512, y: 640, w: 120 },
-  { id: 0, x: 260, y: 986, w: 120, fuel: true },
+  /* Kuusi sateessa: kaksi saaren kyljissä ja neljä kuiluissa kahdella
+     korkeudella. Nämä ovat ne joille kivi putoaa. */
+  { id: 1, x: 96,  y: 640,  w: 150 },   // saaren vasen kylki
+  { id: 2, x: 474, y: 640,  w: 150 },   // saaren oikea kylki
+  { id: 3, x: 40,  y: 240,  w: 150 },
+  { id: 4, x: 530, y: 240,  w: 150 },
+  { id: 5, x: 16,  y: 440,  w: 150 },
+  { id: 6, x: 554, y: 440,  w: 150 },
+  /* Kolme lattialla saaren alla: tankkaus ja kaksi sen kylkeen. Ne ovat
+     tahallaan suojassa — saaren varjo on kentän ainoa turvapaikka, ja siellä
+     saa istua purkauksen yli. Ks. tiedoston alun sääntö 2. */
+  { id: 7, x: 100, y: FLOOR - PAD_H - 4, w: 150 },
+  { id: 0, x: 285, y: FLOOR - PAD_H - 4, w: 150, fuel: true },
+  { id: 8, x: 470, y: FLOOR - PAD_H - 4, w: 150 },
 ];
 
 /* ---------------------------------------------------------------- purkaus
@@ -148,7 +210,7 @@ const ERUPT = {
   grace: 6,           // tauko kentän alussa ja kuoleman jälkeen s
   nmin: 1, nmax: 4,   // palloja purkauksessa
   vmin: 290, vmax: 430,
-  amin: 4, amax: 18,  // lähtökulma pystystä, astetta
+  amin: 6, amax: 26,  // lähtökulma pystystä, astetta
   spit: 0.3,          // purkauksen sisäinen sylkyväli s
   size: 1,
   quake: 3,           // vuoren tärinä px — vain piirto, ks. sääntö 3
@@ -221,7 +283,7 @@ function launch() {
   const r = between(R_SMALL, R_BIG) * ERUPT.size;
   const side = BOX * 2 * r;
   S.balls.push({
-    x: 360 + between(-6, 6) * dir, y: CRATER_Y + 10,
+    x: ISLE.cx + between(-6, 6) * dir, y: ISLE.top + 12,
     vx: Math.sin(a) * v * dir, vy: -Math.cos(a) * v,
     r, t: 0, puff: 0, hot: between(0, 1), spin: between(-2, 2),
     box: { x: 0, y: 0, w: side, h: side, hide: true, magma: true },
@@ -243,7 +305,7 @@ function puffSmoke(dt, heat) {
   while (S.smokeT <= 0) {
     S.smokeT += 1 / Math.max(0.5, rate);
     S.smoke.push({
-      x: 360 + between(-28, 28), y: CRATER_Y + between(-4, 10),
+      x: ISLE.cx + between(-26, 26), y: ISLE.top + between(-4, 10),
       vx: between(-SMOKE.drift, SMOKE.drift),
       vy: -SMOKE.rise * between(0.6, 1.3) * (0.7 + heat * 0.6),
       life: SMOKE.life * between(0.7, 1.2), max: SMOKE.life,
@@ -259,7 +321,7 @@ function sparkle(dt, heat) {
   while (S.sparkT <= 0) {
     S.sparkT += 1 / Math.max(1, SPARK.rate * heat);
     S.bits.push({
-      x: 360 + between(-30, 30), y: CRATER_Y + between(0, 14),
+      x: ISLE.cx + between(-28, 28), y: ISLE.top + between(0, 14),
       vx: between(-SPARK.spread, SPARK.spread) * heat,
       vy: -SPARK.up * between(0.5, 1.2) * heat,
       life: SPARK.life * between(0.5, 1.1), max: SPARK.life,
@@ -534,74 +596,173 @@ function jungle(ctx) {
 
 /* ---- vuori */
 
-/* Kiven pinta arvotaan kerran laatikkoa kohti ja pidetään tallessa: halkeamat
-   eivät saa vilkkua ruudusta toiseen. Kaikki pysyy laatikon sisällä — siluetti
-   on se laatikko joka on myös törmäys, eikä koriste saa liata sitä. */
-const TEX = new Map();
-function texture(r) {
-  let t = TEX.get(r);
-  if (t) return t;
-  let n = Math.abs(Math.round(r.x * 7 + r.y * 13 + r.w)) % 99991 + 7;
-  const nx = () => ((n = (n * 1103515245 + 12345) >>> 0) / 4294967296);
-  const cracks = [];
-  for (let i = 0; i < Math.round(r.w / 34) + 2; i++) {
-    const x = r.x + 6 + nx() * Math.max(1, r.w - 12);
-    cracks.push({ x, y: r.y + 5 + nx() * Math.max(1, r.h - 12), h: 6 + nx() * (r.h - 12), lean: (nx() - 0.5) * 6 });
+/* ---- saari
+
+   Siluetti on **yksi käyrä** ja rosoisuus kuuluu siihen. Törmäys on käyrän
+   sisällä (`ISLE.inset`), joten kallion uloin roso ei tapa eikä näkymätöntä
+   seinää ole missään. Ks. tiedoston alku.
+
+   Roso on sinien summa eikä arvottu taulukko: se seuraa muotoa itsestään kun
+   säädintä liikutetaan, eikä sitä tarvitse ladata uudestaan. */
+
+const PIT_D = () => (ISLE.bot - ISLE.top) / BAND_N * RIM_BANDS;
+
+const jag = (y, k) => Math.sin(y * 0.37 + k) * 0.55 + Math.sin(y * 0.94 + k * 2.3) * 0.45;
+const edge = (y, side) => ISLE.cx + side * (halfWidth(y) + jag(y, side > 0 ? 3.1 : 0.4) * ISLE.rough);
+
+function islePath(ctx) {
+  const N = 96, span = ISLE.bot - ISLE.top, d = PIT_D(), g = ISLE.chw;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const y = ISLE.top + span * (i / N), x = edge(y, -1);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
-  const scree = [];
-  for (let i = 0; i < Math.round(r.w / 26) + 2; i++) {
-    scree.push({ x: r.x + nx() * Math.max(1, r.w - 8), w: 4 + nx() * 12, d: nx() });
+  for (let i = N; i >= 0; i--) {
+    const y = ISLE.top + span * (i / N);
+    ctx.lineTo(edge(y, 1), y);
   }
-  t = { cracks, scree };
-  TEX.set(r, t);
-  return t;
+  /* Kraatterin kolo laen keskelle. Se on oikea kolo: törmäyksessä sen aukko on
+     vielä piirrettyäkin leveämpi, joten reunalle ei voi jäädä kiinni siihen
+     mitä ei näe. */
+  ctx.lineTo(ISLE.cx + g, ISLE.top);
+  ctx.lineTo(ISLE.cx + g * 0.74, ISLE.top + d);
+  ctx.lineTo(ISLE.cx - g * 0.74, ISLE.top + d);
+  ctx.lineTo(ISLE.cx - g, ISLE.top);
+  ctx.closePath();
 }
 
-function rockBand(ctx, r, lit, glow) {
-  const t = texture(r);
-  ctx.fillStyle = '#2b2521';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
+/* Laavajuonteet. Ne olivat ensimmäisen version paras osa — Sami 23.9.2026:
+   *"vuorta pitkin valuva laava on erinomainen"* — ja sileällä kyljellä ne
+   pääsevät vasta oikeuksiinsa: juonne seuraa muotoa eikä katkea penkan
+   saumaan. Jokainen lähtee kraatterin reunalta ja haarautuu alas kölille. */
+const VEINS = [];
+for (let i = 0; i < 9; i++) {
+  VEINS.push({
+    side: i % 2 ? 1 : -1,
+    f0: 0.12 + (i % 5) * 0.16,          // etäisyys keskilinjasta lähdössä
+    f1: 0.52 + ((i * 7) % 5) * 0.09,    // ja alhaalla
+    wig: 0.9 + ((i * 3) % 4) * 0.5,
+    w: 1.6 + ((i * 5) % 3) * 0.9,
+    end: 0.72 + ((i * 11) % 4) * 0.07,  // kuinka alas asti juonne yltää
+  });
+}
+
+function veins(ctx, heat, t) {
+  const span = ISLE.bot - ISLE.top, d = PIT_D();
+  for (const v of VEINS) {
+    const steps = 16;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      const y = ISLE.top + d + (span - d) * u * v.end;
+      const f = v.f0 + (v.f1 - v.f0) * u;
+      const wig = Math.sin(u * 5.4 * v.wig + v.f0 * 9) * 0.07;
+      const x = ISLE.cx + v.side * halfWidth(y) * Math.min(0.93, f + wig);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    /* Kirkkaus hengittää omalla kellollaan ja kasvaa varoituksen mukana.
+       Levossakin juonne hohtaa hiukan: vuori on kuuma koko ajan, ja varoitus
+       on sen *muutos*. */
+    const pulse = 0.5 + 0.5 * Math.sin(t * 1.1 + v.f0 * 11);
+    ctx.strokeStyle = fade('#ff5a14', 0.18 + heat * 0.5 + pulse * 0.1);
+    ctx.lineWidth = v.w + heat * 1.6;
+    ctx.stroke();
+    ctx.strokeStyle = fade('#ffd07a', 0.1 + heat * 0.45);
+    ctx.lineWidth = Math.max(0.6, v.w * 0.4);
+    ctx.stroke();
+  }
+}
+
+function isle(ctx, heat, t) {
+  const span = ISLE.bot - ISLE.top, d = PIT_D();
+
+  /* Alapuolen hohde: köli on kuuma, ja se on myös se merkki joka kertoo ettei
+     saari nojaa mihinkään. Pelkkä hohde eikä pisaroita — putoava laavapisara
+     näyttäisi magmapallolta, ja silloin kenttä valehtelisi. */
+  const glow = ctx.createRadialGradient(ISLE.cx, ISLE.bot - 10, 4, ISLE.cx, ISLE.bot - 10, 120 + heat * 60);
+  glow.addColorStop(0, fade('#ff7a2c', 0.24 + heat * 0.22));
+  glow.addColorStop(1, '#ff7a2c00');
+  ctx.fillStyle = glow;
+  ctx.fillRect(ISLE.cx - 200, ISLE.bot - 130, 400, 260);
 
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(r.x, r.y, r.w, r.h);
+  islePath(ctx);
+  const body = ctx.createLinearGradient(0, ISLE.top, 0, ISLE.bot);
+  body.addColorStop(0, '#4a4038');
+  body.addColorStop(0.45, '#332c26');
+  body.addColorStop(1, '#221c18');
+  ctx.fillStyle = body;
+  ctx.fill();
+
   ctx.clip();
 
-  /* Yläpinta valoon. Valo tulee ylävasemmalta, joten hyllyn vasen pää on
-     kirkkain ja oikea pää sammuu — muuten penkka näyttää lankulta. */
-  const top = ctx.createLinearGradient(r.x, 0, r.x + r.w, 0);
-  top.addColorStop(0, lit);
-  top.addColorStop(1, '#2f2823');
-  ctx.fillStyle = top;
-  ctx.fillRect(r.x, r.y, r.w, 6);
-  for (const g of t.scree) ctx.fillRect(g.x, r.y + 5, g.w, 2 + g.d * 4);
+  // kerrostumat: vaakajuovia jotka kertovat kivestä ilman että ne ovat portaita
+  for (let y = ISLE.top + 8; y < ISLE.bot; y += 11) {
+    ctx.fillStyle = (y / 11 | 0) % 2 ? '#00000022' : '#ffffff09';
+    ctx.fillRect(ISLE.cx - 200, y, 400, 4);
+  }
 
-  ctx.fillStyle = '#00000044';
-  ctx.fillRect(r.x, r.y + r.h - 5, r.w, 5);
-  ctx.fillStyle = '#ffffff0e';
-  ctx.fillRect(r.x, r.y + 6, 3, r.h - 10);          // vasen kylki valoon
+  // valo ylävasemmalta: kirkas kaistale vasenta kylkeä pitkin
+  ctx.strokeStyle = '#6d5c4d55';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  for (let i = 0; i <= 60; i++) {
+    const y = ISLE.top + span * (i / 60), x = edge(y, -1);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
 
-  ctx.strokeStyle = '#00000038';
+  // halkeamia, kiinteä kuvio jotta ne eivät vilku
+  ctx.strokeStyle = '#00000040';
   ctx.lineWidth = 2;
-  for (const c of t.cracks) {
+  for (let i = 0; i < 16; i++) {
+    const y = ISLE.top + d + ((i * 37) % 100) / 100 * (span - d);
+    const f = ((i * 53) % 100) / 100 * 1.6 - 0.8;
+    const x = ISLE.cx + halfWidth(y) * f;
     ctx.beginPath();
-    ctx.moveTo(c.x, c.y);
-    ctx.lineTo(c.x + c.lean, Math.min(r.y + r.h - 2, c.y + c.h));
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (((i * 17) % 9) - 4), y + 9 + ((i * 29) % 14));
     ctx.stroke();
   }
 
-  if (glow > 0.01) {
-    ctx.strokeStyle = fade('#ff5a18', 0.18 + glow * 0.5);
-    ctx.lineWidth = 2.5;
-    for (let i = 0; i < t.cracks.length; i += 2) {
-      const c = t.cracks[i];
-      ctx.beginPath();
-      ctx.moveTo(c.x, c.y);
-      ctx.lineTo(c.x + c.lean, Math.min(r.y + r.h - 2, c.y + c.h));
-      ctx.stroke();
-    }
-  }
+  veins(ctx, heat, t);
+
+  /* Kraatterin lampi kolon pohjalla. Pinta elää omalla kellollaan. */
+  const py = ISLE.top + d - 7;
+  const pool = ctx.createLinearGradient(0, py - 4, 0, py + 9);
+  pool.addColorStop(0, fade('#ffdc96', 0.6 + heat * 0.4));
+  pool.addColorStop(1, fade('#e0500f', 0.65 + heat * 0.35));
+  ctx.fillStyle = pool;
+  ctx.fillRect(ISLE.cx - ISLE.chw * 0.72, py + Math.sin(t * 1.3) * 1.4, ISLE.chw * 1.44, 12);
   ctx.restore();
+
+  /* Hehku kolon päälle, klippauksen ulkopuolella: se saa vuotaa taivaalle. */
+  const g = 0.3 + heat * 0.7;
+  const gl = ctx.createRadialGradient(ISLE.cx, ISLE.top + d - 4, 4, ISLE.cx, ISLE.top + d - 4, 70 + heat * 60);
+  gl.addColorStop(0, fade('#ffcf7a', 0.5 * g));
+  gl.addColorStop(0.45, fade('#ff6a22', 0.32 * g));
+  gl.addColorStop(1, '#ff6a2200');
+  ctx.fillStyle = gl;
+  ctx.fillRect(ISLE.cx - 150, ISLE.top - 90, 300, 190);
+}
+
+/* Kylkialustan hylly. Piirretään laatikkoaan hitusen suurempana ja alta
+   viistettynä — sama suunta kuin saarella: näkyvä kivi on törmäystä isompi,
+   ei pienempi. */
+function ledge(ctx, r) {
+  const m = 4;
+  ctx.beginPath();
+  ctx.moveTo(r.x - m, r.y - m);
+  ctx.lineTo(r.x + r.w + m, r.y - m);
+  ctx.lineTo(r.x + r.w + m, r.y + r.h);
+  ctx.lineTo(r.x + r.w * 0.62, r.y + r.h + m * 2);
+  ctx.lineTo(r.x + r.w * 0.2, r.y + r.h);
+  ctx.closePath();
+  const gr = ctx.createLinearGradient(0, r.y - m, 0, r.y + r.h + m * 2);
+  gr.addColorStop(0, '#4c4032');
+  gr.addColorStop(1, '#241e19');
+  ctx.fillStyle = gr;
+  ctx.fill();
 }
 
 function mountain(ctx, heat) {
@@ -609,46 +770,8 @@ function mountain(ctx, heat) {
   const q = S.quake;
   ctx.save();
   if (q > 0.01) ctx.translate(nz(t, 41) * q, nz(t, 57) * q * 0.55);
-
-  /* Luolan pimeys ennen kiveä, jottei suu näytä aukolta viidakkoon. Perällä
-     palaa tankkausaseman valo: se on ainoa lämmin asia magman lisäksi, ja se
-     kertoo kauas että siellä on jotain. */
-  ctx.fillStyle = '#0a0908';
-  ctx.fillRect(CAVE.x0, CAVE.y0, CAVE.x1 - CAVE.x0, CAVE.y1 - CAVE.y0);
-  const lamp = ctx.createRadialGradient(320, 972, 6, 320, 972, 190);
-  lamp.addColorStop(0, '#ffcf8a2e');
-  lamp.addColorStop(1, '#ffcf8a00');
-  ctx.fillStyle = lamp;
-  ctx.fillRect(CAVE.x0, CAVE.y0, CAVE.x1 - CAVE.x0, CAVE.y1 - CAVE.y0);
-
-  /* Penkat alhaalta ylös, jotta ylempi peittää alemman saumat. Hehku on
-     voimakkain kraatterilla ja sammuu tyveä kohti: kuumuus on ylhäällä. */
-  for (let i = BANDS.length - 1; i >= 0; i--) {
-    const b = BANDS[i];
-    const up = Math.max(0, 1 - (b.y - CRATER_Y) / (BASE_Y - CRATER_Y));
-    rockBand(ctx, b, up > 0.72 ? '#57483c' : '#413830', heat * up * up);
-  }
-  rockBand(ctx, BASE, '#413830', 0);
-  for (const s2 of SHELVES) rockBand(ctx, s2, '#4c4032', 0);
-
-  /* Kraatteri: pohjalla lampi, jonka pinta elää omalla kellollaan, ja sen
-     päällä hehku joka kasvaa varoituksen mukana. Lampi on piirretty penkan
-     b1 yläpinnalle eli kiven päälle — kolo on oikea kolo, ei maalattu. */
-  const g = 0.3 + heat * 0.7;
-  const pw = PIT.x1 - PIT.x0;
-  const pool = ctx.createLinearGradient(0, CRATER_Y + 30, 0, CRATER_Y + 47);
-  pool.addColorStop(0, fade('#ffdc96', 0.55 + heat * 0.45));
-  pool.addColorStop(1, fade('#e0500f', 0.6 + heat * 0.4));
-  ctx.fillStyle = pool;
-  ctx.fillRect(PIT.x0 + 2, CRATER_Y + 30 + Math.sin(t * 1.3) * 1.5, pw - 4, 18);
-
-  const gl = ctx.createRadialGradient(360, CRATER_Y + 26, 4, 360, CRATER_Y + 26, 78 + heat * 64);
-  gl.addColorStop(0, fade('#ffcf7a', 0.5 * g));
-  gl.addColorStop(0.45, fade('#ff6a22', 0.34 * g));
-  gl.addColorStop(1, '#ff6a2200');
-  ctx.fillStyle = gl;
-  ctx.fillRect(PIT.x0 - 96, CRATER_Y - 74, pw + 192, 150);
-
+  for (const sh of SHELVES) ledge(ctx, sh);
+  isle(ctx, heat, t);
   ctx.restore();
 }
 
@@ -718,6 +841,7 @@ function ballDraw(ctx, b) {
 }
 
 function back(ctx) {
+  panelCheck();                   // muodon säädin voi liikkua myös tauolla
   jungle(ctx);
   const heat = S.phase === 'warn' ? Math.min(1, S.t / Math.max(0.05, ERUPT.warn)) ** 2 : 0;
   mountain(ctx, heat);
@@ -756,6 +880,26 @@ export const volcano = {
     })),
   ],
   tune: [
+    /* Saaren muoto säätimiin: sitä sommitellaan kokonaisuutena eikä penkka
+       kerrallaan, ja juuri siksi penkkoja ei ole kirjoitettu lukuina.
+       `inset` on se luku joka pitää piirron ja törmäyksen erillään — jos sen
+       laskee nollaan, kallion roso alkaa olla näkymätöntä seinää. */
+    {
+      name: 'saari', obj: ISLE, open: false,
+      sliders: [
+        { key: 'top', label: 'kraatteri y', min: 120, max: 640, step: 2 },
+        { key: 'waist', label: 'levein kohta y', min: 200, max: 760, step: 2 },
+        { key: 'bot', label: 'kölin kärki y', min: 260, max: 900, step: 2 },
+        { key: 'hw', label: 'puolileveys', min: 40, max: 300, step: 2 },
+        { key: 'rim', label: 'kraatterin reunan puolileveys', min: 20, max: 200, step: 2 },
+        { key: 'chw', label: 'kraatterin puoliaukko', min: 12, max: 90, step: 1 },
+        { key: 'pow', label: 'ylärinteen kaarevuus', min: 0.6, max: 3, step: 0.05 },
+        { key: 'keel', label: 'kölin kaarevuus', min: 0.6, max: 4, step: 0.05 },
+        { key: 'rough', label: 'reunan roso px (vain piirto)', min: 0, max: 16, step: 0.5 },
+        { key: 'inset', label: 'törmäys piirtoa kapeampi px', min: 2, max: 26, step: 1 },
+        { key: 'cx', label: 'keskikohta x', min: 200, max: 520, step: 2 },
+      ],
+    },
     {
       name: 'purkaus', obj: ERUPT,
       sliders: [
