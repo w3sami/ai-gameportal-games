@@ -531,9 +531,22 @@ function leaf(into, x, y, a, r) {
 
    Kenttä ei kuluta pelin satunnaisvirtaa: `lrnd` on oma siemenensä, jotta
    lehvästö on sama joka ajolla eikä piirto vaikuta purkausten arvontaan. */
+/* Lehvästön perusvärit. Ne eivät ole se mitä ruudulla näkyy vaan se millä
+   tausta **kerrotaan**: lehvästö piirretään multiply-tilassa, jolloin se
+   tummentaa sen mitä sen takana on sen sijaan että peittäisi sen. Siitä tulee
+   kaksi asiaa kerralla — ilmaperspektiivi ilmaiseksi (alhaalla tumman
+   harjanteen päällä lehti on melkein musta, ylhäällä taivasta vasten vain
+   sävy) ja se ettei lehvästö voi koskaan lukea etualana.
+
+   Sami 23.9.2026: *"jos ne alkaa maasta asti niin sittenhän se ei toimi,
+   pitäis saada joku multiply sen alimman harjanteen kanssa."* Juuri niin: sitä
+   ennen lehvästö oli joko harjanteiden edessä (liian kirkas) tai niiden takana
+   (näkymätön alaosastaan). `dark` on kertoimen voimakkuus, 0 = ei vaikutusta. */
+const LEAF_TONE = ['#3f5a46', '#4b6a52'];
+
 const LEAF = {
-  min: 46, max: 130, edge: 0.78, sway: 1,
-  y: [17, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  min: 46, max: 130, edge: 0.78, sway: 1, dark: 0.55,
+  y: [17, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
 };
 
 let lseed = 4242;
@@ -568,7 +581,7 @@ const LEAF_PAD = 60;
 function leafImage(ctx) {
   const [pa, pb] = leafField();
   const sc = Math.min(2, Math.max(0.5, ctx.getTransform().a));
-  const key = leafSig + '|' + sc.toFixed(2);
+  const key = leafSig + '|' + sc.toFixed(2) + '|' + LEAF.dark;
   if (leafBmp && leafBmpKey === key) return leafBmp;
 
   const w = W + LEAF_PAD * 2, h = H + LEAF_PAD * 2;
@@ -576,8 +589,15 @@ function leafImage(ctx) {
   c.width = Math.round(w * sc); c.height = Math.round(h * sc);
   const g = c.getContext('2d');
   g.setTransform(sc, 0, 0, sc, LEAF_PAD * sc, LEAF_PAD * sc);
-  g.fillStyle = '#0c1610'; g.fill(pa);
-  g.fillStyle = '#101d15'; g.fill(pb);
+  /* Valkoinen on multiplyn ykkönen: `dark` 0 jättää taustan koskematta, 1 vie
+     perusväriin asti. Mitä tummempi väri, sitä vahvempi kerroin. */
+  const tone = i => {
+    const n = parseInt(LEAF_TONE[i].slice(1), 16);
+    const ch = sh => Math.round(255 + (((n >> sh) & 255) - 255) * LEAF.dark);
+    return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+  };
+  g.fillStyle = tone(0); g.fill(pa);
+  g.fillStyle = tone(1); g.fill(pb);
   leafBmp = c; leafBmpKey = key;
   return c;
 }
@@ -701,6 +721,7 @@ function jungle(ctx) {
   const t = clock();
 
 
+
   /* Kaukaiset harjanteet — mitä kauempana, sitä lähempänä taivaan väriä. */
   /* Sävyt ovat lähellä toisiaan mutta eivät samoja: ilman eroa kerrokset
      katosivat yhdeksi tasaiseksi vihreäksi, ja syvyys on se mitä niillä
@@ -731,20 +752,20 @@ function jungle(ctx) {
 
   treeline(ctx);
 
-  /* Lehvästö on lehtikerroksista **takimmainen** ja tummin — Sami 23.9.2026.
-     Se oli ensin päällimmäisenä, ja silloin se luki etualana: kirkkaimpana
-     ja lähimpänä juuri se mitä taustan ei pidä olla.
 
-     Kauempana kuin tämä ei silti voi olla. Puuraja on yhtenäinen massa
-     vaakaviivastaan alaspäin, joten sen taakse pantuna lehvästöstä näkyisi
-     vain se osa joka nousee viivan yläpuolelle — koko alalaidan kehys
-     katoaisi. Järjestys on siis: harjanteet, utu, puuraja, **lehvästö**,
-     rungot.
+  /* Lehvästö **kertoo** taustan eikä peitä sitä (multiply). Sillä on kaksi
+     puolta kerralla: harjanteet ja puuraja "yliajavat" sen sitä vahvemmin
+     mitä tummempia ne ovat, ja lehvästö voi silti alkaa maasta asti — takana
+     se katosi alimman harjanteen alle, edessä se luki etualana.
 
-     Koko lehvästö kahdella täytöllä, ja huojunta yhtenä siirtona: tuuli käy
+     Piirtojärjestys on siis harjanteet, utu, puuraja, **lehvästö**, rungot;
+     kerroin hoitaa syvyyden, ei järjestys.
+
+     Koko lehvästö yhtenä kuvana, ja huojunta yhtenä siirtona: tuuli käy
      metsän yli eikä lehti kerrallaan. */
   const bmp = leafImage(ctx);
   ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
   ctx.translate(Math.sin(t * 0.5) * 2.4 * LEAF.sway, 0);
   ctx.drawImage(bmp, -LEAF_PAD, -LEAF_PAD, W + LEAF_PAD * 2, H + LEAF_PAD * 2);
   ctx.restore();
@@ -1069,6 +1090,7 @@ export const volcano = {
         { key: 'min', label: 'viuhkan koko min', min: 8, max: 200, step: 2 },
         { key: 'max', label: 'viuhkan koko max', min: 8, max: 260, step: 2 },
         { key: 'edge', label: 'laitaan hakeutuminen', min: 0, max: 1, step: 0.02 },
+        { key: 'dark', label: 'tummennus (multiply)', min: 0, max: 1, step: 0.02 },
         { key: 'sway', label: 'huojunta ×', min: 0, max: 3, step: 0.1 },
       ],
     },
