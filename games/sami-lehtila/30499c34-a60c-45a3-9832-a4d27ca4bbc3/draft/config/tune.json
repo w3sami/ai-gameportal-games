@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790179394008,
+ "stamp": 1790189520354,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -10,6 +10,7 @@
   "bounceFrom": 0.5,
   "bounceLift": 10,
   "bounceKeep": 0.62,
+  "hop": 30,
   "burn": 12,
   "refuel": 63,
   "price": 0.9,
@@ -27,7 +28,13 @@
   "fadeRush": 2.4,
   "tipHold": 1.35,
   "fadeHold": 1.4,
-  "stick": 2.05
+  "stick": 2.05,
+  "smokeFrom": 58,
+  "smokeRate": 40,
+  "smokeLife": 1,
+  "smokeSize": 6.5,
+  "smokeGrow": 2,
+  "smokeRise": 16
  },
  "levels": {
   "lanterns": {
@@ -175,8 +182,7 @@
      "size": 3.6,
      "spread": 12
     }
-   },
-   "name": "Hellcano"
+   }
   }
  }
 }
