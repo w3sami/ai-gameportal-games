@@ -171,20 +171,20 @@ const PADS = [
   /* **Kahdeksan alustaa tasaisin välein laitoihin kiinni**, neljä kummallakin
      puolella. Sami 23.9.2026. Kulkuväylä on alustan ja vuoren välissä. */
   { id: 1, x: 16,  y: 190, w: 150 },
-  { id: 2, x: 554, y: 190, w: 150 },
+  { id: 2, x: 295, y: 300, w: 150 },    // keskellä, suoraan kraatterin yllä
   { id: 3, x: 16,  y: 443, w: 150 },
   { id: 4, x: 554, y: 443, w: 150 },
   { id: 5, x: 16,  y: 697, w: 150 },
   { id: 6, x: 554, y: 697, w: 150 },
   { id: 7, x: 16,  y: 950, w: 150 },
   { id: 8, x: 554, y: 950, w: 150 },
-  /* Tankkaus **ylhäällä keskellä**, luukun alla. Vuori seisoo nyt lattialla,
-     joten vanha paikka sen alla on kiveä — ja turva löytyy toisesta suunnasta:
-     purkauksen lakikorkeus on y 376 (laatikon yläreuna), eli kaikki tämän
-     yläpuolella on magman ulottumattomissa. Sama sääntö kuin ennenkin, eri
-     suunnasta: turva on fysiikassa eikä säännössä, ja se lasketaan
-     lähtönopeudesta. Jos `vmax` nousee, tämä raja laskee. */
-  { id: 0, x: 295, y: 300, w: 150, fuel: true },
+  /* Tankkaus ylös laitaan, **pois keskilinjalta**. Se oli ensin keskellä
+     kraatterin yläpuolella, ja Samin nostettua `vmax`in 620:een se oli
+     mittauksessa koko kentän pommitetuin alusta (15,8 %) — juuri se paikka
+     jossa pitää istua paikallaan pisimpään. Laidalla osuma on 7 %. Sami
+     ehdotti tätä itse: *"voisin kokeilla vaihtaa bensan toisen yläalustan
+     paikalle."* Vaihto on kahden rivin mittainen kumpaankin suuntaan. */
+  { id: 0, x: 554, y: 190, w: 150, fuel: true },
 ];
 
 /* ---------------------------------------------------------------- purkaus
@@ -487,14 +487,22 @@ let fseed = 7717;
 const frnd = () => ((fseed = (fseed * 1103515245 + 12345) >>> 0) / 4294967296);
 const fbet = (a, b) => a + frnd() * (b - a);
 
-const RIDGE = [];
-for (let i = 0; i < 3; i++) {
+/* Neljä harjannekerrosta, ylin melkein kattoon asti. Sami 23.9.2026:
+   *"taustan himmeät vuoret voisivat jatkua 1 kerroksella lisää eli ylös
+   asti."*
+
+   **Yhdelläkään ei ole terävää ylärajaa.** Kerros piirretään pystyliu'ulla
+   joka on läpinäkyvä harjanteen korkeimman huipun *yläpuolella* ja täysi
+   vasta sen alimman notkon *alapuolella* — muuten harjanne piirtyisi
+   paikoin täydellä värillä heti reunastaan, ja juuri siitä syntyi se viiva
+   jonka Sami näki ruudun yläneljänneksessä. Ks. myös `haze` alempana. */
+const RIDGE_BASE = [120, 240, 360, 480];
+const RIDGE_JIT = 46;
+const RIDGE = RIDGE_BASE.map(base => {
   const pts = [];
-  for (let x = -40; x <= W + 40; x += 60) {
-    pts.push({ x, y: 300 + i * 90 + fbet(-46, 46) });
-  }
-  RIDGE.push(pts);
-}
+  for (let x = -40; x <= W + 40; x += 60) pts.push({ x, y: base + fbet(-RIDGE_JIT, RIDGE_JIT) });
+  return pts;
+});
 
 /* Lehtiviuhkat reunoilla ja pohjalla. Jokainen on paikka, koko, kallistus ja
    lehtien määrä; piirto on yksi kaari lehteä kohti. */
@@ -550,15 +558,12 @@ for (let i = 0; i < 7; i++) {
 function jungle(ctx) {
   const t = clock();
 
-  /* Kaukaiset harjanteet — mitä kauempana, sitä lähempänä taivaan väriä.
-     Kukin saa vielä oman pystyliukunsa, jottei harjanteen laki ole viiva:
-     kova vaakaraja näytti horisontilta jonka takana ei ole mitään. */
-  const tone = ['#1f3029', '#1b2a24', '#16231e'];
+  /* Kaukaiset harjanteet — mitä kauempana, sitä lähempänä taivaan väriä. */
+  const tone = ['#16231e', '#1a2922', '#1e2f26', '#22362a'];
   for (let i = 0; i < RIDGE.length; i++) {
-    const topY = 250 + i * 90;
-    const gr = ctx.createLinearGradient(0, topY, 0, topY + 260);
+    const base = RIDGE_BASE[i];
+    const gr = ctx.createLinearGradient(0, base - RIDGE_JIT - 40, 0, base + RIDGE_JIT + 90);
     gr.addColorStop(0, tone[i] + '00');
-    gr.addColorStop(0.35, tone[i]);
     gr.addColorStop(1, tone[i]);
     ctx.fillStyle = gr;
     ctx.beginPath();
@@ -568,12 +573,14 @@ function jungle(ctx) {
     ctx.fill();
   }
 
-  // utu harjanteiden päälle, jotta kivi erottuu niistä ilman epäilystä
-  const haze = ctx.createLinearGradient(0, 250, 0, 780);
-  haze.addColorStop(0, '#6a7f6633');
+  /* Utu harjanteiden päälle, jotta kivi erottuu niistä ilman epäilystä.
+     Läpinäkyvä molemmista päistä: terävä alku oli toinen puoli samaa viivaa. */
+  const haze = ctx.createLinearGradient(0, 0, 0, 860);
+  haze.addColorStop(0, '#6a7f6600');
+  haze.addColorStop(0.32, '#6a7f6630');
   haze.addColorStop(1, '#6a7f6600');
   ctx.fillStyle = haze;
-  ctx.fillRect(0, 250, W, 530);
+  ctx.fillRect(0, 0, W, 860);
 
   ctx.strokeStyle = '#142218';
   for (const tr of TRUNKS) {
@@ -849,7 +856,10 @@ export const volcano = {
   /* Trooppinen iltahämärä tuhkan läpi. Taivas on viileä, jotta magma on
      ruudun ainoa lämmin asia — sitä pitää nähdä kauas. */
   sky: ['#0e1a22', '#1b3038', '#2f4a42', '#46583c'],
-  sun: { x: 612, y: 236, r: 44, color: '#d8a271' },
+  /* Aurinko pois 23.9.2026: Sami ei vakuuttunut siitä, ja tuhkan läpi
+     hohtava kiekko kilpaili magman kanssa siitä mikä ruudulla on kuumaa.
+     Rivi jää tähän kommentiksi, koska takaisin se on yksi rivi.
+     sun: { x: 612, y: 236, r: 44, color: '#d8a271' }, */
   /* Luukku keskelle, Sami 23.9.2026. Se on suoraan kraatterin yläpuolella,
      mutta se ei haittaa: sisääntulon aikana kentän `update` ei aja lainkaan,
      ja `grace` pitää vuoren hiljaa vielä kolme sekuntia GO:n jälkeen. */
