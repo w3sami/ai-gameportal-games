@@ -168,23 +168,21 @@ function panelCheck() {
    Tankkaus on lattialla suoraan saaren alla. Se on koko kentän lupaus:
    ulkona ei ole turvaa, sisällä ei ole keikkoja. */
 const PADS = [
-  /* **Kahdeksan alustaa tasaisin välein laitoihin kiinni**, neljä kummallakin
-     puolella. Sami 23.9.2026. Kulkuväylä on alustan ja vuoren välissä. */
-  { id: 1, x: 16,  y: 190, w: 150 },
-  { id: 2, x: 295, y: 300, w: 150 },    // keskellä, suoraan kraatterin yllä
-  { id: 3, x: 16,  y: 443, w: 150 },
-  { id: 4, x: 554, y: 443, w: 150 },
-  { id: 5, x: 16,  y: 697, w: 150 },
-  { id: 6, x: 554, y: 697, w: 150 },
-  { id: 7, x: 16,  y: 950, w: 150 },
-  { id: 8, x: 554, y: 950, w: 150 },
-  /* Tankkaus ylös laitaan, **pois keskilinjalta**. Se oli ensin keskellä
-     kraatterin yläpuolella, ja Samin nostettua `vmax`in 620:een se oli
-     mittauksessa koko kentän pommitetuin alusta (15,8 %) — juuri se paikka
-     jossa pitää istua paikallaan pisimpään. Laidalla osuma on 7 %. Sami
-     ehdotti tätä itse: *"voisin kokeilla vaihtaa bensan toisen yläalustan
-     paikalle."* Vaihto on kahden rivin mittainen kumpaankin suuntaan. */
+  /* **Seitsemän numeroitua alustaa ja tankkaus, kaikki laitoihin kiinni**,
+     tasaisin välein neljällä korkeudella. Sami 23.9.2026: tankkaus *korvaa*
+     yhden alustan eikä vaihda sen kanssa paikkaa, ja keskialusta jää
+     kokonaan pois — *"pointti oli testata ilman sitä keskimmäistä estettä +
+     suojaa."* Keskellä kraatterin yllä ollut alusta oli molempia kerralla:
+     se söi purkauksesta kuudenneksen ja tarjosi samalla paikan jossa saattoi
+     istua ikuisesti. */
   { id: 0, x: 554, y: 190, w: 150, fuel: true },
+  { id: 1, x: 16,  y: 190, w: 150 },
+  { id: 2, x: 16,  y: 443, w: 150 },
+  { id: 3, x: 554, y: 443, w: 150 },
+  { id: 4, x: 16,  y: 697, w: 150 },
+  { id: 5, x: 554, y: 697, w: 150 },
+  { id: 6, x: 16,  y: 950, w: 150 },
+  { id: 7, x: 554, y: 950, w: 150 },
 ];
 
 /* ---------------------------------------------------------------- purkaus
@@ -544,6 +542,43 @@ function frond(ctx, f, t) {
   ctx.restore();
 }
 
+/* Kaukainen puuraja, latvat noin 2/5 korkeudella alhaalta (y 624). Sami
+   23.9.2026. Se on yksi tumma siluetti eikä yksittäisiä puita: latvusto on
+   pyöreitä kumpuja ja sieltä täältä pistää yksi korkeampi puu yli, niin kuin
+   viidakossa. Väri on tummin mitä taustassa on, koska se on lähinnä — mutta
+   yhä selvästi vaimeampi kuin vuori, johon voi osua. */
+const TREELINE_Y = 624;
+const TREELINE = [];
+for (let x = -30; x < W + 60; ) {
+  const w = fbet(26, 58);
+  const tall = frnd() < 0.18;
+  TREELINE.push({ x, w, h: fbet(14, 30) + (tall ? fbet(28, 54) : 0), tall });
+  x += w * fbet(0.52, 0.8);
+}
+
+function treeline(ctx) {
+  ctx.fillStyle = '#0f1a14';
+  ctx.beginPath();
+  ctx.moveTo(-40, H);
+  ctx.lineTo(-40, TREELINE_Y + 20);
+  for (const t of TREELINE) {
+    const top = TREELINE_Y - t.h;
+    if (t.tall) {
+      /* Yli pistävä puu piirretään kärjelliseksi, muuten se olisi vain
+         korkeampi kumpu eikä erottuisi miksikään. */
+      ctx.lineTo(t.x, TREELINE_Y + 6);
+      ctx.lineTo(t.x + t.w * 0.5, top);
+      ctx.lineTo(t.x + t.w, TREELINE_Y + 6);
+    } else {
+      ctx.quadraticCurveTo(t.x + t.w * 0.5, top, t.x + t.w, TREELINE_Y + 8);
+    }
+  }
+  ctx.lineTo(W + 40, TREELINE_Y + 20);
+  ctx.lineTo(W + 40, H);
+  ctx.closePath();
+  ctx.fill();
+}
+
 /* Rungot ja liaanit reunoilla. Ne ovat pelkkää pystyviivaa, mutta ne antavat
    lehvästölle jotain mistä kasvaa — ilman niitä viuhkat leijuivat tyhjässä. */
 const TRUNKS = [];
@@ -584,6 +619,8 @@ function jungle(ctx) {
   haze.addColorStop(1, '#6a7f6600');
   ctx.fillStyle = haze;
   ctx.fillRect(0, 0, W, 860);
+
+  treeline(ctx);
 
   ctx.strokeStyle = '#142218';
   for (const tr of TRUNKS) {
@@ -868,7 +905,7 @@ export const volcano = {
      ja `grace` pitää vuoren hiljaa vielä kolme sekuntia GO:n jälkeen. */
   gate: { x: 300, w: 120 },
   start: 0,
-  firstFrom: 1,
+  firstFrom: 4,
   walls: SOLID,
   pads: PADS,
   edit: [
