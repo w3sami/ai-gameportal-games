@@ -122,7 +122,7 @@ const numbered = () => PADS.filter(p => !p.fuel);
 const DEFAULTS = {
   grav: 250, thrust: 920,
   landVY: 215, landVX: 200,
-  bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62,
+  bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62, hop: 110,
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
   /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
@@ -2012,7 +2012,15 @@ function update(dt) {
        joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
     if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
     if (raw.y < -0.2 && fuel > 0) leavePad();
-    else { jobStep(dt); return; }
+    else {
+      /* Tikku alas laskee taksin maahan, ylös nostaa ilmaan: sama liike
+         molempiin suuntiin, eikä telinenappia tarvitse muistaa. Sami
+         23.9.2026: *"sekin on intuitiivinen liike."* Ylös nostaminen on yhä
+         telinenapin takana, koska ylös on jo varattu lähdölle. */
+      if (raw.y > 0.35) taxi.gearWant = false;
+      jobStep(dt);
+      return;
+    }
   }
 
   const throttle = Math.min(1, Math.hypot(v.x, v.y));
@@ -2084,12 +2092,46 @@ function leavePad() {
      lohkoissa ja Highrisen ylärivissä on sellaisia — ja tarkistamaton nosto
      työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
      oikein. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
-  const y0 = taxi.y;
-  taxi.y -= P.bounceLift;
-  const b = taxiBox(taxi);
-  for (const r of solids()) {
-    if (r !== p && hit(b, r)) { taxi.y = y0; break; }
+  /* Ponnistus: teline suoristuu ja työntää taksin irti pinnasta, ja vetäytyy
+     samalla sisään. Sami 23.9.2026: *"ylös lähtiessä telineet pompauttaa
+     meidät ylös ja sitten vetäytyy heti takasin ja ohjattavuus on jo heti
+     käytössä."*
+
+     Kolme osaa, ja jokainen tekee eri asian:
+       - `gear = 1` suoristaa jalat siksi hetkeksi kun ne työntävät. Kyykystä
+         lähtevällä ne ovat sisällä, eikä sisäänvedetty teline voi ponnistaa
+         mihinkään.
+       - nosto on `bounceLift` **plus** se matka jonka jalat suoristuivat:
+         seisova taksi nousee jalkojensa mitan, niin kuin alustallakin.
+       - `gearWant = false` vetää ne takaisin heti, joten sivusuuttimet ovat
+         käytössä (`activeThrust` sammuttaa ne vain telineen ollessa ulkona)
+         jo ennen kuin nousu on ohi.
+
+     `hop` on vauhtina eikä paikkana, koska paikka loppuu heti: ponnistus
+     tuntuu vasta kun se jatkuu. Nosto tarkistetaan törmäyksiltä ja kokeillaan
+     kahdesti — koko ponnistus ensin ja pelkkä `bounceLift` sitten — koska
+     alusta voi olla matalan katon alla (Moonshotin lohkot, Highrisen ylärivi)
+     ja tarkistamaton nosto työntäisi taksin seinään juuri silloin kun pelaaja
+     teki kaiken oikein. Jätetty alusta ei ole este, se on se josta noustiin. */
+  const y0 = taxi.y, gear0 = taxi.gear;
+  taxi.gear = 1;
+  taxi.gearWant = false;
+  const fits = () => {
+    const b = taxiBox(taxi);
+    for (const r of solids()) if (r !== p && hit(b, r)) return false;
+    return true;
+  };
+  taxi.y = y0 - P.bounceLift - GEAR * (1 - gear0);
+  let sprung = true;
+  if (!fits()) {
+    sprung = false;
+    taxi.y = y0 - P.bounceLift;
+    if (!fits()) taxi.y = y0;
   }
+  /* Vauhti annetaan vain jos koko ponnistus mahtui. Katon alla jalat eivät
+     suoristu loppuun asti, eikä peli saa heittää taksia kattoon omasta
+     aloitteestaan — nousu on siellä pelaajan oman kaasun varassa. */
+  if (sprung && taxi.vy > -P.hop) taxi.vy = -P.hop;
 }
 
 /* Alas tuleva teline työntää taksia, ei taksia pintaan.
@@ -3093,7 +3135,7 @@ function tipGraph(ctx, w, h) {
 const SLIDER_GROUPS = [
   { name: 'lento', open: true, keys: ['grav', 'thrust', 'stick'] },
   { name: 'laskeutuminen', open: false,
-    keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep'] },
+    keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep', 'hop'] },
   { name: 'bensa', open: true,
     keys: ['burn', 'refuel', 'price', 'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
   { name: 'savu', open: false,
@@ -3110,6 +3152,7 @@ const SLIDERS = [
   { key: 'landVX', label: 'lasku vx max', min: 10, max: 200, step: 5 },
   { key: 'bounceFrom', label: 'pomppu alkaa x', min: 0.2, max: 0.95, step: 0.05 },
   { key: 'bounceLift', label: 'pompun nosto px', min: 2, max: 30, step: 1 },
+  { key: 'hop', label: 'lähdön ponnistus px/s', min: 0, max: 300, step: 10 },
   { key: 'bounceKeep', label: 'pompun jäävä vauhti', min: 0.2, max: 0.9, step: 0.02 },
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
   { key: 'refuel', label: 'tankkaus / s', min: 5, max: 80, step: 1 },
