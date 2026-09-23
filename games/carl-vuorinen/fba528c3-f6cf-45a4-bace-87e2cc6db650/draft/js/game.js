@@ -32,11 +32,13 @@ const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d');
 let vw = 1, vh = 1, dpr = 1, Z = 1, layers = [], mainC = null, mask = null, motes = [];
 function buildMain(){
+  freeLayer(mainC);
   mainC = renderLayer(1, STYLE.main, 0, 0);            // tiled; see art.js
   mask = mainC.mask; mainC.mask = null;
 }
 function isSolid(x,y){ if (x<0||y<0||x>=L.w||y>=L.h) return true; return mask[(y|0)*L.w+(x|0)] === 1; }
 function buildLayers(){
+  for (const ly of layers) freeLayer(ly.c);
   layers = STYLE.depth.map(st => {
     const f = st.f, q = f*0.5, padX = Math.ceil(vw*(1-f)/(2*f*Z))+40, padY = Math.ceil(vh*(1-f)/(2*f*Z))+40;
     return {f, q, padX, padY, c:renderLayer(q, st, padX, padY)};
@@ -130,6 +132,8 @@ function reset(){
 }
 function loadLevel(i){
   li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; menuCh = chapterOf(li); save();
+  for (const ly of layers) freeLayer(ly.c); layers = [];        // drop the old level's depth layers before the new main layer is built, not after
+  for (const z of hazards) z.sprite.c.width = z.sprite.c.height = 0;
   setGeom(); applyTheme(); buildMain(); buildHazards(); resize(); reset();
 }
 
