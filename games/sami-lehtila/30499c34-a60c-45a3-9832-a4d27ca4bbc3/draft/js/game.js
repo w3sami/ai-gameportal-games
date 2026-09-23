@@ -105,6 +105,13 @@ const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
 const TURN_V = 70;
 /* Telineen ulos- ja sisäänmenon vauhti, 1/s: neljäsosasekunti koko matkaan. */
 const GEAR_RATE = 4;
+
+/* Näin monta ruutua ylös on pidettävä pohjassa ennen kuin taksi ponnistaa
+   alustalta. Sami 23.9.2026: *"nyt pomppii välillä vahingossa."* Ponnistus on
+   nopea ja lähtee vauhdilla, joten hipaisu tikkuun riitti nostamaan taksin
+   ilmaan kesken asiakkaan odottamisen. Ruutuja eikä sekunteja, koska niin se
+   pyydettiin; 60 ruudun sekunnilla tämä on 50 ms. */
+const LEAVE_HOLD = 3;
 const PAD_LEAVE = 0.5;                     // näin kauan lähtöalusta vielä kannattelee
 const PAD_LEAVE_GAP = 8;                   // ...ja tätä lähempänä niin kauan kuin siinä ollaan
 const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
@@ -1002,7 +1009,7 @@ function beginEntry(showTitle) {
   taxi = {
     x: GATE.x + GATE.w / 2, y: -60,
     vx: 0, vy: 300, gear: 0, gearWant: false, landed: null,
-    face: -1, spring: 0,                     // nokka vasemmalle, ks. stepTurn
+    face: -1, spring: 0, upHold: 0,          // nokka vasemmalle, ks. stepTurn
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1035,7 +1042,7 @@ function resetTaxi() {
   taxi = {
     x: p.x + p.w / 2, y: p.y - (TH / 2 + GEAR),
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
-    face: -1, spring: 0,
+    face: -1, spring: 0, upHold: 0,
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1561,6 +1568,7 @@ function touchdown(pad, b) {
 
   t2.y = pad.y - (TH / 2 + GEAR * t2.gear);
   t2.vx = 0; t2.vy = 0; t2.landed = pad; t2.gearWant = true;
+  t2.upHold = 0;                            // laskuun asti pidetty ylös ei ole lähtö
   t2.offPad = null;
   bounces = 0;
   sfx.land();
@@ -2021,8 +2029,10 @@ function update(dt) {
     /* Tankilla kuolee myös: tyhjä tankki ja tyhjä kassa ei ratkea istumalla,
        joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
     if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
-    if (raw.y < -0.2 && fuel > 0) leavePad();
+    const wantsUp = raw.y < -0.2 && fuel > 0;
+    if (wantsUp && ++taxi.upHold >= LEAVE_HOLD) leavePad();
     else {
+      if (!wantsUp) taxi.upHold = 0;
       /* Tikku alas laskee taksin maahan, ylös nostaa ilmaan: sama liike
          molempiin suuntiin, eikä telinenappia tarvitse muistaa. Sami
          23.9.2026: *"sekin on intuitiivinen liike."* Ylös nostaminen on yhä
