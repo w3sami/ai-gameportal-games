@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790111698668,
+ "stamp": 1790198209260,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -8,9 +8,11 @@
   "landVY": 215,
   "landVX": 200,
   "bounceFrom": 0.5,
-  "bounceLift": 10,
+  "bounceLift": 12,
   "bounceKeep": 0.62,
+  "hopRate": 1.75,
   "burn": 12,
+  "sideBurn": 0.5,
   "refuel": 63,
   "price": 0.9,
   "fare": 100,
@@ -27,10 +29,42 @@
   "fadeRush": 2.4,
   "tipHold": 1.35,
   "fadeHold": 1.4,
-  "stick": 2.05
+  "stick": 2.05,
+  "turnV": 165,
+  "smokeCurve": [
+   138.1,
+   133.5,
+   119.6,
+   105.7,
+   91.8,
+   77.9,
+   64,
+   50.1,
+   36.2,
+   22.3,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "smokeLife": 1,
+  "smokeSize": 6.5,
+  "smokeGrow": 2,
+  "smokeRise": 16,
+  "smokeC0": 14737632,
+  "smokeA0": 0.7,
+  "smokeC1": 14341795,
+  "smokeA1": 0.35
  },
  "levels": {
-  "Sky Lanterns": {
+  "lanterns": {
    "own": {
     "liike": {
      "amp": 1,
@@ -45,7 +79,7 @@
     }
    }
   },
-  "Stormport": {
+  "stormport": {
    "own": {
     "tuuli": {
      "peak": 220,
@@ -62,7 +96,7 @@
     }
    }
   },
-  "Trouble Factory": {
+  "troublefactory": {
    "own": {
     "häiriö": {
      "on": 0.18,
@@ -79,7 +113,7 @@
     }
    }
   },
-  "Moonshot": {
+  "moonshot": {
    "mul": {
     "grav": 0.2,
     "thrust": 0.25,
@@ -94,7 +128,7 @@
     }
    }
   },
-  "Shooting Stars": {
+  "shootingstars": {
    "own": {
     "tähdet": {
      "count": 24,
@@ -123,6 +157,87 @@
      "arc": -23,
      "pow": 1.85,
      "trunk": 46
+    }
+   }
+  },
+  "volcano": {
+   "mul": {
+    "burn": 0.6
+   },
+   "own": {
+    "vuori": {
+     "top": 754,
+     "hw": 212,
+     "rim": 58,
+     "chw": 60,
+     "rough": 4,
+     "inset": 11,
+     "cx": 370
+    },
+    "lehvästö": {
+     "min": 60,
+     "max": 90,
+     "edge": 0.46,
+     "dark": 0.55,
+     "sway": 2.4,
+     "y": [
+      82.1,
+      75.2,
+      54.3,
+      54.3,
+      54.3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      26.5,
+      75.2,
+      102.9,
+      137.7
+     ]
+    },
+    "purkaus": {
+     "freq": 0.4,
+     "warn": 2.6,
+     "grace": 3,
+     "nmin": 3,
+     "nmax": 8,
+     "vmin": 290,
+     "vmax": 620,
+     "amin": 4,
+     "amax": 18,
+     "spit": 0.3,
+     "size": 1,
+     "quake": 5
+    },
+    "savu": {
+     "rate": 9,
+     "boost": 6,
+     "life": 3.2,
+     "size": 19,
+     "rise": 40,
+     "drift": 12
+    },
+    "kipinät": {
+     "rate": 30,
+     "life": 0.8,
+     "size": 2.6,
+     "up": 200,
+     "spread": 90
+    },
+    "magman vana": {
+     "rate": 56,
+     "life": 0.3,
+     "size": 3.6,
+     "spread": 12
     }
    }
   }

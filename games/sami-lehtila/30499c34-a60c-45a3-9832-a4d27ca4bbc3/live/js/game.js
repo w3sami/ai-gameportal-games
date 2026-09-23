@@ -70,6 +70,21 @@ const FLEET_COUNT = 3, FLEET_PRICE = 1000;
 const CLEAN_BONUS = 100;
 const ENTER_Y = H * 0.15;
 const HORN_R = 150;
+/* Taksi on kyykyssä kun teline on sisällä ja pohja alustan pinnassa. Asiakas
+   sekä nousee kyytiin että poistuu vain silloin: ovi on siellä missä jalat
+   ovat, eikä jaloilleen nousseeseen taksiin kiivetä.
+
+   Sama raja molemmille, ja se on nolla eikä "melkein": kyykky kestää
+   neljäsosasekunnin, joten väljempi raja näkyisi asiakkaana joka lähtee
+   kävelemään ennen kuin taksi on paikallaan. */
+const KNEEL_DOWN = 0.02;
+const kneeled = () => taxi.gear < KNEEL_DOWN;
+
+/* Kyydistä poistuva kävelee lähimmälle alustan reunalle ja häipyy siinä.
+   Kävelyvauhti on sama kuin kyytiin tullessa, jotta sama tyyppi liikkuu
+   molempiin suuntiin samalla tavalla. */
+const LEAVE_WALK = 95;                     // px/s
+const LEAVE_FADE = 16;                     // näin läheltä reunaa häivytys alkaa
 const SQ_FALL = 0.4, SQ_WAIT = 0.3, SQ_RISE = 0.7;
 const SQ_DUR = SQ_FALL + SQ_WAIT + SQ_RISE;
 const GRAVE_MAX = 10;
@@ -77,13 +92,32 @@ const END_CARD_DELAY = 2600;
 const LAND_WARN_FROM = 0.75;               // varoitus jo ennen laskurajaa
 const PAD_WARN_LEAD = 1.0;                 // sekuntia pudotusta ennen kuin alusta vilkkuu
 const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
+/* Nokan kääntyminen kulkusuuntaan. `turnV` (säädin) on se vauhti joka uuteen
+   suuntaan pitää kertyä ennen kuin taksi kääntyy, ja se on olemassa juuri
+   välkkymisen takia: ilman kynnystä nokka heilahtaisi joka kerta kun vauhti
+   käy nollan kautta.
+
+   **Itse käännös on välitön peilaus.** Animoitu käännös kokeiltiin 23.9.2026
+   ja Sami hylkäsi sen saman tien: *"piti olla instant flip, nyt on liuku ja
+   taksi menee ihan reikäiseksi mutkalla, ihan vaan flipx."* Litteän kautta
+   kulkeva runko on juuri sitä: kapea kaistale jonka läpi näkyy. Kynnys jää,
+   liuku ei. */
+/* Telineen ulos- ja sisäänmenon vauhti, 1/s: neljäsosasekunti koko matkaan. */
+const GEAR_RATE = 4;
+
+/* Näin monta ruutua ylös on pidettävä pohjassa ennen kuin taksi ponnistaa
+   alustalta. Sami 23.9.2026: *"nyt pomppii välillä vahingossa."* Ponnistus on
+   nopea ja lähtee vauhdilla, joten hipaisu tikkuun riitti nostamaan taksin
+   ilmaan kesken asiakkaan odottamisen. Ruutuja eikä sekunteja, koska niin se
+   pyydettiin; 60 ruudun sekunnilla tämä on 50 ms. */
+const LEAVE_HOLD = 3;
 const PAD_LEAVE = 0.5;                     // näin kauan lähtöalusta vielä kannattelee
 const PAD_LEAVE_GAP = 8;                   // ...ja tätä lähempänä niin kauan kuin siinä ollaan
 const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
 const PAD_WARN_HOT = '#ff5d7a', PAD_WARN_COLD = '#6fe3ff';
 
 let levelIndex = 0, level = LEVELS[0];
-let GATE = level.gate, WALLS = [], PADS = [];
+let GATE = level.gate, WALLS = [], WALLS0 = 0, PADS = [];
 
 function frameWalls(gate) {
   return [
@@ -101,8 +135,8 @@ const numbered = () => PADS.filter(p => !p.fuel);
 const DEFAULTS = {
   grav: 250, thrust: 920,
   landVY: 215, landVX: 200,
-  bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62,
-  burn: 12, refuel: 63, price: 0.9,
+  bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62, hopRate: 2,
+  burn: 12, sideBurn: 0.5, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
   /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
      mittari laskee. Nämä ovat säätimissä, koska oikea tuntuma löytyy vain
@@ -112,10 +146,34 @@ const DEFAULTS = {
   tipCalm: 1, fadeCalm: 1,
   tipRush: 1.85, fadeRush: 2.4,
   tipHold: 1.35, fadeHold: 1.4,
-  stick: 2.05,
+  stick: 2.05, turnV: 70,
+  /* Tyhjenevän tankin savuvana. Ks. stepSmoke. */
+  /* Savun määrä tankin täyteyden mukaan: 21 pistettä viiden prosentin välein,
+     indeksi 0 = tyhjä tankki, 20 = täysi. Yksi käyrä kahden luvun sijasta
+     (ennen: `smokeFrom` ja `smokeRate`), koska "mistä alkaa" ja "kuinka
+     paljon" ovat saman asian kaksi puolta — ja käyrällä määrä saa myös
+     kasvaa miten haluaa. Sami 23.9.2026. Oletus on täsmälleen entinen muoto:
+     nollasta 25 prosenttiin, 15 savua sekunnissa tyhjänä. */
+  smokeCurve: [15, 13.2, 11.4, 9.6, 7.8, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  smokeLife: 1.7, smokeSize: 5,
+  smokeGrow: 15, smokeRise: 16,
+  /* Savun liukuma: väri ja läpinäkyvyys kummassakin päässä. Väri on luku
+     (0xRRGGBB) eikä merkkijono, jotta viritys pysyy kauttaaltaan numeroina —
+     tallennus, lataus ja kentän kertoimet käsittelevät vain lukuja, eikä
+     yhteen väriin kannata rakentaa poikkeusta koko ketjuun. */
+  smokeC0: 0x969696, smokeA0: 0.55,        // kynnyksellä: vaalea harmaa
+  smokeC1: 0x0c0c0c, smokeA1: 0.55,        // tyhjänä: melkein musta
 };
 const DEFAULT_SIDE = 'left';
-const P = Object.assign({}, DEFAULTS);
+/** Viritys on lukuja ja taulukoita lukuja. Taulukko kopioidaan aina, koska
+    jaettu taulukko tarkoittaisi että säädin kirjoittaa myös oletukseen —
+    ja silloin "oletukset"-nappi ei palauttaisi mitään. */
+const cloneTune = o => {
+  const r = {};
+  for (const k of Object.keys(o)) r[k] = Array.isArray(o[k]) ? o[k].slice() : o[k];
+  return r;
+};
+const P = cloneTune(DEFAULTS);
 let gearSide = DEFAULT_SIDE;
 
 /* Nappien puoli on pelaajan asia, ei tekijän. tune.json antaa oletuksen, mutta
@@ -198,13 +256,30 @@ const diffMuls = () =>
  * säätää painovoimaa, myrskykentän raskaampi painovoima seuraa mukana.
  * Kenttä voi julkaista lähtökertoimensa (level.mul), ja säätöpaneeli antaa
  * muuttaa niitä lennossa. */
-const BASE = Object.assign({}, DEFAULTS);
+const BASE = cloneTune(DEFAULTS);
 
 /* Kertoimet säilyvät kentittäin koko istunnon: kentästä toiseen käyminen ei
    saa nollata sitä mitä juuri säädit. MUL osoittaa aina nykyisen kentän
    omaan olioon. */
 const MULS = {};
-const mulOf = lv => MULS[lv.name] || (MULS[lv.name] = Object.assign({}, lv.mul));
+
+/* **Kentän tunnus on sen tiedostonimi, ei näkyvä nimi.** Nimi on säädettävä
+   teksti ja saa vaihtua lennossa; tiedostonimi ei vaihdu koskaan.
+   Sami 23.9.2026: *"työ- ja tiedostonimi sitten erikseen."*
+
+   Ero on pakko tehdä, koska kentälle tallennetut arvot avataan tunnuksella.
+   Ennen tätä ne avattiin nimellä, ja kun Tulivuoresta tuli Hellcano, koko
+   kentän viritys — vuoren mitat, purkauksen arvot, bensakerroin — jäi orvoksi
+   vanhan nimen alle ja kenttä palasi koodin oletuksiin. Kerran se korjattiin
+   käsin tiedostoa muokkaamalla; toista kertaa ei tarvita.
+
+   `indexOf` eikä etukäteen rakennettu kartta: `reloadLevel` vaihtaa
+   LEVELS-taulukkoon uuden moduulin, ja kartta osoittaisi vanhaan olioon. */
+const lvId = lv => {
+  const i = LEVELS.indexOf(lv);
+  return (i >= 0 && LEVEL_FILES[i]) || lv.name;
+};
+const mulOf = lv => MULS[lvId(lv)] || (MULS[lvId(lv)] = Object.assign({}, lv.mul));
 let MUL = {};
 
 /* Sauva syntyy vasta paljon alempana, ja tätä kutsutaan jo tallennettua
@@ -217,6 +292,9 @@ let stickReady = false;
 function applyMul() {
   const d = diffMuls();
   for (const k of Object.keys(DEFAULTS)) {
+    /* Taulukko menee sellaisenaan ja **samana oliona**: kerroin on luvun
+       asia, ja säätimen piirtämä käyrä näkyy pelissä ilman välikopiota. */
+    if (Array.isArray(BASE[k])) { P[k] = BASE[k]; continue; }
     const m = MUL[k];
     let mul = typeof m === 'number' && isFinite(m) ? m : 1;
     if (k in MUL_MIN) mul = Math.max(MUL_MIN[k], mul * d[k]);
@@ -247,16 +325,22 @@ function tuneAll(stamp) {
   const levels = {};
   for (const lv of LEVELS) {
     const entry = {};
-    const m = MULS[lv.name];
+    const m = MULS[lvId(lv)];
     if (m && Object.keys(m).length) entry.mul = Object.assign({}, m);
     const own = {};
     for (const g of lv.tune || []) {
-      if (!g.obj || !g.sliders) continue;
+      if (!g.obj || (!g.sliders && !g.curve)) continue;
       const o = own[g.name] = {};
-      for (const sl of g.sliders) o[sl.key] = g.obj[sl.key];
+      for (const sl of g.sliders || []) o[sl.key] = g.obj[sl.key];
+      if (g.curve && Array.isArray(g.obj[g.curve.key])) {
+        o[g.curve.key] = g.obj[g.curve.key].slice();
+      }
     }
     if (Object.keys(own).length) entry.own = own;
-    if (Object.keys(entry).length) levels[lv.name] = entry;
+    /* Nimi tallentuu vain jos se on muutettu: muuttumaton nimi on koodissa,
+       eikä sitä kannata kirjoittaa tiedostoon toiseen kertaan. */
+    if (lv.name !== LEVEL_NAME0.get(lvId(lv))) entry.name = lv.name;
+    if (Object.keys(entry).length) levels[lvId(lv)] = entry;
   }
   return { v: 1, stamp: stamp || Date.now(), gearSide, global: Object.assign({}, BASE), levels };
 }
@@ -267,6 +351,14 @@ function applyAll(raw) {
   if (!raw || typeof raw !== 'object') return false;
   const g = raw.global || raw;                 // vanha muoto oli pelkkä pohja
   for (const k of Object.keys(DEFAULTS)) {
+    /* Taulukko kelpaa vain oikean mittaisena ja pelkkinä lukuina: väärän
+       mittainen käyrä olisi hiljainen vika, ja tiedosto voi olla vanha. */
+    if (Array.isArray(DEFAULTS[k])) {
+      const a = g[k];
+      if (Array.isArray(a) && a.length === DEFAULTS[k].length
+          && a.every(v => typeof v === 'number' && isFinite(v))) BASE[k] = a.slice();
+      continue;
+    }
     if (typeof g[k] === 'number' && isFinite(g[k])) BASE[k] = g[k];
   }
   if (raw.gearSide === 'left' || raw.gearSide === 'right') {
@@ -274,8 +366,12 @@ function applyAll(raw) {
     layout();
   }
   for (const lv of LEVELS) {
-    const e = (raw.levels || {})[lv.name];
+    /* Tunnus ensin, nimi varalta: ennen 23.9.2026 tallennetut tiedostot on
+       avattu nimellä, eikä niitä tarvitse muuntaa erikseen. */
+    const ls = raw.levels || {};
+    const e = ls[lvId(lv)] || ls[lv.name];
     if (!e) continue;
+    if (typeof e.name === 'string' && e.name.trim()) lv.name = e.name.trim().slice(0, 32);
     if (e.mul) {
       const m = mulOf(lv);
       for (const k of Object.keys(DEFAULTS)) {
@@ -287,6 +383,14 @@ function applyAll(raw) {
       if (!o || !grp.obj) continue;
       for (const sl of grp.sliders || []) {
         if (typeof o[sl.key] === 'number' && isFinite(o[sl.key])) grp.obj[sl.key] = o[sl.key];
+      }
+      /* Käyrä kirjoitetaan vanhan taulukon sisään eikä sen tilalle: kenttä on
+         voinut ottaa siihen viittauksen, ja uusi taulukko jäisi näkymättä. */
+      const cv = grp.curve && o[grp.curve.key];
+      const into = grp.curve && grp.obj[grp.curve.key];
+      if (Array.isArray(cv) && Array.isArray(into) && cv.length === into.length
+          && cv.every(v => typeof v === 'number' && isFinite(v))) {
+        for (let i = 0; i < into.length; i++) into[i] = cv[i];
       }
     }
   }
@@ -379,21 +483,42 @@ function layout() {
    niiden päälle. Kentän olio on ainoa paikka jossa ne elävät, joten ilman tätä
    "oletukset" ei voisi palauttaa niitä millään. */
 const LEVEL_DEF = new Map();
-for (const lv of LEVELS) {
-  for (const g of lv.tune || []) {
-    if (!g.obj || !g.sliders) continue;
-    const d = {};
-    for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
-    LEVEL_DEF.set(lv.name + '\u0000' + g.name, d);
+/* Sama koodin nimille: se on se mihin "oletukset" palauttaa, ja se mistä
+   tiedetään onko nimeä ylipäätään muutettu. */
+/** Kentän säätöryhmän koodin arvot talteen: se on se mihin "oletukset"
+    palauttaa. Käyrästä otetaan kopio, koska ryhmä kirjoittaa omaansa. */
+function tuneDefaults(lv, g) {
+  if (!g.obj || (!g.sliders && !g.curve)) return;
+  const d = {};
+  for (const sl of g.sliders || []) d[sl.key] = g.obj[sl.key];
+  if (g.curve && Array.isArray(g.obj[g.curve.key])) {
+    d[g.curve.key] = g.obj[g.curve.key].slice();
   }
+  LEVEL_DEF.set(lvId(lv) + '\u0000' + g.name, d);
+}
+
+const LEVEL_NAME0 = new Map();
+for (const lv of LEVELS) {
+  LEVEL_NAME0.set(lvId(lv), lv.name);
+  for (const g of lv.tune || []) tuneDefaults(lv, g);
 }
 
 function resetLevelTune() {
   for (const k of Object.keys(MULS)) delete MULS[k];
   for (const lv of LEVELS) {
+    const n0 = LEVEL_NAME0.get(lvId(lv));
+    if (n0) lv.name = n0;                      // myös nimi on oletusarvo
     for (const g of lv.tune || []) {
-      const d = LEVEL_DEF.get(lv.name + '\u0000' + g.name);
-      if (d && g.obj) Object.assign(g.obj, d);
+      const d = LEVEL_DEF.get(lvId(lv) + '\u0000' + g.name);
+      if (!d || !g.obj) continue;
+      /* Taulukko kopioidaan sisään eikä tilalle: kenttä on voinut ottaa
+         siihen viittauksen, ja tilalle pantu oletus alkaisi elää säätimen
+         mukana — seuraava "oletukset" ei palauttaisi enää mitään. */
+      for (const k of Object.keys(d)) {
+        if (Array.isArray(d[k]) && Array.isArray(g.obj[k])) {
+          for (let i = 0; i < g.obj[k].length; i++) g.obj[k][i] = d[k][i];
+        } else g.obj[k] = d[k];
+      }
     }
   }
   MUL = mulOf(level);
@@ -461,7 +586,7 @@ const sketch = createSketch({
    Vain tässä selaimessa ja vain kun säätöjä on käytetty; pelaajan kone ei
    kirjoita tähän koskaan mitään. */
 const DEV_STORE = 'spacetaxi.dev';
-const dev = { panel: false, sketch: false, level: -1, watch: true };
+const dev = { panel: false, sketch: false, level: -1, watch: true, folds: {}, scroll: 0 };
 try { Object.assign(dev, JSON.parse(localStorage.getItem(DEV_STORE) || 'null') || {}); } catch (e) {}
 let devReady = false;                          // vasta palautuksen jälkeen
 /* dev.sketch asetetaan käsin eikä lueta sketch.activesta: onOpen ajetaan ennen
@@ -472,8 +597,18 @@ function saveDev() {
   dev.panel = panelOpen();
   dev.level = levelIndex;
   dev.watch = watching;
+  if (panelOpen()) dev.scroll = panelEl.scrollTop;
   try { localStorage.setItem(DEV_STORE, JSON.stringify(dev)); } catch (e) {}
 }
+
+/* Paneelin vieritys talteen. Oma kuuntelija eikä saveDev jokaisesta ruudusta:
+   vieritystapahtumia tulee kymmeniä sekunnissa, ja localStorage on synkroninen.
+   Viive on lyhyt, koska paneelin voi sulkea heti vierityksen jälkeen. */
+let scrollT = 0;
+panelEl.addEventListener('scroll', () => {
+  clearTimeout(scrollT);
+  scrollT = setTimeout(saveDev, 180);
+}, { passive: true });
 
 /* Kenttä uusiksi ilman sivun latausta.
  *
@@ -499,12 +634,8 @@ async function reloadLevel() {
   } catch (e) { return false; }
   if (!lv || !lv.name) return false;
   LEVELS[levelIndex] = lv;
-  for (const g of lv.tune || []) {             // uudet oletukset uusista olioista
-    if (!g.obj || !g.sliders) continue;
-    const d = {};
-    for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
-    LEVEL_DEF.set(lv.name + '\u0000' + g.name, d);
-  }
+  LEVEL_NAME0.set(lvId(lv), lv.name);          // uuden moduulin oma nimi on oletus
+  for (const g of lv.tune || []) tuneDefaults(lv, g);   // uudet oletukset uusista olioista
   applyBody(keep);                             // ja säädetyt arvot takaisin
   sketch.forget(lv.name);
   beginLevel(levelIndex, false);               // vasta tässä level on uusi
@@ -853,7 +984,7 @@ let thrustNow = 0;
 let dryT = 0, dryPhase = 0, dryFiring = false;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
-    graves, squishes,
+    graves, squishes, leavers,
     wreck, bounces, titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
     runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
 
@@ -891,11 +1022,16 @@ function loadLevel(i) {
   GATE = level.gate;
   sketch.restore();                          // ennen kuin PADS kopioidaan
   WALLS = frameWalls(GATE).concat(level.walls || []);
+  /* Tästä indeksistä eteenpäin WALLSissa on vain sitä mitä kenttä työntää
+     sinne kesken kentän: putoava tähti, magmapallo, liikkuva kone. Ne ovat
+     vaaroja eivätkä kulissia, ja `hazardHit` tarvitsee rajan erottaakseen
+     ne. Kenttä lisää ja poistaa omansa hännästä, joten raja pitää. */
+  WALLS0 = WALLS.length;
   PADS = (level.pads || []).map(p => Object.assign({ h: 18 }, p, { bx: p.x, by: p.y }));
   served = {};
   for (const p of numbered()) served[p.id] = false;
   gateOpen = false;
-  graves = []; squishes = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
+  graves = []; squishes = []; leavers = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
   msg = ''; msgT = 0; titleT = 0; goT = 0;
   clearWarnings();
   job = null;
@@ -925,6 +1061,7 @@ function beginEntry(showTitle) {
   taxi = {
     x: GATE.x + GATE.w / 2, y: -60,
     vx: 0, vy: 300, gear: 0, gearWant: false, landed: null,
+    face: -1, spring: 0, upHold: 0, launch: 0,   // nokka vasemmalle, ks. stepTurn
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -957,6 +1094,7 @@ function resetTaxi() {
   taxi = {
     x: p.x + p.w / 2, y: p.y - (TH / 2 + GEAR),
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
+    face: -1, spring: 0, upHold: 0, launch: 0,
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1123,7 +1261,18 @@ stick.gain = P.stick;
 const gamepad = createGamepad({
   keys: false,
   actions: {
-    gear:  ['A', 'LB', 'RB'],
+    /* Teline on A ja **kumpi tahansa liipasin**. Molemmat liipasimet yhtä
+       aikaa on koko ruutu, ei teline — ks. `padFullscreen`, joka peruu
+       telineen jos ele alkoi siitä. Sami 23.9.2026: *"kumpi tahansa
+       liipasin voi olla, tai siis molemmat, kunhan eri aikaa."* */
+    gear:  ['A', 'LT', 'RT'],
+    /* Olkapäät ovat kentänvaihto: vasen aloittaa nykyisen kentän alusta
+       kolmella elämällä, oikea siirtyy seuraavaan ja viimeisestä ensimmäiseen.
+       Molemmat tekevät saman kuin säätöpaneelin kenttänappi hiirellä. Sami
+       23.9.2026. Teline menetti tässä molemmat olkapäänsä — sama painallus ei
+       voi olla kaksi asiaa — ja sille jäi A, joka on aina ollut sen oma. */
+    restart: ['LB'],
+    next:  ['RB'],
     horn:  ['B', 'X'],
     menu:  ['Start'],
     select: ['Back'],
@@ -1157,10 +1306,23 @@ const gamepad = createGamepad({
  *
  * Ulos pääsee aina, koska poistuminen ei vaadi elettä. */
 let fullArmed = false;
+let trigGearAt = -1e9;                       // milloin teline viimeksi kääntyi liipasimesta
+let fullFired = false;                       // koko ruudun ele laukesi tällä ruudulla
 
 function padFullscreen() {
   const both = gamepad.held('LT') && gamepad.held('RT');
-  if (both && !fullArmed) toggleFullscreen();
+  fullFired = both && !fullArmed;
+  if (fullFired) {
+    toggleFullscreen();
+    /* Koko ruudun ele alkaa toisesta liipasimesta, ja se ehti jo kääntää
+       telineen — kahden napin eleessä ensimmäistä painallusta ei voi tietää
+       eleen aluksi ennen kuin toinen tulee. Perutaan se siis jälkikäteen, jos
+       se tapahtui juuri äsken. Äänettä, koska eleen ei kuulu kuulua
+       telineeltä. */
+    if (state === PLAY && !dead && taxi && performance.now() - trigGearAt < 400) {
+      taxi.gearWant = !taxi.gearWant;
+    }
+  }
   fullArmed = both;
 }
 
@@ -1212,8 +1374,26 @@ function padInput() {
     if (debugAllowed()) togglePanel(); else toggleMute();
     return;
   }
+  /* Uusi yritys valitusta kentästä, kolmella elämällä — sama kuin
+     säätöpaneelin kenttänappi. Tekijän oikeuksien takana samasta syystä kuin
+     se nappikin: pelaajalle kenttä ei ole valittava asia, eikä vuoroa voi
+     aloittaa keskeltä uudestaan niin monta kertaa kuin haluaa. */
+  if (gamepad.pressed('restart') && debugAllowed()) { startLevel(levelIndex); return; }
+  if (gamepad.pressed('next') && debugAllowed()) {
+    startLevel((levelIndex + 1) % LEVELS.length);   // viimeisestä ensimmäiseen
+    return;
+  }
   if (gamepad.pressed('horn')) { honk(); return; }
-  if (gamepad.pressed('gear')) toggleGear();
+  /* `fullFired` on tämän ruudun koko ruudun ele: sen laukaissut toinen
+     liipasin ei saa kääntää telinettä, ja ensimmäisen kääntö on jo peruttu. */
+  if (gamepad.pressed('gear') && !fullFired) {
+    /* Liipasimesta tullut painallus merkitään muistiin: siitä voi vielä tulla
+       koko ruudun ele, jos toinen liipasin painuu heti perään. */
+    if (state === PLAY && !dead && (gamepad.held('LT') || gamepad.held('RT'))) {
+      trigGearAt = performance.now();
+    }
+    toggleGear();
+  }
 }
 
 /* Kortin napit ohjaimella: sama ele kuin valikossa, suunta liikuttaa ja A
@@ -1369,7 +1549,16 @@ function dryThrust(v) {
 function activeThrust() {
   if (state !== PLAY || dead) return { x: 0, y: 0 };
   const v = inputVector();
-  if (taxi.gear > 0.35) v.x = 0;
+  /* Teline ulkona sammuttaa sivusuuttimet — paitsi lähtöpompussa. Siinä
+     teline on ulkona nimenomaan siksi että se juuri ponnisti, ja ohjaus on
+     se mitä lähdössä tarvitaan. Sami 23.9.2026: *"ohjattavuus piti säilyä
+     lähtöpompussa vaikka teline on puoliksi ulkona."*
+
+     Lupa raukeaa itsestään kun teline on vetäytynyt rajan alle — siitä
+     eteenpäin tavallinen sääntö sanoo saman — eikä sille siksi tarvita
+     kelloa. Laskeutumispomppuun tämä ei ulotu: siellä teline on ulkona
+     siksi että sillä ollaan laskeutumassa. */
+  if (taxi.gear > 0.35 && !taxi.launch) v.x = 0;
   if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
   if (fuel <= 0) dryThrust(v);
   return v;
@@ -1427,11 +1616,42 @@ function crash() {
   gamepad.rumble({ duration: 260, strong: 0.85, weak: 0.45 });
 }
 
+/* Osuuko kentän liikkuva vaara taksiin juuri nyt?
+ *
+ * Alustalla istuva taksi ei tarkista törmäyksiä lainkaan — `update` palaa
+ * keikka-askeleeseen eikä `move` aja — ja niin kauan kuin alustalla oli
+ * turvallista, se oli koko totuus. Tulivuoren magmapallot tekivät siitä
+ * kuolemattomuuden: pallo tuli alas, taksi istui alustalla, eikä mitään
+ * tapahtunut. Sami 23.9.2026: *"taxi ei saa damagea tulipalloista, sen
+ * haluan vain iisille."*
+ *
+ * Nyt liikkuva vaara osuu myös alustalla istuvaan, paitsi helpolla — siellä
+ * alusta on yhä turvapaikka, ja se on helpon oma ero. Kulissiin ja kentän
+ * kiinteisiin seiniin tätä ei uloteta: alusta saa olla seinässä kiinni, ja
+ * pysyvän seinän sisällä istuva taksi on ollut turvassa aina. Raja on
+ * `WALLS0`, eli juuri se mitä kenttä itse työntää WALLSiin. */
+function hazardHit() {
+  if (dead || diff === 'easy' || !taxi) return false;
+  const b = taxiBox(taxi);
+  for (let i = WALLS0; i < WALLS.length; i++) if (hit(b, WALLS[i])) return true;
+  return false;
+}
+
 function touchdown(pad, b) {
   const t2 = taxi;
   const ratio = landRatio(pad);
 
-  if (t2.gear < 0.85) return crash();
+  /* Kesken ulostulon oleva teline ei ole vatsalasku: alas tuleva teline osuu
+     pintaan ensin, ja loppumatkan alusta työntää taksia ylös (`taxi.landed`in
+     y lasketaan joka ruutu telineen pituudesta). Kolari on siis vain siitä
+     ettei telinettä ole eikä sitä olla laskemassa — nopeusrajat pätevät
+     erikseen alla, niin kuin ennenkin.
+
+     **Tämä on sama kaikilla vaikeustasoilla.** Kokeiltiin 23.9.2026 hetken
+     ajan helpon omaksi ja palautettiin saman tien: laskeutuminen ei ole se
+     paikka josta vaikeus haetaan. Vaikeustasolla eroaa se mitä alustalla
+     istuvalle saa tapahtua, ks. `hazardHit`. */
+  if (t2.gear < 0.85 && !t2.gearWant) return crash();
   if (b.x < pad.x - 2 || b.x + b.w > pad.x + pad.w + 2) return crash();
   if (ratio > 1) return crash();
 
@@ -1451,6 +1671,8 @@ function touchdown(pad, b) {
 
   t2.y = pad.y - (TH / 2 + GEAR * t2.gear);
   t2.vx = 0; t2.vy = 0; t2.landed = pad; t2.gearWant = true;
+  t2.upHold = 0;                            // laskuun asti pidetty ylös ei ole lähtö
+  t2.launch = 0;
   t2.offPad = null;
   bounces = 0;
   sfx.land();
@@ -1470,25 +1692,74 @@ function askForPad() {
   sfx.pickup();
 }
 
+/* Keikan maksu: se hetki jona asiakas poistuu taksista.
+
+   Tippi on kiinni vain ajasta. Laskun pehmeys ei kerro sitä alas: kova lasku
+   rankaisee jo itsessään, koska pomppu vie sekunteja ja sekunnit tippiä, eikä
+   kaksi rangaistusta samasta asiasta houkuta ajamaan lujaa — mitä peli
+   nimenomaan hakee. Vajoamisen neljäsosasekunti ei sitä vastoin vie tippiä
+   lainkaan: mittari pysähtyy kosketukseen (`jobStep`). */
+function payRide(pad) {
+  const tip = tipNow();
+  const fare = P.fare + tip;
+  const kind = job.kind;
+  money += fare;
+  served[pad.id] = true;                  // jättö merkkaa alustan käydyksi
+  say(t('msg.thanks', { fare, tip }), 2.6);
+  burst(taxi.x, taxi.y - 20, '#6fe3ff', 16, 160);
+  sfx.pay();
+  speakLine('thanks', kind);
+  leave(pad, kind);
+  job = null;
+  spawnJob(pad.id, 1.6);
+}
+
+/* Asiakas nousee ulos siltä kyljeltä jolla on lyhyempi matka reunalle, ja
+   kävelee pois. Se on sama kävely kuin kyytiin tullessa, toisin päin: ilman
+   sitä keikka päättyi siihen että asiakas katosi taksin sisään. Lähtöpaikka
+   pidetään alustalla, koska kävelijä piirretään alustan pintaan — reunan yli
+   mennyt seisoisi tyhjän päällä. */
+function leave(pad, kind) {
+  /* Kyljistä se jolla on enemmän tilaa: alustan reunaan pysäköity taksi
+     jättäisi toiselle puolelle kävelymatkaksi muutaman pikselin, eikä
+     poistumista ehtisi nähdä. */
+  const room = d => d < 0 ? (taxi.x - TW / 2 - 8) - pad.x : (pad.x + pad.w) - (taxi.x + TW / 2 + 8);
+  const dir = room(-1) > room(1) ? -1 : 1;
+  const x = clamp(taxi.x + dir * (TW / 2 + 8), pad.x + 6, pad.x + pad.w - 6);
+  leavers.push({ pad: pad.id, x, kind, walk: 0, dir, fade: 0 });
+}
+
+/* Häivytys lasketaan matkasta reunaan eikä kellosta, jotta kävely ja
+   katoaminen ovat sama liike: perillä oleva on jo läpinäkyvä. */
+function stepLeavers(dt) {
+  for (let i = leavers.length - 1; i >= 0; i--) {
+    const lv = leavers[i];
+    const p = padById(lv.pad);
+    if (!p) { leavers.splice(i, 1); continue; }
+    lv.x += lv.dir * LEAVE_WALK * dt;
+    lv.walk += dt * 9;
+    const gap = lv.dir < 0 ? lv.x - p.x : p.x + p.w - lv.x;
+    lv.fade = clamp(1 - gap / LEAVE_FADE, 0, 1);
+    if (gap <= 0) leavers.splice(i, 1);
+  }
+}
+
 function onLanded(pad) {
   if (!job) return;
 
   if (job.phase === 'aboard' && pad.id === job.to) {
-    /* Tippi on kiinni vain ajasta. Laskun pehmeys ei enää kerro sitä alas:
-       kova lasku rankaisee jo itsessään, koska pomppu vie sekunteja ja
-       sekunnit tippiä, eikä kaksi rangaistusta samasta asiasta houkuta
-       ajamaan lujaa — mitä peli nimenomaan hakee. */
-    const tip = tipNow();
-    const fare = P.fare + tip;
-    const kind = job.kind;
-    money += fare;
-    served[pad.id] = true;                  // jättö merkkaa alustan käydyksi
-    say(t('msg.thanks', { fare, tip }), 2.6);
-    burst(taxi.x, taxi.y - 20, '#6fe3ff', 16, 160);
-    sfx.pay();
-    speakLine('thanks', kind);
-    job = null;
-    spawnJob(pad.id, 1.6);
+    /* Perillä taksi kyykistyy ensin ja asiakas poistuu vasta pohjalla — Sami
+       23.9.2026: *"ensin laskeudutaan alas, sitten asiakas poistuu."* Teline
+       vedetään sisään tässä, ja `jobStep` maksaa keikan kun se on sisällä.
+       Alhaalla sivusuuttimet ovat heti käytössä (`activeThrust` sammuttaa ne
+       vain telineen ollessa ulkona), joten lähtö on helpompi kuin jalkojen
+       päältä.
+
+       Odotus on lippu eikä oma vaihe, koska `crash`, `finish` ja tippimittari
+       lukevat `phase === 'aboard'` suoraan: vaihe olisi pitänyt muistaa
+       kolmessa paikassa, lippu ei missään. */
+    job.drop = pad;
+    if (diff !== 'pro') taxi.gearWant = false;
     return;
   }
 
@@ -1508,6 +1779,14 @@ function onLanded(pad) {
 function jobStep(dt) {
   if (!job) return;
   if (job.phase === 'aboard') {
+    /* Perillä oltaessa mittari seisoo ja odotetaan että taksi on pohjassa:
+       asiakas poistuu vasta silloin. Teline voi olla matkalla ylös vain jos
+       pelaaja itse laski sen takaisin, ja silloin asiakas odottaa — kyykky on
+       poistumisen ehto eikä kello. */
+    if (job.drop) {
+      if (taxi.landed === job.drop && kneeled()) payRide(job.drop);
+      return;
+    }
     /* Kaasuprofiililla mittari seisoo niin kauan kuin suuttimet ovat päällä. */
     const pr = tipper();
     if (!(pr.onlyIdle && thrustNow > 0.05)) job.t += dt * P[pr.fade];
@@ -1533,7 +1812,23 @@ function jobStep(dt) {
   }
 
   job.moving = false;
-  if (!dead && taxi.landed && taxi.landed.id === job.from) {
+  const here = !dead && taxi.landed && taxi.landed.id === job.from;
+
+  /* Asiakas on tulossa kyytiin: taksi kyykistyy hänelle kerran. Sen jälkeen
+     teline on pelaajan oma asia — pakotus joka ruudulla estäisi nostamasta
+     sitä takaisin. Kyykyssä lähtö on helppo, koska sivusuuttimet ovat heti
+     käytössä.
+
+     Prolla kyykky jää pelaajalle: se on nimenomaan se mitä helpompi taso
+     opettaa tekemällä sen puolesta. Sami 23.9.2026: *"pro tasolla ei ole
+     automaattista laskua, vaan pitää itse tehdä, näin voidaan tehdä koska
+     normaali taso opettaa miten peli toimii."* */
+  if (here && !job.knelt) { job.knelt = true; if (diff !== 'pro') taxi.gearWant = false; }
+
+  /* Kävely ja kyytiin nousu vaativat kyykyn: jaloilleen noussut taksi
+     pysäyttää asiakkaan siihen missä hän on, ja matka jatkuu kun taksi
+     laskeutuu takaisin. */
+  if (here && kneeled()) {
     const b = taxiBox(taxi);
     const target = job.x < taxi.x ? b.x - 10 : b.x + b.w + 10;
     const d = target - job.x;
@@ -1637,6 +1932,7 @@ function movePads(dt) {
     if (job && job.from === p.id && job.phase === 'wait') job.x += dx;
     for (const g of graves) if (g.pad === p.id) g.x += dx;
     for (const s of squishes) if (s.pad === p.id) s.x += dx;
+    for (const lv of leavers) if (lv.pad === p.id) lv.x += dx;
   }
 }
 
@@ -1675,6 +1971,75 @@ function warnPad() {
   return best;
 }
 
+/* Tyhjenevä tankki näkyy ulos: viimeisellä neljänneksellä taksi jättää
+   savuvanan, harmaana ensin ja mustana lopuksi. Sami 23.9.2026:
+   *"ruvetaan jättämään harmaata savuvanaa ku bensa tippuu sinne viimeselle
+   20-25% ja ihan mustaa sit lopuks."*
+
+   Mittari kertoo saman luvun tarkemmin, mutta se on ruudun laidassa ja katse
+   on taksissa. Savu on siis toinen tapa sanoa sama asia siellä missä pelaaja
+   katsoo — ja se näkyy myös siitä miten pitkä vana jää, eli kuinka lujaa on
+   menty.
+
+   Kaikki kuusi lukua ovat säätöpaneelissa (`savu`), koska tiheys ja koko ovat
+   makuasioita joita ei löydä muuten kuin ajamalla. Savun väri ei ole säädin:
+   se on tankin tila, ja juuri se on koko pointti.
+
+   Hiukkanen on tavallinen `bits`-hiutale kolmella lisäkentällä: oma
+   haipumisnopeus (`fade`), kasvu (`grow`) ja läpikuultavuus (`a`). Ilman niitä
+   savu olisi räjähdyksen sirpale — lyhyt, kutistumaton ja täysin peittävä. */
+/** 0xRRGGBB → '#rrggbb', säädintä varten. */
+const hexOf = n => '#' + (n & 0xffffff).toString(16).padStart(6, '0');
+
+/** Käyrän arvo kohdassa x = 0…1 (tyhjä…täysi), pisteiden välistä suoraan. */
+function curveAt(a, x) {
+  const n = a.length - 1;
+  const t = clamp(x, 0, 1) * n;
+  const i = Math.min(n - 1, Math.floor(t));
+  return a[i] + (a[i + 1] - a[i]) * (t - i);
+}
+
+/** Mistä käyrä alkaa: suurin täyteys jossa arvo on vielä nollaa suurempi.
+    Väriliukuma lasketaan siitä, jottei alkupistettä tarvitse kertoa kahdesti
+    — käyrä on nyt ainoa paikka joka sanoo missä savu alkaa. */
+function curveTop(a) {
+  for (let i = a.length - 1; i >= 0; i--) if (a[i] > 0) return i / (a.length - 1);
+  return 0;
+}
+
+let smokeT = 0;
+function stepSmoke(dt, throttle) {
+  const full = fuel / FUEL_MAX;
+  const rate = curveAt(P.smokeCurve, full);
+  if (dead || rate <= 0) { smokeT = 0; return; }
+
+  const top = curveTop(P.smokeCurve);
+  const k = top > 0 ? clamp(1 - full / top, 0, 1) : 1;   // 0 alkupisteessä, 1 tyhjänä
+  /* Kaasu kertoo määrän, käyrä muodon: sammutetuin suuttimin taksi liitää,
+     eikä sammunut moottori savuta täysillä. */
+  smokeT += dt * rate * (0.3 + 0.7 * throttle);
+  while (smokeT >= 1) {
+    smokeT -= 1;
+    bits.push({
+      x: taxi.x + rand(-9, 9), y: taxi.y + TH / 2 - 3,
+      vx: taxi.vx * 0.12 + rand(-9, 9), vy: -P.smokeRise + rand(-7, 7),
+      g: 0, life: 1, fade: 1 / Math.max(0.1, P.smokeLife),
+      /* Sama `mixHex` kuin bensapalkilla: se puhuu heksaa, joten luvut
+         käännetään sille. Toinen sekoitin olisi ollut sama funktio uudestaan. */
+      color: mixHex(hexOf(P.smokeC0), hexOf(P.smokeC1), k),
+      a: P.smokeA0 + (P.smokeA1 - P.smokeA0) * k,
+      r: P.smokeSize * rand(0.7, 1.3), grow: P.smokeGrow,
+    });
+  }
+}
+
+/* Taksi kääntyy sinne minne se menee: `face` on nokan suunta, +1 oikealle.
+   Vaihto vaatii vauhtia uuteen suuntaan, ks. turnV. */
+function stepTurn() {
+  if (taxi.vx > P.turnV) taxi.face = 1;
+  else if (taxi.vx < -P.turnV) taxi.face = -1;
+}
+
 function warnings(dt) {
   if (fuel < FUEL_LOW && fuel > 0 && !dead) {
     lowWarn -= dt;
@@ -1709,6 +2074,7 @@ function updateEnter(dt) {
   if (hornFx > 0) hornFx -= dt;
   stepBits(dt);
   stepSquish(dt);
+  stepLeavers(dt);
   movePads(dt);
 
   const d = ENTER_Y - taxi.y;
@@ -1736,6 +2102,7 @@ function update(dt) {
   if (hornFx > 0) hornFx -= dt;
   stepBits(dt);
   stepSquish(dt);
+  stepLeavers(dt);
   movePads(dt);
   if (level.update) level.update(dt, api());
 
@@ -1766,9 +2133,21 @@ function update(dt) {
     return;
   }
 
-  taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * 4, dt * 4);
+  stepTurn();
+  const gearWas = taxi.gear;
+  /* Ponnistuksessa jalat aukeavat nopeammin kuin tavallisesti; kun ne ovat
+     auki, ponnistus on ohi ja sama liike jatkuu sisäänpäin tavallisella
+     vauhdilla. */
+  const gearRate = GEAR_RATE * (taxi.spring ? P.hopRate : 1);
+  taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * gearRate, dt * gearRate);
+  if (taxi.spring && taxi.gear >= 1) { taxi.spring = 0; taxi.gearWant = false; }
+  /* Lähdön ohjauslupa raukeaa kun jalat ovat **matkalla sisään** ja rajan
+     alla — siitä eteenpäin tavallinen sääntö sanoo saman. Ponnistuksen aikana
+     (`spring`) se ei saa raueta, koska silloin jalat ovat vasta menossa ulos
+     ja kulkevat rajan läpi väärään suuntaan. */
+  if (taxi.launch && !taxi.spring && taxi.gear <= 0.35) taxi.launch = 0;
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
-  else carryOff(dt);
+  else { if (taxi.gear > gearWas) gearPush(gearWas); carryOff(dt); }
 
   warnings(dt);                              // piippaukset myös alustalla
 
@@ -1779,21 +2158,47 @@ function update(dt) {
 
   if (taxi.landed) {
     jetLevel(0);
+    if (hazardHit()) { crash(); return; }
     if (taxi.landed.fuel) refuel(dt);
     /* Tankilla kuolee myös: tyhjä tankki ja tyhjä kassa ei ratkea istumalla,
        joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
     if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
-    if (raw.y < -0.2 && fuel > 0) leavePad();
-    else { jobStep(dt); return; }
+    const wantsUp = raw.y < -0.2 && fuel > 0;
+    if (wantsUp && ++taxi.upHold >= LEAVE_HOLD) leavePad();
+    else {
+      if (!wantsUp) taxi.upHold = 0;
+      /* Tikku alas laskee taksin maahan, ylös nostaa ilmaan: sama liike
+         molempiin suuntiin, eikä telinenappia tarvitse muistaa. Sami
+         23.9.2026: *"sekin on intuitiivinen liike."* Ylös nostaminen on yhä
+         telinenapin takana, koska ylös on jo varattu lähdölle. */
+      if (raw.y > 0.35) taxi.gearWant = false;
+      jobStep(dt);
+      return;
+    }
   }
 
   const throttle = Math.min(1, Math.hypot(v.x, v.y));
-  if (throttle > 0 && !holdRide()) {
+
+  /* Kulutus suuttimen mukaan: **alasuuttimista menee kaksinkertaisesti**
+     sivuihin ja kattoon nähden. Sami 23.9.2026. Ne ovat ne isot, ja ne
+     kannattelevat koko taksia; sivusuuttimet ovat nokare sen rinnalla.
+
+     Suhde tehdään halventamalla sivuja eikä kallistamalla nostoa
+     (`sideBurn` 0,5), koska `burn` on se luku josta kenttien bensabudjetti
+     on laskettu: leijunta maksaa grav/thrust × burn, ja jos nosto
+     kaksinkertaistuisi, jokaisen kentän tankki puolittuisi kerralla. Nyt
+     leijunta maksaa täsmälleen saman kuin ennen ja sivuttainen on halvempaa.
+     Ks. README, "Bensabudjetti". */
+  const lift = Math.max(0, -v.y);                        // alasuuttimet
+  const side = Math.min(1, Math.hypot(v.x, Math.max(0, v.y)));
+  const burnRate = Math.min(1, lift + side * P.sideBurn);
+  if (burnRate > 0 && !holdRide()) {
     const had = fuel;
-    fuel = Math.max(0, fuel - P.burn * throttle * dt);
+    fuel = Math.max(0, fuel - P.burn * burnRate * dt);
     if (had > 0 && fuel <= 0) say(t('msg.dry'), 3);
   }
   jetLevel(throttle);
+  stepSmoke(dt, throttle);
 
   taxi.vx += v.x * P.thrust * dt;
   taxi.vy += v.y * P.thrust * dt + P.grav * dt;
@@ -1844,6 +2249,10 @@ function move(dt) {
  * reilu kymmenesosa sekuntia. Siksi carryOff sen lisäksi. */
 function leavePad() {
   const p = taxi.landed;
+  /* Kesken vajoamisen lähtevä vie asiakkaan mukanaan: keikka jää kyytiin ja
+     maksetaan seuraavalla laskulla samalle alustalle. Ilman tätä odotuslippu
+     jäisi päälle ilmaan, jossa `taxi.landed` ei ole enää mikään. */
+  if (job && job.drop) job.drop = null;
   taxi.landed = null;
   taxi.offPad = p;
   taxi.offT = PAD_LEAVE;
@@ -1851,11 +2260,104 @@ function leavePad() {
      lohkoissa ja Highrisen ylärivissä on sellaisia — ja tarkistamaton nosto
      työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
      oikein. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
-  const y0 = taxi.y;
-  taxi.y -= P.bounceLift;
+  /* Ponnistus: teline suoristuu ja työntää taksin irti pinnasta, ja vetäytyy
+     heti perään sisään. Sami 23.9.2026: *"ylös lähtiessä telineet pompauttaa
+     meidät ylös ja sitten vetäytyy heti takasin ja ohjattavuus on jo heti
+     käytössä."*
+
+     **Ponnistus on animaatio eikä hyppäys.** Ensimmäinen versio suoristi jalat
+     yhdessä ruudussa, ja Sami: *"liian nopea, pitää mennä useampi frame kun
+     jalat aukeaa, ihan se perusanimaatio vauhti riittää tai ... mx 2x."*
+     Nyt jalat suoristuvat telineen omalla vauhdilla kerrottuna `hopRate`llä,
+     ja koska suoja juuri jätettyyn alustaan on vielä voimassa (`carryOff`),
+     ne työntävät taksia edellään samalla kun ne aukeavat.
+
+     **Lähtövauhti on jalkojen suoristumisvauhti**, ei oma lukunsa: 14 px
+     jaettuna suoristumisajalla. Kaksi erillistä säädintä olisi kaksi lukua
+     jotka pitää muistaa pitää samassa mielessä, ja väärässä suhteessa taksi
+     joko karkaa jaloiltaan tai jää roikkumaan niiden varaan. Yksi säädin, ja
+     0 ottaa ponnistuksen kokonaan pois.
+
+     Nosto ja vauhti tarkistetaan törmäyksiltä: alusta voi olla matalan katon
+     alla (Moonshotin lohkot, Highrisen ylärivi), eikä peli saa heittää taksia
+     kattoon omasta aloitteestaan. Siellä nousu jää pelaajan oman kaasun
+     varaan. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
+  const y0 = taxi.y, gear0 = taxi.gear;
+  const fits = () => {
+    const b = taxiBox(taxi);
+    for (const r of solids()) if (r !== p && hit(b, r)) return false;
+    return true;
+  };
+
+  taxi.y = y0 - P.bounceLift;
+  if (!fits()) taxi.y = y0;
+
+  if (P.hopRate > 0) {
+    /* Jalat suoristuvat vaikka tilaa olisi vain sen verran: se palauttaa
+       taksin seisomakorkeuteen, joka on varmasti mahtunut — sieltä on
+       laskeuduttu — ja jättää telineen ulos siltä varalta että taksi vajoaa
+       takaisin. */
+    taxi.spring = 1;
+    taxi.gearWant = true;                    // jalat auki, ja sen jälkeen heti kiinni
+    taxi.launch = 1;                         // ja ohjaus auki koko sen ajan
+
+    /* Vauhti sen sijaan vain jos koko ponnistus mahtuu: nosto ja se matka
+       jonka jalat vielä suoristuvat. Se on se osa joka veisi kattoon, eikä
+       peli saa heittää taksia sinne omasta aloitteestaan. Mitataan siltä
+       paikalta jossa taksi ponnistuksen päätteeksi olisi. */
+    const yNow = taxi.y;
+    taxi.y = y0 - P.bounceLift - GEAR * (1 - gear0);
+    taxi.gear = 1;
+    const hopRoom = fits();
+    taxi.y = yNow; taxi.gear = gear0;
+
+    const v = GEAR * GEAR_RATE * P.hopRate;  // px/s, eli juuri jalkojen vauhti
+    if (hopRoom && taxi.vy > -v) taxi.vy = -v;
+  }
+}
+
+/* Alas tuleva teline työntää taksia, ei taksia pintaan.
+ *
+ * Teline kasvaa neljäsosasekunnissa neljätoista pikseliä alaspäin, ja se on
+ * osa taksin törmäyslaatikkoa. Pinnan lähellä laskettu teline kasvoi siis
+ * suoraan alustan tai lattian sisään, ja koska kosketus tuli laatikon
+ * kasvamisesta eikä taksin liikkeestä, `move` ei lukenut sitä laskuksi vaan
+ * seinäksi: teline tappoi pelaajan juuri silloin kun hän valmistautui laskuun.
+ *
+ * Oikein päin ajateltuna teline osuu maahan ensin ja maa työntää sen takaisin
+ * — eli taksia ylös. Siksi tämä siirtää taksin sen verran ylös kuin teline
+ * upposi, jolloin jalat jäävät pinnalle ja `move` lukee seuraavan ruudun
+ * laskuna tavallisine nopeusrajoineen. Nopeus ei muutu tässä: liian kovaa
+ * tuleva kuolee yhä, teline ei vain ole enää syy.
+ *
+ * Kaksi rajausta:
+ *   - Vain ylhäältä tullut kosketus. Jos taksi oli jo pinnan tasalla ennen
+ *     telineen kasvua, kyse on törmäyksestä jonka `move` hoitaa, eikä sitä
+ *     saa peruuttaa hyppäämällä taksi seinän päälle.
+ *   - Nosto vain jos se mahtuu, samasta syystä kuin `leavePad`issa. Jos ylhäällä
+ *     on katto, teline jää sen sijaan siihen mihin se ehti: ahtaassa paikassa
+ *     maa pitää telineen sisällä, eikä mitään työnnetä seinään. */
+function gearPush(gearWas) {
   const b = taxiBox(taxi);
+  const foot = b.y + b.h;
+  const prevFoot = foot - GEAR * (taxi.gear - gearWas);
+  let lift = 0;
   for (const r of solids()) {
-    if (r !== p && hit(b, r)) { taxi.y = y0; break; }
+    if (r === taxi.offPad) continue;
+    if (b.x + b.w <= r.x || b.x >= r.x + r.w) continue;
+    /* Alustan yläreuna ruudun alussa, samasta syystä kuin `move`ssa: nousevan
+       alustan pitää kelvata vaikka se ehti jo taksin jalkojen ohi. */
+    if (prevFoot > (r.y - (r.dy || 0)) + 1) continue;
+    if (foot <= r.y) continue;
+    lift = Math.max(lift, foot - r.y);
+  }
+  if (lift <= 0) return;
+
+  const y0 = taxi.y;
+  taxi.y -= lift;
+  const nb = taxiBox(taxi);
+  for (const r of solids()) {
+    if (r !== taxi.offPad && hit(nb, r)) { taxi.y = y0; taxi.gear = gearWas; return; }
   }
 }
 
@@ -1966,7 +2468,8 @@ function stepBits(dt) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.vy += (b.g === undefined ? 200 : b.g) * dt;
     b.vx *= Math.pow(0.15, dt);
-    b.life -= dt * 1.3;
+    if (b.grow) b.r += b.grow * dt;
+    b.life -= dt * (b.fade === undefined ? 1.3 : b.fade);
     if (b.life <= 0) bits.splice(i, 1);
   }
 }
@@ -2281,6 +2784,11 @@ function drawSquish(s) {
   ctx.restore();
 }
 
+function drawLeaver(lv) {
+  const p = padById(lv.pad);
+  if (p) drawAlien(lv.kind, lv.x, p.y, lv.walk, true, false, 1 - lv.fade);
+}
+
 function drawPassenger() {
   if (!job || job.phase !== 'wait' || !job.shown) return;
   const p = padById(job.from);
@@ -2323,6 +2831,7 @@ function drawTaxi(v) {
   const ts = typeof level.taxiScale === 'number' ? level.taxiScale : 1;
   if (ts <= 0.01) return;
   const t2 = taxi, gl = GEAR * t2.gear;
+  const NOZ = 7;                             // suuttimen pituus kyljestä ulos
   ctx.save();
   ctx.translate(t2.x, t2.y);
   if (ts !== 1) ctx.scale(ts, ts);
@@ -2343,8 +2852,37 @@ function drawTaxi(v) {
   const j = () => rand(0.8, 1.2);
   if (v.y < -0.05) { const l = 26 * -v.y * j(); flame(-14, TH / 2, 0, l); flame(14, TH / 2, 0, l); }
   if (v.y > 0.05) flame(0, -TH / 2, Math.PI, 18 * v.y * j());
-  if (v.x > 0.05) flame(-TW / 2, 0, -Math.PI / 2, 20 * v.x * j());
-  if (v.x < -0.05) flame(TW / 2, 0, Math.PI / 2, 20 * -v.x * j());
+  /* Sivuliekki on hieman pidempi kuin pystyliekki: se tulee kapeammasta
+     suuttimesta, ja lyhyenä se hukkui rungon viereen. Sami 23.9.2026. */
+  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, -Math.PI / 2, 26 * v.x * j());
+  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, Math.PI / 2, 26 * -v.x * j());
+
+  /* Sivusuuttimet. Ne ovat olleet aina liekissä muttei rungossa — Sami
+     23.9.2026: *"sivuthrustereiden puuttuminen on häirinnyt aina, molemmissa
+     sivuissa pitäis olla."* Suuttimet ovat kiinteä osa runkoa eivätkä käänny
+     nokan mukana: kumpikin kylki työntää omaan suuntaansa, ja liekki tulee
+     siitä suuttimesta joka työntää. */
+  const nozzle = (sx, hot) => {
+    ctx.save();
+    ctx.scale(sx, 1);
+    ctx.fillStyle = '#9fb0d8';
+    ctx.beginPath();
+    /* Puolet matalampi kuin ensimmäisessä versiossa: neljännes pois sekä
+       ylä- että alareunasta. Sami 23.9.2026. */
+    ctx.moveTo(TW / 2 - 4, -3);
+    ctx.lineTo(TW / 2 + NOZ, -4);
+    ctx.lineTo(TW / 2 + NOZ, 4);
+    ctx.lineTo(TW / 2 - 4, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = hot ? '#ffe3a6' : '#3b4460';
+    if (hot) { ctx.shadowColor = '#ffb355'; ctx.shadowBlur = 10; }
+    ctx.fillRect(TW / 2 + NOZ - 2.4, -3.25, 2.4, 6.5);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  };
+  nozzle(1, v.x < -0.05);
+  nozzle(-1, v.x > 0.05);
 
   if (gl > 0.5) {
     ctx.strokeStyle = '#9fb0d8'; ctx.lineWidth = 3; ctx.lineCap = 'round';
@@ -2359,7 +2897,12 @@ function drawTaxi(v) {
     ctx.stroke();
   }
 
+  /* Runko peilataan, suuttimet ja teline eivät: ne ovat samat kummallakin
+     kyljellä, ja jalat ovat siellä missä maa on. */
+  ctx.save();
+  ctx.scale(t2.face === 1 ? -1 : 1, 1);
   taxiShape(TW, TH, false);
+  ctx.restore();
 
   const busy = job && job.phase === 'aboard';
   ctx.fillStyle = busy ? '#ff5d7a' : '#9fb0d8';
@@ -2661,13 +3204,14 @@ function draw(v) {
   for (const p of PADS) drawPad(p);
   for (const gr of graves) drawGrave(gr);
   for (const s of squishes) drawSquish(s);
+  for (const lv of leavers) drawLeaver(lv);
   drawPassenger();
   drawTaxi(v);
   drawHorn();
   drawWreck();
 
   for (const b of bits) {
-    ctx.globalAlpha = clamp(b.life, 0, 1);
+    ctx.globalAlpha = clamp(b.life, 0, 1) * (b.a === undefined ? 1 : b.a);
     ctx.fillStyle = b.color;
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.3); ctx.fill();
   }
@@ -2705,6 +3249,7 @@ const SAVE_FAIL = {
    siihen voi siis piirtää myös sen missä kohtaa kierrosta juuri nyt ollaan,
    ja säätimen liikuttaminen näkyy käyrässä samalla hetkellä. */
 let graphDraws = [];
+let fpsEl = null;                              // paneelin ruudunpäivitysluku
 
 function graphCanvas(draw) {
   const c = document.createElement('canvas');
@@ -2719,13 +3264,24 @@ function graphCanvas(draw) {
     try { draw(g, c.width, c.height); } catch (e) {}
   };
   graphDraws.push(paint);
+  c.repaint = paint;                           // editorille, joka haluaa näkyä heti
   paint();
   return c;
 }
 
-function paintGraphs() {
+/* Kuvaajat piirretään kahdeksan kertaa sekunnissa eikä joka ruudulla. Kolme
+   560 × 150 kangasta tyhjennettynä ja täytettynä kuusikymmentä kertaa
+   sekunnissa on paljon työtä säätimelle jota katsotaan silmällä — ja se työ
+   tehtiin ennen myös silloin kun pelissä oli kiire. Vedon aikana editori
+   piirtää itsensä heti (`repaint`), joten viive ei näy siellä missä sillä on
+   väliä. */
+let graphT = 0, fpsAvg = 60;
+function paintGraphs(now) {
   if (!graphDraws.length || panelEl.classList.contains('hidden')) return;
+  if (now - graphT < 120) return;
+  graphT = now;
   for (const d of graphDraws) d();
+  if (fpsEl) fpsEl.textContent = Math.round(fpsAvg) + ' fps';
 }
 
 /* Tippikäyrä: kolme profiilia, kukin laskeva suora omalta korkeudeltaan omaan
@@ -2772,11 +3328,16 @@ function tipGraph(ctx, w, h) {
    sellaista listaa. Ryhmään kuulumaton säädin päätyy "muut"-laatikkoon, joten
    uusi säädin ei katoa näkyvistä vaikka lisääjä ei kävisi tätä listaa läpi. */
 const SLIDER_GROUPS = [
-  { name: 'lento', open: true, keys: ['grav', 'thrust', 'stick'] },
+  { name: 'lento', open: true, keys: ['grav', 'thrust', 'stick', 'turnV'] },
   { name: 'laskeutuminen', open: false,
-    keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep'] },
+    keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep', 'hopRate'] },
   { name: 'bensa', open: true,
-    keys: ['burn', 'refuel', 'price', 'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
+    keys: ['burn', 'sideBurn', 'refuel', 'price',
+           'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
+  { name: 'savu', open: false,
+    curve: 'smokeCurve',
+    keys: ['smokeLife', 'smokeSize', 'smokeGrow',
+           'smokeRise', 'smokeC0', 'smokeA0', 'smokeC1', 'smokeA1'] },
   { name: 'raha ja tipit', open: false, graph: tipGraph,
     keys: ['fare', 'tip', 'tipTime',
            'tipCalm', 'fadeCalm', 'tipRush', 'fadeRush', 'tipHold', 'fadeHold'] },
@@ -2789,8 +3350,10 @@ const SLIDERS = [
   { key: 'landVX', label: 'lasku vx max', min: 10, max: 200, step: 5 },
   { key: 'bounceFrom', label: 'pomppu alkaa x', min: 0.2, max: 0.95, step: 0.05 },
   { key: 'bounceLift', label: 'pompun nosto px', min: 2, max: 30, step: 1 },
+  { key: 'hopRate', label: 'ponnistus × telineen vauhti', min: 0, max: 3, step: 0.25 },
   { key: 'bounceKeep', label: 'pompun jäävä vauhti', min: 0.2, max: 0.9, step: 0.02 },
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
+  { key: 'sideBurn', label: 'sivusuuttimet × kulutus', min: 0, max: 1, step: 0.05 },
   { key: 'refuel', label: 'tankkaus / s', min: 5, max: 80, step: 1 },
   { key: 'price', label: 'bensan hinta', min: 0, max: 3, step: 0.1 },
   { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
@@ -2807,6 +3370,15 @@ const SLIDERS = [
   { key: 'tipHold', label: 'kaasu: tippi ×', min: 0.5, max: 3, step: 0.05 },
   { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
+  { key: 'turnV', label: 'nokan kääntymisraja px/s', min: 0, max: 300, step: 5 },
+  { key: 'smokeLife', label: 'savun kesto s', min: 0.2, max: 5, step: 0.1 },
+  { key: 'smokeSize', label: 'savun koko px', min: 1, max: 16, step: 0.5 },
+  { key: 'smokeGrow', label: 'savun kasvu px/s', min: 0, max: 50, step: 1 },
+  { key: 'smokeRise', label: 'savun nousu px/s', min: -20, max: 80, step: 2 },
+  { key: 'smokeC0', label: 'savun väri täydessä', color: true },
+  { key: 'smokeA0', label: 'savun peitto täydessä', min: 0, max: 1, step: 0.05 },
+  { key: 'smokeC1', label: 'savun väri tyhjänä', color: true },
+  { key: 'smokeA1', label: 'savun peitto tyhjänä', min: 0, max: 1, step: 0.05 },
 ];
 
 let panelNote = '';
@@ -2827,6 +3399,16 @@ function pbutton(cls, text, fn) {
 function buildPanel() {
   panelEl.replaceChildren(el('h2', null, 'säädöt'));
   graphDraws = [];                             // vanhat kankaat irtosivat DOMista
+
+  /* Ruudunpäivitys näkyviin: raskas kenttä, tiheä lehvästö tai iso savumäärä
+     maksaa ruutuja, eikä sitä voi arvata katsomalla. Päivittyy kuvaajien
+     tahdissa eli kahdeksan kertaa sekunnissa. */
+  const fpsRow = el('div', 'row');
+  fpsEl = el('b', null, '');
+  const fpsLab = el('label');
+  fpsLab.append(document.createTextNode('ruudunpäivitys'), fpsEl);
+  fpsRow.append(fpsLab);
+  panelEl.append(fpsRow);
 
   const lvlRow = el('div', 'row');
   const lvlSeg = el('div', 'seg');
@@ -2933,12 +3515,117 @@ function buildPanel() {
     return row;
   };
 
-  const globalRow = s => sliderRow(s, () => BASE[s.key], v => {
-    BASE[s.key] = v;
+  /* Väririvi on sama rivi kuin säädin, mutta liu'un tilalla on selaimen oma
+     värivalitsin. Arvo on luku (0xRRGGBB) niin kuin kaikki muukin viritys;
+     vain syöte puhuu heksaa. */
+  const colorRow = (s, get, set) => {
+    const row = el('div', 'row');
+    const lab = el('label');
+    const val = el('b', null, hexOf(get()));
+    lab.append(document.createTextNode(s.label), val);
+    const input = el('input');
+    input.type = 'color';
+    input.value = hexOf(get());
+    input.addEventListener('pointerdown', snapUndo);
+    input.addEventListener('input', () => {
+      set(parseInt(input.value.slice(1), 16));
+      val.textContent = input.value;
+    });
+    row.append(lab, input);
+    return row;
+  };
+
+  /* Käyräeditori: sama laatikko kuin muillakin kuvaajilla, mutta siihen saa
+     piirtää. Pystypylväs kutakin pistettä kohti, ja veto asettaa arvon siellä
+     missä sormi kulkee — myös pisteiden väliin jääneet, jotta nopea veto ei
+     jätä aukkoja. Piirtämisen jälkeen ei tarvitse painaa mitään: arvo on
+     pelissä heti, ja tallennus tapahtuu vedon päättyessä niin kuin liu'uillakin.
+
+     x on tankin täyteys 0…100 % vasemmalta oikealle ja y savua sekunnissa. */
+  const curveRow = (arr, o, done) => {
+    const { label, max: maxY, lo = '', hi = '', now = null } = o;
+    const wrap = el('div', 'row');
+    const lab = el('label');
+    const val = el('b', null, '');
+    lab.append(document.createTextNode(label), val);
+    wrap.append(lab);
+
+    const c = graphCanvas((g, w, h) => {
+      const a = arr(), n = a.length - 1;
+      const L = 44, R = w - 10, T = 12, B = h - 26;
+      const xOf = i => L + (R - L) * (i / n);
+      const yOf = v => B - (B - T) * clamp(v / maxY, 0, 1);
+
+      g.strokeStyle = 'rgba(120,160,255,.22)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(L, T); g.lineTo(L, B); g.lineTo(R, B); g.stroke();
+      g.font = '13px system-ui, sans-serif';
+      g.fillStyle = 'rgba(190,210,255,.55)';
+      g.textAlign = 'right'; g.fillText(String(maxY), L - 5, T + 11);
+      g.textAlign = 'left'; g.fillText(lo, L, B + 16);
+      g.textAlign = 'right'; g.fillText(hi, R, B + 16);
+
+      /* Missä tankki on juuri nyt: säätäminen on helpompaa kun näkee mitä
+         kohtaa käyrästä ollaan ajamassa. */
+      if (now !== null && taxi && state === PLAY) {
+        g.strokeStyle = 'rgba(255,212,121,.45)';
+        g.beginPath();
+        const x = L + (R - L) * clamp(now(), 0, 1);
+        g.moveTo(x, T); g.lineTo(x, B); g.stroke();
+      }
+
+      const bw = Math.max(3, (R - L) / n - 3);
+      for (let i = 0; i <= n; i++) {
+        if (a[i] <= 0) continue;
+        g.fillStyle = 'rgba(111,227,255,.55)';
+        g.fillRect(xOf(i) - bw / 2, yOf(a[i]), bw, B - yOf(a[i]));
+      }
+      g.strokeStyle = '#6fe3ff'; g.lineWidth = 2;
+      g.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const x = xOf(i), y = yOf(a[i]);
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    });
+    c.style.touchAction = 'none';
+    c.style.cursor = 'crosshair';
+
+    let last = -1;
+    const at = ev => {
+      const r = c.getBoundingClientRect();
+      const a = arr(), n = a.length - 1;
+      const w = c.width, h = c.height;
+      const L = 44, R = w - 10, T = 12, B = h - 26;
+      const x = (ev.clientX - r.left) / r.width * w;
+      const y = (ev.clientY - r.top) / r.height * h;
+      const i = Math.round(clamp((x - L) / (R - L), 0, 1) * n);
+      const v = Math.round(clamp((B - y) / (B - T), 0, 1) * maxY * 10) / 10;
+      /* Väliin jääneet pisteet täytetään, jotta nopea veto ei jätä aukkoja. */
+      const from = last < 0 ? i : last;
+      const step = i >= from ? 1 : -1;
+      for (let j = from; j !== i + step; j += step) a[j] = v;
+      last = i;
+      val.textContent = String(Math.round(a[i]));
+      if (c.repaint) c.repaint();
+    };
+    c.addEventListener('pointerdown', ev => {
+      snapUndo(); last = -1; c.setPointerCapture(ev.pointerId); at(ev);
+    });
+    c.addEventListener('pointermove', ev => { if (last >= 0 || ev.buttons) at(ev); });
+    c.addEventListener('pointerup', () => { last = -1; done(); });
+    c.addEventListener('pointercancel', () => { last = -1; });
+    wrap.append(c);
+    return wrap;
+  };
+
+  const globalSet = key => v => {
+    BASE[key] = v;
     applyMul();
     saveTune();
     syncFoot();
-  });
+  };
+  const globalRow = s =>
+    (s.color ? colorRow : sliderRow)(s, () => BASE[s.key], globalSet(s.key));
 
   /* Kentän arvot tallentuvat samalla tavalla kuin globaalit. Tämä puuttui
      ensin, ja vika näkyi vasta sivun latauksessa: säädöt toimivat, mutta
@@ -2956,12 +3643,21 @@ function buildPanel() {
     saveBtn.disabled = !tuneDirty();
   }
 
-  /* <details> hoitaa auki ja kiinni itse, joten laatikoille ei tarvita omaa
-     tilaa eikä kuuntelijaa. */
+  /* <details> hoitaa auki ja kiinni itse, mutta **ei muista sitä**: paneeli
+     rakennetaan uudestaan joka kenttänapista ja joka sivun latauksesta, ja
+     silloin jokainen laatikko palasi koodin oletukseen. Kenttää rakentaessa
+     sivu ladataan kymmeniä kertoja, joten se tarkoitti samojen kolmen laatikon
+     avaamista uudestaan joka kerta. Sami 23.9.2026.
+
+     Tila talletetaan otsikon mukaan (`dev.folds`), eli kentän omat laatikot
+     muistetaan kenttäkohtaisesti — otsikko on "Tulivuori: purkaus" eikä
+     "purkaus". Koodin `open` jää oletukseksi sille mitä ei ole vielä avattu
+     kertaakaan. */
   const group = (name, open, rows, graph) => {
     const box = el('details', 'grp');
-    box.open = open;
+    box.open = typeof dev.folds[name] === 'boolean' ? dev.folds[name] : open;
     box.append(el('summary', null, name));
+    box.addEventListener('toggle', () => { dev.folds[name] = box.open; saveDev(); });
     const body = el('div', 'body');
     for (const r of rows) body.append(r);
     if (graph) body.append(graphCanvas(graph));
@@ -2979,6 +3675,33 @@ function buildPanel() {
        sliders   kentän omat arvot, kirjoitetaan suoraan kentän omaan olioon
 
      Taulu vaihtuu kenttää vaihdettaessa, koska buildPanel ajetaan uudestaan. */
+  /* Kentän näkyvä nimi tekstikenttänä. **Nimi on pelkkää näyttöä** — kentän
+     tunnus on sen tiedostonimi — joten sen saa vaihtaa lennossa ilman että
+     mikään tallennettu katoaa, ja se tallentuu peliin muun virityksen mukana.
+     Sami 23.9.2026: *"paras olisi jos propseissa on nimi kenttä, jotta voin
+     vaihtaa sitä lennossa."*
+
+     Tyhjä kenttä palauttaa koodin nimen sen sijaan että jättäisi kentän
+     nimettömäksi: nimetön kenttä näkyisi tyhjänä nappina ja tyhjänä otsikkona
+     HUDissa, eikä sitä saisi enää valittua. */
+  const nameRow = el('div', 'row');
+  const nameIn = document.createElement('input');
+  nameIn.type = 'text';
+  nameIn.maxLength = 32;
+  nameIn.value = level.name;
+  nameIn.style.cssText = 'width:100%;box-sizing:border-box;background:#141a2c;'
+    + 'border:1px solid #2b3550;border-radius:6px;color:#ffd479;font:inherit;padding:5px 7px;';
+  nameIn.addEventListener('input', () => {
+    level.name = nameIn.value.trim() || LEVEL_NAME0.get(lvId(level)) || level.name;
+    levelChanged();
+  });
+  /* Nappirivi ja laatikko-otsikot näyttävät nimen, joten ne ladotaan uusiksi
+     vasta kun kirjoittaminen loppuu — kesken kirjoittamisen se veisi fokuksen
+     kentästä joka näppäimen painalluksella. */
+  nameIn.addEventListener('change', () => buildPanel());
+  nameRow.append(el('label', null, 'kentän nimi'), nameIn);
+  panelEl.append(nameRow);
+
   for (const g of level.tune || []) {
     const rows = [];
     for (const key of g.mul || []) {
@@ -2994,6 +3717,12 @@ function buildPanel() {
       if (!g.obj) continue;
       rows.push(sliderRow(sl, () => g.obj[sl.key], v => { g.obj[sl.key] = v; levelChanged(); }));
     }
+    /* Kentän oma käyrä. Sama editori kuin globaalilla, ja arvot kirjoitetaan
+       aina olemassa olevan taulukon sisään — kenttä on voinut ottaa siihen
+       viittauksen, ja uusi taulukko jäisi siltä näkymättä. */
+    if (g.curve && g.obj && Array.isArray(g.obj[g.curve.key])) {
+      rows.unshift(curveRow(() => g.obj[g.curve.key], g.curve, levelChanged));
+    }
     if (rows.length || g.graph) {
       panelEl.append(group(level.name + ': ' + g.name, g.open !== false, rows, g.graph));
     }
@@ -3003,7 +3732,14 @@ function buildPanel() {
   for (const g of SLIDER_GROUPS) {
     const rows = g.keys.map(k => byKey.get(k)).filter(Boolean);
     for (const s of rows) used.add(s.key);
-    if (rows.length) panelEl.append(group(g.name, g.open, rows.map(globalRow), g.graph));
+    const built = rows.map(globalRow);
+    if (g.curve) {
+      built.unshift(curveRow(() => BASE[g.curve],
+        { label: 'savua / s', max: 200, lo: 'tyhjä', hi: 'täysi',
+          now: () => fuel / FUEL_MAX },
+        () => { saveTune(); syncFoot(); }));
+    }
+    if (built.length) panelEl.append(group(g.name, g.open, built, g.graph));
   }
   const rest = SLIDERS.filter(s => !used.has(s.key));
   if (rest.length) panelEl.append(group('muut', false, rest.map(globalRow)));
@@ -3031,7 +3767,7 @@ function buildPanel() {
     }
     disarm();
     snapUndo();
-    Object.assign(BASE, DEFAULTS);
+    Object.assign(BASE, cloneTune(DEFAULTS));
     resetLevelTune();                          // myös kenttien omat arvot
     sidePick = null; gearSide = DEFAULT_SIDE; layout();
     applyMul();
@@ -3090,6 +3826,11 @@ function buildPanel() {
   ends.append(saveBtn, pbutton('btn sm', 'sulje', togglePanel));
   panelEl.append(acts, ends, note);
   syncFoot();
+
+  /* Vieritys takaisin siihen mihin se jäi. Tämä on vasta lopussa, koska
+     scrollTop leikkautuu sisällön korkeuteen: ennen viimeistä riviä paneeli on
+     matalampi kuin se kohta johon ollaan menossa, ja arvo katoaisi. */
+  if (dev.scroll > 0) panelEl.scrollTop = dev.scroll;
 }
 
 function panelOpen() {
@@ -3101,7 +3842,12 @@ function panelOpen() {
    avattu täältä rattaasta. */
 function setPanel(on) {
   if (on === panelOpen()) return;
-  if (on) { buildPanel(); panelEl.classList.remove('hidden'); }
+  /* Näkyviin **ennen** rakentamista. Piilotettuna paneelilla ei ole asettelua,
+     eikä piilotetun elementin `scrollTop` ota vastaan mitään — buildPanelin
+     lopussa palautettu vieritys katosi siis joka avauksella. Vaihto ei vilauta
+     mitään, koska molemmat tapahtuvat samassa tehtävässä eikä välissä
+     piirretä. */
+  if (on) { panelEl.classList.remove('hidden'); buildPanel(); }
   else panelEl.classList.add('hidden');
   saveDev();
   setWatch(wantWatch());                       // vartija seuraa paneelia
@@ -3480,7 +4226,10 @@ function loop(now) {
   last = now;
   resize();
   padInput();
-  paintGraphs();                               // vain auki olevaan paneeliin
+  /* Liukuva keskiarvo: yksittäinen pitkä ruutu ei saa heilauttaa lukua, mutta
+     pysyvän notkahduksen pitää näkyä sekunnissa. */
+  if (dt > 0) fpsAvg += (1 / dt - fpsAvg) * 0.08;
+  paintGraphs(now);                            // vain auki olevaan paneeliin
 
   /* Tauolla piirretään sama ruutu uudestaan ilman päivitystä. Vain lennon
      aikana: valikossa ja välianimaatiossa taukoa ei ole mitä pitää. */
@@ -3510,7 +4259,12 @@ function loop(now) {
 
   if (state === ENTER) {
     updateEnter(dt);
-    draw({ x: 0, y: clamp(1 - taxi.vy / 300, 0.25, 1) });
+    /* Miinus, koska luukusta tuleva taksi **jarruttaa**: se hidastaa
+       putoamistaan, ja jarrutus on alasuuttimien työtä. Plussalla liekki
+       piirtyi katolle, mikä näytti siltä että taksi kiihdyttää alaspäin
+       samalla kun se hidastuu. Sami 23.9.2026: *"yksi asia on häirinnyt
+       pitkään."* */
+    draw({ x: 0, y: -clamp(1 - taxi.vy / 300, 0.25, 1) });
     requestAnimationFrame(loop);
     return;
   }
