@@ -522,6 +522,21 @@ for (let i = 0; i < 14; i++) {
   });
 }
 
+/* Yksi sakara: tyvestä kärkeen ja takaisin, kahdella kaarella. Kierto on
+   lukuina eikä `ctx.rotate`na, jotta sama pensseli käy sekä piirtoon että
+   Path2D:hen — kaukametsä kootaan yhdeksi poluksi, ks. `canopy`. `into` on
+   siis kumpi tahansa, koska molemmilla on nämä kaksi metodia. */
+function leaf(into, x, y, a, r) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const at = (px, py) => [x + px * c - py * s, y + px * s + py * c];
+  const [c1x, c1y] = at(r * 0.55, -r * 0.16);
+  const [tipx, tipy] = at(r, 0);
+  const [c2x, c2y] = at(r * 0.55, r * 0.16);
+  into.moveTo(x, y);
+  into.quadraticCurveTo(c1x, c1y, tipx, tipy);
+  into.quadraticCurveTo(c2x, c2y, x, y);
+}
+
 function frond(ctx, f, t) {
   const sway = Math.sin(t * 0.5 * f.sway + f.x * 0.02) * 0.05;
   ctx.save();
@@ -530,23 +545,18 @@ function frond(ctx, f, t) {
   ctx.fillStyle = f.tone < 0.5 ? '#13251a' : '#193020';
   for (let i = 0; i < f.n; i++) {
     const a = -1.35 + (i / Math.max(1, f.n - 1)) * 2.7;
-    ctx.save();
-    ctx.rotate(a);
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.quadraticCurveTo(f.r * 0.55, -f.r * 0.16, f.r, 0);
-    ctx.quadraticCurveTo(f.r * 0.55, f.r * 0.16, 0, 0);
+    leaf(ctx, 0, 0, a, f.r);
     ctx.fill();
-    ctx.restore();
   }
   ctx.restore();
 }
 
 /* Kaukainen puuraja, latvat noin 2/5 korkeudella alhaalta (y 624). Sami
-   23.9.2026. Se on yksi tumma siluetti eikä yksittäisiä puita: latvusto on
-   pyöreitä kumpuja ja sieltä täältä pistää yksi korkeampi puu yli, niin kuin
-   viidakossa. Väri on tummin mitä taustassa on, koska se on lähinnä — mutta
-   yhä selvästi vaimeampi kuin vuori, johon voi osua. */
+   23.9.2026. Se on yksi tumma siluetti eikä yksittäisiä puita, ja sieltä
+   täältä pistää yksi korkeampi puu yli, niin kuin viidakossa. Väri on tummin
+   mitä taustassa on, koska se on lähinnä — mutta yhä selvästi vaimeampi kuin
+   vuori, johon voi osua. */
 const TREELINE_Y = 624;
 const TREELINE = [];
 for (let x = -30; x < W + 60; ) {
@@ -556,27 +566,62 @@ for (let x = -30; x < W + 60; ) {
   x += w * fbet(0.52, 0.8);
 }
 
-function treeline(ctx) {
-  ctx.fillStyle = '#0f1a14';
-  ctx.beginPath();
-  ctx.moveTo(-40, H);
-  ctx.lineTo(-40, TREELINE_Y + 20);
+/* Latvusto piirretään **samalla pensselillä kuin reunojen viuhkat, vain
+   paljon pienempänä**. Sami 23.9.2026: *"tehdään samoilla pensseleillä millä
+   noi reunatkin mutta paljon pienempänä."* Ensimmäinen versio oli pyöreitä
+   kumpuja, ja kumpu ei kerro mistä puusta on kyse — sakaroiden reuna lukee
+   lehvästönä vielä 20 pikselin kokoisena, ja se on sama muoto jonka silmä on
+   juuri nähnyt ruudun laidassa isona.
+
+   `TREELINE` pysyy ennallaan: se antaa paikat, leveydet ja korkeudet, ja
+   **erityisesti se kuluttaa satunnaisvirtaa saman verran kuin ennen** —
+   rungot ja viuhkat arvotaan sen jälkeen samasta virrasta, joten reunojen
+   viidakko pysyy pikselilleen sinä minkä Sami on jo hyväksynyt. Vaihtunut on
+   vain piirto.
+
+   Koko metsä on yksi Path2D ja yksi täyttö: satakunta erillistä sakaraa
+   ruudussa on taustaa, ja taustan pitää olla halpa. Polku rakennetaan vasta
+   piirrossa, koska kenttätiedostot ajetaan myös nodessa eikä siellä ole
+   Path2D:tä — sama syy kuin Shooting Starsin kaukametsässä. */
+let canopyPath = null;
+function canopy() {
+  if (canopyPath) return canopyPath;
+  const p = new Path2D();
+
+  /* Yhtenäinen pohja latvusten alle. Suora reuna riittää: latvukset ovat
+     tiheämmässä kuin leveitä, joten viiva jää niiden taakse. */
+  p.rect(-40, TREELINE_Y + 2, W + 80, H - TREELINE_Y);
+
   for (const t of TREELINE) {
-    const top = TREELINE_Y - t.h;
-    if (t.tall) {
-      /* Yli pistävä puu piirretään kärjelliseksi, muuten se olisi vain
-         korkeampi kumpu eikä erottuisi miksikään. */
-      ctx.lineTo(t.x, TREELINE_Y + 6);
-      ctx.lineTo(t.x + t.w * 0.5, top);
-      ctx.lineTo(t.x + t.w, TREELINE_Y + 6);
-    } else {
-      ctx.quadraticCurveTo(t.x + t.w * 0.5, top, t.x + t.w, TREELINE_Y + 8);
+    const cx = t.x + t.w * 0.5;
+    const r = t.w * (t.tall ? 0.6 : 0.85);
+    /* Viuhkan tyvi jää massan sisään, jotta latvus kasvaa metsästä eikä
+       leiju sen yllä. */
+    const base = Math.min(TREELINE_Y + 6, TREELINE_Y - t.h + r * 0.55);
+    /* Yli pistävällä on runko, jotta se on puu eikä korkeampi pensas. */
+    if (t.tall) p.rect(cx - 2.2, base, 4.4, TREELINE_Y + 12 - base);
+    /* Kallistus paikasta eikä arpakuutiosta: piirto ei saa kuluttaa
+       satunnaisvirtaa, ks. `nz`. */
+    const tilt = ((cx * 0.37) % 1 - 0.5) * 0.5;
+    /* Kaksi kerrosta: uloin viuhka antaa siluetin ja sisempi lyhyempi täyttää
+       latvuksen, jottei puu ole pelkkiä piikkejä ilman runkoa ympärillään.
+       Uloin kiertää melkein vaakaan asti, jolloin viereiset puut menevät
+       limittäin eikä väliin jää taivasta. */
+    for (let i = 0; i < 9; i++) {
+      leaf(p, cx, base, -Math.PI / 2 + tilt + (i / 8 - 0.5) * 3.1, r);
+    }
+    for (let i = 0; i < 6; i++) {
+      leaf(p, cx, base - r * 0.16, -Math.PI / 2 - tilt + (i / 5 - 0.5) * 2.2, r * 0.6);
     }
   }
-  ctx.lineTo(W + 40, TREELINE_Y + 20);
-  ctx.lineTo(W + 40, H);
-  ctx.closePath();
-  ctx.fill();
+
+  canopyPath = p;
+  return p;
+}
+
+function treeline(ctx) {
+  ctx.fillStyle = '#0f1a14';
+  ctx.fill(canopy());
 }
 
 /* Rungot ja liaanit reunoilla. Ne ovat pelkkää pystyviivaa, mutta ne antavat
