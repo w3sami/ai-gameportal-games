@@ -502,6 +502,33 @@ const RIDGE = RIDGE_BASE.map(base => {
   return pts;
 });
 
+/* Lehtiviuhkat reunoilla ja pohjalla. Jokainen on paikka, koko, kallistus ja
+   lehtien määrä; piirto on yksi kaari lehteä kohti.
+
+   **Nämä ovat eri asia kuin korkeuskäyrän lehvästö.** Reunaviuhkat ovat
+   etualaa: isoja, omalla tahdillaan huojuvia ja lähellä katsojaa. Ne olivat
+   hetken pois — korvattu kentällä — ja Sami 23.9.2026: *"ei näy enää ne
+   sivulehvät, ne oli ihan hyvät, nämä oli erillisiä asioita."* Arvonta on
+   tässä samassa kohdassa satunnaisvirtaa kuin ennenkin, joten ne ovat
+   pikselilleen entisillä paikoillaan. */
+const FRONDS = [];
+for (let i = 0; i < 26; i++) {
+  const left = i % 2 === 0;
+  const x = left ? fbet(-30, 120) : fbet(W - 120, W + 30);
+  FRONDS.push({
+    x, y: fbet(560, 1040), r: fbet(46, 120),
+    rot: (left ? fbet(-0.5, 0.7) : fbet(-0.7, 0.5)) + (left ? -0.5 : 0.5),
+    n: Math.round(fbet(5, 9)), tone: fbet(0, 1), sway: fbet(0.5, 1.4),
+  });
+}
+for (let i = 0; i < 14; i++) {
+  FRONDS.push({
+    x: fbet(-20, W + 20), y: fbet(1010, 1075), r: fbet(60, 140),
+    rot: fbet(-0.8, 0.8), n: Math.round(fbet(6, 10)),
+    tone: fbet(0, 1), sway: fbet(0.4, 1.2),
+  });
+}
+
 /* Yksi sakara: tyvestä kärkeen ja takaisin, kahdella kaarella. Kierto on
    lukuina eikä `ctx.rotate`na, koska koko lehvästö ja kaukometsän latvusto
    kootaan Path2D:ksi — sama pensseli käy sekä piirtoon että polkuun, koska
@@ -515,6 +542,21 @@ function leaf(into, x, y, a, r) {
   into.moveTo(x, y);
   into.quadraticCurveTo(c1x, c1y, tipx, tipy);
   into.quadraticCurveTo(c2x, c2y, x, y);
+}
+
+function frond(ctx, f, t) {
+  const sway = Math.sin(t * 0.5 * f.sway + f.x * 0.02) * 0.05;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.rot + sway);
+  ctx.fillStyle = f.tone < 0.5 ? '#13251a' : '#193020';
+  for (let i = 0; i < f.n; i++) {
+    const a = -1.35 + (i / Math.max(1, f.n - 1)) * 2.7;
+    ctx.beginPath();
+    leaf(ctx, 0, 0, a, f.r);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /* Lehvästö on **korkeuskäyrä**: `LEAF.y` kertoo montako lehtiviuhkaa millekin
@@ -546,7 +588,7 @@ const LEAF_TONE = ['#3f5a46', '#4b6a52'];
 
 const LEAF = {
   min: 46, max: 130, edge: 0.78, sway: 1, dark: 0.55,
-  y: [17, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+  y: [20, 14, 12, 11, 10, 9, 8, 7, 5, 4, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 };
 
 let lseed = 4242;
@@ -670,9 +712,11 @@ function canopy() {
   if (canopyPath) return canopyPath;
   const p = new Path2D();
 
-  /* Yhtenäinen pohja latvusten alle. Suora reuna riittää: latvukset ovat
-     tiheämmässä kuin leveitä, joten viiva jää niiden taakse. */
-  p.rect(-40, TREELINE_Y + 2, W + 80, H - TREELINE_Y);
+  /* **Ei yhtenäistä pohjaa latvusten alle.** Se oli se tumma kerros jonka
+     lehvästö korvaa: umpinainen massa vaakaviivasta alaspäin peitti kaiken
+     mitä sen taakse pani, ja juuri siitä koko puuraja aikanaan alkoi. Sami
+     23.9.2026. Nyt puuraja on pelkkä latvusrivi, ja alalaidan tummuus tulee
+     lehvästöstä ja harjanteista. */
 
   for (const t of TREELINE) {
     const cx = t.x + t.w * 0.5;
@@ -859,6 +903,11 @@ function veins(ctx, heat, t) {
     ctx.lineWidth = Math.max(0.6, v.w * 0.4);
     ctx.stroke();
   }
+
+  /* Reunaviuhkat päällimmäisenä ja omalla huojunnallaan: ne ovat etualaa,
+     eivät taustaa. Neljäkymmentä viuhkaa piirtyy polkuina hyvin — kentän
+     tuhannet eivät, ja siksi ne ovat kuvana. */
+  for (const f of FRONDS) frond(ctx, f, t);
 }
 
 function isle(ctx, heat, t) {
