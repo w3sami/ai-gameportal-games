@@ -181,8 +181,8 @@ const PADS = [
   { id: 4, x: 554, y: 360,  w: 150 },
   { id: 5, x: 16,  y: 620,  w: 150 },
   { id: 6, x: 554, y: 620,  w: 150 },
-  { id: 7, x: 16,  y: 860,  w: 150 },
-  { id: 8, x: 554, y: 860,  w: 150 },
+  { id: 7, x: 16,  y: 820,  w: 150 },
+  { id: 8, x: 554, y: 820,  w: 150 },
   /* Bensa on vuoren varjossa, ja se on kentän ainoa turvapaikka. Ks. sääntö 2. */
   { id: 0, x: 285, y: FLOOR - PAD_H - 4, w: 150, fuel: true },
 ];
@@ -722,12 +722,16 @@ function isle(ctx, heat, t) {
     ctx.stroke();
   }
 
-  /* Kraatterin huuli valoon: se on saaren ainoa vaakapinta, ja ilman sitä
-     kolo katosi siluettiin. */
-  ctx.fillStyle = '#6a5a4a';
-  ctx.fillRect(ISLE.cx - halfWidth(ISLE.top) - 8, ISLE.top, halfWidth(ISLE.top) * 2 + 16, 5);
-  ctx.fillStyle = '#00000055';
+  /* Kraatterin huulet valoon — **kaksi palaa, ei yhtä yli kolon**. Yhtenä
+     palkkina piirrettynä valo jatkui aukon yli ja lakeen tuli kirkas viiva
+     joka näytti pöydältä. Kolon sisus on täysin musta: sen pohjalla oleva
+     lampi on ainoa asia joka sieltä näkyy. */
+  const lipW = halfWidth(ISLE.top) - ISLE.chw + 8;
+  ctx.fillStyle = '#0d0a08';
   ctx.fillRect(ISLE.cx - ISLE.chw, ISLE.top, ISLE.chw * 2, d);
+  ctx.fillStyle = '#6a5a4a';
+  ctx.fillRect(ISLE.cx - ISLE.chw - lipW, ISLE.top, lipW, 5);
+  ctx.fillRect(ISLE.cx + ISLE.chw, ISLE.top, lipW, 5);
 
   veins(ctx, heat, t);
 
