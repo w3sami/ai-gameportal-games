@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790173632977,
+ "stamp": 1790179394008,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -30,7 +30,7 @@
   "stick": 2.05
  },
  "levels": {
-  "Sky Lanterns": {
+  "lanterns": {
    "own": {
     "liike": {
      "amp": 1,
@@ -45,7 +45,7 @@
     }
    }
   },
-  "Stormport": {
+  "stormport": {
    "own": {
     "tuuli": {
      "peak": 220,
@@ -62,7 +62,7 @@
     }
    }
   },
-  "Trouble Factory": {
+  "troublefactory": {
    "own": {
     "häiriö": {
      "on": 0.18,
@@ -79,7 +79,7 @@
     }
    }
   },
-  "Moonshot": {
+  "moonshot": {
    "mul": {
     "grav": 0.2,
     "thrust": 0.25,
@@ -94,7 +94,7 @@
     }
    }
   },
-  "Shooting Stars": {
+  "shootingstars": {
    "own": {
     "tähdet": {
      "count": 24,
@@ -126,7 +126,7 @@
     }
    }
   },
-  "Tulivuori": {
+  "volcano": {
    "mul": {
     "burn": 0.6
    },
@@ -175,7 +175,8 @@
      "size": 3.6,
      "spread": 12
     }
-   }
+   },
+   "name": "Hellcano"
   }
  }
 }
