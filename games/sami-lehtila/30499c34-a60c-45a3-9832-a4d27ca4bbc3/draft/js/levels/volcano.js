@@ -559,7 +559,10 @@ function jungle(ctx) {
   const t = clock();
 
   /* Kaukaiset harjanteet — mitä kauempana, sitä lähempänä taivaan väriä. */
-  const tone = ['#16231e', '#1a2922', '#1e2f26', '#22362a'];
+  /* Sävyt ovat lähellä toisiaan mutta eivät samoja: ilman eroa kerrokset
+     katosivat yhdeksi tasaiseksi vihreäksi, ja syvyys on se mitä niillä
+     haetaan. Ero saa olla pieni juuri siksi, että liukuma hoitaa reunan. */
+  const tone = ['#141f1a', '#1a2921', '#21342a', '#293f31'];
   for (let i = 0; i < RIDGE.length; i++) {
     const base = RIDGE_BASE[i];
     const gr = ctx.createLinearGradient(0, base - RIDGE_JIT - 40, 0, base + RIDGE_JIT + 90);
@@ -577,7 +580,7 @@ function jungle(ctx) {
      Läpinäkyvä molemmista päistä: terävä alku oli toinen puoli samaa viivaa. */
   const haze = ctx.createLinearGradient(0, 0, 0, 860);
   haze.addColorStop(0, '#6a7f6600');
-  haze.addColorStop(0.32, '#6a7f6630');
+  haze.addColorStop(0.32, '#6a7f6626');
   haze.addColorStop(1, '#6a7f6600');
   ctx.fillStyle = haze;
   ctx.fillRect(0, 0, W, 860);
