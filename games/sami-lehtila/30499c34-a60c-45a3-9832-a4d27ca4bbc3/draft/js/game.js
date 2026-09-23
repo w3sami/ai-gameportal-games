@@ -1008,7 +1008,7 @@ function beginEntry(showTitle) {
   taxi = {
     x: GATE.x + GATE.w / 2, y: -60,
     vx: 0, vy: 300, gear: 0, gearWant: false, landed: null,
-    face: -1, spring: 0, upHold: 0,          // nokka vasemmalle, ks. stepTurn
+    face: -1, spring: 0, upHold: 0, launch: 0,   // nokka vasemmalle, ks. stepTurn
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1041,7 +1041,7 @@ function resetTaxi() {
   taxi = {
     x: p.x + p.w / 2, y: p.y - (TH / 2 + GEAR),
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
-    face: -1, spring: 0, upHold: 0,
+    face: -1, spring: 0, upHold: 0, launch: 0,
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1464,13 +1464,16 @@ function dryThrust(v) {
 function activeThrust() {
   if (state !== PLAY || dead) return { x: 0, y: 0 };
   const v = inputVector();
-  /* Teline ulkona sammuttaa sivusuuttimet — paitsi pompussa. Pomppu on juuri
-     se hetki jolloin ohjausta tarvitaan, ja teline on silloin määritelmän
-     mukaan ulkona: sillähän alustaan osuttiin. Sami 23.9.2026:
-     *"ohjattavuus piti säilyä pompussa vaikka teline on puoliksi ulkona."*
-     `bounces` nollautuu onnistuneessa laskussa ja kentän alussa, joten lupa
-     kestää pompun yli seuraavaan laskuun asti eikä sekuntiakaan pidempään. */
-  if (taxi.gear > 0.35 && !bounces) v.x = 0;
+  /* Teline ulkona sammuttaa sivusuuttimet — paitsi lähtöpompussa. Siinä
+     teline on ulkona nimenomaan siksi että se juuri ponnisti, ja ohjaus on
+     se mitä lähdössä tarvitaan. Sami 23.9.2026: *"ohjattavuus piti säilyä
+     lähtöpompussa vaikka teline on puoliksi ulkona."*
+
+     Lupa raukeaa itsestään kun teline on vetäytynyt rajan alle — siitä
+     eteenpäin tavallinen sääntö sanoo saman — eikä sille siksi tarvita
+     kelloa. Laskeutumispomppuun tämä ei ulotu: siellä teline on ulkona
+     siksi että sillä ollaan laskeutumassa. */
+  if (taxi.gear > 0.35 && !taxi.launch) v.x = 0;
   if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
   if (fuel <= 0) dryThrust(v);
   return v;
@@ -1584,6 +1587,7 @@ function touchdown(pad, b) {
   t2.y = pad.y - (TH / 2 + GEAR * t2.gear);
   t2.vx = 0; t2.vy = 0; t2.landed = pad; t2.gearWant = true;
   t2.upHold = 0;                            // laskuun asti pidetty ylös ei ole lähtö
+  t2.launch = 0;
   t2.offPad = null;
   bounces = 0;
   sfx.land();
@@ -2027,6 +2031,9 @@ function update(dt) {
   const gearRate = GEAR_RATE * (taxi.spring ? P.hopRate : 1);
   taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * gearRate, dt * gearRate);
   if (taxi.spring && taxi.gear >= 1) { taxi.spring = 0; taxi.gearWant = false; }
+  /* Lähdön ohjauslupa raukeaa kun teline on sisällä sen verran että
+     tavallinenkin sääntö päästäisi sivusuuttimet päälle. */
+  if (taxi.launch && taxi.gear <= 0.35) taxi.launch = 0;
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
   else { if (taxi.gear > gearWas) gearPush(gearWas); carryOff(dt); }
 
@@ -2123,6 +2130,7 @@ function leavePad() {
   taxi.landed = null;
   taxi.offPad = p;
   taxi.offT = PAD_LEAVE;
+  taxi.launch = 1;                           // ohjaus auki koko ponnistuksen ajan
   /* Nosto vain jos se mahtuu. Alusta voi olla matalan katon alla — Moonshotin
      lohkoissa ja Highrisen ylärivissä on sellaisia — ja tarkistamaton nosto
      työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
@@ -2174,11 +2182,11 @@ function leavePad() {
     const yNow = taxi.y;
     taxi.y = y0 - P.bounceLift - GEAR * (1 - gear0);
     taxi.gear = 1;
-    const launch = fits();
+    const hopRoom = fits();
     taxi.y = yNow; taxi.gear = gear0;
 
     const v = GEAR * GEAR_RATE * P.hopRate;  // px/s, eli juuri jalkojen vauhti
-    if (launch && taxi.vy > -v) taxi.vy = -v;
+    if (hopRoom && taxi.vy > -v) taxi.vy = -v;
   }
 }
 
