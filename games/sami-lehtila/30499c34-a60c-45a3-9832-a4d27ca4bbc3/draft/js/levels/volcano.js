@@ -502,30 +502,10 @@ const RIDGE = RIDGE_BASE.map(base => {
   return pts;
 });
 
-/* Lehtiviuhkat reunoilla ja pohjalla. Jokainen on paikka, koko, kallistus ja
-   lehtien määrä; piirto on yksi kaari lehteä kohti. */
-const FRONDS = [];
-for (let i = 0; i < 26; i++) {
-  const left = i % 2 === 0;
-  const x = left ? fbet(-30, 120) : fbet(W - 120, W + 30);
-  FRONDS.push({
-    x, y: fbet(560, 1040), r: fbet(46, 120),
-    rot: (left ? fbet(-0.5, 0.7) : fbet(-0.7, 0.5)) + (left ? -0.5 : 0.5),
-    n: Math.round(fbet(5, 9)), tone: fbet(0, 1), sway: fbet(0.5, 1.4),
-  });
-}
-for (let i = 0; i < 14; i++) {
-  FRONDS.push({
-    x: fbet(-20, W + 20), y: fbet(1010, 1075), r: fbet(60, 140),
-    rot: fbet(-0.8, 0.8), n: Math.round(fbet(6, 10)),
-    tone: fbet(0, 1), sway: fbet(0.4, 1.2),
-  });
-}
-
 /* Yksi sakara: tyvestä kärkeen ja takaisin, kahdella kaarella. Kierto on
-   lukuina eikä `ctx.rotate`na, jotta sama pensseli käy sekä piirtoon että
-   Path2D:hen — kaukametsä kootaan yhdeksi poluksi, ks. `canopy`. `into` on
-   siis kumpi tahansa, koska molemmilla on nämä kaksi metodia. */
+   lukuina eikä `ctx.rotate`na, koska koko lehvästö ja kaukometsän latvusto
+   kootaan Path2D:ksi — sama pensseli käy sekä piirtoon että polkuun, koska
+   molemmilla on nämä kaksi metodia. */
 function leaf(into, x, y, a, r) {
   const c = Math.cos(a), s = Math.sin(a);
   const at = (px, py) => [x + px * c - py * s, y + px * s + py * c];
@@ -537,19 +517,69 @@ function leaf(into, x, y, a, r) {
   into.quadraticCurveTo(c2x, c2y, x, y);
 }
 
-function frond(ctx, f, t) {
-  const sway = Math.sin(t * 0.5 * f.sway + f.x * 0.02) * 0.05;
-  ctx.save();
-  ctx.translate(f.x, f.y);
-  ctx.rotate(f.rot + sway);
-  ctx.fillStyle = f.tone < 0.5 ? '#13251a' : '#193020';
-  for (let i = 0; i < f.n; i++) {
-    const a = -1.35 + (i / Math.max(1, f.n - 1)) * 2.7;
-    ctx.beginPath();
-    leaf(ctx, 0, 0, a, f.r);
-    ctx.fill();
+/* Lehvästö on **korkeuskäyrä**: `LEAF.y` kertoo montako lehtiviuhkaa millekin
+   korkeudelle tulee, alhaalta ylös, 21 pistettä eli noin 52 pikselin välein.
+   Koko, kierto ja paikka arvotaan kullekin erikseen. Sami 23.9.2026: koko
+   min ja max säätimiin, kierto aina satunnainen, ja määrä korkeuden mukaan
+   käyrältä.
+
+   `edge` on se kuinka vahvasti viuhkat hakeutuvat ruudun laitoihin. Se ei ole
+   pyydetty säädin vaan pakollinen kaveri käyrälle: käyrä kertoo *montako*
+   millekin korkeudelle mutta ei *mihin*, ja tasan levitettynä lehvästö
+   kasvaisi keskelle lentoväylää. Yksi nolla siinä tekee viidakosta metsän
+   jonka läpi lennetään.
+
+   Kenttä ei kuluta pelin satunnaisvirtaa: `lrnd` on oma siemenensä, jotta
+   lehvästö on sama joka ajolla eikä piirto vaikuta purkausten arvontaan. */
+const LEAF = {
+  min: 46, max: 130, edge: 0.78, sway: 1,
+  y: [17, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+};
+
+let lseed = 4242;
+const lrnd = () => ((lseed = (lseed * 1103515245 + 12345) >>> 0) / 4294967296);
+const lbet = (a, b) => a + lrnd() * (b - a);
+
+/* Koko kenttä leivotaan kahdeksi Path2D:ksi — yksi kummallekin sävylle — ja
+   piirretään kahdella täytöllä. Ilman sitä tuhat viuhkaa olisi tuhat polkua
+   ruudussa. Kaksi eikä yksi, koska sävyero on se mistä syvyys tulee; sama
+   syy kuin harjanteiden neljällä vihreällä.
+
+   Polku rakennetaan vasta piirrossa (nodessa ei ole Path2D:tä) ja uudestaan
+   vain kun jokin luku on muuttunut — säätimen veto ei saa maksaa tuhatta
+   polkua ruudulta, mutta sen pitää näkyä heti. */
+let leafPaths = null, leafSig = '';
+
+function leafField() {
+  const sig = LEAF.y.join(',') + '|' + LEAF.min + '|' + LEAF.max + '|' + LEAF.edge;
+  if (leafPaths && sig === leafSig) return leafPaths;
+  leafSig = sig;
+  lseed = 4242;
+
+  const paths = [new Path2D(), new Path2D()];
+  const n = LEAF.y.length - 1;
+  const band = H / n;
+  const lo = Math.min(LEAF.min, LEAF.max), hi = Math.max(LEAF.min, LEAF.max);
+  for (let i = 0; i <= n; i++) {
+    const count = Math.max(0, Math.round(LEAF.y[i]));
+    for (let k = 0; k < count; k++) {
+      const y = H - i * band + lbet(-band / 2, band / 2);
+      /* Laitaan vai vapaasti: `edge` on todennäköisyys että viuhka hakeutuu
+         jompaankumpaan laitaan. */
+      const x = lrnd() < LEAF.edge
+        ? (lrnd() < 0.5 ? lbet(-30, 140) : lbet(W - 140, W + 30))
+        : lbet(-30, W + 30);
+      const r = lbet(lo, hi);
+      const rot = lbet(0, Math.PI * 2);
+      const blades = Math.round(lbet(5, 9));
+      const p = paths[lrnd() < 0.5 ? 0 : 1];
+      for (let b = 0; b < blades; b++) {
+        leaf(p, x, y, rot + (-1.35 + (b / Math.max(1, blades - 1)) * 2.7), r);
+      }
+    }
   }
-  ctx.restore();
+  leafPaths = paths;
+  return paths;
 }
 
 /* Kaukainen puuraja, latvat noin 2/5 korkeudella alhaalta (y 624). Sami
@@ -676,7 +706,14 @@ function jungle(ctx) {
     ctx.stroke();
   }
 
-  for (const f of FRONDS) frond(ctx, f, t);
+  /* Koko lehvästö kahdella täytöllä, ja huojunta yhtenä siirtona: tuuli käy
+     metsän yli eikä lehti kerrallaan. */
+  const [pa, pb] = leafField();
+  ctx.save();
+  ctx.translate(Math.sin(t * 0.5) * 2.4 * LEAF.sway, 0);
+  ctx.fillStyle = '#13251a'; ctx.fill(pa);
+  ctx.fillStyle = '#193020'; ctx.fill(pb);
+  ctx.restore();
 }
 
 /* ---- vuori */
@@ -977,6 +1014,17 @@ export const volcano = {
         { key: 'rough', label: 'reunan roso px (vain piirto)', min: 0, max: 16, step: 0.5 },
         { key: 'inset', label: 'törmäys piirtoa kapeampi px', min: 2, max: 26, step: 1 },
         { key: 'cx', label: 'keskikohta x', min: 200, max: 520, step: 2 },
+      ],
+    },
+    {
+      name: 'lehvästö', obj: LEAF, open: false,
+      curve: { key: 'y', label: 'viuhkoja korkeudella', max: 300,
+               lo: 'pohja', hi: 'katto' },
+      sliders: [
+        { key: 'min', label: 'viuhkan koko min', min: 8, max: 200, step: 2 },
+        { key: 'max', label: 'viuhkan koko max', min: 8, max: 260, step: 2 },
+        { key: 'edge', label: 'laitaan hakeutuminen', min: 0, max: 1, step: 0.02 },
+        { key: 'sway', label: 'huojunta ×', min: 0, max: 3, step: 0.1 },
       ],
     },
     {
