@@ -95,9 +95,14 @@ const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
 /* Nokan kääntyminen kulkusuuntaan. `TURN_V` on se vauhti joka uuteen suuntaan
    pitää kertyä ennen kuin taksi kääntyy, ja se on tässä juuri välkkymisen
    takia: ilman kynnystä nokka heilahtaisi joka kerta kun vauhti käy nollan
-   kautta. `TURN_RATE` on itse käännöksen nopeus, eli peruutus näkyy hetken
-   ennen kuin taksi on kääntynyt ympäri. Sami 23.9.2026. */
-const TURN_V = 70, TURN_RATE = 6;
+   kautta.
+
+   **Itse käännös on välitön peilaus.** Animoitu käännös kokeiltiin 23.9.2026
+   ja Sami hylkäsi sen saman tien: *"piti olla instant flip, nyt on liuku ja
+   taksi menee ihan reikäiseksi mutkalla, ihan vaan flipx."* Litteän kautta
+   kulkeva runko on juuri sitä: kapea kaistale jonka läpi näkyy. Kynnys jää,
+   liuku ei. */
+const TURN_V = 70;
 const PAD_LEAVE = 0.5;                     // näin kauan lähtöalusta vielä kannattelee
 const PAD_LEAVE_GAP = 8;                   // ...ja tätä lähempänä niin kauan kuin siinä ollaan
 const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
@@ -995,7 +1000,7 @@ function beginEntry(showTitle) {
   taxi = {
     x: GATE.x + GATE.w / 2, y: -60,
     vx: 0, vy: 300, gear: 0, gearWant: false, landed: null,
-    face: -1, turn: -1,                      // nokka vasemmalle, ks. stepTurn
+    face: -1,                                // nokka vasemmalle, ks. stepTurn
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1028,7 +1033,7 @@ function resetTaxi() {
   taxi = {
     x: p.x + p.w / 2, y: p.y - (TH / 2 + GEAR),
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
-    face: -1, turn: -1,
+    face: -1,
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1852,9 +1857,6 @@ function warnPad() {
   return best;
 }
 
-/* Taksi kääntyy sinne minne se menee. `face` on tavoite (+1 oikealle) ja
-   `turn` sen animoitu arvo, joka on suoraan piirron x-skaala: käännös kulkee
-   litteän kautta, niin kuin kylkeään kääntävä lautanen. */
 /* Tyhjenevä tankki näkyy ulos: viimeisellä neljänneksellä taksi jättää
    savuvanan, harmaana ensin ja mustana lopuksi. Sami 23.9.2026:
    *"ruvetaan jättämään harmaata savuvanaa ku bensa tippuu sinne viimeselle
@@ -1892,10 +1894,11 @@ function stepSmoke(dt, throttle) {
   }
 }
 
-function stepTurn(dt) {
+/* Taksi kääntyy sinne minne se menee: `face` on nokan suunta, +1 oikealle.
+   Vaihto vaatii vauhtia uuteen suuntaan, ks. TURN_V. */
+function stepTurn() {
   if (taxi.vx > TURN_V) taxi.face = 1;
   else if (taxi.vx < -TURN_V) taxi.face = -1;
-  taxi.turn += clamp(taxi.face - taxi.turn, -dt * TURN_RATE, dt * TURN_RATE);
 }
 
 function warnings(dt) {
@@ -1991,7 +1994,7 @@ function update(dt) {
     return;
   }
 
-  stepTurn(dt);
+  stepTurn();
   const gearWas = taxi.gear;
   taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * 4, dt * 4);
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
@@ -2711,13 +2714,10 @@ function drawTaxi(v) {
     ctx.stroke();
   }
 
-  /* Runko kääntyy, suuttimet ja teline eivät: ne ovat samat kummallakin
-     kyljellä, ja jalat ovat siellä missä maa on. Nollaskaala on canvasilla
-     rappeutunut muunnos, joten litteinkin hetki jätetään kapeaksi kaistaksi
-     eikä nollaksi. */
+  /* Runko peilataan, suuttimet ja teline eivät: ne ovat samat kummallakin
+     kyljellä, ja jalat ovat siellä missä maa on. */
   ctx.save();
-  const sx = -(t2.turn === undefined ? -1 : t2.turn);
-  ctx.scale(Math.abs(sx) < 0.08 ? (sx < 0 ? -0.08 : 0.08) : sx, 1);
+  ctx.scale(t2.face === 1 ? -1 : 1, 1);
   taxiShape(TW, TH, false);
   ctx.restore();
 
