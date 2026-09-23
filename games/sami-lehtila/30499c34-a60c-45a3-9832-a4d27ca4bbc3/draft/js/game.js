@@ -148,7 +148,14 @@ const DEFAULTS = {
   tipHold: 1.35, fadeHold: 1.4,
   stick: 2.05, turnV: 70,
   /* Tyhjenevän tankin savuvana. Ks. stepSmoke. */
-  smokeFrom: 25, smokeRate: 15, smokeLife: 1.7, smokeSize: 5,
+  /* Savun määrä tankin täyteyden mukaan: 21 pistettä viiden prosentin välein,
+     indeksi 0 = tyhjä tankki, 20 = täysi. Yksi käyrä kahden luvun sijasta
+     (ennen: `smokeFrom` ja `smokeRate`), koska "mistä alkaa" ja "kuinka
+     paljon" ovat saman asian kaksi puolta — ja käyrällä määrä saa myös
+     kasvaa miten haluaa. Sami 23.9.2026. Oletus on täsmälleen entinen muoto:
+     nollasta 25 prosenttiin, 15 savua sekunnissa tyhjänä. */
+  smokeCurve: [15, 13.2, 11.4, 9.6, 7.8, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  smokeLife: 1.7, smokeSize: 5,
   smokeGrow: 15, smokeRise: 16,
   /* Savun liukuma: väri ja läpinäkyvyys kummassakin päässä. Väri on luku
      (0xRRGGBB) eikä merkkijono, jotta viritys pysyy kauttaaltaan numeroina —
@@ -158,7 +165,15 @@ const DEFAULTS = {
   smokeC1: 0x0c0c0c, smokeA1: 0.55,        // tyhjänä: melkein musta
 };
 const DEFAULT_SIDE = 'left';
-const P = Object.assign({}, DEFAULTS);
+/** Viritys on lukuja ja taulukoita lukuja. Taulukko kopioidaan aina, koska
+    jaettu taulukko tarkoittaisi että säädin kirjoittaa myös oletukseen —
+    ja silloin "oletukset"-nappi ei palauttaisi mitään. */
+const cloneTune = o => {
+  const r = {};
+  for (const k of Object.keys(o)) r[k] = Array.isArray(o[k]) ? o[k].slice() : o[k];
+  return r;
+};
+const P = cloneTune(DEFAULTS);
 let gearSide = DEFAULT_SIDE;
 
 /* Nappien puoli on pelaajan asia, ei tekijän. tune.json antaa oletuksen, mutta
@@ -241,7 +256,7 @@ const diffMuls = () =>
  * säätää painovoimaa, myrskykentän raskaampi painovoima seuraa mukana.
  * Kenttä voi julkaista lähtökertoimensa (level.mul), ja säätöpaneeli antaa
  * muuttaa niitä lennossa. */
-const BASE = Object.assign({}, DEFAULTS);
+const BASE = cloneTune(DEFAULTS);
 
 /* Kertoimet säilyvät kentittäin koko istunnon: kentästä toiseen käyminen ei
    saa nollata sitä mitä juuri säädit. MUL osoittaa aina nykyisen kentän
@@ -277,6 +292,9 @@ let stickReady = false;
 function applyMul() {
   const d = diffMuls();
   for (const k of Object.keys(DEFAULTS)) {
+    /* Taulukko menee sellaisenaan ja **samana oliona**: kerroin on luvun
+       asia, ja säätimen piirtämä käyrä näkyy pelissä ilman välikopiota. */
+    if (Array.isArray(BASE[k])) { P[k] = BASE[k]; continue; }
     const m = MUL[k];
     let mul = typeof m === 'number' && isFinite(m) ? m : 1;
     if (k in MUL_MIN) mul = Math.max(MUL_MIN[k], mul * d[k]);
@@ -330,6 +348,14 @@ function applyAll(raw) {
   if (!raw || typeof raw !== 'object') return false;
   const g = raw.global || raw;                 // vanha muoto oli pelkkä pohja
   for (const k of Object.keys(DEFAULTS)) {
+    /* Taulukko kelpaa vain oikean mittaisena ja pelkkinä lukuina: väärän
+       mittainen käyrä olisi hiljainen vika, ja tiedosto voi olla vanha. */
+    if (Array.isArray(DEFAULTS[k])) {
+      const a = g[k];
+      if (Array.isArray(a) && a.length === DEFAULTS[k].length
+          && a.every(v => typeof v === 'number' && isFinite(v))) BASE[k] = a.slice();
+      continue;
+    }
     if (typeof g[k] === 'number' && isFinite(g[k])) BASE[k] = g[k];
   }
   if (raw.gearSide === 'left' || raw.gearSide === 'right') {
@@ -1944,13 +1970,33 @@ function warnPad() {
 /** 0xRRGGBB → '#rrggbb', säädintä varten. */
 const hexOf = n => '#' + (n & 0xffffff).toString(16).padStart(6, '0');
 
+/** Käyrän arvo kohdassa x = 0…1 (tyhjä…täysi), pisteiden välistä suoraan. */
+function curveAt(a, x) {
+  const n = a.length - 1;
+  const t = clamp(x, 0, 1) * n;
+  const i = Math.min(n - 1, Math.floor(t));
+  return a[i] + (a[i + 1] - a[i]) * (t - i);
+}
+
+/** Mistä käyrä alkaa: suurin täyteys jossa arvo on vielä nollaa suurempi.
+    Väriliukuma lasketaan siitä, jottei alkupistettä tarvitse kertoa kahdesti
+    — käyrä on nyt ainoa paikka joka sanoo missä savu alkaa. */
+function curveTop(a) {
+  for (let i = a.length - 1; i >= 0; i--) if (a[i] > 0) return i / (a.length - 1);
+  return 0;
+}
+
 let smokeT = 0;
 function stepSmoke(dt, throttle) {
-  const from = FUEL_MAX * P.smokeFrom / 100;
-  if (dead || from <= 0 || fuel > from) { smokeT = 0; return; }
+  const full = fuel / FUEL_MAX;
+  const rate = curveAt(P.smokeCurve, full);
+  if (dead || rate <= 0) { smokeT = 0; return; }
 
-  const k = clamp(1 - fuel / from, 0, 1);         // 0 kynnyksellä, 1 tyhjänä
-  smokeT += dt * P.smokeRate * (0.3 + 0.7 * throttle) * (0.4 + 0.6 * k);
+  const top = curveTop(P.smokeCurve);
+  const k = top > 0 ? clamp(1 - full / top, 0, 1) : 1;   // 0 alkupisteessä, 1 tyhjänä
+  /* Kaasu kertoo määrän, käyrä muodon: sammutetuin suuttimin taksi liitää,
+     eikä sammunut moottori savuta täysillä. */
+  smokeT += dt * rate * (0.3 + 0.7 * throttle);
   while (smokeT >= 1) {
     smokeT -= 1;
     bits.push({
@@ -3256,7 +3302,8 @@ const SLIDER_GROUPS = [
     keys: ['burn', 'sideBurn', 'refuel', 'price',
            'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
   { name: 'savu', open: false,
-    keys: ['smokeFrom', 'smokeRate', 'smokeLife', 'smokeSize', 'smokeGrow',
+    curve: 'smokeCurve',
+    keys: ['smokeLife', 'smokeSize', 'smokeGrow',
            'smokeRise', 'smokeC0', 'smokeA0', 'smokeC1', 'smokeA1'] },
   { name: 'raha ja tipit', open: false, graph: tipGraph,
     keys: ['fare', 'tip', 'tipTime',
@@ -3291,8 +3338,6 @@ const SLIDERS = [
   { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
   { key: 'turnV', label: 'nokan kääntymisraja px/s', min: 0, max: 300, step: 5 },
-  { key: 'smokeFrom', label: 'savu alkaa tankista %', min: 0, max: 60, step: 1 },
-  { key: 'smokeRate', label: 'savua / s', min: 0, max: 200, step: 2 },
   { key: 'smokeLife', label: 'savun kesto s', min: 0.2, max: 5, step: 0.1 },
   { key: 'smokeSize', label: 'savun koko px', min: 1, max: 16, step: 0.5 },
   { key: 'smokeGrow', label: 'savun kasvu px/s', min: 0, max: 50, step: 1 },
@@ -3447,6 +3492,90 @@ function buildPanel() {
     return row;
   };
 
+  /* Käyräeditori: sama laatikko kuin muillakin kuvaajilla, mutta siihen saa
+     piirtää. Pystypylväs kutakin pistettä kohti, ja veto asettaa arvon siellä
+     missä sormi kulkee — myös pisteiden väliin jääneet, jotta nopea veto ei
+     jätä aukkoja. Piirtämisen jälkeen ei tarvitse painaa mitään: arvo on
+     pelissä heti, ja tallennus tapahtuu vedon päättyessä niin kuin liu'uillakin.
+
+     x on tankin täyteys 0…100 % vasemmalta oikealle ja y savua sekunnissa. */
+  const curveRow = (key, label, maxY) => {
+    const arr = () => BASE[key];
+    const wrap = el('div', 'row');
+    const lab = el('label');
+    const val = el('b', null, '');
+    lab.append(document.createTextNode(label), val);
+    wrap.append(lab);
+
+    const c = graphCanvas((g, w, h) => {
+      const a = arr(), n = a.length - 1;
+      const L = 44, R = w - 10, T = 12, B = h - 26;
+      const xOf = i => L + (R - L) * (i / n);
+      const yOf = v => B - (B - T) * clamp(v / maxY, 0, 1);
+
+      g.strokeStyle = 'rgba(120,160,255,.22)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(L, T); g.lineTo(L, B); g.lineTo(R, B); g.stroke();
+      g.font = '13px system-ui, sans-serif';
+      g.fillStyle = 'rgba(190,210,255,.55)';
+      g.textAlign = 'right'; g.fillText(String(maxY), L - 5, T + 11);
+      g.textAlign = 'left'; g.fillText('tyhjä', L, B + 16);
+      g.textAlign = 'right'; g.fillText('täysi', R, B + 16);
+
+      /* Missä tankki on juuri nyt: säätäminen on helpompaa kun näkee mitä
+         kohtaa käyrästä ollaan ajamassa. */
+      if (taxi && state === PLAY) {
+        g.strokeStyle = 'rgba(255,212,121,.45)';
+        g.beginPath();
+        const x = L + (R - L) * clamp(fuel / FUEL_MAX, 0, 1);
+        g.moveTo(x, T); g.lineTo(x, B); g.stroke();
+      }
+
+      const bw = Math.max(3, (R - L) / n - 3);
+      for (let i = 0; i <= n; i++) {
+        if (a[i] <= 0) continue;
+        g.fillStyle = 'rgba(111,227,255,.55)';
+        g.fillRect(xOf(i) - bw / 2, yOf(a[i]), bw, B - yOf(a[i]));
+      }
+      g.strokeStyle = '#6fe3ff'; g.lineWidth = 2;
+      g.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const x = xOf(i), y = yOf(a[i]);
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    });
+    c.style.touchAction = 'none';
+    c.style.cursor = 'crosshair';
+
+    let last = -1;
+    const at = ev => {
+      const r = c.getBoundingClientRect();
+      const a = arr(), n = a.length - 1;
+      const w = c.width, h = c.height;
+      const L = 44, R = w - 10, T = 12, B = h - 26;
+      const x = (ev.clientX - r.left) / r.width * w;
+      const y = (ev.clientY - r.top) / r.height * h;
+      const i = Math.round(clamp((x - L) / (R - L), 0, 1) * n);
+      const v = Math.round(clamp((B - y) / (B - T), 0, 1) * maxY * 10) / 10;
+      /* Väliin jääneet pisteet täytetään, jotta nopea veto ei jätä aukkoja. */
+      const from = last < 0 ? i : last;
+      const step = i >= from ? 1 : -1;
+      for (let j = from; j !== i + step; j += step) a[j] = v;
+      last = i;
+      val.textContent = Math.round(a[i]) + ' / s';
+      applyMul();
+      syncFoot();
+    };
+    c.addEventListener('pointerdown', ev => {
+      snapUndo(); last = -1; c.setPointerCapture(ev.pointerId); at(ev);
+    });
+    c.addEventListener('pointermove', ev => { if (last >= 0 || ev.buttons) at(ev); });
+    c.addEventListener('pointerup', () => { last = -1; saveTune(); syncFoot(); });
+    c.addEventListener('pointercancel', () => { last = -1; });
+    wrap.append(c);
+    return wrap;
+  };
+
   const globalSet = key => v => {
     BASE[key] = v;
     applyMul();
@@ -3555,7 +3684,9 @@ function buildPanel() {
   for (const g of SLIDER_GROUPS) {
     const rows = g.keys.map(k => byKey.get(k)).filter(Boolean);
     for (const s of rows) used.add(s.key);
-    if (rows.length) panelEl.append(group(g.name, g.open, rows.map(globalRow), g.graph));
+    const built = rows.map(globalRow);
+    if (g.curve) built.unshift(curveRow(g.curve, 'savua / s', 200));
+    if (built.length) panelEl.append(group(g.name, g.open, built, g.graph));
   }
   const rest = SLIDERS.filter(s => !used.has(s.key));
   if (rest.length) panelEl.append(group('muut', false, rest.map(globalRow)));
@@ -3583,7 +3714,7 @@ function buildPanel() {
     }
     disarm();
     snapUndo();
-    Object.assign(BASE, DEFAULTS);
+    Object.assign(BASE, cloneTune(DEFAULTS));
     resetLevelTune();                          // myös kenttien omat arvot
     sidePick = null; gearSide = DEFAULT_SIDE; layout();
     applyMul();
