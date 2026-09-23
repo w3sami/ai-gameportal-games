@@ -823,7 +823,10 @@ function jungle(ctx) {
     ctx.stroke();
   }
 
-
+  /* Reunaviuhkat päällimmäisenä ja omalla huojunnallaan: ne ovat etualaa,
+     eivät taustaa. Neljäkymmentä viuhkaa piirtyy polkuina hyvin — kentän
+     tuhannet eivät, ja siksi ne ovat kuvana. */
+  for (const f of FRONDS) frond(ctx, f, t);
 }
 
 /* ---- vuori */
@@ -903,11 +906,6 @@ function veins(ctx, heat, t) {
     ctx.lineWidth = Math.max(0.6, v.w * 0.4);
     ctx.stroke();
   }
-
-  /* Reunaviuhkat päällimmäisenä ja omalla huojunnallaan: ne ovat etualaa,
-     eivät taustaa. Neljäkymmentä viuhkaa piirtyy polkuina hyvin — kentän
-     tuhannet eivät, ja siksi ne ovat kuvana. */
-  for (const f of FRONDS) frond(ctx, f, t);
 }
 
 function isle(ctx, heat, t) {
