@@ -3292,7 +3292,7 @@ const SLIDERS = [
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
   { key: 'turnV', label: 'nokan kääntymisraja px/s', min: 0, max: 300, step: 5 },
   { key: 'smokeFrom', label: 'savu alkaa tankista %', min: 0, max: 60, step: 1 },
-  { key: 'smokeRate', label: 'savua / s', min: 0, max: 40, step: 1 },
+  { key: 'smokeRate', label: 'savua / s', min: 0, max: 200, step: 2 },
   { key: 'smokeLife', label: 'savun kesto s', min: 0.2, max: 5, step: 0.1 },
   { key: 'smokeSize', label: 'savun koko px', min: 1, max: 16, step: 0.5 },
   { key: 'smokeGrow', label: 'savun kasvu px/s', min: 0, max: 50, step: 1 },
