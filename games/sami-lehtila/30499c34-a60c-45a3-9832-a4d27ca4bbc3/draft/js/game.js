@@ -1516,25 +1516,43 @@ function askForPad() {
   sfx.pickup();
 }
 
+/* Keikan maksu: se hetki jona asiakas poistuu taksista.
+
+   Tippi on kiinni vain ajasta. Laskun pehmeys ei kerro sitä alas: kova lasku
+   rankaisee jo itsessään, koska pomppu vie sekunteja ja sekunnit tippiä, eikä
+   kaksi rangaistusta samasta asiasta houkuta ajamaan lujaa — mitä peli
+   nimenomaan hakee. Vajoamisen neljäsosasekunti ei sitä vastoin vie tippiä
+   lainkaan: mittari pysähtyy kosketukseen (`jobStep`). */
+function payRide(pad) {
+  const tip = tipNow();
+  const fare = P.fare + tip;
+  const kind = job.kind;
+  money += fare;
+  served[pad.id] = true;                  // jättö merkkaa alustan käydyksi
+  say(t('msg.thanks', { fare, tip }), 2.6);
+  burst(taxi.x, taxi.y - 20, '#6fe3ff', 16, 160);
+  sfx.pay();
+  speakLine('thanks', kind);
+  job = null;
+  spawnJob(pad.id, 1.6);
+}
+
 function onLanded(pad) {
   if (!job) return;
 
   if (job.phase === 'aboard' && pad.id === job.to) {
-    /* Tippi on kiinni vain ajasta. Laskun pehmeys ei enää kerro sitä alas:
-       kova lasku rankaisee jo itsessään, koska pomppu vie sekunteja ja
-       sekunnit tippiä, eikä kaksi rangaistusta samasta asiasta houkuta
-       ajamaan lujaa — mitä peli nimenomaan hakee. */
-    const tip = tipNow();
-    const fare = P.fare + tip;
-    const kind = job.kind;
-    money += fare;
-    served[pad.id] = true;                  // jättö merkkaa alustan käydyksi
-    say(t('msg.thanks', { fare, tip }), 2.6);
-    burst(taxi.x, taxi.y - 20, '#6fe3ff', 16, 160);
-    sfx.pay();
-    speakLine('thanks', kind);
-    job = null;
-    spawnJob(pad.id, 1.6);
+    /* Perillä taksi kyykistyy ensin ja asiakas poistuu vasta pohjalla — Sami
+       23.9.2026: *"ensin laskeudutaan alas, sitten asiakas poistuu."* Teline
+       vedetään sisään tässä, ja `jobStep` maksaa keikan kun se on sisällä.
+       Alhaalla sivusuuttimet ovat heti käytössä (`activeThrust` sammuttaa ne
+       vain telineen ollessa ulkona), joten lähtö on helpompi kuin jalkojen
+       päältä.
+
+       Odotus on lippu eikä oma vaihe, koska `crash`, `finish` ja tippimittari
+       lukevat `phase === 'aboard'` suoraan: vaihe olisi pitänyt muistaa
+       kolmessa paikassa, lippu ei missään. */
+    job.drop = pad;
+    taxi.gearWant = false;
     return;
   }
 
@@ -1554,6 +1572,14 @@ function onLanded(pad) {
 function jobStep(dt) {
   if (!job) return;
   if (job.phase === 'aboard') {
+    /* Perillä oltaessa mittari seisoo ja odotetaan että taksi on pohjassa:
+       asiakas poistuu vasta silloin. Teline voi olla matkalla ylös vain jos
+       pelaaja itse laski sen takaisin, ja silloin asiakas odottaa — kyykky on
+       poistumisen ehto eikä kello. */
+    if (job.drop) {
+      if (taxi.landed === job.drop && taxi.gear < 0.02) payRide(job.drop);
+      return;
+    }
     /* Kaasuprofiililla mittari seisoo niin kauan kuin suuttimet ovat päällä. */
     const pr = tipper();
     if (!(pr.onlyIdle && thrustNow > 0.05)) job.t += dt * P[pr.fade];
@@ -1580,6 +1606,11 @@ function jobStep(dt) {
 
   job.moving = false;
   if (!dead && taxi.landed && taxi.landed.id === job.from) {
+    /* Asiakas on tulossa kyytiin: taksi kyykistyy hänelle kerran. Sen jälkeen
+       teline on pelaajan oma asia — pakotus joka ruudulla estäisi nostamasta
+       sitä takaisin. Kyykyssä lähtö on helppo, koska sivusuuttimet ovat heti
+       käytössä. */
+    if (!job.knelt) { job.knelt = true; taxi.gearWant = false; }
     const b = taxiBox(taxi);
     const target = job.x < taxi.x ? b.x - 10 : b.x + b.w + 10;
     const d = target - job.x;
@@ -1891,6 +1922,10 @@ function move(dt) {
  * reilu kymmenesosa sekuntia. Siksi carryOff sen lisäksi. */
 function leavePad() {
   const p = taxi.landed;
+  /* Kesken vajoamisen lähtevä vie asiakkaan mukanaan: keikka jää kyytiin ja
+     maksetaan seuraavalla laskulla samalle alustalle. Ilman tätä odotuslippu
+     jäisi päälle ilmaan, jossa `taxi.landed` ei ole enää mikään. */
+  if (job && job.drop) job.drop = null;
   taxi.landed = null;
   taxi.offPad = p;
   taxi.offT = PAD_LEAVE;
