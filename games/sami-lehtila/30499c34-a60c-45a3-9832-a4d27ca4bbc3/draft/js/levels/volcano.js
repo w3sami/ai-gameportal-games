@@ -1,30 +1,21 @@
-/* Tulivuori — viidakon yllä leijuva tulivuorisaari.
+/* Tulivuori — viidakon yllä leijuva tulivuori.
  *
  * Yksi kenttä per tiedosto, jotta kaksi tekijää voi työstää eri kenttiä
  * yhtä aikaa kirjoittamatta toistensa yli. Kentän muoto on kuvattu
  * ../levels.js:ssä.
  *
- * Saari roikkuu ruudun keskellä eikä nojaa mihinkään, ja sen alta pääsee
- * lentämään läpi kummaltakin puolelta. Kenttä on siis rengas: kaikki kiertää
- * yhtä kappaletta kiveä.
+ * Vuori on **tasasivuinen kolmio, kärki ylös**, ja se roikkuu ruudun keskellä
+ * nojaamatta mihinkään. Sen alta pääsee lentämään läpi kummaltakin puolelta,
+ * ja kenttä on siksi rengas: kaikki kiertää yhtä kappaletta kiveä.
  *
- *   kraatteri     saaren laella. Purkaus syöksee 1–4 magmapalloa, suurin
- *                 taksin kokoinen ja pienin 70 % siitä.
- *   kylkialustat  1 ja 2, kiinni saaressa sen leveimmällä kohdalla.
- *   kuilualustat  3–6, ruudun laidoilla kahdella korkeudella.
- *   saaren varjo  lattialla saaren alla kolme alustaa vierekkäin: tankkaus ja
- *                 7 ja 8 sen kyljessä. **Ne ovat tahallaan suojassa.**
+ *   kraatteri   kolmion katkaistulla laella. Purkaus syöksee 1–4 magmapalloa,
+ *               suurin taksin kokoinen ja pienin 70 % siitä.
+ *   alustat     kahdeksan, **kaikki ruudun laitoihin kiinni**, neljällä
+ *               korkeudella ja neljä kummallakin puolella.
+ *   tankkaus    lattialla suoraan vuoren alla. Kentän ainoa turvapaikka.
  *
- * Kenttä opettaa itse oman sääntönsä: **taivas pään päällä tarkoittaa että
- * sieltä tulee kiveä.** Kuusi alustaa on sateessa ja kolme saaren varjossa,
- * ja sen näkee katsomalla ylöspäin. Varjossa saa istua purkauksen yli, ja
- * juuri siksi siellä on myös bensa.
- *
- * Ettei tuo jää arvailuksi: 20 000 lähdön simulaatio antaa alustoille 3–6
- * kullekin 17–18 %, kylkialustoille 11,6 %, ja varjon kolmelle **nollan**.
- * Luvut ovat volcano.md:ssä, ja ne on mitattu eikä arvattu — alusta jonka
- * yläpuolella on toinen alusta ei saa osumia lainkaan, ja se rajoitti tämän
- * kentän muotoa enemmän kuin mikään muu.
+ * Kulkuväylä on alustan ja vuoren välissä, ja se on 74 px kun taksi on 54.
+ * Niukka mutta ei ahdas: vaikeus tulee ajoituksesta eikä ahtaudesta.
  *
  * Kolme sääntöä joilla tämä pysyy rehellisenä:
  *
@@ -33,36 +24,36 @@
  *      kentän. Peli ei piirrä sitä (`hide`), koska laatikko ei ole pallon
  *      näköinen — piirto on tässä tiedostossa, ja laatikko on tahallaan
  *      hieman piirrettyä pienempi.
- *   2. **Saaren alla on turvassa fysiikan takia, ei säännön.** Pallo lähtee
+ *   2. **Vuoren alla on turvassa fysiikan takia, ei säännön.** Pallo lähtee
  *      kraatterista aina *ulospäin* eikä sen vaakanopeus vaihda merkkiä
  *      koskaan. Vasemmalle lähtenyt on siis ikuisesti menossa vasemmalle, eikä
- *      se voi palata saaren alle sen jälkeen kun se on ohittanut saaren
- *      kyljen. Saaren runko on lisäksi umpinaista kiveä koko leveydeltään.
- *      **Kumpikaan ehto yksin ei riitä**, ja jos tankkausta siirtää saaren
- *      varjon ulkopuolelle, tämä on se mikä menee rikki.
+ *      se voi palata vuoren alle sen jälkeen kun se on ohittanut kyljen.
+ *      Kolmio on lisäksi umpinaista kiveä koko leveydeltään. **Kumpikaan ehto
+ *      yksin ei riitä**, ja jos tankkausta siirtää vuoren varjon ulkopuolelle,
+ *      tämä on se mikä menee rikki. 20 000 lähdön simulaatio antaa
+ *      tankkaukselle nollan; muut luvut ovat volcano.md:ssä.
  *   3. **Vain vuori tärisee.** Tärinä on piirron siirto eikä fysiikkaa, ja se
  *      on siksi pidetty pienenä (`quake`, enintään 5 px). Ruutu ja alustat
  *      eivät liiku lainkaan: varoituksen aikana laskeutumisen pitää olla yhtä
  *      tarkkaa kuin muulloin, muuten varoitus rankaisisi siitä että sen
  *      huomasi. Sami 23.9.2026: *"vain vuori tärisee."*
  *
- * **Piirto ja törmäys ovat tässä kentässä eri muotoisia, ja se on tahallista.**
- * Ensimmäinen versio rakensi vuoren kymmenestä laatikosta ja piirsi ne
- * laatikkoina, ja Sami sanoi mitä se näytti: atsteekkitemppeliltä. Vika ei
- * ollut moottorissa vaan siinä, että konventiota noudatettiin väärään
- * suuntaan. Oikea järjestys on se jota Shooting Starsin kuusi jo käyttää:
+ * **Piirto ja törmäys ovat eri muotoisia, ja se on tahallista.** Ensimmäinen
+ * versio rakensi vuoren laatikoista ja piirsi ne laatikkoina; Sami sanoi mitä
+ * se näytti: atsteekkitemppeliltä. Vika ei ollut moottorissa vaan siinä, että
+ * konventiota noudatettiin väärään suuntaan. Oikea järjestys on tämä:
  *
  *   **siluetti piirretään yhtenä käyränä, ja törmäys ladotaan sen sisään.**
  *
- * Penkat ovat siis `ISLE.inset` verran kapeampia kuin piirretty reuna joka
- * kohdassa, ja rosoisuus kuuluu kokonaan piirtoon. Silloin kaikki mikä tappaa
- * on sen sisällä minkä pelaaja näkee — kallion uloin roso ei tapa — mutta
- * näkymätöntä seinää ei ole missään. Se on sama anteeksiantava suunta kuin
- * magmapallon törmäyslaatikko, joka on 0,68 × pallon halkaisija.
+ * Penkat ovat `ISLE.inset` verran kapeampia kuin piirretty reuna, ja rosoisuus
+ * kuuluu kokonaan piirtoon. Silloin kaikki mikä tappaa on sen sisällä minkä
+ * pelaaja näkee — kallion uloin roso ei tapa — mutta näkymätöntä seinää ei ole
+ * missään. Sama anteeksiantava suunta kuin magmapallon törmäyslaatikossa, joka
+ * on 0,68 × pallon halkaisija, ja sama kuin Shooting Starsin kuusessa.
  *
- * Saaren muoto on siksi laskettu eikä kirjoitettu: sitä sommitellaan muodon
- * säätimistä (`ISLE`), ja `shape()` lataa luvut samoihin laatikoihin joita
- * törmäys jo käyttää.
+ * Muoto on siksi laskettu eikä kirjoitettu: sitä sommitellaan säätimistä
+ * (`ISLE`), ja `shape()` lataa luvut samoihin laatikoihin joita törmäys jo
+ * käyttää.
  */
 
 import { W, H, CEIL } from './shared.js';
