@@ -549,6 +549,38 @@ const lbet = (a, b) => a + lrnd() * (b - a);
    vain kun jokin luku on muuttunut — säätimen veto ei saa maksaa tuhatta
    polkua ruudulta, mutta sen pitää näkyä heti. */
 let leafPaths = null, leafSig = '';
+let leafBmp = null, leafBmpKey = '';
+
+/* Kuvapuskuri koko lehvästölle.
+ *
+ * Polut ovat halpa tapa piirtää sata viuhkaa mutta kallis tapa piirtää tuhat:
+ * jokainen sakara on oma käyränsä, ja ne täytetään joka ruudulla uudestaan.
+ * Sami 23.9.2026 nosti käyrän ylös ja ruudunpäivitys putosi viiteen —
+ * *"tällä voi simuloida sitä mopoa konetta."* Nyt lehvästö piirretään kerran
+ * omaan kankaaseensa ja sen jälkeen yhtenä kuvana, joten **määrä ei enää maksa
+ * ruudunpäivitystä**: tuhat viuhkaa on yhtä halpa kuin kymmenen.
+ *
+ * Kuva tehdään uudestaan vain kun luvut tai ruudun tarkkuus muuttuvat.
+ * Reunoille jätetään marginaali, koska viuhkat saavat mennä ruudun yli.
+ * Tarkkuus rajataan kahteen: sitä suurempi ei enää näy, mutta muisti kasvaa
+ * neliöllisesti. */
+const LEAF_PAD = 60;
+function leafImage(ctx) {
+  const [pa, pb] = leafField();
+  const sc = Math.min(2, Math.max(0.5, ctx.getTransform().a));
+  const key = leafSig + '|' + sc.toFixed(2);
+  if (leafBmp && leafBmpKey === key) return leafBmp;
+
+  const w = W + LEAF_PAD * 2, h = H + LEAF_PAD * 2;
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+  const g = c.getContext('2d');
+  g.setTransform(sc, 0, 0, sc, LEAF_PAD * sc, LEAF_PAD * sc);
+  g.fillStyle = '#0c1610'; g.fill(pa);
+  g.fillStyle = '#101d15'; g.fill(pb);
+  leafBmp = c; leafBmpKey = key;
+  return c;
+}
 
 function leafField() {
   const sig = LEAF.y.join(',') + '|' + LEAF.min + '|' + LEAF.max + '|' + LEAF.edge;
@@ -668,6 +700,7 @@ for (let i = 0; i < 7; i++) {
 function jungle(ctx) {
   const t = clock();
 
+
   /* Kaukaiset harjanteet — mitä kauempana, sitä lähempänä taivaan väriä. */
   /* Sävyt ovat lähellä toisiaan mutta eivät samoja: ilman eroa kerrokset
      katosivat yhdeksi tasaiseksi vihreäksi, ja syvyys on se mitä niillä
@@ -695,7 +728,26 @@ function jungle(ctx) {
   ctx.fillStyle = haze;
   ctx.fillRect(0, 0, W, 860);
 
+
   treeline(ctx);
+
+  /* Lehvästö on lehtikerroksista **takimmainen** ja tummin — Sami 23.9.2026.
+     Se oli ensin päällimmäisenä, ja silloin se luki etualana: kirkkaimpana
+     ja lähimpänä juuri se mitä taustan ei pidä olla.
+
+     Kauempana kuin tämä ei silti voi olla. Puuraja on yhtenäinen massa
+     vaakaviivastaan alaspäin, joten sen taakse pantuna lehvästöstä näkyisi
+     vain se osa joka nousee viivan yläpuolelle — koko alalaidan kehys
+     katoaisi. Järjestys on siis: harjanteet, utu, puuraja, **lehvästö**,
+     rungot.
+
+     Koko lehvästö kahdella täytöllä, ja huojunta yhtenä siirtona: tuuli käy
+     metsän yli eikä lehti kerrallaan. */
+  const bmp = leafImage(ctx);
+  ctx.save();
+  ctx.translate(Math.sin(t * 0.5) * 2.4 * LEAF.sway, 0);
+  ctx.drawImage(bmp, -LEAF_PAD, -LEAF_PAD, W + LEAF_PAD * 2, H + LEAF_PAD * 2);
+  ctx.restore();
 
   ctx.strokeStyle = '#142218';
   for (const tr of TRUNKS) {
@@ -706,14 +758,7 @@ function jungle(ctx) {
     ctx.stroke();
   }
 
-  /* Koko lehvästö kahdella täytöllä, ja huojunta yhtenä siirtona: tuuli käy
-     metsän yli eikä lehti kerrallaan. */
-  const [pa, pb] = leafField();
-  ctx.save();
-  ctx.translate(Math.sin(t * 0.5) * 2.4 * LEAF.sway, 0);
-  ctx.fillStyle = '#13251a'; ctx.fill(pa);
-  ctx.fillStyle = '#193020'; ctx.fill(pb);
-  ctx.restore();
+
 }
 
 /* ---- vuori */
