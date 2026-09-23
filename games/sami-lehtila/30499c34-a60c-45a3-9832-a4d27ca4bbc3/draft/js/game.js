@@ -92,17 +92,16 @@ const END_CARD_DELAY = 2600;
 const LAND_WARN_FROM = 0.75;               // varoitus jo ennen laskurajaa
 const PAD_WARN_LEAD = 1.0;                 // sekuntia pudotusta ennen kuin alusta vilkkuu
 const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
-/* Nokan kääntyminen kulkusuuntaan. `TURN_V` on se vauhti joka uuteen suuntaan
-   pitää kertyä ennen kuin taksi kääntyy, ja se on tässä juuri välkkymisen
-   takia: ilman kynnystä nokka heilahtaisi joka kerta kun vauhti käy nollan
-   kautta.
+/* Nokan kääntyminen kulkusuuntaan. `turnV` (säädin) on se vauhti joka uuteen
+   suuntaan pitää kertyä ennen kuin taksi kääntyy, ja se on olemassa juuri
+   välkkymisen takia: ilman kynnystä nokka heilahtaisi joka kerta kun vauhti
+   käy nollan kautta.
 
    **Itse käännös on välitön peilaus.** Animoitu käännös kokeiltiin 23.9.2026
    ja Sami hylkäsi sen saman tien: *"piti olla instant flip, nyt on liuku ja
    taksi menee ihan reikäiseksi mutkalla, ihan vaan flipx."* Litteän kautta
    kulkeva runko on juuri sitä: kapea kaistale jonka läpi näkyy. Kynnys jää,
    liuku ei. */
-const TURN_V = 70;
 /* Telineen ulos- ja sisäänmenon vauhti, 1/s: neljäsosasekunti koko matkaan. */
 const GEAR_RATE = 4;
 
@@ -147,7 +146,7 @@ const DEFAULTS = {
   tipCalm: 1, fadeCalm: 1,
   tipRush: 1.85, fadeRush: 2.4,
   tipHold: 1.35, fadeHold: 1.4,
-  stick: 2.05,
+  stick: 2.05, turnV: 70,
   /* Tyhjenevän tankin savuvana. Ks. stepSmoke. */
   smokeFrom: 25, smokeRate: 15, smokeLife: 1.7, smokeSize: 5,
   smokeGrow: 15, smokeRise: 16,
@@ -1465,7 +1464,13 @@ function dryThrust(v) {
 function activeThrust() {
   if (state !== PLAY || dead) return { x: 0, y: 0 };
   const v = inputVector();
-  if (taxi.gear > 0.35) v.x = 0;
+  /* Teline ulkona sammuttaa sivusuuttimet — paitsi pompussa. Pomppu on juuri
+     se hetki jolloin ohjausta tarvitaan, ja teline on silloin määritelmän
+     mukaan ulkona: sillähän alustaan osuttiin. Sami 23.9.2026:
+     *"ohjattavuus piti säilyä pompussa vaikka teline on puoliksi ulkona."*
+     `bounces` nollautuu onnistuneessa laskussa ja kentän alussa, joten lupa
+     kestää pompun yli seuraavaan laskuun asti eikä sekuntiakaan pidempään. */
+  if (taxi.gear > 0.35 && !bounces) v.x = 0;
   if (taxi.landed) { v.x = 0; if (v.y > 0) v.y = 0; }
   if (fuel <= 0) dryThrust(v);
   return v;
@@ -1915,10 +1920,10 @@ function stepSmoke(dt, throttle) {
 }
 
 /* Taksi kääntyy sinne minne se menee: `face` on nokan suunta, +1 oikealle.
-   Vaihto vaatii vauhtia uuteen suuntaan, ks. TURN_V. */
+   Vaihto vaatii vauhtia uuteen suuntaan, ks. turnV. */
 function stepTurn() {
-  if (taxi.vx > TURN_V) taxi.face = 1;
-  else if (taxi.vx < -TURN_V) taxi.face = -1;
+  if (taxi.vx > P.turnV) taxi.face = 1;
+  else if (taxi.vx < -P.turnV) taxi.face = -1;
 }
 
 function warnings(dt) {
@@ -2713,8 +2718,10 @@ function drawTaxi(v) {
   const j = () => rand(0.8, 1.2);
   if (v.y < -0.05) { const l = 26 * -v.y * j(); flame(-14, TH / 2, 0, l); flame(14, TH / 2, 0, l); }
   if (v.y > 0.05) flame(0, -TH / 2, Math.PI, 18 * v.y * j());
-  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, -Math.PI / 2, 20 * v.x * j());
-  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, Math.PI / 2, 20 * -v.x * j());
+  /* Sivuliekki on hieman pidempi kuin pystyliekki: se tulee kapeammasta
+     suuttimesta, ja lyhyenä se hukkui rungon viereen. Sami 23.9.2026. */
+  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, -Math.PI / 2, 26 * v.x * j());
+  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, Math.PI / 2, 26 * -v.x * j());
 
   /* Sivusuuttimet. Ne ovat olleet aina liekissä muttei rungossa — Sami
      23.9.2026: *"sivuthrustereiden puuttuminen on häirinnyt aina, molemmissa
@@ -2726,15 +2733,17 @@ function drawTaxi(v) {
     ctx.scale(sx, 1);
     ctx.fillStyle = '#9fb0d8';
     ctx.beginPath();
-    ctx.moveTo(TW / 2 - 4, -6);
-    ctx.lineTo(TW / 2 + NOZ, -8);
-    ctx.lineTo(TW / 2 + NOZ, 8);
-    ctx.lineTo(TW / 2 - 4, 6);
+    /* Puolet matalampi kuin ensimmäisessä versiossa: neljännes pois sekä
+       ylä- että alareunasta. Sami 23.9.2026. */
+    ctx.moveTo(TW / 2 - 4, -3);
+    ctx.lineTo(TW / 2 + NOZ, -4);
+    ctx.lineTo(TW / 2 + NOZ, 4);
+    ctx.lineTo(TW / 2 - 4, 3);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = hot ? '#ffe3a6' : '#3b4460';
     if (hot) { ctx.shadowColor = '#ffb355'; ctx.shadowBlur = 10; }
-    ctx.fillRect(TW / 2 + NOZ - 2.4, -6.5, 2.4, 13);
+    ctx.fillRect(TW / 2 + NOZ - 2.4, -3.25, 2.4, 6.5);
     ctx.shadowBlur = 0;
     ctx.restore();
   };
@@ -3173,7 +3182,7 @@ function tipGraph(ctx, w, h) {
    sellaista listaa. Ryhmään kuulumaton säädin päätyy "muut"-laatikkoon, joten
    uusi säädin ei katoa näkyvistä vaikka lisääjä ei kävisi tätä listaa läpi. */
 const SLIDER_GROUPS = [
-  { name: 'lento', open: true, keys: ['grav', 'thrust', 'stick'] },
+  { name: 'lento', open: true, keys: ['grav', 'thrust', 'stick', 'turnV'] },
   { name: 'laskeutuminen', open: false,
     keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep', 'hopRate'] },
   { name: 'bensa', open: true,
@@ -3211,6 +3220,7 @@ const SLIDERS = [
   { key: 'tipHold', label: 'kaasu: tippi ×', min: 0.5, max: 3, step: 0.05 },
   { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
+  { key: 'turnV', label: 'nokan kääntymisraja px/s', min: 0, max: 300, step: 5 },
   { key: 'smokeFrom', label: 'savu alkaa tankista %', min: 0, max: 60, step: 1 },
   { key: 'smokeRate', label: 'savua / s', min: 0, max: 40, step: 1 },
   { key: 'smokeLife', label: 'savun kesto s', min: 0.2, max: 5, step: 0.1 },
