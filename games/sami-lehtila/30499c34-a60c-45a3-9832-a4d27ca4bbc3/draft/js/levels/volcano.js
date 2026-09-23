@@ -373,7 +373,10 @@ function update(dt, api) {
     if (p.life <= 0) { S.smoke.splice(i, 1); continue; }
     p.x += p.vx * dt; p.y += p.vy * dt;
     p.vy *= 1 - Math.min(1, dt * 0.5);
-    p.vx += (p.x < 360 ? -6 : 6) * dt;
+    /* Patsas huojuu, se ei leviä. Ensimmäisessä ajossa savu työnnettiin
+       keskeltä ulospäin, ja silloin se ei näyttänyt patsaalta vaan kahdelta
+       harmaalta pisterivilta jotka valuivat ruudun laitoja kohti. */
+    p.vx += Math.sin(p.y * 0.013 + p.max) * 9 * dt;
   }
 }
 
@@ -644,9 +647,10 @@ function smokeDraw(ctx) {
   ctx.save();
   for (const p of S.smoke) {
     const k = Math.max(0, p.life / p.max);
-    const r = Math.max(1, p.r * (1.8 - k));
-    const warm = p.heat;
-    ctx.fillStyle = fade(warm > 0.4 ? '#6a5346' : '#4c4a48', 0.32 * k * k);
+    const r = Math.max(1, p.r * (2.2 - k * 1.2));
+    /* Varoituksen savu on lämpimämpää ja tummempaa kuin levon savu: sama
+       patsas, eri väri, ja se ero on toinen puoli varoitusta. */
+    ctx.fillStyle = fade(p.heat > 0.35 ? '#6d5344' : '#57565a', 0.5 * k * (1.2 - k * 0.4));
     ctx.beginPath();
     ctx.arc(p.x, p.y, r, 0, 6.3);
     ctx.fill();
