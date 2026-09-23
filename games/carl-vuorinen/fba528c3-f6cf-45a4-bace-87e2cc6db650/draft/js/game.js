@@ -30,19 +30,15 @@ let li = 0;
 // ---- Canvas, layers, collision mask ----
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d');
-let vw = 1, vh = 1, dpr = 1, Z = 1, layers = [], mainC = null, mask = null, motes = [];
+let vw = 1, vh = 1, dpr = 1, Z = 1, mainC = null, mask = null, motes = [];
 function buildMain(){
   freeLayer(mainC);
   mainC = renderLayer(1, STYLE.main, 0, 0);            // tiled; see art.js
   mask = mainC.mask; mainC.mask = null;
+  WALLS.build();                                       // depth walls, traced from the mask; see art.js
 }
 function isSolid(x,y){ if (x<0||y<0||x>=L.w||y>=L.h) return true; return mask[(y|0)*L.w+(x|0)] === 1; }
-function buildLayers(){
-  for (const ly of layers) freeLayer(ly.c);
-  layers = STYLE.depth.map(st => {
-    const f = st.f, q = f*0.5, padX = Math.ceil(vw*(1-f)/(2*f*Z))+40, padY = Math.ceil(vh*(1-f)/(2*f*Z))+40;
-    return {f, q, padX, padY, c:renderLayer(q, st, padX, padY)};
-  }).reverse();
+function buildMotes(){
   const r = rng(L.rooms[0].seed*13+1); motes = [];
   for (let i=0;i<L.w*L.h/50000;i++) motes.push({x:r()*L.w, y:r()*L.h, s:1+r()*1.6, v:4+r()*8});
 }
@@ -50,7 +46,7 @@ function resize(){
   vw = innerWidth; vh = innerHeight; dpr = Math.min(devicePixelRatio||1, 2);
   cv.width = Math.round(vw*dpr); cv.height = Math.round(vh*dpr); cv.style.width = vw+'px'; cv.style.height = vh+'px';
   Z = Math.max(Math.min(Math.max(vw/1000, 0.6), 1.15), vw/L.w, vh/L.h);
-  buildLayers(); placeControls();
+  placeControls();                                     // nothing in the level art depends on the viewport any more
 }
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 120); });
 
@@ -132,9 +128,8 @@ function reset(){
 }
 function loadLevel(i){
   li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; menuCh = chapterOf(li); save();
-  for (const ly of layers) freeLayer(ly.c); layers = [];        // drop the old level's depth layers before the new main layer is built, not after
   for (const z of hazards) z.sprite.c.width = z.sprite.c.height = 0;
-  setGeom(); applyTheme(); buildMain(); buildHazards(); resize(); reset();
+  setGeom(); applyTheme(); buildMain(); buildHazards(); buildMotes(); resize(); reset();
 }
 
 // ---- Forces: regions that push the rocket (waterfalls, wind, vents, magnets). Level data `forces`:
@@ -607,10 +602,7 @@ function render(dt){
   };
   for (const g of jb.glows) glow(g, 1-k2);
   if (k2 > 0) for (const g of cb.glows) glow(g, k2*0.6);
-  for (const ly of layers){   // true perspective about the screen centre: screen = (p - cam)·f·Z + centre·(1-f)
-    const ox = -(cam.x+ly.padX)*Z*ly.f + vw/2*(1-ly.f) + sx*ly.f, oy = -(cam.y+ly.padY)*Z*ly.f + vh/2*(1-ly.f) + sy*ly.f, kk = Z*ly.f/ly.q;
-    drawLayer(ctx, ly.c, ox, oy, kk, vw, vh);
-  }
+  WALLS.draw(sx, sy);
   if (hazards.length){
     ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
     for (const z of hazards){ if (z.state === 'gone') continue; const h = z.h, sp = z.sprite;
@@ -842,4 +834,4 @@ addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false
 // ---- Go ----
 migrateBests();
 li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; menuCh = chapterOf(li); setGeom(); applyTheme();
-resize(); buildMain(); buildHazards(); reset(); showMenu(); requestAnimationFrame(frame);
+resize(); buildMain(); buildHazards(); buildMotes(); reset(); showMenu(); requestAnimationFrame(frame);
