@@ -204,7 +204,24 @@ const BASE = Object.assign({}, DEFAULTS);
    saa nollata sitä mitä juuri säädit. MUL osoittaa aina nykyisen kentän
    omaan olioon. */
 const MULS = {};
-const mulOf = lv => MULS[lv.name] || (MULS[lv.name] = Object.assign({}, lv.mul));
+
+/* **Kentän tunnus on sen tiedostonimi, ei näkyvä nimi.** Nimi on säädettävä
+   teksti ja saa vaihtua lennossa; tiedostonimi ei vaihdu koskaan.
+   Sami 23.9.2026: *"työ- ja tiedostonimi sitten erikseen."*
+
+   Ero on pakko tehdä, koska kentälle tallennetut arvot avataan tunnuksella.
+   Ennen tätä ne avattiin nimellä, ja kun Tulivuoresta tuli Hellcano, koko
+   kentän viritys — vuoren mitat, purkauksen arvot, bensakerroin — jäi orvoksi
+   vanhan nimen alle ja kenttä palasi koodin oletuksiin. Kerran se korjattiin
+   käsin tiedostoa muokkaamalla; toista kertaa ei tarvita.
+
+   `indexOf` eikä etukäteen rakennettu kartta: `reloadLevel` vaihtaa
+   LEVELS-taulukkoon uuden moduulin, ja kartta osoittaisi vanhaan olioon. */
+const lvId = lv => {
+  const i = LEVELS.indexOf(lv);
+  return (i >= 0 && LEVEL_FILES[i]) || lv.name;
+};
+const mulOf = lv => MULS[lvId(lv)] || (MULS[lvId(lv)] = Object.assign({}, lv.mul));
 let MUL = {};
 
 /* Sauva syntyy vasta paljon alempana, ja tätä kutsutaan jo tallennettua
@@ -247,7 +264,7 @@ function tuneAll(stamp) {
   const levels = {};
   for (const lv of LEVELS) {
     const entry = {};
-    const m = MULS[lv.name];
+    const m = MULS[lvId(lv)];
     if (m && Object.keys(m).length) entry.mul = Object.assign({}, m);
     const own = {};
     for (const g of lv.tune || []) {
@@ -256,7 +273,10 @@ function tuneAll(stamp) {
       for (const sl of g.sliders) o[sl.key] = g.obj[sl.key];
     }
     if (Object.keys(own).length) entry.own = own;
-    if (Object.keys(entry).length) levels[lv.name] = entry;
+    /* Nimi tallentuu vain jos se on muutettu: muuttumaton nimi on koodissa,
+       eikä sitä kannata kirjoittaa tiedostoon toiseen kertaan. */
+    if (lv.name !== LEVEL_NAME0.get(lvId(lv))) entry.name = lv.name;
+    if (Object.keys(entry).length) levels[lvId(lv)] = entry;
   }
   return { v: 1, stamp: stamp || Date.now(), gearSide, global: Object.assign({}, BASE), levels };
 }
@@ -274,8 +294,12 @@ function applyAll(raw) {
     layout();
   }
   for (const lv of LEVELS) {
-    const e = (raw.levels || {})[lv.name];
+    /* Tunnus ensin, nimi varalta: ennen 23.9.2026 tallennetut tiedostot on
+       avattu nimellä, eikä niitä tarvitse muuntaa erikseen. */
+    const ls = raw.levels || {};
+    const e = ls[lvId(lv)] || ls[lv.name];
     if (!e) continue;
+    if (typeof e.name === 'string' && e.name.trim()) lv.name = e.name.trim().slice(0, 32);
     if (e.mul) {
       const m = mulOf(lv);
       for (const k of Object.keys(DEFAULTS)) {
@@ -379,20 +403,26 @@ function layout() {
    niiden päälle. Kentän olio on ainoa paikka jossa ne elävät, joten ilman tätä
    "oletukset" ei voisi palauttaa niitä millään. */
 const LEVEL_DEF = new Map();
+/* Sama koodin nimille: se on se mihin "oletukset" palauttaa, ja se mistä
+   tiedetään onko nimeä ylipäätään muutettu. */
+const LEVEL_NAME0 = new Map();
 for (const lv of LEVELS) {
+  LEVEL_NAME0.set(lvId(lv), lv.name);
   for (const g of lv.tune || []) {
     if (!g.obj || !g.sliders) continue;
     const d = {};
     for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
-    LEVEL_DEF.set(lv.name + '\u0000' + g.name, d);
+    LEVEL_DEF.set(lvId(lv) + '\u0000' + g.name, d);
   }
 }
 
 function resetLevelTune() {
   for (const k of Object.keys(MULS)) delete MULS[k];
   for (const lv of LEVELS) {
+    const n0 = LEVEL_NAME0.get(lvId(lv));
+    if (n0) lv.name = n0;                      // myös nimi on oletusarvo
     for (const g of lv.tune || []) {
-      const d = LEVEL_DEF.get(lv.name + '\u0000' + g.name);
+      const d = LEVEL_DEF.get(lvId(lv) + '\u0000' + g.name);
       if (d && g.obj) Object.assign(g.obj, d);
     }
   }
@@ -509,11 +539,12 @@ async function reloadLevel() {
   } catch (e) { return false; }
   if (!lv || !lv.name) return false;
   LEVELS[levelIndex] = lv;
+  LEVEL_NAME0.set(lvId(lv), lv.name);          // uuden moduulin oma nimi on oletus
   for (const g of lv.tune || []) {             // uudet oletukset uusista olioista
     if (!g.obj || !g.sliders) continue;
     const d = {};
     for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
-    LEVEL_DEF.set(lv.name + '\u0000' + g.name, d);
+    LEVEL_DEF.set(lvId(lv) + '\u0000' + g.name, d);
   }
   applyBody(keep);                             // ja säädetyt arvot takaisin
   sketch.forget(lv.name);
@@ -3049,6 +3080,33 @@ function buildPanel() {
        sliders   kentän omat arvot, kirjoitetaan suoraan kentän omaan olioon
 
      Taulu vaihtuu kenttää vaihdettaessa, koska buildPanel ajetaan uudestaan. */
+  /* Kentän näkyvä nimi tekstikenttänä. **Nimi on pelkkää näyttöä** — kentän
+     tunnus on sen tiedostonimi — joten sen saa vaihtaa lennossa ilman että
+     mikään tallennettu katoaa, ja se tallentuu peliin muun virityksen mukana.
+     Sami 23.9.2026: *"paras olisi jos propseissa on nimi kenttä, jotta voin
+     vaihtaa sitä lennossa."*
+
+     Tyhjä kenttä palauttaa koodin nimen sen sijaan että jättäisi kentän
+     nimettömäksi: nimetön kenttä näkyisi tyhjänä nappina ja tyhjänä otsikkona
+     HUDissa, eikä sitä saisi enää valittua. */
+  const nameRow = el('div', 'row');
+  const nameIn = document.createElement('input');
+  nameIn.type = 'text';
+  nameIn.maxLength = 32;
+  nameIn.value = level.name;
+  nameIn.style.cssText = 'width:100%;box-sizing:border-box;background:#141a2c;'
+    + 'border:1px solid #2b3550;border-radius:6px;color:#ffd479;font:inherit;padding:5px 7px;';
+  nameIn.addEventListener('input', () => {
+    level.name = nameIn.value.trim() || LEVEL_NAME0.get(lvId(level)) || level.name;
+    levelChanged();
+  });
+  /* Nappirivi ja laatikko-otsikot näyttävät nimen, joten ne ladotaan uusiksi
+     vasta kun kirjoittaminen loppuu — kesken kirjoittamisen se veisi fokuksen
+     kentästä joka näppäimen painalluksella. */
+  nameIn.addEventListener('change', () => buildPanel());
+  nameRow.append(el('label', null, 'kentän nimi'), nameIn);
+  panelEl.append(nameRow);
+
   for (const g of level.tune || []) {
     const rows = [];
     for (const key of g.mul || []) {
