@@ -78,8 +78,17 @@ const PAD_H = 18;                     // pelin oletus, ks. game.js loadLevel
      inset   kuinka paljon törmäys on piirrettyä kapeampi. Tämän on katettava
              sekä rosoisuus että penkkaportaan leveys, tai kolmion viistoon
              reunaan jäisi näkymätöntä seinää. */
+/* Nämä ovat **Samin säätöpaneelista hakemat luvut** 23.9.2026, ja koodin
+   oletukset on synkattu niihin. `config/tune.json` voittaa koodin oletukset
+   kaikilla pelaajilla, joten jos nämä kaksi eroavat, tiedosto on se joka
+   pelataan ja koodi valehtelee lukijalle.
+
+   Vuori seisoo tässä virityksessä lattialla eikä leiju: tyvi on y 1021 ja
+   lattia 1024. Leijuminen oli välivaihe, ja sen jäljiltä koodissa ei ole
+   mitään joka vaatisi ilmaa alapuolelle — `top` on ainoa luku joka nostaa
+   sen takaisin. */
 const ISLE = {
-  cx: 360, top: 500, hw: 120, rim: 52, chw: 34, rough: 6, inset: 10,
+  cx: 370, top: 754, hw: 212, rim: 58, chw: 60, rough: 4, inset: 11,
 };
 const TAN30 = Math.tan(Math.PI / 6);
 const isleBot = () => ISLE.top + (ISLE.hw - ISLE.rim) / TAN30;
@@ -159,23 +168,23 @@ function panelCheck() {
    Tankkaus on lattialla suoraan saaren alla. Se on koko kentän lupaus:
    ulkona ei ole turvaa, sisällä ei ole keikkoja. */
 const PADS = [
-  /* **Kaikki reunoihin kiinni, bensa keskelle** — Sami 23.9.2026. Kahdeksan
-     alustaa neljällä korkeudella, neljä kummallakin laidalla, ja tankkaus
-     lattialla suoraan vuoren alla.
-
-     Reunaan kiinni tarkoittaa myös sitä, että kulkuväylä on alustan ja vuoren
-     välissä: 74 px kun taksi on 54. Se on tarkoituksella niukka mutta ei
-     ahdas — vaikeus tulee ajoituksesta, ei ahtaudesta. */
-  { id: 1, x: 16,  y: 220,  w: 150 },
-  { id: 2, x: 554, y: 220,  w: 150 },
-  { id: 3, x: 16,  y: 360,  w: 150 },
-  { id: 4, x: 554, y: 360,  w: 150 },
-  { id: 5, x: 16,  y: 620,  w: 150 },
-  { id: 6, x: 554, y: 620,  w: 150 },
-  { id: 7, x: 16,  y: 820,  w: 150 },
-  { id: 8, x: 554, y: 820,  w: 150 },
-  /* Bensa on vuoren varjossa, ja se on kentän ainoa turvapaikka. Ks. sääntö 2. */
-  { id: 0, x: 285, y: FLOOR - PAD_H - 4, w: 150, fuel: true },
+  /* **Kahdeksan alustaa tasaisin välein laitoihin kiinni**, neljä kummallakin
+     puolella. Sami 23.9.2026. Kulkuväylä on alustan ja vuoren välissä. */
+  { id: 1, x: 16,  y: 190, w: 150 },
+  { id: 2, x: 554, y: 190, w: 150 },
+  { id: 3, x: 16,  y: 443, w: 150 },
+  { id: 4, x: 554, y: 443, w: 150 },
+  { id: 5, x: 16,  y: 697, w: 150 },
+  { id: 6, x: 554, y: 697, w: 150 },
+  { id: 7, x: 16,  y: 950, w: 150 },
+  { id: 8, x: 554, y: 950, w: 150 },
+  /* Tankkaus **ylhäällä keskellä**, luukun alla. Vuori seisoo nyt lattialla,
+     joten vanha paikka sen alla on kiveä — ja turva löytyy toisesta suunnasta:
+     purkauksen lakikorkeus on y 376 (laatikon yläreuna), eli kaikki tämän
+     yläpuolella on magman ulottumattomissa. Sama sääntö kuin ennenkin, eri
+     suunnasta: turva on fysiikassa eikä säännössä, ja se lasketaan
+     lähtönopeudesta. Jos `vmax` nousee, tämä raja laskee. */
+  { id: 0, x: 295, y: 300, w: 150, fuel: true },
 ];
 
 /* ---------------------------------------------------------------- purkaus
@@ -189,10 +198,10 @@ const PADS = [
    varoitus on savun *muutos*, ja muutosta ei näe ellei ole mitä vertailla. */
 
 const ERUPT = {
-  freq: 0.2,          // purkauksia sekunnissa
+  freq: 0.6,          // purkauksia sekunnissa
   warn: 2.6,          // varoituksen kesto s
-  grace: 6,           // tauko kentän alussa ja kuoleman jälkeen s
-  nmin: 1, nmax: 4,   // palloja purkauksessa
+  grace: 3,           // tauko kentän alussa ja kuoleman jälkeen s
+  nmin: 3, nmax: 8,   // palloja purkauksessa
   vmin: 290, vmax: 430,
   amin: 6, amax: 26,  // lähtökulma pystystä, astetta
   spit: 0.3,          // purkauksen sisäinen sylkyväli s
@@ -841,10 +850,10 @@ export const volcano = {
      ruudun ainoa lämmin asia — sitä pitää nähdä kauas. */
   sky: ['#0e1a22', '#1b3038', '#2f4a42', '#46583c'],
   sun: { x: 612, y: 236, r: 44, color: '#d8a271' },
-  /* Luukku on vasemmalla: keskellä se olisi suoraan kraatterin yläpuolella,
-     ja sisääntulo menisi purkauksen läpi. Vasen laita on myös se kuilu jota
-     pitkin luolaan mennään, joten sisääntulo opettaa reitin. */
-  gate: { x: 96, w: 120 },
+  /* Luukku keskelle, Sami 23.9.2026. Se on suoraan kraatterin yläpuolella,
+     mutta se ei haittaa: sisääntulon aikana kentän `update` ei aja lainkaan,
+     ja `grace` pitää vuoren hiljaa vielä kolme sekuntia GO:n jälkeen. */
+  gate: { x: 300, w: 120 },
   start: 0,
   firstFrom: 1,
   walls: SOLID,
