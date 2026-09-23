@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790167055748,
+ "stamp": 1790173632977,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -127,6 +127,9 @@
    }
   },
   "Tulivuori": {
+   "mul": {
+    "burn": 0.6
+   },
    "own": {
     "vuori": {
      "top": 754,
