@@ -461,7 +461,7 @@ const sketch = createSketch({
    Vain tässä selaimessa ja vain kun säätöjä on käytetty; pelaajan kone ei
    kirjoita tähän koskaan mitään. */
 const DEV_STORE = 'spacetaxi.dev';
-const dev = { panel: false, sketch: false, level: -1, watch: true };
+const dev = { panel: false, sketch: false, level: -1, watch: true, folds: {}, scroll: 0 };
 try { Object.assign(dev, JSON.parse(localStorage.getItem(DEV_STORE) || 'null') || {}); } catch (e) {}
 let devReady = false;                          // vasta palautuksen jälkeen
 /* dev.sketch asetetaan käsin eikä lueta sketch.activesta: onOpen ajetaan ennen
@@ -472,8 +472,18 @@ function saveDev() {
   dev.panel = panelOpen();
   dev.level = levelIndex;
   dev.watch = watching;
+  if (panelOpen()) dev.scroll = panelEl.scrollTop;
   try { localStorage.setItem(DEV_STORE, JSON.stringify(dev)); } catch (e) {}
 }
+
+/* Paneelin vieritys talteen. Oma kuuntelija eikä saveDev jokaisesta ruudusta:
+   vieritystapahtumia tulee kymmeniä sekunnissa, ja localStorage on synkroninen.
+   Viive on lyhyt, koska paneelin voi sulkea heti vierityksen jälkeen. */
+let scrollT = 0;
+panelEl.addEventListener('scroll', () => {
+  clearTimeout(scrollT);
+  scrollT = setTimeout(saveDev, 180);
+}, { passive: true });
 
 /* Kenttä uusiksi ilman sivun latausta.
  *
@@ -2956,12 +2966,21 @@ function buildPanel() {
     saveBtn.disabled = !tuneDirty();
   }
 
-  /* <details> hoitaa auki ja kiinni itse, joten laatikoille ei tarvita omaa
-     tilaa eikä kuuntelijaa. */
+  /* <details> hoitaa auki ja kiinni itse, mutta **ei muista sitä**: paneeli
+     rakennetaan uudestaan joka kenttänapista ja joka sivun latauksesta, ja
+     silloin jokainen laatikko palasi koodin oletukseen. Kenttää rakentaessa
+     sivu ladataan kymmeniä kertoja, joten se tarkoitti samojen kolmen laatikon
+     avaamista uudestaan joka kerta. Sami 23.9.2026.
+
+     Tila talletetaan otsikon mukaan (`dev.folds`), eli kentän omat laatikot
+     muistetaan kenttäkohtaisesti — otsikko on "Tulivuori: purkaus" eikä
+     "purkaus". Koodin `open` jää oletukseksi sille mitä ei ole vielä avattu
+     kertaakaan. */
   const group = (name, open, rows, graph) => {
     const box = el('details', 'grp');
-    box.open = open;
+    box.open = typeof dev.folds[name] === 'boolean' ? dev.folds[name] : open;
     box.append(el('summary', null, name));
+    box.addEventListener('toggle', () => { dev.folds[name] = box.open; saveDev(); });
     const body = el('div', 'body');
     for (const r of rows) body.append(r);
     if (graph) body.append(graphCanvas(graph));
@@ -3090,6 +3109,11 @@ function buildPanel() {
   ends.append(saveBtn, pbutton('btn sm', 'sulje', togglePanel));
   panelEl.append(acts, ends, note);
   syncFoot();
+
+  /* Vieritys takaisin siihen mihin se jäi. Tämä on vasta lopussa, koska
+     scrollTop leikkautuu sisällön korkeuteen: ennen viimeistä riviä paneeli on
+     matalampi kuin se kohta johon ollaan menossa, ja arvo katoaisi. */
+  if (dev.scroll > 0) panelEl.scrollTop = dev.scroll;
 }
 
 function panelOpen() {
