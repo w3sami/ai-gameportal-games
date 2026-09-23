@@ -1214,12 +1214,14 @@ stick.gain = P.stick;
 const gamepad = createGamepad({
   keys: false,
   actions: {
-    gear:  ['A', 'RB'],
-    /* Vasen olkapää aloittaa valitun kentän alusta kolmella elämällä, eli
-       tekee saman kuin säätöpaneelin kenttänappi hiirellä. Sami 23.9.2026.
-       Se otettiin pois telineeltä: sama painallus ei voi olla kaksi asiaa,
-       ja telineellä on yhä A ja oikea olkapää. */
+    gear:  ['A'],
+    /* Olkapäät ovat kentänvaihto: vasen aloittaa nykyisen kentän alusta
+       kolmella elämällä, oikea siirtyy seuraavaan ja viimeisestä ensimmäiseen.
+       Molemmat tekevät saman kuin säätöpaneelin kenttänappi hiirellä. Sami
+       23.9.2026. Teline menetti tässä molemmat olkapäänsä — sama painallus ei
+       voi olla kaksi asiaa — ja sille jäi A, joka on aina ollut sen oma. */
     restart: ['LB'],
+    next:  ['RB'],
     horn:  ['B', 'X'],
     menu:  ['Start'],
     select: ['Back'],
@@ -1313,6 +1315,10 @@ function padInput() {
      se nappikin: pelaajalle kenttä ei ole valittava asia, eikä vuoroa voi
      aloittaa keskeltä uudestaan niin monta kertaa kuin haluaa. */
   if (gamepad.pressed('restart') && debugAllowed()) { startLevel(levelIndex); return; }
+  if (gamepad.pressed('next') && debugAllowed()) {
+    startLevel((levelIndex + 1) % LEVELS.length);   // viimeisestä ensimmäiseen
+    return;
+  }
   if (gamepad.pressed('horn')) { honk(); return; }
   if (gamepad.pressed('gear')) toggleGear();
 }
