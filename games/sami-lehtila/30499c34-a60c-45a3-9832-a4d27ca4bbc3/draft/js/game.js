@@ -329,9 +329,12 @@ function tuneAll(stamp) {
     if (m && Object.keys(m).length) entry.mul = Object.assign({}, m);
     const own = {};
     for (const g of lv.tune || []) {
-      if (!g.obj || !g.sliders) continue;
+      if (!g.obj || (!g.sliders && !g.curve)) continue;
       const o = own[g.name] = {};
-      for (const sl of g.sliders) o[sl.key] = g.obj[sl.key];
+      for (const sl of g.sliders || []) o[sl.key] = g.obj[sl.key];
+      if (g.curve && Array.isArray(g.obj[g.curve.key])) {
+        o[g.curve.key] = g.obj[g.curve.key].slice();
+      }
     }
     if (Object.keys(own).length) entry.own = own;
     /* Nimi tallentuu vain jos se on muutettu: muuttumaton nimi on koodissa,
@@ -380,6 +383,14 @@ function applyAll(raw) {
       if (!o || !grp.obj) continue;
       for (const sl of grp.sliders || []) {
         if (typeof o[sl.key] === 'number' && isFinite(o[sl.key])) grp.obj[sl.key] = o[sl.key];
+      }
+      /* Käyrä kirjoitetaan vanhan taulukon sisään eikä sen tilalle: kenttä on
+         voinut ottaa siihen viittauksen, ja uusi taulukko jäisi näkymättä. */
+      const cv = grp.curve && o[grp.curve.key];
+      const into = grp.curve && grp.obj[grp.curve.key];
+      if (Array.isArray(cv) && Array.isArray(into) && cv.length === into.length
+          && cv.every(v => typeof v === 'number' && isFinite(v))) {
+        for (let i = 0; i < into.length; i++) into[i] = cv[i];
       }
     }
   }
@@ -474,15 +485,22 @@ function layout() {
 const LEVEL_DEF = new Map();
 /* Sama koodin nimille: se on se mihin "oletukset" palauttaa, ja se mistä
    tiedetään onko nimeä ylipäätään muutettu. */
+/** Kentän säätöryhmän koodin arvot talteen: se on se mihin "oletukset"
+    palauttaa. Käyrästä otetaan kopio, koska ryhmä kirjoittaa omaansa. */
+function tuneDefaults(lv, g) {
+  if (!g.obj || (!g.sliders && !g.curve)) return;
+  const d = {};
+  for (const sl of g.sliders || []) d[sl.key] = g.obj[sl.key];
+  if (g.curve && Array.isArray(g.obj[g.curve.key])) {
+    d[g.curve.key] = g.obj[g.curve.key].slice();
+  }
+  LEVEL_DEF.set(lvId(lv) + '\u0000' + g.name, d);
+}
+
 const LEVEL_NAME0 = new Map();
 for (const lv of LEVELS) {
   LEVEL_NAME0.set(lvId(lv), lv.name);
-  for (const g of lv.tune || []) {
-    if (!g.obj || !g.sliders) continue;
-    const d = {};
-    for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
-    LEVEL_DEF.set(lvId(lv) + '\u0000' + g.name, d);
-  }
+  for (const g of lv.tune || []) tuneDefaults(lv, g);
 }
 
 function resetLevelTune() {
@@ -492,7 +510,15 @@ function resetLevelTune() {
     if (n0) lv.name = n0;                      // myös nimi on oletusarvo
     for (const g of lv.tune || []) {
       const d = LEVEL_DEF.get(lvId(lv) + '\u0000' + g.name);
-      if (d && g.obj) Object.assign(g.obj, d);
+      if (!d || !g.obj) continue;
+      /* Taulukko kopioidaan sisään eikä tilalle: kenttä on voinut ottaa
+         siihen viittauksen, ja tilalle pantu oletus alkaisi elää säätimen
+         mukana — seuraava "oletukset" ei palauttaisi enää mitään. */
+      for (const k of Object.keys(d)) {
+        if (Array.isArray(d[k]) && Array.isArray(g.obj[k])) {
+          for (let i = 0; i < g.obj[k].length; i++) g.obj[k][i] = d[k][i];
+        } else g.obj[k] = d[k];
+      }
     }
   }
   MUL = mulOf(level);
@@ -609,12 +635,7 @@ async function reloadLevel() {
   if (!lv || !lv.name) return false;
   LEVELS[levelIndex] = lv;
   LEVEL_NAME0.set(lvId(lv), lv.name);          // uuden moduulin oma nimi on oletus
-  for (const g of lv.tune || []) {             // uudet oletukset uusista olioista
-    if (!g.obj || !g.sliders) continue;
-    const d = {};
-    for (const sl of g.sliders) d[sl.key] = g.obj[sl.key];
-    LEVEL_DEF.set(lvId(lv) + '\u0000' + g.name, d);
-  }
+  for (const g of lv.tune || []) tuneDefaults(lv, g);   // uudet oletukset uusista olioista
   applyBody(keep);                             // ja säädetyt arvot takaisin
   sketch.forget(lv.name);
   beginLevel(levelIndex, false);               // vasta tässä level on uusi
@@ -3499,8 +3520,8 @@ function buildPanel() {
      pelissä heti, ja tallennus tapahtuu vedon päättyessä niin kuin liu'uillakin.
 
      x on tankin täyteys 0…100 % vasemmalta oikealle ja y savua sekunnissa. */
-  const curveRow = (key, label, maxY) => {
-    const arr = () => BASE[key];
+  const curveRow = (arr, o, done) => {
+    const { label, max: maxY, lo = '', hi = '', now = null } = o;
     const wrap = el('div', 'row');
     const lab = el('label');
     const val = el('b', null, '');
@@ -3518,15 +3539,15 @@ function buildPanel() {
       g.font = '13px system-ui, sans-serif';
       g.fillStyle = 'rgba(190,210,255,.55)';
       g.textAlign = 'right'; g.fillText(String(maxY), L - 5, T + 11);
-      g.textAlign = 'left'; g.fillText('tyhjä', L, B + 16);
-      g.textAlign = 'right'; g.fillText('täysi', R, B + 16);
+      g.textAlign = 'left'; g.fillText(lo, L, B + 16);
+      g.textAlign = 'right'; g.fillText(hi, R, B + 16);
 
       /* Missä tankki on juuri nyt: säätäminen on helpompaa kun näkee mitä
          kohtaa käyrästä ollaan ajamassa. */
-      if (taxi && state === PLAY) {
+      if (now !== null && taxi && state === PLAY) {
         g.strokeStyle = 'rgba(255,212,121,.45)';
         g.beginPath();
-        const x = L + (R - L) * clamp(fuel / FUEL_MAX, 0, 1);
+        const x = L + (R - L) * clamp(now(), 0, 1);
         g.moveTo(x, T); g.lineTo(x, B); g.stroke();
       }
 
@@ -3562,15 +3583,13 @@ function buildPanel() {
       const step = i >= from ? 1 : -1;
       for (let j = from; j !== i + step; j += step) a[j] = v;
       last = i;
-      val.textContent = Math.round(a[i]) + ' / s';
-      applyMul();
-      syncFoot();
+      val.textContent = String(Math.round(a[i]));
     };
     c.addEventListener('pointerdown', ev => {
       snapUndo(); last = -1; c.setPointerCapture(ev.pointerId); at(ev);
     });
     c.addEventListener('pointermove', ev => { if (last >= 0 || ev.buttons) at(ev); });
-    c.addEventListener('pointerup', () => { last = -1; saveTune(); syncFoot(); });
+    c.addEventListener('pointerup', () => { last = -1; done(); });
     c.addEventListener('pointercancel', () => { last = -1; });
     wrap.append(c);
     return wrap;
@@ -3675,6 +3694,12 @@ function buildPanel() {
       if (!g.obj) continue;
       rows.push(sliderRow(sl, () => g.obj[sl.key], v => { g.obj[sl.key] = v; levelChanged(); }));
     }
+    /* Kentän oma käyrä. Sama editori kuin globaalilla, ja arvot kirjoitetaan
+       aina olemassa olevan taulukon sisään — kenttä on voinut ottaa siihen
+       viittauksen, ja uusi taulukko jäisi siltä näkymättä. */
+    if (g.curve && g.obj && Array.isArray(g.obj[g.curve.key])) {
+      rows.unshift(curveRow(() => g.obj[g.curve.key], g.curve, levelChanged));
+    }
     if (rows.length || g.graph) {
       panelEl.append(group(level.name + ': ' + g.name, g.open !== false, rows, g.graph));
     }
@@ -3685,7 +3710,12 @@ function buildPanel() {
     const rows = g.keys.map(k => byKey.get(k)).filter(Boolean);
     for (const s of rows) used.add(s.key);
     const built = rows.map(globalRow);
-    if (g.curve) built.unshift(curveRow(g.curve, 'savua / s', 200));
+    if (g.curve) {
+      built.unshift(curveRow(() => BASE[g.curve],
+        { label: 'savua / s', max: 200, lo: 'tyhjä', hi: 'täysi',
+          now: () => fuel / FUEL_MAX },
+        () => { saveTune(); syncFoot(); }));
+    }
     if (built.length) panelEl.append(group(g.name, g.open, built, g.graph));
   }
   const rest = SLIDERS.filter(s => !used.has(s.key));
