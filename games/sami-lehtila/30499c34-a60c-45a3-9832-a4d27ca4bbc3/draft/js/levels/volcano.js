@@ -76,7 +76,10 @@ const PAD_H = 18;                     // pelin oletus, ks. game.js loadLevel
    kokonaisuutena eikä penkka kerrallaan.
 
      top…waist   ylärinne: kraatterin reunasta levaimpaan kohtaan
-     waist…bot   köli: levaimmasta kohdasta alas kärkeen, ilman mitään alla
+     waist…bot   köli: leveimmästä kohdasta alas kärkeen, ilman mitään alla.
+                 `keel` alle yhden kaventaa sen nopeasti ja jättää pitkän
+                 juuren — yli yhden teki siitä pyöreän pohjan, ja saari
+                 näytti munalta.
      rough       reunan rosoisuus **piirrossa**. Törmäys ei tiedä siitä
                  mitään: se on aina sileän muodon sisällä.
      inset       kuinka paljon törmäys on piirrettyä kapeampi. Tämän on
@@ -87,8 +90,8 @@ const PAD_H = 18;                     // pelin oletus, ks. game.js loadLevel
    siitä kuperan, ja ensimmäisessä leijuvassa versiossa saari näytti siltä
    munalta jollaiseksi Sami olisi sen varmasti nimennyt. */
 const ISLE = {
-  cx: 360, top: 480, waist: 640, bot: 760,
-  hw: 120, rim: 58, chw: 34, pow: 0.7, keel: 2.1, rough: 7, inset: 10,
+  cx: 360, top: 440, waist: 640, bot: 820,
+  hw: 120, rim: 58, chw: 34, pow: 0.7, keel: 0.65, rough: 7, inset: 10,
 };
 const BAND_N = 26;                    // penkkoja, kiinteä määrä
 const RIM_BANDS = 4;                  // ylimmät penkat halkaistaan kraatteriksi
@@ -705,7 +708,7 @@ function isle(ctx, heat, t) {
   let y = ISLE.top + 10;
   for (let i = 0; y < ISLE.bot; i++) {
     const gap = 9 + ((i * 29) % 17);
-    ctx.fillStyle = (i % 3) ? `#0000002${(i % 6) + 2}` : '#ffffff0c';
+    ctx.fillStyle = (i % 3) ? `#0000001${(i % 6) + 2}` : '#ffffff09';
     ctx.fillRect(ISLE.cx - 220, y, 440, 2 + ((i * 7) % 4));
     y += gap;
   }
@@ -909,7 +912,7 @@ export const volcano = {
         { key: 'rim', label: 'kraatterin reunan puolileveys', min: 20, max: 200, step: 2 },
         { key: 'chw', label: 'kraatterin puoliaukko', min: 12, max: 90, step: 1 },
         { key: 'pow', label: 'ylärinne <1 kovera >1 kupera', min: 0.35, max: 2.5, step: 0.05 },
-        { key: 'keel', label: 'kölin kaarevuus', min: 0.6, max: 4, step: 0.05 },
+        { key: 'keel', label: 'köli <1 juuri >1 pyöreä', min: 0.3, max: 3, step: 0.05 },
         { key: 'rough', label: 'reunan roso px (vain piirto)', min: 0, max: 16, step: 0.5 },
         { key: 'inset', label: 'törmäys piirtoa kapeampi px', min: 2, max: 26, step: 1 },
         { key: 'cx', label: 'keskikohta x', min: 200, max: 520, step: 2 },
