@@ -11,6 +11,10 @@ function polyPts(cx,cy,rx,ry,wob,seed){
 }
 function poly(x,pts){ x.beginPath(); x.moveTo(pts[0][0],pts[0][1]); for (let i=1;i<pts.length;i++) x.lineTo(pts[i][0],pts[i][1]); x.closePath(); }
 function mkCanvas(w,h){ const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+// Releases a layer's backing stores now rather than whenever GC gets round to it. WebKit counts canvas memory against a
+// hard cap and only gives it back when the canvas shrinks or is collected, so a big level swapped for another would
+// otherwise hold both sets at once.
+function freeLayer(lr){ if (!lr) return; for (const t of lr.tiles) t.c.width = t.c.height = 0; lr.tiles.length = 0; }
 
 // ---- Art ----
 // Low-poly shading: large flat convex facets, each a slight shift lighter or darker. Straight edges only.
@@ -85,6 +89,9 @@ function solidGroups(pal){
 const TILE = 2048, TM = 2;                                           // TM: tiles overlap by this many pixels so scaled edges never show a seam
 function renderLayer(q, st, padX, padY){
   const W = Math.ceil((L.w+2*padX)*q), H = Math.ceil((L.h+2*padY)*q), pal = st.pal, out = {w:W, h:H, tiles:[], mask:st.captureMask ? new Uint8Array(L.w*L.h) : null};
+  // One scratch canvas for the solids, re-sized to each tile (which also clears it and frees the previous store at once)
+  // and released at the end. A fresh one per tile left up to ~70 dead 16 MB canvases per level build waiting on GC.
+  const tc = mkCanvas(1, 1), t = tc.getContext('2d');
   for (let ty=0; ty<H; ty+=TILE) for (let tx=0; tx<W; tx+=TILE){
     const tw = Math.min(TILE, W-tx), th = Math.min(TILE, H-ty), c = mkCanvas(tw+2*TM,th+2*TM), x = c.getContext('2d'), r = rng(L.rooms[0].seed*31+7);
     x.fillStyle = massCol(pal); x.fillRect(0,0,tw+2*TM,th+2*TM);
@@ -102,7 +109,7 @@ function renderLayer(q, st, padX, padY){
     for (const p of G.clear) x.strokeRect(p[0],p[1],p[2],p[3]);
     // solids (rocks, trunks, foliage, pad blocks) on a scratch canvas, composited behind the terrain so overlaps never show.
     // Each group is filled, faceted, detailed and edge-shaded inside its own clip, so one group's edge never marks another.
-    const tc = mkCanvas(tw+2*TM,th+2*TM), t = tc.getContext('2d'); t.translate(padX*q-tx+TM, padY*q-ty+TM); t.scale(q,q);
+    tc.width = tw+2*TM; tc.height = th+2*TM; t.translate(padX*q-tx+TM, padY*q-ty+TM); t.scale(q,q);
     for (const g of solidGroups(pal)){
       t.save(); groupPath(t,g); t.clip();
       t.fillStyle = g.col; t.fillRect(-400,-400,L.w+800,L.h+800);
@@ -120,6 +127,7 @@ function renderLayer(q, st, padX, padY){
     if (st.pads){ drawPad(x,L.pads.start,PAL.start,st.padK); drawPad(x,L.pads.target,PAL.target,st.padK); }
     out.tiles.push({x:tx, y:ty, c});
   }
+  tc.width = tc.height = 0;
   return out;
 }
 // Draws a tiled layer with its origin at screen (ox,oy) and scale k, skipping tiles outside the viewport.
@@ -199,7 +207,7 @@ const THEMES = {
     main:  { pal:JUNGLE_PAL, amp:0.07, edge:10, pads:true, captureMask:true },
     depth: DEPTH_F.map((f,i) => ({ f, pal:shadePal(JUNGLE_PAL, 0.87-i*0.075), amp:0.06, edge:5, edgeAlpha:0.1, pads:true, padK:0.86-i*0.1 })),
     bg: { top:'#27391d', bottom:'#150f09', f:0.35, mote:'rgba(225,240,140,.22)',    // green light high up, brown shadow low down
-      glows:[ {u:.22,v:.12,r:.5,c:'rgba(140,190,80,.34)'}, {u:.70,v:.10,r:.5,c:'rgba(120,190,90,.26)'}, {u:.5,v:.55,r:.5,c:'rgba(50,100,55,.36)'}, {u:.92,v:.55,r:.45,c:'rgba(35,110,80,.30)'}, {u:.15,v:.88,r:.45,c:'rgba(110,70,38,.46)'}, {u:.8,v:.9,r:.4,c:'rgba(95,62,34,.42)'} ] },
+      glows:[ {u:.22,v:.12,r:.5,c:'rgba(140,190,80,.34)'}, {u:.70,v:.10,r:.5,c:'rgba(120,190,90,.26)'}, {u:.5,v:.55,r:.5,c:'rgba(50,100,55,.36)'}, {u:.92,v:.55,r:.45,c:'rgba(35,110,80,.30)'}, {u:.15,v:.88,r:.45,c:'rgba(110,64,150,.32)'.replace('110,64,150,.32','110,70,38,.46')}, {u:.8,v:.9,r:.4,c:'rgba(95,62,34,.42)'} ] },
     terrain: jungleTerrain,
   },
 };
