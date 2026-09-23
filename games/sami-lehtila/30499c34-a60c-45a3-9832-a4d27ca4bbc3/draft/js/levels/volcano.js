@@ -72,29 +72,29 @@ import { W, H, CEIL } from './shared.js';
 const FLOOR = H - 16;                 // kehäseinän lattia
 const PAD_H = 18;                     // pelin oletus, ks. game.js loadLevel
 
-/* Saaren muoto yhtenä oliona. Nämä ovat säätimissä, koska saarta sommitellaan
-   kokonaisuutena eikä penkka kerrallaan.
+/* Vuori on **tasasivuinen kolmio, kärki ylös**. Sami 23.9.2026, kahden
+   hylätyn version jälkeen: pystysuora laatikkopino oli atsteekkitemppeli ja
+   kaareva profiili ampiaispesä. Kolmio on se muoto jonka kaikki lukee vuoreksi
+   ilman selitystä, eikä siinä ole mitään säädettävää kaarevuutta.
 
-     top…waist   ylärinne: kraatterin reunasta levaimpaan kohtaan
-     waist…bot   köli: leveimmästä kohdasta alas kärkeen, ilman mitään alla.
-                 `keel` alle yhden kaventaa sen nopeasti ja jättää pitkän
-                 juuren — yli yhden teki siitä pyöreän pohjan, ja saari
-                 näytti munalta.
-     rough       reunan rosoisuus **piirrossa**. Törmäys ei tiedä siitä
-                 mitään: se on aina sileän muodon sisällä.
-     inset       kuinka paljon törmäys on piirrettyä kapeampi. Tämän on
-                 katettava rosoisuus, tai roso alkaisi olla näkymätöntä
-                 seinää. */
-/* `pow` alle yhden tekee ylärinteestä **koveran**: kapea kraatterilla ja
-   levenevä kiihtyen tyveä kohti. Se on tulivuoren profiili. Yli yhden teki
-   siitä kuperan, ja ensimmäisessä leijuvassa versiossa saari näytti siltä
-   munalta jollaiseksi Sami olisi sen varmasti nimennyt. */
+   Kärki on katkaistu kraatterin kohdalta: `rim` on puolileveys katkaisutasolla
+   ja `chw` kraatterin puoliaukko, joten laelle jää kaksi `rim − chw` levyistä
+   huulta. **`bot` lasketaan tasasivuisuudesta eikä kirjoiteta**: sivun kulma on
+   60°, eli korkeus on (hw − rim) / tan 30°. Jos leveyttä muuttaa, kolmio pysyy
+   tasasivuisena itsestään.
+
+     rough   reunan rosoisuus **piirrossa**. Törmäys ei tiedä siitä mitään.
+     inset   kuinka paljon törmäys on piirrettyä kapeampi. Tämän on katettava
+             sekä rosoisuus että penkkaportaan leveys, tai kolmion viistoon
+             reunaan jäisi näkymätöntä seinää. */
 const ISLE = {
-  cx: 360, top: 440, waist: 640, bot: 820,
-  hw: 120, rim: 58, chw: 34, pow: 0.7, keel: 0.65, rough: 7, inset: 10,
+  cx: 360, top: 500, hw: 120, rim: 52, chw: 34, rough: 6, inset: 10,
 };
-const BAND_N = 26;                    // penkkoja, kiinteä määrä
-const RIM_BANDS = 4;                  // ylimmät penkat halkaistaan kraatteriksi
+const TAN30 = Math.tan(Math.PI / 6);
+const isleBot = () => ISLE.top + (ISLE.hw - ISLE.rim) / TAN30;
+
+const BAND_N = 16;                    // penkkoja, kiinteä määrä
+const RIM_BANDS = 5;                  // ylimmät halkaistaan kraatteriksi
 
 /* ------------------------------------------------------------------ seinät
 
@@ -107,9 +107,9 @@ const SOLID = [];
 const add = r => { r.hide = true; SOLID.push(r); return r; };
 
 /* Penkat varataan kerran. Halkaistuilla on kaksi laatikkoa, muilla yksi ja
-   toinen jää nollan levyiseksi — **nollan levyinen ei osu mihinkään**, ja se
-   on siistimpi tapa jättää laatikko pois kuin poistaa se listalta, joka
-   rikkoisi jaetut viittaukset. */
+   toinen jää nollan levyiseksi — nollan levyinen ei osu mihinkään, ja se on
+   siistimpi tapa jättää laatikko pois kuin poistaa se listalta, joka rikkoisi
+   jaetut viittaukset. */
 const BANDS = [];
 for (let i = 0; i < BAND_N; i++) {
   BANDS.push({
@@ -118,34 +118,27 @@ for (let i = 0; i < BAND_N; i++) {
   });
 }
 
-const bandY = i => ISLE.top + (ISLE.bot - ISLE.top) * (i / BAND_N);
-
-/* Puolileveys korkeudella y. Ylärinne kaartuu ulos, köli kapenee kärkeen. */
+/* Puolileveys korkeudella y: suora viiva kärjestä tyveen. */
 function halfWidth(y) {
-  const { top, waist, bot, hw, rim, pow, keel } = ISLE;
-  if (y <= waist) {
-    const u = Math.max(0, Math.min(1, (y - top) / Math.max(1, waist - top)));
-    return rim + (hw - rim) * Math.pow(u, 1 / Math.max(0.2, pow));
-  }
-  const u = Math.max(0, Math.min(1, (y - waist) / Math.max(1, bot - waist)));
-  return hw * Math.pow(1 - u, 1 / Math.max(0.2, keel));
+  const bot = isleBot();
+  const u = Math.max(0, Math.min(1, (y - ISLE.top) / Math.max(1, bot - ISLE.top)));
+  return ISLE.rim + (ISLE.hw - ISLE.rim) * u;
 }
 
 function shape() {
-  const step = (ISLE.bot - ISLE.top) / BAND_N;
+  const bot = isleBot();
+  const step = (bot - ISLE.top) / BAND_N;
   for (let i = 0; i < BAND_N; i++) {
-    const y = bandY(i);
-    /* Penkan leveys luetaan sen **kapeimmasta** kohdasta: ylärinteellä
-       yläreunasta, kölissä alareunasta. Yhdessä `inset`in kanssa se pitää
-       laatikon varmasti piirretyn käyrän sisällä myös siellä missä käyrä
-       kaartuu jyrkimmin. */
-    const at = y + step < ISLE.waist ? y : y + step;
-    const half = Math.max(3, halfWidth(at) - ISLE.inset);
+    const y = ISLE.top + step * i;
+    /* Leveys luetaan penkan **yläreunasta**, koska kolmio levenee alaspäin:
+       silloin laatikko on kapeampi kuin viiste koko matkaltaan, ja yhdessä
+       `inset`in kanssa se pysyy varmasti piirretyn reunan sisällä. */
+    const half = Math.max(3, halfWidth(y) - ISLE.inset);
     const x0 = ISLE.cx - half, x1 = ISLE.cx + half;
     const b = BANDS[i];
-    if (i < RIM_BANDS) {                 // kraatterin reunat, aukko keskellä
-      /* Kraatterin aukko on törmäyksessä leveämpi kuin piirretty: sama
-         sääntö toisin päin, koska tässä kiveä on aukon *ulkopuolella*. */
+    if (i < RIM_BANDS) {
+      /* Kraatterin aukko on törmäyksessä leveämpi kuin piirretty: sama sääntö
+         toisin päin, koska tässä kiveä on aukon *ulkopuolella*. */
       const g0 = ISLE.cx - ISLE.chw - ISLE.inset, g1 = ISLE.cx + ISLE.chw + ISLE.inset;
       b.l.x = x0; b.l.y = y; b.l.w = Math.max(0, g0 - x0); b.l.h = step;
       b.r.x = g1; b.r.y = y; b.r.w = Math.max(0, x1 - g1); b.r.h = step;
@@ -159,23 +152,13 @@ shape();
 
 let shapeSig = '';
 /* Säätimet luetaan piirrossa eikä päivityksessä: peli ajaa kentän `update`in
-   vain PLAY-tilassa, ja saarta sommitellaan nimenomaan tauolla. */
+   vain PLAY-tilassa, ja vuorta sommitellaan nimenomaan tauolla. */
 function panelCheck() {
-  const sig = `${ISLE.top},${ISLE.waist},${ISLE.bot},${ISLE.hw},${ISLE.rim},`
-    + `${ISLE.chw},${ISLE.pow},${ISLE.keel},${ISLE.inset},${ISLE.cx}`;
+  const sig = `${ISLE.top},${ISLE.hw},${ISLE.rim},${ISLE.chw},${ISLE.inset},${ISLE.cx}`;
   if (sig === shapeSig) return;
   shapeSig = sig;
   shape();
 }
-
-/* Kylkialustojen hyllyt. Hylly alkaa alustan alareunasta ja työntyy saaren
-   sisään, joten alustan laskupinta ei ole koskaan seinän sisällä — se on se
-   ainoa asia jonka tarkistin katsoo. */
-const LEDGES = [
-  { x: 88, y: 658, w: 180, h: 30 },     // alustan 1 alla
-  { x: 452, y: 658, w: 180, h: 30 },    // alustan 2 alla
-];
-const SHELVES = LEDGES.map(l => add({ ...l, rock: true, shelf: true }));
 
 /* ---------------------------------------------------------------- alustat
 
@@ -185,20 +168,23 @@ const SHELVES = LEDGES.map(l => add({ ...l, rock: true, shelf: true }));
    Tankkaus on lattialla suoraan saaren alla. Se on koko kentän lupaus:
    ulkona ei ole turvaa, sisällä ei ole keikkoja. */
 const PADS = [
-  /* Kuusi sateessa: kaksi saaren kyljissä ja neljä kuiluissa kahdella
-     korkeudella. Nämä ovat ne joille kivi putoaa. */
-  { id: 1, x: 88,  y: 640,  w: 150 },   // saaren vasen kylki
-  { id: 2, x: 482, y: 640,  w: 150 },   // saaren oikea kylki
-  { id: 3, x: 40,  y: 240,  w: 150 },
-  { id: 4, x: 530, y: 240,  w: 150 },
-  { id: 5, x: 16,  y: 440,  w: 150 },
-  { id: 6, x: 554, y: 440,  w: 150 },
-  /* Kolme lattialla saaren alla: tankkaus ja kaksi sen kylkeen. Ne ovat
-     tahallaan suojassa — saaren varjo on kentän ainoa turvapaikka, ja siellä
-     saa istua purkauksen yli. Ks. tiedoston alun sääntö 2. */
-  { id: 7, x: 100, y: FLOOR - PAD_H - 4, w: 150 },
+  /* **Kaikki reunoihin kiinni, bensa keskelle** — Sami 23.9.2026. Kahdeksan
+     alustaa neljällä korkeudella, neljä kummallakin laidalla, ja tankkaus
+     lattialla suoraan vuoren alla.
+
+     Reunaan kiinni tarkoittaa myös sitä, että kulkuväylä on alustan ja vuoren
+     välissä: 74 px kun taksi on 54. Se on tarkoituksella niukka mutta ei
+     ahdas — vaikeus tulee ajoituksesta, ei ahtaudesta. */
+  { id: 1, x: 16,  y: 220,  w: 150 },
+  { id: 2, x: 554, y: 220,  w: 150 },
+  { id: 3, x: 16,  y: 360,  w: 150 },
+  { id: 4, x: 554, y: 360,  w: 150 },
+  { id: 5, x: 16,  y: 620,  w: 150 },
+  { id: 6, x: 554, y: 620,  w: 150 },
+  { id: 7, x: 16,  y: 860,  w: 150 },
+  { id: 8, x: 554, y: 860,  w: 150 },
+  /* Bensa on vuoren varjossa, ja se on kentän ainoa turvapaikka. Ks. sääntö 2. */
   { id: 0, x: 285, y: FLOOR - PAD_H - 4, w: 150, fuel: true },
-  { id: 8, x: 470, y: FLOOR - PAD_H - 4, w: 150 },
 ];
 
 /* ---------------------------------------------------------------- purkaus
@@ -290,7 +276,7 @@ function launch() {
   const r = between(R_SMALL, R_BIG) * ERUPT.size;
   const side = BOX * 2 * r;
   S.balls.push({
-    x: ISLE.cx + between(-6, 6) * dir, y: ISLE.top + 12,
+    x: ISLE.cx + between(-6, 6) * dir, y: ISLE.top + 8,
     vx: Math.sin(a) * v * dir, vy: -Math.cos(a) * v,
     r, t: 0, puff: 0, hot: between(0, 1), spin: between(-2, 2),
     box: { x: 0, y: 0, w: side, h: side, hide: true, magma: true },
@@ -612,13 +598,13 @@ function jungle(ctx) {
    Roso on sinien summa eikä arvottu taulukko: se seuraa muotoa itsestään kun
    säädintä liikutetaan, eikä sitä tarvitse ladata uudestaan. */
 
-const PIT_D = () => (ISLE.bot - ISLE.top) / BAND_N * RIM_BANDS;
+const PIT_D = () => (isleBot() - ISLE.top) / BAND_N * RIM_BANDS;
 
 const jag = (y, k) => Math.sin(y * 0.37 + k) * 0.55 + Math.sin(y * 0.94 + k * 2.3) * 0.45;
 const edge = (y, side) => ISLE.cx + side * (halfWidth(y) + jag(y, side > 0 ? 3.1 : 0.4) * ISLE.rough);
 
 function islePath(ctx) {
-  const N = 96, span = ISLE.bot - ISLE.top, d = PIT_D(), g = ISLE.chw;
+  const N = 64, span = isleBot() - ISLE.top, d = PIT_D(), g = ISLE.chw;
   ctx.beginPath();
   for (let i = 0; i <= N; i++) {
     const y = ISLE.top + span * (i / N), x = edge(y, -1);
@@ -655,7 +641,7 @@ for (let i = 0; i < 9; i++) {
 }
 
 function veins(ctx, heat, t) {
-  const span = ISLE.bot - ISLE.top, d = PIT_D();
+  const span = isleBot() - ISLE.top, d = PIT_D();
   for (const v of VEINS) {
     const steps = 16;
     ctx.beginPath();
@@ -681,20 +667,20 @@ function veins(ctx, heat, t) {
 }
 
 function isle(ctx, heat, t) {
-  const span = ISLE.bot - ISLE.top, d = PIT_D();
+  const bot = isleBot(), span = bot - ISLE.top, d = PIT_D();
 
   /* Alapuolen hohde: köli on kuuma, ja se on myös se merkki joka kertoo ettei
      saari nojaa mihinkään. Pelkkä hohde eikä pisaroita — putoava laavapisara
      näyttäisi magmapallolta, ja silloin kenttä valehtelisi. */
-  const glow = ctx.createRadialGradient(ISLE.cx, ISLE.bot - 10, 4, ISLE.cx, ISLE.bot - 10, 120 + heat * 60);
+  const glow = ctx.createRadialGradient(ISLE.cx, bot - 6, 4, ISLE.cx, bot - 6, 150 + heat * 60);
   glow.addColorStop(0, fade('#ff7a2c', 0.24 + heat * 0.22));
   glow.addColorStop(1, '#ff7a2c00');
   ctx.fillStyle = glow;
-  ctx.fillRect(ISLE.cx - 200, ISLE.bot - 130, 400, 260);
+  ctx.fillRect(ISLE.cx - 240, bot - 150, 480, 300);
 
   ctx.save();
   islePath(ctx);
-  const body = ctx.createLinearGradient(0, ISLE.top, 0, ISLE.bot);
+  const body = ctx.createLinearGradient(0, ISLE.top, 0, bot);
   body.addColorStop(0, '#4a4038');
   body.addColorStop(0.45, '#332c26');
   body.addColorStop(1, '#221c18');
@@ -706,7 +692,7 @@ function isle(ctx, heat, t) {
   /* Kerrostumat. Väli ja kirkkaus vaihtelevat: tasavälinen juovitus näytti
      korilta eikä kivikerrostumalta. */
   let y = ISLE.top + 10;
-  for (let i = 0; y < ISLE.bot; i++) {
+  for (let i = 0; y < bot; i++) {
     const gap = 9 + ((i * 29) % 17);
     ctx.fillStyle = (i % 3) ? `#0000001${(i % 6) + 2}` : '#ffffff09';
     ctx.fillRect(ISLE.cx - 220, y, 440, 2 + ((i * 7) % 4));
@@ -764,31 +750,11 @@ function isle(ctx, heat, t) {
   ctx.fillRect(ISLE.cx - 150, ISLE.top - 90, 300, 190);
 }
 
-/* Kylkialustan hylly. Piirretään laatikkoaan hitusen suurempana ja alta
-   viistettynä — sama suunta kuin saarella: näkyvä kivi on törmäystä isompi,
-   ei pienempi. */
-function ledge(ctx, r) {
-  const m = 4;
-  ctx.beginPath();
-  ctx.moveTo(r.x - m, r.y - m);
-  ctx.lineTo(r.x + r.w + m, r.y - m);
-  ctx.lineTo(r.x + r.w + m, r.y + r.h);
-  ctx.lineTo(r.x + r.w * 0.62, r.y + r.h + m * 2);
-  ctx.lineTo(r.x + r.w * 0.2, r.y + r.h);
-  ctx.closePath();
-  const gr = ctx.createLinearGradient(0, r.y - m, 0, r.y + r.h + m * 2);
-  gr.addColorStop(0, '#4c4032');
-  gr.addColorStop(1, '#241e19');
-  ctx.fillStyle = gr;
-  ctx.fill();
-}
-
 function mountain(ctx, heat) {
   const t = clock();
   const q = S.quake;
   ctx.save();
   if (q > 0.01) ctx.translate(nz(t, 41) * q, nz(t, 57) * q * 0.55);
-  for (const sh of SHELVES) ledge(ctx, sh);
   isle(ctx, heat, t);
   ctx.restore();
 }
@@ -903,16 +869,12 @@ export const volcano = {
        `inset` on se luku joka pitää piirron ja törmäyksen erillään — jos sen
        laskee nollaan, kallion roso alkaa olla näkymätöntä seinää. */
     {
-      name: 'saari', obj: ISLE, open: false,
+      name: 'vuori', obj: ISLE, open: false,
       sliders: [
-        { key: 'top', label: 'kraatteri y', min: 120, max: 640, step: 2 },
-        { key: 'waist', label: 'levein kohta y', min: 200, max: 760, step: 2 },
-        { key: 'bot', label: 'kölin kärki y', min: 260, max: 900, step: 2 },
-        { key: 'hw', label: 'puolileveys', min: 40, max: 300, step: 2 },
-        { key: 'rim', label: 'kraatterin reunan puolileveys', min: 20, max: 200, step: 2 },
-        { key: 'chw', label: 'kraatterin puoliaukko', min: 12, max: 90, step: 1 },
-        { key: 'pow', label: 'ylärinne <1 kovera >1 kupera', min: 0.35, max: 2.5, step: 0.05 },
-        { key: 'keel', label: 'köli <1 juuri >1 pyöreä', min: 0.3, max: 3, step: 0.05 },
+        { key: 'top', label: 'lakitaso y', min: 120, max: 800, step: 2 },
+        { key: 'hw', label: 'puolileveys tyvessä', min: 50, max: 260, step: 2 },
+        { key: 'rim', label: 'puolileveys laella', min: 20, max: 140, step: 2 },
+        { key: 'chw', label: 'kraatterin puoliaukko', min: 10, max: 90, step: 1 },
         { key: 'rough', label: 'reunan roso px (vain piirto)', min: 0, max: 16, step: 0.5 },
         { key: 'inset', label: 'törmäys piirtoa kapeampi px', min: 2, max: 26, step: 1 },
         { key: 'cx', label: 'keskikohta x', min: 200, max: 520, step: 2 },
