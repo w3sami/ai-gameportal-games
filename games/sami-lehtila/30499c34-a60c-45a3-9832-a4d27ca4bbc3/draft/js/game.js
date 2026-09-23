@@ -2031,9 +2031,11 @@ function update(dt) {
   const gearRate = GEAR_RATE * (taxi.spring ? P.hopRate : 1);
   taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * gearRate, dt * gearRate);
   if (taxi.spring && taxi.gear >= 1) { taxi.spring = 0; taxi.gearWant = false; }
-  /* Lähdön ohjauslupa raukeaa kun teline on sisällä sen verran että
-     tavallinenkin sääntö päästäisi sivusuuttimet päälle. */
-  if (taxi.launch && taxi.gear <= 0.35) taxi.launch = 0;
+  /* Lähdön ohjauslupa raukeaa kun jalat ovat **matkalla sisään** ja rajan
+     alla — siitä eteenpäin tavallinen sääntö sanoo saman. Ponnistuksen aikana
+     (`spring`) se ei saa raueta, koska silloin jalat ovat vasta menossa ulos
+     ja kulkevat rajan läpi väärään suuntaan. */
+  if (taxi.launch && !taxi.spring && taxi.gear <= 0.35) taxi.launch = 0;
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
   else { if (taxi.gear > gearWas) gearPush(gearWas); carryOff(dt); }
 
@@ -2130,7 +2132,6 @@ function leavePad() {
   taxi.landed = null;
   taxi.offPad = p;
   taxi.offT = PAD_LEAVE;
-  taxi.launch = 1;                           // ohjaus auki koko ponnistuksen ajan
   /* Nosto vain jos se mahtuu. Alusta voi olla matalan katon alla — Moonshotin
      lohkoissa ja Highrisen ylärivissä on sellaisia — ja tarkistamaton nosto
      työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
@@ -2174,6 +2175,7 @@ function leavePad() {
        takaisin. */
     taxi.spring = 1;
     taxi.gearWant = true;                    // jalat auki, ja sen jälkeen heti kiinni
+    taxi.launch = 1;                         // ja ohjaus auki koko sen ajan
 
     /* Vauhti sen sijaan vain jos koko ponnistus mahtuu: nosto ja se matka
        jonka jalat vielä suoristuvat. Se on se osa joka veisi kattoon, eikä
