@@ -1441,7 +1441,12 @@ function touchdown(pad, b) {
   const t2 = taxi;
   const ratio = landRatio(pad);
 
-  if (t2.gear < 0.85) return crash();
+  /* Kesken ulostulon oleva teline ei ole vatsalasku: alas tuleva teline osuu
+     pintaan ensin, ja loppumatkan alusta työntää taksia ylös (`taxi.landed`in
+     y lasketaan joka ruutu telineen pituudesta). Kolari on siis vain siitä
+     ettei telinettä ole eikä sitä olla laskemassa — nopeusrajat pätevät
+     erikseen alla, niin kuin ennenkin. */
+  if (t2.gear < 0.85 && !t2.gearWant) return crash();
   if (b.x < pad.x - 2 || b.x + b.w > pad.x + pad.w + 2) return crash();
   if (ratio > 1) return crash();
 
@@ -1776,9 +1781,10 @@ function update(dt) {
     return;
   }
 
+  const gearWas = taxi.gear;
   taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * 4, dt * 4);
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
-  else carryOff(dt);
+  else { if (taxi.gear > gearWas) gearPush(gearWas); carryOff(dt); }
 
   warnings(dt);                              // piippaukset myös alustalla
 
@@ -1866,6 +1872,51 @@ function leavePad() {
   const b = taxiBox(taxi);
   for (const r of solids()) {
     if (r !== p && hit(b, r)) { taxi.y = y0; break; }
+  }
+}
+
+/* Alas tuleva teline työntää taksia, ei taksia pintaan.
+ *
+ * Teline kasvaa neljäsosasekunnissa neljätoista pikseliä alaspäin, ja se on
+ * osa taksin törmäyslaatikkoa. Pinnan lähellä laskettu teline kasvoi siis
+ * suoraan alustan tai lattian sisään, ja koska kosketus tuli laatikon
+ * kasvamisesta eikä taksin liikkeestä, `move` ei lukenut sitä laskuksi vaan
+ * seinäksi: teline tappoi pelaajan juuri silloin kun hän valmistautui laskuun.
+ *
+ * Oikein päin ajateltuna teline osuu maahan ensin ja maa työntää sen takaisin
+ * — eli taksia ylös. Siksi tämä siirtää taksin sen verran ylös kuin teline
+ * upposi, jolloin jalat jäävät pinnalle ja `move` lukee seuraavan ruudun
+ * laskuna tavallisine nopeusrajoineen. Nopeus ei muutu tässä: liian kovaa
+ * tuleva kuolee yhä, teline ei vain ole enää syy.
+ *
+ * Kaksi rajausta:
+ *   - Vain ylhäältä tullut kosketus. Jos taksi oli jo pinnan tasalla ennen
+ *     telineen kasvua, kyse on törmäyksestä jonka `move` hoitaa, eikä sitä
+ *     saa peruuttaa hyppäämällä taksi seinän päälle.
+ *   - Nosto vain jos se mahtuu, samasta syystä kuin `leavePad`issa. Jos ylhäällä
+ *     on katto, teline jää sen sijaan siihen mihin se ehti: ahtaassa paikassa
+ *     maa pitää telineen sisällä, eikä mitään työnnetä seinään. */
+function gearPush(gearWas) {
+  const b = taxiBox(taxi);
+  const foot = b.y + b.h;
+  const prevFoot = foot - GEAR * (taxi.gear - gearWas);
+  let lift = 0;
+  for (const r of solids()) {
+    if (r === taxi.offPad) continue;
+    if (b.x + b.w <= r.x || b.x >= r.x + r.w) continue;
+    /* Alustan yläreuna ruudun alussa, samasta syystä kuin `move`ssa: nousevan
+       alustan pitää kelvata vaikka se ehti jo taksin jalkojen ohi. */
+    if (prevFoot > (r.y - (r.dy || 0)) + 1) continue;
+    if (foot <= r.y) continue;
+    lift = Math.max(lift, foot - r.y);
+  }
+  if (lift <= 0) return;
+
+  const y0 = taxi.y;
+  taxi.y -= lift;
+  const nb = taxiBox(taxi);
+  for (const r of solids()) {
+    if (r !== taxi.offPad && hit(nb, r)) { taxi.y = y0; taxi.gear = gearWas; return; }
   }
 }
 
