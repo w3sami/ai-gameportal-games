@@ -207,7 +207,7 @@ const THEMES = {
     main:  { pal:JUNGLE_PAL, amp:0.07, edge:10, pads:true, captureMask:true },
     depth: DEPTH_F.map((f,i) => ({ f, pal:shadePal(JUNGLE_PAL, 0.87-i*0.075), amp:0.06, edge:5, edgeAlpha:0.1, pads:true, padK:0.86-i*0.1 })),
     bg: { top:'#27391d', bottom:'#150f09', f:0.35, mote:'rgba(225,240,140,.22)',    // green light high up, brown shadow low down
-      glows:[ {u:.22,v:.12,r:.5,c:'rgba(140,190,80,.34)'}, {u:.70,v:.10,r:.5,c:'rgba(120,190,90,.26)'}, {u:.5,v:.55,r:.5,c:'rgba(50,100,55,.36)'}, {u:.92,v:.55,r:.45,c:'rgba(35,110,80,.30)'}, {u:.15,v:.88,r:.45,c:'rgba(110,64,150,.32)'.replace('110,64,150,.32','110,70,38,.46')}, {u:.8,v:.9,r:.4,c:'rgba(95,62,34,.42)'} ] },
+      glows:[ {u:.22,v:.12,r:.5,c:'rgba(140,190,80,.34)'}, {u:.70,v:.10,r:.5,c:'rgba(120,190,90,.26)'}, {u:.5,v:.55,r:.5,c:'rgba(50,100,55,.36)'}, {u:.92,v:.55,r:.45,c:'rgba(35,110,80,.30)'}, {u:.15,v:.88,r:.45,c:'rgba(110,70,38,.46)'}, {u:.8,v:.9,r:.4,c:'rgba(95,62,34,.42)'} ] },
     terrain: jungleTerrain,
   },
 };
