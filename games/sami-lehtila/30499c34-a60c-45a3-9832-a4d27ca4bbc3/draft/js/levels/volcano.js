@@ -82,12 +82,16 @@ const PAD_H = 18;                     // pelin oletus, ks. game.js loadLevel
      inset       kuinka paljon törmäys on piirrettyä kapeampi. Tämän on
                  katettava rosoisuus, tai roso alkaisi olla näkymätöntä
                  seinää. */
+/* `pow` alle yhden tekee ylärinteestä **koveran**: kapea kraatterilla ja
+   levenevä kiihtyen tyveä kohti. Se on tulivuoren profiili. Yli yhden teki
+   siitä kuperan, ja ensimmäisessä leijuvassa versiossa saari näytti siltä
+   munalta jollaiseksi Sami olisi sen varmasti nimennyt. */
 const ISLE = {
-  cx: 360, top: 500, waist: 634, bot: 742,
-  hw: 108, rim: 66, chw: 38, pow: 1.6, keel: 2.1, rough: 7, inset: 10,
+  cx: 360, top: 480, waist: 640, bot: 760,
+  hw: 120, rim: 58, chw: 34, pow: 0.7, keel: 2.1, rough: 7, inset: 10,
 };
 const BAND_N = 26;                    // penkkoja, kiinteä määrä
-const RIM_BANDS = 3;                  // ylimmät penkat halkaistaan kraatteriksi
+const RIM_BANDS = 4;                  // ylimmät penkat halkaistaan kraatteriksi
 
 /* ------------------------------------------------------------------ seinät
 
@@ -165,8 +169,8 @@ function panelCheck() {
    sisään, joten alustan laskupinta ei ole koskaan seinän sisällä — se on se
    ainoa asia jonka tarkistin katsoo. */
 const LEDGES = [
-  { x: 96, y: 658, w: 180, h: 30 },     // alustan 1 alla
-  { x: 444, y: 658, w: 180, h: 30 },    // alustan 2 alla
+  { x: 88, y: 658, w: 180, h: 30 },     // alustan 1 alla
+  { x: 452, y: 658, w: 180, h: 30 },    // alustan 2 alla
 ];
 const SHELVES = LEDGES.map(l => add({ ...l, rock: true, shelf: true }));
 
@@ -180,8 +184,8 @@ const SHELVES = LEDGES.map(l => add({ ...l, rock: true, shelf: true }));
 const PADS = [
   /* Kuusi sateessa: kaksi saaren kyljissä ja neljä kuiluissa kahdella
      korkeudella. Nämä ovat ne joille kivi putoaa. */
-  { id: 1, x: 96,  y: 640,  w: 150 },   // saaren vasen kylki
-  { id: 2, x: 474, y: 640,  w: 150 },   // saaren oikea kylki
+  { id: 1, x: 88,  y: 640,  w: 150 },   // saaren vasen kylki
+  { id: 2, x: 482, y: 640,  w: 150 },   // saaren oikea kylki
   { id: 3, x: 40,  y: 240,  w: 150 },
   { id: 4, x: 530, y: 240,  w: 150 },
   { id: 5, x: 16,  y: 440,  w: 150 },
@@ -696,10 +700,14 @@ function isle(ctx, heat, t) {
 
   ctx.clip();
 
-  // kerrostumat: vaakajuovia jotka kertovat kivestä ilman että ne ovat portaita
-  for (let y = ISLE.top + 8; y < ISLE.bot; y += 11) {
-    ctx.fillStyle = (y / 11 | 0) % 2 ? '#00000022' : '#ffffff09';
-    ctx.fillRect(ISLE.cx - 200, y, 400, 4);
+  /* Kerrostumat. Väli ja kirkkaus vaihtelevat: tasavälinen juovitus näytti
+     korilta eikä kivikerrostumalta. */
+  let y = ISLE.top + 10;
+  for (let i = 0; y < ISLE.bot; i++) {
+    const gap = 9 + ((i * 29) % 17);
+    ctx.fillStyle = (i % 3) ? `#0000002${(i % 6) + 2}` : '#ffffff0c';
+    ctx.fillRect(ISLE.cx - 220, y, 440, 2 + ((i * 7) % 4));
+    y += gap;
   }
 
   // valo ylävasemmalta: kirkas kaistale vasenta kylkeä pitkin
@@ -724,6 +732,13 @@ function isle(ctx, heat, t) {
     ctx.lineTo(x + (((i * 17) % 9) - 4), y + 9 + ((i * 29) % 14));
     ctx.stroke();
   }
+
+  /* Kraatterin huuli valoon: se on saaren ainoa vaakapinta, ja ilman sitä
+     kolo katosi siluettiin. */
+  ctx.fillStyle = '#6a5a4a';
+  ctx.fillRect(ISLE.cx - halfWidth(ISLE.top) - 8, ISLE.top, halfWidth(ISLE.top) * 2 + 16, 5);
+  ctx.fillStyle = '#00000055';
+  ctx.fillRect(ISLE.cx - ISLE.chw, ISLE.top, ISLE.chw * 2, d);
 
   veins(ctx, heat, t);
 
@@ -893,7 +908,7 @@ export const volcano = {
         { key: 'hw', label: 'puolileveys', min: 40, max: 300, step: 2 },
         { key: 'rim', label: 'kraatterin reunan puolileveys', min: 20, max: 200, step: 2 },
         { key: 'chw', label: 'kraatterin puoliaukko', min: 12, max: 90, step: 1 },
-        { key: 'pow', label: 'ylärinteen kaarevuus', min: 0.6, max: 3, step: 0.05 },
+        { key: 'pow', label: 'ylärinne <1 kovera >1 kupera', min: 0.35, max: 2.5, step: 0.05 },
         { key: 'keel', label: 'kölin kaarevuus', min: 0.6, max: 4, step: 0.05 },
         { key: 'rough', label: 'reunan roso px (vain piirto)', min: 0, max: 16, step: 0.5 },
         { key: 'inset', label: 'törmäys piirtoa kapeampi px', min: 2, max: 26, step: 1 },
