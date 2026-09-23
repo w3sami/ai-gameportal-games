@@ -3125,7 +3125,12 @@ function panelOpen() {
    avattu täältä rattaasta. */
 function setPanel(on) {
   if (on === panelOpen()) return;
-  if (on) { buildPanel(); panelEl.classList.remove('hidden'); }
+  /* Näkyviin **ennen** rakentamista. Piilotettuna paneelilla ei ole asettelua,
+     eikä piilotetun elementin `scrollTop` ota vastaan mitään — buildPanelin
+     lopussa palautettu vieritys katosi siis joka avauksella. Vaihto ei vilauta
+     mitään, koska molemmat tapahtuvat samassa tehtävässä eikä välissä
+     piirretä. */
+  if (on) { panelEl.classList.remove('hidden'); buildPanel(); }
   else panelEl.classList.add('hidden');
   saveDev();
   setWatch(wantWatch());                       // vartija seuraa paneelia
