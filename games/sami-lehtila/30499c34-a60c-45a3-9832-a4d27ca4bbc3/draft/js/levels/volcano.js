@@ -1,4 +1,4 @@
-/* Tulivuori — viidakon yllä leijuva tulivuori.
+/* Hellcano — viidakon keskellä tasasivuinen tulivuori, kärki ylös.
  *
  * Yksi kenttä per tiedosto, jotta kaksi tekijää voi työstää eri kenttiä
  * yhtä aikaa kirjoittamatta toistensa yli. Kentän muoto on kuvattu
@@ -891,7 +891,7 @@ function front(ctx) {
 /* ------------------------------------------------------------------ kenttä */
 
 export const volcano = {
-  name: 'Tulivuori',
+  name: 'Hellcano',
   glow: '#ff8a3c',
   /* Trooppinen iltahämärä tuhkan läpi. Taivas on viileä, jotta magma on
      ruudun ainoa lämmin asia — sitä pitää nähdä kauas. */
