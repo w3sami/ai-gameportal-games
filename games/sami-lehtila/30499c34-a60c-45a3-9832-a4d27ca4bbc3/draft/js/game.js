@@ -150,6 +150,12 @@ const DEFAULTS = {
   /* Tyhjenevän tankin savuvana. Ks. stepSmoke. */
   smokeFrom: 25, smokeRate: 15, smokeLife: 1.7, smokeSize: 5,
   smokeGrow: 15, smokeRise: 16,
+  /* Savun liukuma: väri ja läpinäkyvyys kummassakin päässä. Väri on luku
+     (0xRRGGBB) eikä merkkijono, jotta viritys pysyy kauttaaltaan numeroina —
+     tallennus, lataus ja kentän kertoimet käsittelevät vain lukuja, eikä
+     yhteen väriin kannata rakentaa poikkeusta koko ketjuun. */
+  smokeC0: 0x969696, smokeA0: 0.55,        // kynnyksellä: vaalea harmaa
+  smokeC1: 0x0c0c0c, smokeA1: 0.55,        // tyhjänä: melkein musta
 };
 const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
@@ -1903,6 +1909,9 @@ function warnPad() {
    Hiukkanen on tavallinen `bits`-hiutale kolmella lisäkentällä: oma
    haipumisnopeus (`fade`), kasvu (`grow`) ja läpikuultavuus (`a`). Ilman niitä
    savu olisi räjähdyksen sirpale — lyhyt, kutistumaton ja täysin peittävä. */
+/** 0xRRGGBB → '#rrggbb', säädintä varten. */
+const hexOf = n => '#' + (n & 0xffffff).toString(16).padStart(6, '0');
+
 let smokeT = 0;
 function stepSmoke(dt, throttle) {
   const from = FUEL_MAX * P.smokeFrom / 100;
@@ -1912,12 +1921,14 @@ function stepSmoke(dt, throttle) {
   smokeT += dt * P.smokeRate * (0.3 + 0.7 * throttle) * (0.4 + 0.6 * k);
   while (smokeT >= 1) {
     smokeT -= 1;
-    const g = Math.round(150 - 138 * k);          // harmaasta melkein mustaan
     bits.push({
       x: taxi.x + rand(-9, 9), y: taxi.y + TH / 2 - 3,
       vx: taxi.vx * 0.12 + rand(-9, 9), vy: -P.smokeRise + rand(-7, 7),
       g: 0, life: 1, fade: 1 / Math.max(0.1, P.smokeLife),
-      color: `rgb(${g},${g},${g})`, a: 0.55,
+      /* Sama `mixHex` kuin bensapalkilla: se puhuu heksaa, joten luvut
+         käännetään sille. Toinen sekoitin olisi ollut sama funktio uudestaan. */
+      color: mixHex(hexOf(P.smokeC0), hexOf(P.smokeC1), k),
+      a: P.smokeA0 + (P.smokeA1 - P.smokeA0) * k,
       r: P.smokeSize * rand(0.7, 1.3), grow: P.smokeGrow,
     });
   }
@@ -3213,7 +3224,8 @@ const SLIDER_GROUPS = [
     keys: ['burn', 'sideBurn', 'refuel', 'price',
            'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
   { name: 'savu', open: false,
-    keys: ['smokeFrom', 'smokeRate', 'smokeLife', 'smokeSize', 'smokeGrow', 'smokeRise'] },
+    keys: ['smokeFrom', 'smokeRate', 'smokeLife', 'smokeSize', 'smokeGrow',
+           'smokeRise', 'smokeC0', 'smokeA0', 'smokeC1', 'smokeA1'] },
   { name: 'raha ja tipit', open: false, graph: tipGraph,
     keys: ['fare', 'tip', 'tipTime',
            'tipCalm', 'fadeCalm', 'tipRush', 'fadeRush', 'tipHold', 'fadeHold'] },
@@ -3253,6 +3265,10 @@ const SLIDERS = [
   { key: 'smokeSize', label: 'savun koko px', min: 1, max: 16, step: 0.5 },
   { key: 'smokeGrow', label: 'savun kasvu px/s', min: 0, max: 50, step: 1 },
   { key: 'smokeRise', label: 'savun nousu px/s', min: -20, max: 80, step: 2 },
+  { key: 'smokeC0', label: 'savun väri täydessä', color: true },
+  { key: 'smokeA0', label: 'savun peitto täydessä', min: 0, max: 1, step: 0.05 },
+  { key: 'smokeC1', label: 'savun väri tyhjänä', color: true },
+  { key: 'smokeA1', label: 'savun peitto tyhjänä', min: 0, max: 1, step: 0.05 },
 ];
 
 let panelNote = '';
@@ -3379,12 +3395,34 @@ function buildPanel() {
     return row;
   };
 
-  const globalRow = s => sliderRow(s, () => BASE[s.key], v => {
-    BASE[s.key] = v;
+  /* Väririvi on sama rivi kuin säädin, mutta liu'un tilalla on selaimen oma
+     värivalitsin. Arvo on luku (0xRRGGBB) niin kuin kaikki muukin viritys;
+     vain syöte puhuu heksaa. */
+  const colorRow = (s, get, set) => {
+    const row = el('div', 'row');
+    const lab = el('label');
+    const val = el('b', null, hexOf(get()));
+    lab.append(document.createTextNode(s.label), val);
+    const input = el('input');
+    input.type = 'color';
+    input.value = hexOf(get());
+    input.addEventListener('pointerdown', snapUndo);
+    input.addEventListener('input', () => {
+      set(parseInt(input.value.slice(1), 16));
+      val.textContent = input.value;
+    });
+    row.append(lab, input);
+    return row;
+  };
+
+  const globalSet = key => v => {
+    BASE[key] = v;
     applyMul();
     saveTune();
     syncFoot();
-  });
+  };
+  const globalRow = s =>
+    (s.color ? colorRow : sliderRow)(s, () => BASE[s.key], globalSet(s.key));
 
   /* Kentän arvot tallentuvat samalla tavalla kuin globaalit. Tämä puuttui
      ensin, ja vika näkyi vasta sivun latauksessa: säädöt toimivat, mutta
