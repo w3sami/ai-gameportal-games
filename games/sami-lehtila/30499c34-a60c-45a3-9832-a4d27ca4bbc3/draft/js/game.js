@@ -70,6 +70,11 @@ const FLEET_COUNT = 3, FLEET_PRICE = 1000;
 const CLEAN_BONUS = 100;
 const ENTER_Y = H * 0.15;
 const HORN_R = 150;
+/* Kyydistä poistuva kävelee lähimmälle alustan reunalle ja häipyy siinä.
+   Kävelyvauhti on sama kuin kyytiin tullessa, jotta sama tyyppi liikkuu
+   molempiin suuntiin samalla tavalla. */
+const LEAVE_WALK = 95;                     // px/s
+const LEAVE_FADE = 16;                     // näin läheltä reunaa häivytys alkaa
 const SQ_FALL = 0.4, SQ_WAIT = 0.3, SQ_RISE = 0.7;
 const SQ_DUR = SQ_FALL + SQ_WAIT + SQ_RISE;
 const GRAVE_MAX = 10;
@@ -894,7 +899,7 @@ let thrustNow = 0;
 let dryT = 0, dryPhase = 0, dryFiring = false;
 let taxi, money, fuel, lives, job, served, gateOpen, runT, dead, deadT,
     msg, msgT, bits, lowWarn, fastWarn, padWarn, padBlink,
-    graves, squishes,
+    graves, squishes, leavers,
     wreck, bounces, titleT, cut, enterT, goT, levelMoney0, hornFx, levelDeaths,
     runDeaths = 0, runRuns = 0, carried = null, hyper = null, endTimer = 0;
 
@@ -936,7 +941,7 @@ function loadLevel(i) {
   served = {};
   for (const p of numbered()) served[p.id] = false;
   gateOpen = false;
-  graves = []; squishes = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
+  graves = []; squishes = []; leavers = []; bits = []; wreck = null; bounces = 0; hornFx = 0;
   msg = ''; msgT = 0; titleT = 0; goT = 0;
   clearWarnings();
   job = null;
@@ -1533,8 +1538,39 @@ function payRide(pad) {
   burst(taxi.x, taxi.y - 20, '#6fe3ff', 16, 160);
   sfx.pay();
   speakLine('thanks', kind);
+  leave(pad, kind);
   job = null;
   spawnJob(pad.id, 1.6);
+}
+
+/* Asiakas nousee ulos siltä kyljeltä jolla on lyhyempi matka reunalle, ja
+   kävelee pois. Se on sama kävely kuin kyytiin tullessa, toisin päin: ilman
+   sitä keikka päättyi siihen että asiakas katosi taksin sisään. Lähtöpaikka
+   pidetään alustalla, koska kävelijä piirretään alustan pintaan — reunan yli
+   mennyt seisoisi tyhjän päällä. */
+function leave(pad, kind) {
+  /* Kyljistä se jolla on enemmän tilaa: alustan reunaan pysäköity taksi
+     jättäisi toiselle puolelle kävelymatkaksi muutaman pikselin, eikä
+     poistumista ehtisi nähdä. */
+  const room = d => d < 0 ? (taxi.x - TW / 2 - 8) - pad.x : (pad.x + pad.w) - (taxi.x + TW / 2 + 8);
+  const dir = room(-1) > room(1) ? -1 : 1;
+  const x = clamp(taxi.x + dir * (TW / 2 + 8), pad.x + 6, pad.x + pad.w - 6);
+  leavers.push({ pad: pad.id, x, kind, walk: 0, dir, fade: 0 });
+}
+
+/* Häivytys lasketaan matkasta reunaan eikä kellosta, jotta kävely ja
+   katoaminen ovat sama liike: perillä oleva on jo läpinäkyvä. */
+function stepLeavers(dt) {
+  for (let i = leavers.length - 1; i >= 0; i--) {
+    const lv = leavers[i];
+    const p = padById(lv.pad);
+    if (!p) { leavers.splice(i, 1); continue; }
+    lv.x += lv.dir * LEAVE_WALK * dt;
+    lv.walk += dt * 9;
+    const gap = lv.dir < 0 ? lv.x - p.x : p.x + p.w - lv.x;
+    lv.fade = clamp(1 - gap / LEAVE_FADE, 0, 1);
+    if (gap <= 0) leavers.splice(i, 1);
+  }
 }
 
 function onLanded(pad) {
@@ -1714,6 +1750,7 @@ function movePads(dt) {
     if (job && job.from === p.id && job.phase === 'wait') job.x += dx;
     for (const g of graves) if (g.pad === p.id) g.x += dx;
     for (const s of squishes) if (s.pad === p.id) s.x += dx;
+    for (const lv of leavers) if (lv.pad === p.id) lv.x += dx;
   }
 }
 
@@ -1786,6 +1823,7 @@ function updateEnter(dt) {
   if (hornFx > 0) hornFx -= dt;
   stepBits(dt);
   stepSquish(dt);
+  stepLeavers(dt);
   movePads(dt);
 
   const d = ENTER_Y - taxi.y;
@@ -1813,6 +1851,7 @@ function update(dt) {
   if (hornFx > 0) hornFx -= dt;
   stepBits(dt);
   stepSquish(dt);
+  stepLeavers(dt);
   movePads(dt);
   if (level.update) level.update(dt, api());
 
@@ -2408,6 +2447,11 @@ function drawSquish(s) {
   ctx.restore();
 }
 
+function drawLeaver(lv) {
+  const p = padById(lv.pad);
+  if (p) drawAlien(lv.kind, lv.x, p.y, lv.walk, true, false, 1 - lv.fade);
+}
+
 function drawPassenger() {
   if (!job || job.phase !== 'wait' || !job.shown) return;
   const p = padById(job.from);
@@ -2788,6 +2832,7 @@ function draw(v) {
   for (const p of PADS) drawPad(p);
   for (const gr of graves) drawGrave(gr);
   for (const s of squishes) drawSquish(s);
+  for (const lv of leavers) drawLeaver(lv);
   drawPassenger();
   drawTaxi(v);
   drawHorn();
