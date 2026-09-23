@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790111698668,
+ "stamp": 1790166840414,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -123,6 +123,54 @@
      "arc": -23,
      "pow": 1.85,
      "trunk": 46
+    }
+   }
+  },
+  "Tulivuori": {
+   "own": {
+    "vuori": {
+     "top": 754,
+     "hw": 212,
+     "rim": 58,
+     "chw": 60,
+     "rough": 4,
+     "inset": 11,
+     "cx": 370
+    },
+    "purkaus": {
+     "freq": 0.6,
+     "warn": 2.6,
+     "grace": 3,
+     "nmin": 3,
+     "nmax": 8,
+     "vmin": 290,
+     "vmax": 430,
+     "amin": 4,
+     "amax": 18,
+     "spit": 0.3,
+     "size": 1,
+     "quake": 3
+    },
+    "savu": {
+     "rate": 9,
+     "boost": 6,
+     "life": 3.2,
+     "size": 19,
+     "rise": 40,
+     "drift": 12
+    },
+    "kipinät": {
+     "rate": 30,
+     "life": 0.8,
+     "size": 2.6,
+     "up": 200,
+     "spread": 90
+    },
+    "magman vana": {
+     "rate": 56,
+     "life": 0.3,
+     "size": 3.6,
+     "spread": 12
     }
    }
   }
