@@ -55,16 +55,21 @@ const FLOOR = H - 16;                 // kehäseinän lattia
 /* Penkat: y on yläreuna, h korkeus, x0…x1 leveys. Alaspäin levenevä kartio
    jonka tyvi on 130…590 — kuilut jäävät silloin 114 px leveiksi vielä
    alimmillaan, ja taksi on 54 px. Ahtaus ei ole tämän kentän vaikeus. */
+/* Penkkojen korkeudet ja reunat ovat tahallaan epätasaisia. Tasavälinen
+   pino näytti ensimmäisessä ajossa zikkuratilta eikä vuorelta — kivi ei ole
+   muurattu. Yksi ehto ne silti täyttävät: **kukin penkka on vähintään yhtä
+   leveä kuin sen yläpuolinen.** Ylöspäin kapeneva pino ei tee yhtään ulkonevaa
+   hyllyä, ja ulkoneva hylly olisi suoja jota kenttä ei ole luvannut. */
 const CONE = [
   { y: 430, h: 47, x0: 281, x1: 439, rim: true },   // kraatterin reunat
-  { y: 477, h: 47, x0: 264, x1: 456 },
-  { y: 524, h: 47, x0: 248, x1: 472 },
-  { y: 571, h: 47, x0: 231, x1: 489 },
-  { y: 618, h: 47, x0: 214, x1: 506 },
-  { y: 665, h: 47, x0: 197, x1: 523 },
-  { y: 712, h: 47, x0: 180, x1: 540 },
-  { y: 759, h: 47, x0: 164, x1: 556 },
-  { y: 806, h: 47, x0: 147, x1: 573 },
+  { y: 477, h: 41, x0: 262, x1: 458 },
+  { y: 518, h: 52, x0: 250, x1: 466 },
+  { y: 570, h: 38, x0: 234, x1: 492 },
+  { y: 608, h: 55, x0: 214, x1: 502 },
+  { y: 663, h: 44, x0: 198, x1: 526 },
+  { y: 707, h: 50, x0: 176, x1: 536 },
+  { y: 757, h: 40, x0: 166, x1: 558 },
+  { y: 797, h: 56, x0: 142, x1: 570 },
   { y: 853, h: 47, x0: 130, x1: 590 },
 ];
 
@@ -149,7 +154,7 @@ const ERUPT = {
 };
 
 const TRAIL = { rate: 56, life: 0.3, size: 3.6, spread: 12 };
-const SMOKE = { rate: 6, life: 2.8, size: 15, rise: 38, drift: 12, boost: 6 };
+const SMOKE = { rate: 9, life: 3.2, size: 19, rise: 40, drift: 12, boost: 6 };
 const SPARK = { rate: 30, life: 0.8, size: 2.6, up: 200, spread: 90 };
 
 /* Taksi on 54 px leveä: suurin pallo on sen kokoinen, pienin 70 % siitä.
@@ -462,13 +467,31 @@ function frond(ctx, f, t) {
   ctx.restore();
 }
 
+/* Rungot ja liaanit reunoilla. Ne ovat pelkkää pystyviivaa, mutta ne antavat
+   lehvästölle jotain mistä kasvaa — ilman niitä viuhkat leijuivat tyhjässä. */
+const TRUNKS = [];
+for (let i = 0; i < 7; i++) {
+  const left = i % 2 === 0;
+  TRUNKS.push({
+    x: left ? fbet(-10, 92) : fbet(W - 92, W + 10),
+    top: fbet(300, 560), w: fbet(9, 22), lean: fbet(-18, 18),
+  });
+}
+
 function jungle(ctx) {
   const t = clock();
 
-  // kaukaiset harjanteet — mitä kauempana, sitä lähempänä taivaan väriä
-  const tone = ['#22362f', '#1d3029', '#182821'];
+  /* Kaukaiset harjanteet — mitä kauempana, sitä lähempänä taivaan väriä.
+     Kukin saa vielä oman pystyliukunsa, jottei harjanteen laki ole viiva:
+     kova vaakaraja näytti horisontilta jonka takana ei ole mitään. */
+  const tone = ['#1f3029', '#1b2a24', '#16231e'];
   for (let i = 0; i < RIDGE.length; i++) {
-    ctx.fillStyle = tone[i];
+    const topY = 250 + i * 90;
+    const gr = ctx.createLinearGradient(0, topY, 0, topY + 260);
+    gr.addColorStop(0, tone[i] + '00');
+    gr.addColorStop(0.35, tone[i]);
+    gr.addColorStop(1, tone[i]);
+    ctx.fillStyle = gr;
     ctx.beginPath();
     ctx.moveTo(-40, H);
     for (const p of RIDGE[i]) ctx.lineTo(p.x, p.y);
@@ -477,37 +500,92 @@ function jungle(ctx) {
   }
 
   // utu harjanteiden päälle, jotta kivi erottuu niistä ilman epäilystä
-  const haze = ctx.createLinearGradient(0, 280, 0, 720);
-  haze.addColorStop(0, '#5c6f5a33');
-  haze.addColorStop(1, '#5c6f5a00');
+  const haze = ctx.createLinearGradient(0, 250, 0, 780);
+  haze.addColorStop(0, '#6a7f6633');
+  haze.addColorStop(1, '#6a7f6600');
   ctx.fillStyle = haze;
-  ctx.fillRect(0, 280, W, 440);
+  ctx.fillRect(0, 250, W, 530);
+
+  ctx.strokeStyle = '#142218';
+  for (const tr of TRUNKS) {
+    ctx.lineWidth = tr.w;
+    ctx.beginPath();
+    ctx.moveTo(tr.x, tr.top);
+    ctx.quadraticCurveTo(tr.x + tr.lean, (tr.top + H) / 2, tr.x + tr.lean * 1.6, H);
+    ctx.stroke();
+  }
 
   for (const f of FRONDS) frond(ctx, f, t);
 }
 
 /* ---- vuori */
 
+/* Kiven pinta arvotaan kerran laatikkoa kohti ja pidetään tallessa: halkeamat
+   eivät saa vilkkua ruudusta toiseen. Kaikki pysyy laatikon sisällä — siluetti
+   on se laatikko joka on myös törmäys, eikä koriste saa liata sitä. */
+const TEX = new Map();
+function texture(r) {
+  let t = TEX.get(r);
+  if (t) return t;
+  let n = Math.abs(Math.round(r.x * 7 + r.y * 13 + r.w)) % 99991 + 7;
+  const nx = () => ((n = (n * 1103515245 + 12345) >>> 0) / 4294967296);
+  const cracks = [];
+  for (let i = 0; i < Math.round(r.w / 34) + 2; i++) {
+    const x = r.x + 6 + nx() * Math.max(1, r.w - 12);
+    cracks.push({ x, y: r.y + 5 + nx() * Math.max(1, r.h - 12), h: 6 + nx() * (r.h - 12), lean: (nx() - 0.5) * 6 });
+  }
+  const scree = [];
+  for (let i = 0; i < Math.round(r.w / 26) + 2; i++) {
+    scree.push({ x: r.x + nx() * Math.max(1, r.w - 8), w: 4 + nx() * 12, d: nx() });
+  }
+  t = { cracks, scree };
+  TEX.set(r, t);
+  return t;
+}
+
 function rockBand(ctx, r, lit, glow) {
-  ctx.fillStyle = '#272320';
+  const t = texture(r);
+  ctx.fillStyle = '#2b2521';
   ctx.fillRect(r.x, r.y, r.w, r.h);
 
-  // yläpinta valoon: valo tulee ylävasemmalta, joten hyllyt hohtavat
-  ctx.fillStyle = lit;
-  ctx.fillRect(r.x, r.y, r.w, 5);
-  ctx.fillStyle = '#00000038';
-  ctx.fillRect(r.x, r.y + r.h - 4, r.w, 4);
-
-  // pystyjuovia kiveen — ne pysyvät laatikon sisällä, eivät levitä siluettia
   ctx.save();
   ctx.beginPath();
   ctx.rect(r.x, r.y, r.w, r.h);
   ctx.clip();
-  ctx.fillStyle = '#00000026';
-  for (let x = r.x + 9; x < r.x + r.w; x += 23) ctx.fillRect(x, r.y + 4, 3, r.h - 6);
+
+  /* Yläpinta valoon. Valo tulee ylävasemmalta, joten hyllyn vasen pää on
+     kirkkain ja oikea pää sammuu — muuten penkka näyttää lankulta. */
+  const top = ctx.createLinearGradient(r.x, 0, r.x + r.w, 0);
+  top.addColorStop(0, lit);
+  top.addColorStop(1, '#2f2823');
+  ctx.fillStyle = top;
+  ctx.fillRect(r.x, r.y, r.w, 6);
+  for (const g of t.scree) ctx.fillRect(g.x, r.y + 5, g.w, 2 + g.d * 4);
+
+  ctx.fillStyle = '#00000044';
+  ctx.fillRect(r.x, r.y + r.h - 5, r.w, 5);
+  ctx.fillStyle = '#ffffff0e';
+  ctx.fillRect(r.x, r.y + 6, 3, r.h - 10);          // vasen kylki valoon
+
+  ctx.strokeStyle = '#00000038';
+  ctx.lineWidth = 2;
+  for (const c of t.cracks) {
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.x + c.lean, Math.min(r.y + r.h - 2, c.y + c.h));
+    ctx.stroke();
+  }
+
   if (glow > 0.01) {
-    ctx.fillStyle = fade('#ff6a22', 0.1 + glow * 0.22);
-    for (let x = r.x + 16; x < r.x + r.w; x += 47) ctx.fillRect(x, r.y + 5, 2, r.h - 8);
+    ctx.strokeStyle = fade('#ff5a18', 0.18 + glow * 0.5);
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < t.cracks.length; i += 2) {
+      const c = t.cracks[i];
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(c.x + c.lean, Math.min(r.y + r.h - 2, c.y + c.h));
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
@@ -518,31 +596,44 @@ function mountain(ctx, heat) {
   ctx.save();
   if (q > 0.01) ctx.translate(nz(t, 41) * q, nz(t, 57) * q * 0.55);
 
-  // luolan pimeys ennen kiveä, jotta suu ei näytä aukolta viidakkoon
-  const dark = ctx.createLinearGradient(CAVE.x0, 0, CAVE.x1, 0);
-  dark.addColorStop(0, '#0d0b0a');
-  dark.addColorStop(1, '#050404');
-  ctx.fillStyle = dark;
+  /* Luolan pimeys ennen kiveä, jottei suu näytä aukolta viidakkoon. Perällä
+     palaa tankkausaseman valo: se on ainoa lämmin asia magman lisäksi, ja se
+     kertoo kauas että siellä on jotain. */
+  ctx.fillStyle = '#0a0908';
+  ctx.fillRect(CAVE.x0, CAVE.y0, CAVE.x1 - CAVE.x0, CAVE.y1 - CAVE.y0);
+  const lamp = ctx.createRadialGradient(320, 972, 6, 320, 972, 190);
+  lamp.addColorStop(0, '#ffcf8a2e');
+  lamp.addColorStop(1, '#ffcf8a00');
+  ctx.fillStyle = lamp;
   ctx.fillRect(CAVE.x0, CAVE.y0, CAVE.x1 - CAVE.x0, CAVE.y1 - CAVE.y0);
 
+  /* Penkat alhaalta ylös, jotta ylempi peittää alemman saumat. Hehku on
+     voimakkain kraatterilla ja sammuu tyveä kohti: kuumuus on ylhäällä. */
   for (let i = BANDS.length - 1; i >= 0; i--) {
     const b = BANDS[i];
-    const up = 1 - (b.y - CRATER_Y) / (BASE_Y - CRATER_Y);   // 1 = kraatterilla
-    rockBand(ctx, b, i < 2 ? '#4a4038' : '#3a332c', heat * up * up);
+    const up = Math.max(0, 1 - (b.y - CRATER_Y) / (BASE_Y - CRATER_Y));
+    rockBand(ctx, b, up > 0.72 ? '#57483c' : '#413830', heat * up * up);
   }
-  rockBand(ctx, BASE, '#3a332c', 0);
-  for (const s of SHELVES) rockBand(ctx, s, '#43392f', 0);
+  rockBand(ctx, BASE, '#413830', 0);
+  for (const s2 of SHELVES) rockBand(ctx, s2, '#4c4032', 0);
 
-  // kraatterin hehku: kuumuus näkyy kolossa ennen kuin mitään lentää
-  const g = 0.25 + heat * 0.75;
-  const gl = ctx.createRadialGradient(360, CRATER_Y + 18, 4, 360, CRATER_Y + 18, 84 + heat * 46);
-  gl.addColorStop(0, fade('#ffd27a', 0.55 * g));
-  gl.addColorStop(0.45, fade('#ff6a22', 0.4 * g));
+  /* Kraatteri: pohjalla lampi, jonka pinta elää omalla kellollaan, ja sen
+     päällä hehku joka kasvaa varoituksen mukana. Lampi on piirretty penkan
+     b1 yläpinnalle eli kiven päälle — kolo on oikea kolo, ei maalattu. */
+  const g = 0.3 + heat * 0.7;
+  const pw = PIT.x1 - PIT.x0;
+  const pool = ctx.createLinearGradient(0, CRATER_Y + 30, 0, CRATER_Y + 47);
+  pool.addColorStop(0, fade('#ffdc96', 0.55 + heat * 0.45));
+  pool.addColorStop(1, fade('#e0500f', 0.6 + heat * 0.4));
+  ctx.fillStyle = pool;
+  ctx.fillRect(PIT.x0 + 2, CRATER_Y + 30 + Math.sin(t * 1.3) * 1.5, pw - 4, 18);
+
+  const gl = ctx.createRadialGradient(360, CRATER_Y + 26, 4, 360, CRATER_Y + 26, 78 + heat * 64);
+  gl.addColorStop(0, fade('#ffcf7a', 0.5 * g));
+  gl.addColorStop(0.45, fade('#ff6a22', 0.34 * g));
   gl.addColorStop(1, '#ff6a2200');
   ctx.fillStyle = gl;
-  ctx.fillRect(PIT.x0 - 80, CRATER_Y - 60, (PIT.x1 - PIT.x0) + 160, 130);
-  ctx.fillStyle = fade('#ff7a2c', 0.45 + heat * 0.45);
-  ctx.fillRect(PIT.x0 + 3, CRATER_Y + 30, PIT.x1 - PIT.x0 - 6, 17);
+  ctx.fillRect(PIT.x0 - 96, CRATER_Y - 74, pw + 192, 150);
 
   ctx.restore();
 }
