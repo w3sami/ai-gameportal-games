@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790166840414,
+ "stamp": 1790167055748,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -138,13 +138,13 @@
      "cx": 370
     },
     "purkaus": {
-     "freq": 0.6,
+     "freq": 0.4,
      "warn": 2.6,
      "grace": 3,
      "nmin": 3,
      "nmax": 8,
      "vmin": 290,
-     "vmax": 430,
+     "vmax": 620,
      "amin": 4,
      "amax": 18,
      "spit": 0.3,
