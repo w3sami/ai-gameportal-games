@@ -1487,12 +1487,20 @@ function touchdown(pad, b) {
   const t2 = taxi;
   const ratio = landRatio(pad);
 
-  /* Kesken ulostulon oleva teline ei ole vatsalasku: alas tuleva teline osuu
-     pintaan ensin, ja loppumatkan alusta työntää taksia ylös (`taxi.landed`in
-     y lasketaan joka ruutu telineen pituudesta). Kolari on siis vain siitä
-     ettei telinettä ole eikä sitä olla laskemassa — nopeusrajat pätevät
-     erikseen alla, niin kuin ennenkin. */
-  if (t2.gear < 0.85 && !t2.gearWant) return crash();
+  /* Kesken ulostulon oleva teline kelpaa laskuksi **vain helpolla**: alas
+     tuleva teline osuu pintaan ensin ja loppumatkan alusta työntää taksia
+     ylös (`taxi.landed`in y lasketaan joka ruutu telineen pituudesta), joten
+     alustalle ei voi tuhota itseään telineen ajoituksella.
+
+     Muilla tasoilla teline on oltava ulkona ennen kosketusta, niin kuin
+     ennenkin. Sami 23.9.2026: *"vain helpoimmalla tasolla on kuolemattomuus
+     alustalla, helppoon se on just sopiva ei muihin."* Anteeksianto tuli
+     ensin kaikille, ja se oli vahinko eikä päätös: pyydetty asia oli se ettei
+     **kasvava teline** tapa (`gearPush`), ei se ettei laskun ajoituksella ole
+     väliä. `gearPush` onkin yhä kaikilla — se on geometriaa eikä lahja.
+
+     Nopeusrajat ovat erikseen alla, ja ne ovat samat kaikilla tasoilla. */
+  if (t2.gear < 0.85 && !(t2.gearWant && diff === 'easy')) return crash();
   if (b.x < pad.x - 2 || b.x + b.w > pad.x + pad.w + 2) return crash();
   if (ratio > 1) return crash();
 
