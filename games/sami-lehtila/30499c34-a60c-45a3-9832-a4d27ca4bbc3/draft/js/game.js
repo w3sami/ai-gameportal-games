@@ -3249,6 +3249,7 @@ const SAVE_FAIL = {
    siihen voi siis piirtää myös sen missä kohtaa kierrosta juuri nyt ollaan,
    ja säätimen liikuttaminen näkyy käyrässä samalla hetkellä. */
 let graphDraws = [];
+let fpsEl = null;                              // paneelin ruudunpäivitysluku
 
 function graphCanvas(draw) {
   const c = document.createElement('canvas');
@@ -3263,13 +3264,24 @@ function graphCanvas(draw) {
     try { draw(g, c.width, c.height); } catch (e) {}
   };
   graphDraws.push(paint);
+  c.repaint = paint;                           // editorille, joka haluaa näkyä heti
   paint();
   return c;
 }
 
-function paintGraphs() {
+/* Kuvaajat piirretään kahdeksan kertaa sekunnissa eikä joka ruudulla. Kolme
+   560 × 150 kangasta tyhjennettynä ja täytettynä kuusikymmentä kertaa
+   sekunnissa on paljon työtä säätimelle jota katsotaan silmällä — ja se työ
+   tehtiin ennen myös silloin kun pelissä oli kiire. Vedon aikana editori
+   piirtää itsensä heti (`repaint`), joten viive ei näy siellä missä sillä on
+   väliä. */
+let graphT = 0, fpsAvg = 60;
+function paintGraphs(now) {
   if (!graphDraws.length || panelEl.classList.contains('hidden')) return;
+  if (now - graphT < 120) return;
+  graphT = now;
   for (const d of graphDraws) d();
+  if (fpsEl) fpsEl.textContent = Math.round(fpsAvg) + ' fps';
 }
 
 /* Tippikäyrä: kolme profiilia, kukin laskeva suora omalta korkeudeltaan omaan
@@ -3387,6 +3399,16 @@ function pbutton(cls, text, fn) {
 function buildPanel() {
   panelEl.replaceChildren(el('h2', null, 'säädöt'));
   graphDraws = [];                             // vanhat kankaat irtosivat DOMista
+
+  /* Ruudunpäivitys näkyviin: raskas kenttä, tiheä lehvästö tai iso savumäärä
+     maksaa ruutuja, eikä sitä voi arvata katsomalla. Päivittyy kuvaajien
+     tahdissa eli kahdeksan kertaa sekunnissa. */
+  const fpsRow = el('div', 'row');
+  fpsEl = el('b', null, '');
+  const fpsLab = el('label');
+  fpsLab.append(document.createTextNode('ruudunpäivitys'), fpsEl);
+  fpsRow.append(fpsLab);
+  panelEl.append(fpsRow);
 
   const lvlRow = el('div', 'row');
   const lvlSeg = el('div', 'seg');
@@ -3584,6 +3606,7 @@ function buildPanel() {
       for (let j = from; j !== i + step; j += step) a[j] = v;
       last = i;
       val.textContent = String(Math.round(a[i]));
+      if (c.repaint) c.repaint();
     };
     c.addEventListener('pointerdown', ev => {
       snapUndo(); last = -1; c.setPointerCapture(ev.pointerId); at(ev);
@@ -4203,7 +4226,10 @@ function loop(now) {
   last = now;
   resize();
   padInput();
-  paintGraphs();                               // vain auki olevaan paneeliin
+  /* Liukuva keskiarvo: yksittäinen pitkä ruutu ei saa heilauttaa lukua, mutta
+     pysyvän notkahduksen pitää näkyä sekunnissa. */
+  if (dt > 0) fpsAvg += (1 / dt - fpsAvg) * 0.08;
+  paintGraphs(now);                            // vain auki olevaan paneeliin
 
   /* Tauolla piirretään sama ruutu uudestaan ilman päivitystä. Vain lennon
      aikana: valikossa ja välianimaatiossa taukoa ei ole mitä pitää. */
