@@ -103,6 +103,8 @@ const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
    kulkeva runko on juuri sitä: kapea kaistale jonka läpi näkyy. Kynnys jää,
    liuku ei. */
 const TURN_V = 70;
+/* Telineen ulos- ja sisäänmenon vauhti, 1/s: neljäsosasekunti koko matkaan. */
+const GEAR_RATE = 4;
 const PAD_LEAVE = 0.5;                     // näin kauan lähtöalusta vielä kannattelee
 const PAD_LEAVE_GAP = 8;                   // ...ja tätä lähempänä niin kauan kuin siinä ollaan
 const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
@@ -127,7 +129,7 @@ const numbered = () => PADS.filter(p => !p.fuel);
 const DEFAULTS = {
   grav: 250, thrust: 920,
   landVY: 215, landVX: 200,
-  bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62, hop: 110,
+  bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62, hopRate: 2,
   burn: 12, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
   /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
@@ -1000,7 +1002,7 @@ function beginEntry(showTitle) {
   taxi = {
     x: GATE.x + GATE.w / 2, y: -60,
     vx: 0, vy: 300, gear: 0, gearWant: false, landed: null,
-    face: -1,                                // nokka vasemmalle, ks. stepTurn
+    face: -1, spring: 0,                     // nokka vasemmalle, ks. stepTurn
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1033,7 +1035,7 @@ function resetTaxi() {
   taxi = {
     x: p.x + p.w / 2, y: p.y - (TH / 2 + GEAR),
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
-    face: -1,
+    face: -1, spring: 0,
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1996,7 +1998,12 @@ function update(dt) {
 
   stepTurn();
   const gearWas = taxi.gear;
-  taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * 4, dt * 4);
+  /* Ponnistuksessa jalat aukeavat nopeammin kuin tavallisesti; kun ne ovat
+     auki, ponnistus on ohi ja sama liike jatkuu sisäänpäin tavallisella
+     vauhdilla. */
+  const gearRate = GEAR_RATE * (taxi.spring ? P.hopRate : 1);
+  taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * gearRate, dt * gearRate);
+  if (taxi.spring && taxi.gear >= 1) { taxi.spring = 0; taxi.gearWant = false; }
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
   else { if (taxi.gear > gearWas) gearPush(gearWas); carryOff(dt); }
 
@@ -2096,45 +2103,58 @@ function leavePad() {
      työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
      oikein. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
   /* Ponnistus: teline suoristuu ja työntää taksin irti pinnasta, ja vetäytyy
-     samalla sisään. Sami 23.9.2026: *"ylös lähtiessä telineet pompauttaa
+     heti perään sisään. Sami 23.9.2026: *"ylös lähtiessä telineet pompauttaa
      meidät ylös ja sitten vetäytyy heti takasin ja ohjattavuus on jo heti
      käytössä."*
 
-     Kolme osaa, ja jokainen tekee eri asian:
-       - `gear = 1` suoristaa jalat siksi hetkeksi kun ne työntävät. Kyykystä
-         lähtevällä ne ovat sisällä, eikä sisäänvedetty teline voi ponnistaa
-         mihinkään.
-       - nosto on `bounceLift` **plus** se matka jonka jalat suoristuivat:
-         seisova taksi nousee jalkojensa mitan, niin kuin alustallakin.
-       - `gearWant = false` vetää ne takaisin heti, joten sivusuuttimet ovat
-         käytössä (`activeThrust` sammuttaa ne vain telineen ollessa ulkona)
-         jo ennen kuin nousu on ohi.
+     **Ponnistus on animaatio eikä hyppäys.** Ensimmäinen versio suoristi jalat
+     yhdessä ruudussa, ja Sami: *"liian nopea, pitää mennä useampi frame kun
+     jalat aukeaa, ihan se perusanimaatio vauhti riittää tai ... mx 2x."*
+     Nyt jalat suoristuvat telineen omalla vauhdilla kerrottuna `hopRate`llä,
+     ja koska suoja juuri jätettyyn alustaan on vielä voimassa (`carryOff`),
+     ne työntävät taksia edellään samalla kun ne aukeavat.
 
-     `hop` on vauhtina eikä paikkana, koska paikka loppuu heti: ponnistus
-     tuntuu vasta kun se jatkuu. Nosto tarkistetaan törmäyksiltä ja kokeillaan
-     kahdesti — koko ponnistus ensin ja pelkkä `bounceLift` sitten — koska
-     alusta voi olla matalan katon alla (Moonshotin lohkot, Highrisen ylärivi)
-     ja tarkistamaton nosto työntäisi taksin seinään juuri silloin kun pelaaja
-     teki kaiken oikein. Jätetty alusta ei ole este, se on se josta noustiin. */
+     **Lähtövauhti on jalkojen suoristumisvauhti**, ei oma lukunsa: 14 px
+     jaettuna suoristumisajalla. Kaksi erillistä säädintä olisi kaksi lukua
+     jotka pitää muistaa pitää samassa mielessä, ja väärässä suhteessa taksi
+     joko karkaa jaloiltaan tai jää roikkumaan niiden varaan. Yksi säädin, ja
+     0 ottaa ponnistuksen kokonaan pois.
+
+     Nosto ja vauhti tarkistetaan törmäyksiltä: alusta voi olla matalan katon
+     alla (Moonshotin lohkot, Highrisen ylärivi), eikä peli saa heittää taksia
+     kattoon omasta aloitteestaan. Siellä nousu jää pelaajan oman kaasun
+     varaan. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
   const y0 = taxi.y, gear0 = taxi.gear;
-  taxi.gear = 1;
-  taxi.gearWant = false;
   const fits = () => {
     const b = taxiBox(taxi);
     for (const r of solids()) if (r !== p && hit(b, r)) return false;
     return true;
   };
-  taxi.y = y0 - P.bounceLift - GEAR * (1 - gear0);
-  let sprung = true;
-  if (!fits()) {
-    sprung = false;
-    taxi.y = y0 - P.bounceLift;
-    if (!fits()) taxi.y = y0;
+
+  taxi.y = y0 - P.bounceLift;
+  if (!fits()) taxi.y = y0;
+
+  if (P.hopRate > 0) {
+    /* Jalat suoristuvat vaikka tilaa olisi vain sen verran: se palauttaa
+       taksin seisomakorkeuteen, joka on varmasti mahtunut — sieltä on
+       laskeuduttu — ja jättää telineen ulos siltä varalta että taksi vajoaa
+       takaisin. */
+    taxi.spring = 1;
+    taxi.gearWant = true;                    // jalat auki, ja sen jälkeen heti kiinni
+
+    /* Vauhti sen sijaan vain jos koko ponnistus mahtuu: nosto ja se matka
+       jonka jalat vielä suoristuvat. Se on se osa joka veisi kattoon, eikä
+       peli saa heittää taksia sinne omasta aloitteestaan. Mitataan siltä
+       paikalta jossa taksi ponnistuksen päätteeksi olisi. */
+    const yNow = taxi.y;
+    taxi.y = y0 - P.bounceLift - GEAR * (1 - gear0);
+    taxi.gear = 1;
+    const launch = fits();
+    taxi.y = yNow; taxi.gear = gear0;
+
+    const v = GEAR * GEAR_RATE * P.hopRate;  // px/s, eli juuri jalkojen vauhti
+    if (launch && taxi.vy > -v) taxi.vy = -v;
   }
-  /* Vauhti annetaan vain jos koko ponnistus mahtui. Katon alla jalat eivät
-     suoristu loppuun asti, eikä peli saa heittää taksia kattoon omasta
-     aloitteestaan — nousu on siellä pelaajan oman kaasun varassa. */
-  if (sprung && taxi.vy > -P.hop) taxi.vy = -P.hop;
 }
 
 /* Alas tuleva teline työntää taksia, ei taksia pintaan.
@@ -3135,7 +3155,7 @@ function tipGraph(ctx, w, h) {
 const SLIDER_GROUPS = [
   { name: 'lento', open: true, keys: ['grav', 'thrust', 'stick'] },
   { name: 'laskeutuminen', open: false,
-    keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep', 'hop'] },
+    keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep', 'hopRate'] },
   { name: 'bensa', open: true,
     keys: ['burn', 'refuel', 'price', 'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
   { name: 'savu', open: false,
@@ -3152,7 +3172,7 @@ const SLIDERS = [
   { key: 'landVX', label: 'lasku vx max', min: 10, max: 200, step: 5 },
   { key: 'bounceFrom', label: 'pomppu alkaa x', min: 0.2, max: 0.95, step: 0.05 },
   { key: 'bounceLift', label: 'pompun nosto px', min: 2, max: 30, step: 1 },
-  { key: 'hop', label: 'lähdön ponnistus px/s', min: 0, max: 300, step: 10 },
+  { key: 'hopRate', label: 'ponnistus × telineen vauhti', min: 0, max: 3, step: 0.25 },
   { key: 'bounceKeep', label: 'pompun jäävä vauhti', min: 0.2, max: 0.9, step: 0.02 },
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
   { key: 'refuel', label: 'tankkaus / s', min: 5, max: 80, step: 1 },
