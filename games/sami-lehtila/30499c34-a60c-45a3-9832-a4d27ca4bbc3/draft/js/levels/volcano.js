@@ -149,6 +149,7 @@ const ERUPT = {
   nmin: 1, nmax: 4,   // palloja purkauksessa
   vmin: 290, vmax: 430,
   amin: 4, amax: 18,  // lähtökulma pystystä, astetta
+  spit: 0.3,          // purkauksen sisäinen sylkyväli s
   size: 1,
   quake: 3,           // vuoren tärinä px — vain piirto, ks. sääntö 3
 };
@@ -176,7 +177,7 @@ const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
 const between = (a, b) => a + rnd() * (b - a);
 
 const S = {
-  balls: [], bits: [], smoke: [],
+  balls: [], bits: [], smoke: [], pending: [],
   walls: null, gscale: 1, grav: GRAV_REF,
   phase: 'idle', t: 0, wait: 0, quake: 0, jolt: 0, wasDead: false,
   smokeT: 0, sparkT: 0,
@@ -227,9 +228,12 @@ function launch() {
   });
 }
 
+/* Pallot eivät lähde samalla ruudulla. Ensimmäisessä ajossa ne lähtivät, ja
+   silloin purkaus oli yksi köntti joka hajosi vasta ilmassa — vuori sylkee,
+   se ei ammu haulikolla. Jokainen saa oman pienen viiveensä. */
 function blow() {
   const n = Math.round(between(ERUPT.nmin, ERUPT.nmax + 0.49));
-  for (let i = 0; i < n; i++) launch();
+  for (let i = 0; i < n; i++) S.pending.push(i === 0 ? 0 : between(0.04, ERUPT.spit) * i);
   S.jolt = 1;
 }
 
@@ -268,6 +272,7 @@ function sparkle(dt, heat) {
    Muuten seitsemästä armonsekunnista olisi kulunut kolme kuolinanimaatioon
    ennen kuin pelaaja on edes ruudulla. */
 function calm() {
+  S.pending.length = 0;
   for (let i = S.balls.length - 1; i >= 0; i--) kill(S.balls[i], 8);
   S.phase = 'idle';
   S.wait = ERUPT.grace;
@@ -313,6 +318,11 @@ function update(dt, api) {
 
   puffSmoke(dt, heat);
   sparkle(dt, heat);
+
+  for (let i = S.pending.length - 1; i >= 0; i--) {
+    S.pending[i] -= dt;
+    if (S.pending[i] <= 0) { S.pending.splice(i, 1); launch(); }
+  }
 
   /* ---- pallot */
   for (let i = S.balls.length - 1; i >= 0; i--) {
@@ -388,6 +398,7 @@ function init(api) {
   }
   S.walls = api.walls;
   S.balls.length = 0;
+  S.pending.length = 0;
   S.bits.length = 0;
   S.smoke.length = 0;
   S.phase = 'idle';
@@ -694,11 +705,13 @@ function ballDraw(ctx, b) {
   /* Jäähtynyttä kuorta laikkuina. Math.max jokaiseen säteeseen: kutistuva
      kaari on piirtosilmukan tappaja, koska negatiivinen säde on canvasilla
      poikkeus eikä nolla. Ks. README. */
-  ctx.fillStyle = '#3a211966';
-  for (let i = 0; i < 3; i++) {
-    const a = b.spin * t + i * 2.1;
+  ctx.fillStyle = '#41231a55';
+  for (let i = 0; i < 7; i++) {
+    const a = b.spin * t + i * 0.92;
+    const d = 0.18 + ((i * 37) % 11) / 18;
     ctx.beginPath();
-    ctx.arc(Math.cos(a) * b.r * 0.42, Math.sin(a) * b.r * 0.42, Math.max(1, b.r * 0.24), 0, 6.3);
+    ctx.ellipse(Math.cos(a) * b.r * d, Math.sin(a * 1.3) * b.r * d,
+      Math.max(0.8, b.r * (0.08 + (i % 3) * 0.04)), Math.max(0.6, b.r * 0.07), a, 0, 6.3);
     ctx.fill();
   }
   ctx.restore();
@@ -755,6 +768,7 @@ export const volcano = {
         { key: 'vmax', label: 'nopeus max', min: 160, max: 700, step: 10 },
         { key: 'amin', label: 'kulma min astetta', min: 0, max: 45, step: 1 },
         { key: 'amax', label: 'kulma max astetta', min: 2, max: 60, step: 1 },
+        { key: 'spit', label: 'sylkyväli purkauksessa s', min: 0, max: 1.2, step: 0.02 },
         { key: 'size', label: 'pallon koko', min: 0.5, max: 1.6, step: 0.05 },
         /* Tärinä on piirron siirto eikä fysiikkaa, ja siksi sen katto on
            matala: 5 px on jo se raja jossa piirretty kivi ja sen törmäys
