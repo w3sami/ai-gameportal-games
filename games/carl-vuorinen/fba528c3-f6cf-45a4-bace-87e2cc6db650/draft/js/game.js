@@ -431,6 +431,47 @@ const CAVE_IN = { top:'#0a0b10', bottom:'#030305' };
 const inRockZone = (x, y) => (L.rockZones||[]).some(z => { const dx = (x-z.x)/z.r, dy = (y-z.y)/(z.ry||z.r); return dx*dx+dy*dy <= 1; });
 const mixHex = (a, b, k) => { const A = parseInt(a.slice(1),16), B = parseInt(b.slice(1),16), ch = sh => Math.round(((A>>sh)&255)*(1-k)+((B>>sh)&255)*k); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
 
+// Backdrop glows: big soft radial lights in level space, drifting at the backdrop's parallax (bf). Painting five or six
+// full-screen radial gradients every frame cost as much as all the terrain together, so each set is baked once into a
+// small canvas laid out in parallax space (level px × Z × bf) and blitted as one scaled image. Source-over is associative,
+// so glows composited among themselves first and then over the sky come out as they did painted one by one. A jungle
+// level keeps a second, cave plane for the crossfade inside rock zones. Rebaked when the level, theme or zoom changes.
+const GLOWS = (() => {
+  let key = '', planes = [];
+  function bake(glows, bf, am){
+    const R = g => g.r*(L.w+L.h)*0.5*Z*0.7, P = glows.map(g => ({g, x:g.u*L.w*Z*bf, y:g.v*L.h*Z*bf, r:R(g)}));
+    const x0 = Math.min(...P.map(p => p.x-p.r)), y0 = Math.min(...P.map(p => p.y-p.r)), x1 = Math.max(...P.map(p => p.x+p.r)), y1 = Math.max(...P.map(p => p.y+p.r));
+    // Painted at twice the kept resolution and halved, so the gradients' own dither averages out instead of being
+    // blown up into a visible mottle when the plane is stretched to the screen.
+    const s = Math.min(0.25, 1024/Math.max(x1-x0, y1-y0)), W = Math.ceil((x1-x0)*s), H = Math.ceil((y1-y0)*s);
+    const big = mkCanvas(2*W, 2*H), x = big.getContext('2d');
+    x.scale(2*s, 2*s); x.translate(-x0, -y0);
+    for (const p of P){                                           // the stops the live version used; am is baked in, not applied as alpha later,
+      const a0 = parseFloat(p.g.c.match(/[\d.]+\)$/)[0]), rg = x.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);   // because overlapping glows do not scale linearly
+      rg.addColorStop(0, p.g.c.replace(/[\d.]+\)$/, (a0*am).toFixed(3)+')')); rg.addColorStop(0.55, p.g.c.replace(/[\d.]+\)$/, (0.12*am).toFixed(3)+')')); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = rg; x.fillRect(p.x-p.r, p.y-p.r, 2*p.r, 2*p.r);
+    }
+    const c = mkCanvas(W, H), cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(big, 0, 0, W, H); big.width = big.height = 0;
+    return {c, x0, y0, s};
+  }
+  function draw(pl, bf, am){
+    if (am < 0.02) return;
+    const ox = pl.x0 - cam.x*Z*bf + vw/2*(1-bf), oy = pl.y0 - cam.y*Z*bf + vh/2*(1-bf), w = pl.c.width/pl.s, h = pl.c.height/pl.s;
+    const ix0 = Math.max(0, ox), iy0 = Math.max(0, oy), ix1 = Math.min(vw, ox+w), iy1 = Math.min(vh, oy+h);
+    if (ix1 <= ix0 || iy1 <= iy0) return;
+    ctx.globalAlpha = am;
+    ctx.drawImage(pl.c, (ix0-ox)*pl.s, (iy0-oy)*pl.s, (ix1-ix0)*pl.s, (iy1-iy0)*pl.s, ix0, iy0, ix1-ix0, iy1-iy0);
+    ctx.globalAlpha = 1;
+  }
+  return (jb, k2) => {
+    const k = li + '|' + Z + '|' + (STYLE === THEMES.cave ? 'c' : 'j');
+    if (k !== key){ key = k; for (const p of planes) p.c.width = p.c.height = 0;
+      planes = [bake(jb.glows, jb.f, 1)]; if (STYLE !== THEMES.cave) planes.push(bake(THEMES.cave.bg.glows, jb.f, 0.6)); }
+    draw(planes[0], jb.f, 1-k2);                                  // exact at either end of the crossfade, a close blend between
+    if (k2 > 0 && planes[1]) draw(planes[1], jb.f, k2);
+  };
+})();
+
 // ---- Wind and gas: streaks along the push, with leaves, grit and dust riding them ----
 // The field's strength is the force's own envelope (forceLevel), read a beat early so the air visibly stirs just before it
 // pushes — what you see is what the rocket is about to get. Everything else here comes off the wall clock and a per-streak
@@ -590,18 +631,10 @@ function render(dt){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   // inside a rock zone the backdrop crossfades to the cave theme's, so a cave carved into a jungle level feels like a cave
   caveK += ((inRockZone(ship.x, ship.y) ? 1 : 0) - caveK)*(1-Math.exp(-3*dt));
-  const cb = THEMES.cave.bg, jb = STYLE.bg, k2 = STYLE === THEMES.cave ? 0 : caveK;
+  const jb = STYLE.bg, k2 = STYLE === THEMES.cave ? 0 : caveK;
   const vg = ctx.createLinearGradient(0,0,0,vh); vg.addColorStop(0,mixHex(jb.top, CAVE_IN.top, k2)); vg.addColorStop(1,mixHex(jb.bottom, CAVE_IN.bottom, k2));   // darker than the cave chapter itself: a hole in the daylight
   ctx.fillStyle = vg; ctx.fillRect(0,0,vw,vh);
-  const glow = (g, am) => {
-    const bf = jb.f, gx = (g.u*L.w-cam.x)*Z*bf + vw/2*(1-bf), gy = (g.v*L.h-cam.y)*Z*bf + vh/2*(1-bf), rad = g.r*(L.w+L.h)*0.5*Z*0.7;
-    if (am < 0.02 || gx < -rad || gx > vw+rad || gy < -rad || gy > vh+rad) return;
-    const a0 = parseFloat(g.c.match(/[\d.]+\)$/)[0]), c0 = g.c.replace(/[\d.]+\)$/, (a0*am).toFixed(3)+')');
-    const rg = ctx.createRadialGradient(gx,gy,0,gx,gy,rad); rg.addColorStop(0,c0); rg.addColorStop(0.55,g.c.replace(/[\d.]+\)$/,(0.12*am).toFixed(3)+')')); rg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle = rg; ctx.fillRect(Math.max(0,gx-rad),Math.max(0,gy-rad),Math.min(vw,gx+rad)-Math.max(0,gx-rad),Math.min(vh,gy+rad)-Math.max(0,gy-rad));
-  };
-  for (const g of jb.glows) glow(g, 1-k2);
-  if (k2 > 0) for (const g of cb.glows) glow(g, k2*0.6);
+  GLOWS(jb, k2);
   WALLS.draw(sx, sy);
   if (hazards.length){
     ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
