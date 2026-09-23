@@ -92,6 +92,12 @@ const END_CARD_DELAY = 2600;
 const LAND_WARN_FROM = 0.75;               // varoitus jo ennen laskurajaa
 const PAD_WARN_LEAD = 1.0;                 // sekuntia pudotusta ennen kuin alusta vilkkuu
 const PAD_WARN_NEAR = 110;                 // ...tai ainakin näin läheltä
+/* Nokan kääntyminen kulkusuuntaan. `TURN_V` on se vauhti joka uuteen suuntaan
+   pitää kertyä ennen kuin taksi kääntyy, ja se on tässä juuri välkkymisen
+   takia: ilman kynnystä nokka heilahtaisi joka kerta kun vauhti käy nollan
+   kautta. `TURN_RATE` on itse käännöksen nopeus, eli peruutus näkyy hetken
+   ennen kuin taksi on kääntynyt ympäri. Sami 23.9.2026. */
+const TURN_V = 70, TURN_RATE = 6;
 const PAD_LEAVE = 0.5;                     // näin kauan lähtöalusta vielä kannattelee
 const PAD_LEAVE_GAP = 8;                   // ...ja tätä lähempänä niin kauan kuin siinä ollaan
 const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
@@ -128,6 +134,9 @@ const DEFAULTS = {
   tipRush: 1.85, fadeRush: 2.4,
   tipHold: 1.35, fadeHold: 1.4,
   stick: 2.05,
+  /* Tyhjenevän tankin savuvana. Ks. stepSmoke. */
+  smokeFrom: 25, smokeRate: 15, smokeLife: 1.7, smokeSize: 5,
+  smokeGrow: 15, smokeRise: 16,
 };
 const DEFAULT_SIDE = 'left';
 const P = Object.assign({}, DEFAULTS);
@@ -981,6 +990,7 @@ function beginEntry(showTitle) {
   taxi = {
     x: GATE.x + GATE.w / 2, y: -60,
     vx: 0, vy: 300, gear: 0, gearWant: false, landed: null,
+    face: -1, turn: -1,                      // nokka vasemmalle, ks. stepTurn
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1013,6 +1023,7 @@ function resetTaxi() {
   taxi = {
     x: p.x + p.w / 2, y: p.y - (TH / 2 + GEAR),
     vx: 0, vy: 0, gear: 1, gearWant: true, landed: p,
+    face: -1, turn: -1,
   };
   fuel = FUEL_MAX;
   dead = false; deadT = 0; wreck = null; bounces = 0;
@@ -1818,6 +1829,52 @@ function warnPad() {
   return best;
 }
 
+/* Taksi kääntyy sinne minne se menee. `face` on tavoite (+1 oikealle) ja
+   `turn` sen animoitu arvo, joka on suoraan piirron x-skaala: käännös kulkee
+   litteän kautta, niin kuin kylkeään kääntävä lautanen. */
+/* Tyhjenevä tankki näkyy ulos: viimeisellä neljänneksellä taksi jättää
+   savuvanan, harmaana ensin ja mustana lopuksi. Sami 23.9.2026:
+   *"ruvetaan jättämään harmaata savuvanaa ku bensa tippuu sinne viimeselle
+   20-25% ja ihan mustaa sit lopuks."*
+
+   Mittari kertoo saman luvun tarkemmin, mutta se on ruudun laidassa ja katse
+   on taksissa. Savu on siis toinen tapa sanoa sama asia siellä missä pelaaja
+   katsoo — ja se näkyy myös siitä miten pitkä vana jää, eli kuinka lujaa on
+   menty.
+
+   Kaikki kuusi lukua ovat säätöpaneelissa (`savu`), koska tiheys ja koko ovat
+   makuasioita joita ei löydä muuten kuin ajamalla. Savun väri ei ole säädin:
+   se on tankin tila, ja juuri se on koko pointti.
+
+   Hiukkanen on tavallinen `bits`-hiutale kolmella lisäkentällä: oma
+   haipumisnopeus (`fade`), kasvu (`grow`) ja läpikuultavuus (`a`). Ilman niitä
+   savu olisi räjähdyksen sirpale — lyhyt, kutistumaton ja täysin peittävä. */
+let smokeT = 0;
+function stepSmoke(dt, throttle) {
+  const from = FUEL_MAX * P.smokeFrom / 100;
+  if (dead || from <= 0 || fuel > from) { smokeT = 0; return; }
+
+  const k = clamp(1 - fuel / from, 0, 1);         // 0 kynnyksellä, 1 tyhjänä
+  smokeT += dt * P.smokeRate * (0.3 + 0.7 * throttle) * (0.4 + 0.6 * k);
+  while (smokeT >= 1) {
+    smokeT -= 1;
+    const g = Math.round(150 - 138 * k);          // harmaasta melkein mustaan
+    bits.push({
+      x: taxi.x + rand(-9, 9), y: taxi.y + TH / 2 - 3,
+      vx: taxi.vx * 0.12 + rand(-9, 9), vy: -P.smokeRise + rand(-7, 7),
+      g: 0, life: 1, fade: 1 / Math.max(0.1, P.smokeLife),
+      color: `rgb(${g},${g},${g})`, a: 0.55,
+      r: P.smokeSize * rand(0.7, 1.3), grow: P.smokeGrow,
+    });
+  }
+}
+
+function stepTurn(dt) {
+  if (taxi.vx > TURN_V) taxi.face = 1;
+  else if (taxi.vx < -TURN_V) taxi.face = -1;
+  taxi.turn += clamp(taxi.face - taxi.turn, -dt * TURN_RATE, dt * TURN_RATE);
+}
+
 function warnings(dt) {
   if (fuel < FUEL_LOW && fuel > 0 && !dead) {
     lowWarn -= dt;
@@ -1911,6 +1968,7 @@ function update(dt) {
     return;
   }
 
+  stepTurn(dt);
   const gearWas = taxi.gear;
   taxi.gear += clamp((taxi.gearWant ? 1 : 0) - taxi.gear, -dt * 4, dt * 4);
   if (taxi.landed) taxi.y = taxi.landed.y - (TH / 2 + GEAR * taxi.gear);
@@ -1940,6 +1998,7 @@ function update(dt) {
     if (had > 0 && fuel <= 0) say(t('msg.dry'), 3);
   }
   jetLevel(throttle);
+  stepSmoke(dt, throttle);
 
   taxi.vx += v.x * P.thrust * dt;
   taxi.vy += v.y * P.thrust * dt + P.grav * dt;
@@ -2161,7 +2220,8 @@ function stepBits(dt) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.vy += (b.g === undefined ? 200 : b.g) * dt;
     b.vx *= Math.pow(0.15, dt);
-    b.life -= dt * 1.3;
+    if (b.grow) b.r += b.grow * dt;
+    b.life -= dt * (b.fade === undefined ? 1.3 : b.fade);
     if (b.life <= 0) bits.splice(i, 1);
   }
 }
@@ -2523,6 +2583,7 @@ function drawTaxi(v) {
   const ts = typeof level.taxiScale === 'number' ? level.taxiScale : 1;
   if (ts <= 0.01) return;
   const t2 = taxi, gl = GEAR * t2.gear;
+  const NOZ = 7;                             // suuttimen pituus kyljestä ulos
   ctx.save();
   ctx.translate(t2.x, t2.y);
   if (ts !== 1) ctx.scale(ts, ts);
@@ -2543,8 +2604,33 @@ function drawTaxi(v) {
   const j = () => rand(0.8, 1.2);
   if (v.y < -0.05) { const l = 26 * -v.y * j(); flame(-14, TH / 2, 0, l); flame(14, TH / 2, 0, l); }
   if (v.y > 0.05) flame(0, -TH / 2, Math.PI, 18 * v.y * j());
-  if (v.x > 0.05) flame(-TW / 2, 0, -Math.PI / 2, 20 * v.x * j());
-  if (v.x < -0.05) flame(TW / 2, 0, Math.PI / 2, 20 * -v.x * j());
+  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, -Math.PI / 2, 20 * v.x * j());
+  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, Math.PI / 2, 20 * -v.x * j());
+
+  /* Sivusuuttimet. Ne ovat olleet aina liekissä muttei rungossa — Sami
+     23.9.2026: *"sivuthrustereiden puuttuminen on häirinnyt aina, molemmissa
+     sivuissa pitäis olla."* Suuttimet ovat kiinteä osa runkoa eivätkä käänny
+     nokan mukana: kumpikin kylki työntää omaan suuntaansa, ja liekki tulee
+     siitä suuttimesta joka työntää. */
+  const nozzle = (sx, hot) => {
+    ctx.save();
+    ctx.scale(sx, 1);
+    ctx.fillStyle = '#9fb0d8';
+    ctx.beginPath();
+    ctx.moveTo(TW / 2 - 4, -6);
+    ctx.lineTo(TW / 2 + NOZ, -8);
+    ctx.lineTo(TW / 2 + NOZ, 8);
+    ctx.lineTo(TW / 2 - 4, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = hot ? '#ffe3a6' : '#3b4460';
+    if (hot) { ctx.shadowColor = '#ffb355'; ctx.shadowBlur = 10; }
+    ctx.fillRect(TW / 2 + NOZ - 2.4, -6.5, 2.4, 13);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  };
+  nozzle(1, v.x < -0.05);
+  nozzle(-1, v.x > 0.05);
 
   if (gl > 0.5) {
     ctx.strokeStyle = '#9fb0d8'; ctx.lineWidth = 3; ctx.lineCap = 'round';
@@ -2559,7 +2645,15 @@ function drawTaxi(v) {
     ctx.stroke();
   }
 
+  /* Runko kääntyy, suuttimet ja teline eivät: ne ovat samat kummallakin
+     kyljellä, ja jalat ovat siellä missä maa on. Nollaskaala on canvasilla
+     rappeutunut muunnos, joten litteinkin hetki jätetään kapeaksi kaistaksi
+     eikä nollaksi. */
+  ctx.save();
+  const sx = -(t2.turn === undefined ? -1 : t2.turn);
+  ctx.scale(Math.abs(sx) < 0.08 ? (sx < 0 ? -0.08 : 0.08) : sx, 1);
   taxiShape(TW, TH, false);
+  ctx.restore();
 
   const busy = job && job.phase === 'aboard';
   ctx.fillStyle = busy ? '#ff5d7a' : '#9fb0d8';
@@ -2868,7 +2962,7 @@ function draw(v) {
   drawWreck();
 
   for (const b of bits) {
-    ctx.globalAlpha = clamp(b.life, 0, 1);
+    ctx.globalAlpha = clamp(b.life, 0, 1) * (b.a === undefined ? 1 : b.a);
     ctx.fillStyle = b.color;
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.3); ctx.fill();
   }
@@ -2978,6 +3072,8 @@ const SLIDER_GROUPS = [
     keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep'] },
   { name: 'bensa', open: true,
     keys: ['burn', 'refuel', 'price', 'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
+  { name: 'savu', open: false,
+    keys: ['smokeFrom', 'smokeRate', 'smokeLife', 'smokeSize', 'smokeGrow', 'smokeRise'] },
   { name: 'raha ja tipit', open: false, graph: tipGraph,
     keys: ['fare', 'tip', 'tipTime',
            'tipCalm', 'fadeCalm', 'tipRush', 'fadeRush', 'tipHold', 'fadeHold'] },
@@ -3008,6 +3104,12 @@ const SLIDERS = [
   { key: 'tipHold', label: 'kaasu: tippi ×', min: 0.5, max: 3, step: 0.05 },
   { key: 'fadeHold', label: 'kaasu: lasku ×', min: 0.2, max: 4, step: 0.1 },
   { key: 'stick', label: 'sauvan herkkyys', min: 0.2, max: 2.5, step: 0.05 },
+  { key: 'smokeFrom', label: 'savu alkaa tankista %', min: 0, max: 60, step: 1 },
+  { key: 'smokeRate', label: 'savua / s', min: 0, max: 40, step: 1 },
+  { key: 'smokeLife', label: 'savun kesto s', min: 0.2, max: 5, step: 0.1 },
+  { key: 'smokeSize', label: 'savun koko px', min: 1, max: 16, step: 0.5 },
+  { key: 'smokeGrow', label: 'savun kasvu px/s', min: 0, max: 50, step: 1 },
+  { key: 'smokeRise', label: 'savun nousu px/s', min: -20, max: 80, step: 2 },
 ];
 
 let panelNote = '';
