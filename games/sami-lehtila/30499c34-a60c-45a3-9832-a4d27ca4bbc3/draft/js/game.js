@@ -70,6 +70,16 @@ const FLEET_COUNT = 3, FLEET_PRICE = 1000;
 const CLEAN_BONUS = 100;
 const ENTER_Y = H * 0.15;
 const HORN_R = 150;
+/* Taksi on kyykyssä kun teline on sisällä ja pohja alustan pinnassa. Asiakas
+   sekä nousee kyytiin että poistuu vain silloin: ovi on siellä missä jalat
+   ovat, eikä jaloilleen nousseeseen taksiin kiivetä.
+
+   Sama raja molemmille, ja se on nolla eikä "melkein": kyykky kestää
+   neljäsosasekunnin, joten väljempi raja näkyisi asiakkaana joka lähtee
+   kävelemään ennen kuin taksi on paikallaan. */
+const KNEEL_DOWN = 0.02;
+const kneeled = () => taxi.gear < KNEEL_DOWN;
+
 /* Kyydistä poistuva kävelee lähimmälle alustan reunalle ja häipyy siinä.
    Kävelyvauhti on sama kuin kyytiin tullessa, jotta sama tyyppi liikkuu
    molempiin suuntiin samalla tavalla. */
@@ -1588,7 +1598,7 @@ function onLanded(pad) {
        lukevat `phase === 'aboard'` suoraan: vaihe olisi pitänyt muistaa
        kolmessa paikassa, lippu ei missään. */
     job.drop = pad;
-    taxi.gearWant = false;
+    if (diff !== 'pro') taxi.gearWant = false;
     return;
   }
 
@@ -1613,7 +1623,7 @@ function jobStep(dt) {
        pelaaja itse laski sen takaisin, ja silloin asiakas odottaa — kyykky on
        poistumisen ehto eikä kello. */
     if (job.drop) {
-      if (taxi.landed === job.drop && taxi.gear < 0.02) payRide(job.drop);
+      if (taxi.landed === job.drop && kneeled()) payRide(job.drop);
       return;
     }
     /* Kaasuprofiililla mittari seisoo niin kauan kuin suuttimet ovat päällä. */
@@ -1641,12 +1651,23 @@ function jobStep(dt) {
   }
 
   job.moving = false;
-  if (!dead && taxi.landed && taxi.landed.id === job.from) {
-    /* Asiakas on tulossa kyytiin: taksi kyykistyy hänelle kerran. Sen jälkeen
-       teline on pelaajan oma asia — pakotus joka ruudulla estäisi nostamasta
-       sitä takaisin. Kyykyssä lähtö on helppo, koska sivusuuttimet ovat heti
-       käytössä. */
-    if (!job.knelt) { job.knelt = true; taxi.gearWant = false; }
+  const here = !dead && taxi.landed && taxi.landed.id === job.from;
+
+  /* Asiakas on tulossa kyytiin: taksi kyykistyy hänelle kerran. Sen jälkeen
+     teline on pelaajan oma asia — pakotus joka ruudulla estäisi nostamasta
+     sitä takaisin. Kyykyssä lähtö on helppo, koska sivusuuttimet ovat heti
+     käytössä.
+
+     Prolla kyykky jää pelaajalle: se on nimenomaan se mitä helpompi taso
+     opettaa tekemällä sen puolesta. Sami 23.9.2026: *"pro tasolla ei ole
+     automaattista laskua, vaan pitää itse tehdä, näin voidaan tehdä koska
+     normaali taso opettaa miten peli toimii."* */
+  if (here && !job.knelt) { job.knelt = true; if (diff !== 'pro') taxi.gearWant = false; }
+
+  /* Kävely ja kyytiin nousu vaativat kyykyn: jaloilleen noussut taksi
+     pysäyttää asiakkaan siihen missä hän on, ja matka jatkuu kun taksi
+     laskeutuu takaisin. */
+  if (here && kneeled()) {
     const b = taxiBox(taxi);
     const target = job.x < taxi.x ? b.x - 10 : b.x + b.w + 10;
     const d = target - job.x;
