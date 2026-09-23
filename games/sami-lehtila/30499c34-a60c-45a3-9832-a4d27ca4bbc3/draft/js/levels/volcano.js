@@ -676,79 +676,13 @@ function leafField() {
   return paths;
 }
 
-/* Kaukainen puuraja, latvat noin 2/5 korkeudella alhaalta (y 624). Sami
-   23.9.2026. Se on yksi tumma siluetti eikä yksittäisiä puita, ja sieltä
-   täältä pistää yksi korkeampi puu yli, niin kuin viidakossa. Väri on tummin
-   mitä taustassa on, koska se on lähinnä — mutta yhä selvästi vaimeampi kuin
-   vuori, johon voi osua. */
-const TREELINE_Y = 624;
-const TREELINE = [];
-for (let x = -30; x < W + 60; ) {
-  const w = fbet(26, 58);
-  const tall = frnd() < 0.18;
-  TREELINE.push({ x, w, h: fbet(14, 30) + (tall ? fbet(28, 54) : 0), tall });
-  x += w * fbet(0.52, 0.8);
-}
-
-/* Latvusto piirretään **samalla pensselillä kuin reunojen viuhkat, vain
-   paljon pienempänä**. Sami 23.9.2026: *"tehdään samoilla pensseleillä millä
-   noi reunatkin mutta paljon pienempänä."* Ensimmäinen versio oli pyöreitä
-   kumpuja, ja kumpu ei kerro mistä puusta on kyse — sakaroiden reuna lukee
-   lehvästönä vielä 20 pikselin kokoisena, ja se on sama muoto jonka silmä on
-   juuri nähnyt ruudun laidassa isona.
-
-   `TREELINE` pysyy ennallaan: se antaa paikat, leveydet ja korkeudet, ja
-   **erityisesti se kuluttaa satunnaisvirtaa saman verran kuin ennen** —
-   rungot ja viuhkat arvotaan sen jälkeen samasta virrasta, joten reunojen
-   viidakko pysyy pikselilleen sinä minkä Sami on jo hyväksynyt. Vaihtunut on
-   vain piirto.
-
-   Koko metsä on yksi Path2D ja yksi täyttö: satakunta erillistä sakaraa
-   ruudussa on taustaa, ja taustan pitää olla halpa. Polku rakennetaan vasta
-   piirrossa, koska kenttätiedostot ajetaan myös nodessa eikä siellä ole
-   Path2D:tä — sama syy kuin Shooting Starsin kaukametsässä. */
-let canopyPath = null;
-function canopy() {
-  if (canopyPath) return canopyPath;
-  const p = new Path2D();
-
-  /* **Ei yhtenäistä pohjaa latvusten alle.** Se oli se tumma kerros jonka
-     lehvästö korvaa: umpinainen massa vaakaviivasta alaspäin peitti kaiken
-     mitä sen taakse pani, ja juuri siitä koko puuraja aikanaan alkoi. Sami
-     23.9.2026. Nyt puuraja on pelkkä latvusrivi, ja alalaidan tummuus tulee
-     lehvästöstä ja harjanteista. */
-
-  for (const t of TREELINE) {
-    const cx = t.x + t.w * 0.5;
-    const r = t.w * (t.tall ? 0.6 : 0.85);
-    /* Viuhkan tyvi jää massan sisään, jotta latvus kasvaa metsästä eikä
-       leiju sen yllä. */
-    const base = Math.min(TREELINE_Y + 6, TREELINE_Y - t.h + r * 0.55);
-    /* Yli pistävällä on runko, jotta se on puu eikä korkeampi pensas. */
-    if (t.tall) p.rect(cx - 2.2, base, 4.4, TREELINE_Y + 12 - base);
-    /* Kallistus paikasta eikä arpakuutiosta: piirto ei saa kuluttaa
-       satunnaisvirtaa, ks. `nz`. */
-    const tilt = ((cx * 0.37) % 1 - 0.5) * 0.5;
-    /* Kaksi kerrosta: uloin viuhka antaa siluetin ja sisempi lyhyempi täyttää
-       latvuksen, jottei puu ole pelkkiä piikkejä ilman runkoa ympärillään.
-       Uloin kiertää melkein vaakaan asti, jolloin viereiset puut menevät
-       limittäin eikä väliin jää taivasta. */
-    for (let i = 0; i < 9; i++) {
-      leaf(p, cx, base, -Math.PI / 2 + tilt + (i / 8 - 0.5) * 3.1, r);
-    }
-    for (let i = 0; i < 6; i++) {
-      leaf(p, cx, base - r * 0.16, -Math.PI / 2 - tilt + (i / 5 - 0.5) * 2.2, r * 0.6);
-    }
-  }
-
-  canopyPath = p;
-  return p;
-}
-
-function treeline(ctx) {
-  ctx.fillStyle = '#0f1a14';
-  ctx.fill(canopy());
-}
+/* **Puuraja poistettiin 23.9.2026.** Se oli ensin tumma siluettimassa ja
+   sitten latvusrivi, ja lehvästökenttä korvaa molemmat: kenttä osaa saman
+   vaakarivin käyrällä, mutta siihen ei ole pakko jäädä. Sami: *"ne tosi
+   tummat, 1 vaakarivi jäi, niitä puun latva viuhkoja."* Rivi luki viivana
+   eikä metsänä — mitä tahansa yhdellä korkeudella toistuvaa sattuukin
+   olemaan, se lukee viivana. Jos vaakarivi joskus halutaan takaisin, se on
+   yksi piikki käyrässä eikä oma koodinsa. */
 
 /* Rungot ja liaanit reunoilla. Ne ovat pelkkää pystyviivaa, mutta ne antavat
    lehvästölle jotain mistä kasvaa — ilman niitä viuhkat leijuivat tyhjässä. */
@@ -793,8 +727,6 @@ function jungle(ctx) {
   ctx.fillStyle = haze;
   ctx.fillRect(0, 0, W, 860);
 
-
-  treeline(ctx);
 
 
   /* Lehvästö **kertoo** taustan eikä peitä sitä (multiply). Sillä on kaksi
