@@ -104,7 +104,7 @@ const PAD_BLINK_SLOW = 3, PAD_BLINK_FAST = 14;   // vilkkumisen tahti Hz
 const PAD_WARN_HOT = '#ff5d7a', PAD_WARN_COLD = '#6fe3ff';
 
 let levelIndex = 0, level = LEVELS[0];
-let GATE = level.gate, WALLS = [], PADS = [];
+let GATE = level.gate, WALLS = [], WALLS0 = 0, PADS = [];
 
 function frameWalls(gate) {
   return [
@@ -956,6 +956,11 @@ function loadLevel(i) {
   GATE = level.gate;
   sketch.restore();                          // ennen kuin PADS kopioidaan
   WALLS = frameWalls(GATE).concat(level.walls || []);
+  /* Tästä indeksistä eteenpäin WALLSissa on vain sitä mitä kenttä työntää
+     sinne kesken kentän: putoava tähti, magmapallo, liikkuva kone. Ne ovat
+     vaaroja eivätkä kulissia, ja `hazardHit` tarvitsee rajan erottaakseen
+     ne. Kenttä lisää ja poistaa omansa hännästä, joten raja pitää. */
+  WALLS0 = WALLS.length;
   PADS = (level.pads || []).map(p => Object.assign({ h: 18 }, p, { bx: p.x, by: p.y }));
   served = {};
   for (const p of numbered()) served[p.id] = false;
@@ -1494,24 +1499,42 @@ function crash() {
   gamepad.rumble({ duration: 260, strong: 0.85, weak: 0.45 });
 }
 
+/* Osuuko kentän liikkuva vaara taksiin juuri nyt?
+ *
+ * Alustalla istuva taksi ei tarkista törmäyksiä lainkaan — `update` palaa
+ * keikka-askeleeseen eikä `move` aja — ja niin kauan kuin alustalla oli
+ * turvallista, se oli koko totuus. Tulivuoren magmapallot tekivät siitä
+ * kuolemattomuuden: pallo tuli alas, taksi istui alustalla, eikä mitään
+ * tapahtunut. Sami 23.9.2026: *"taxi ei saa damagea tulipalloista, sen
+ * haluan vain iisille."*
+ *
+ * Nyt liikkuva vaara osuu myös alustalla istuvaan, paitsi helpolla — siellä
+ * alusta on yhä turvapaikka, ja se on helpon oma ero. Kulissiin ja kentän
+ * kiinteisiin seiniin tätä ei uloteta: alusta saa olla seinässä kiinni, ja
+ * pysyvän seinän sisällä istuva taksi on ollut turvassa aina. Raja on
+ * `WALLS0`, eli juuri se mitä kenttä itse työntää WALLSiin. */
+function hazardHit() {
+  if (dead || diff === 'easy' || !taxi) return false;
+  const b = taxiBox(taxi);
+  for (let i = WALLS0; i < WALLS.length; i++) if (hit(b, WALLS[i])) return true;
+  return false;
+}
+
 function touchdown(pad, b) {
   const t2 = taxi;
   const ratio = landRatio(pad);
 
-  /* Kesken ulostulon oleva teline kelpaa laskuksi **vain helpolla**: alas
-     tuleva teline osuu pintaan ensin ja loppumatkan alusta työntää taksia
-     ylös (`taxi.landed`in y lasketaan joka ruutu telineen pituudesta), joten
-     alustalle ei voi tuhota itseään telineen ajoituksella.
+  /* Kesken ulostulon oleva teline ei ole vatsalasku: alas tuleva teline osuu
+     pintaan ensin, ja loppumatkan alusta työntää taksia ylös (`taxi.landed`in
+     y lasketaan joka ruutu telineen pituudesta). Kolari on siis vain siitä
+     ettei telinettä ole eikä sitä olla laskemassa — nopeusrajat pätevät
+     erikseen alla, niin kuin ennenkin.
 
-     Muilla tasoilla teline on oltava ulkona ennen kosketusta, niin kuin
-     ennenkin. Sami 23.9.2026: *"vain helpoimmalla tasolla on kuolemattomuus
-     alustalla, helppoon se on just sopiva ei muihin."* Anteeksianto tuli
-     ensin kaikille, ja se oli vahinko eikä päätös: pyydetty asia oli se ettei
-     **kasvava teline** tapa (`gearPush`), ei se ettei laskun ajoituksella ole
-     väliä. `gearPush` onkin yhä kaikilla — se on geometriaa eikä lahja.
-
-     Nopeusrajat ovat erikseen alla, ja ne ovat samat kaikilla tasoilla. */
-  if (t2.gear < 0.85 && !(t2.gearWant && diff === 'easy')) return crash();
+     **Tämä on sama kaikilla vaikeustasoilla.** Kokeiltiin 23.9.2026 hetken
+     ajan helpon omaksi ja palautettiin saman tien: laskeutuminen ei ole se
+     paikka josta vaikeus haetaan. Vaikeustasolla eroaa se mitä alustalla
+     istuvalle saa tapahtua, ks. `hazardHit`. */
+  if (t2.gear < 0.85 && !t2.gearWant) return crash();
   if (b.x < pad.x - 2 || b.x + b.w > pad.x + pad.w + 2) return crash();
   if (ratio > 1) return crash();
 
@@ -1983,6 +2006,7 @@ function update(dt) {
 
   if (taxi.landed) {
     jetLevel(0);
+    if (hazardHit()) { crash(); return; }
     if (taxi.landed.fuel) refuel(dt);
     /* Tankilla kuolee myös: tyhjä tankki ja tyhjä kassa ei ratkea istumalla,
        joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
