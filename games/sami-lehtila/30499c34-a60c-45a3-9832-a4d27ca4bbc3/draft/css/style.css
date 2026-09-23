@@ -118,6 +118,14 @@ kbd {
   width: 100%; accent-color: #ffd479; margin: 0;
   touch-action: none;                 /* veto liukurilla säätää, ei vieritä */
 }
+/* Värivalitsin on samaa riviä kuin liukurit: koko leveys ja sama pyöristys,
+   jottei se näytä eri paikasta tulleelta. Selaimen oletusleveys on noin 50 px
+   ja vasemmassa laidassa, mikä rikkoi paneelin rytmin. */
+#panel input[type=color] {
+  width: 100%; height: 26px; padding: 0; cursor: pointer;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(120,160,255,.26); border-radius: 8px;
+}
 /* Nappirivi rivittyy. Kenttiä tulee lisää yksi kerrallaan, ja ilman
    rivitystä kuudes kenttä puristi nimet lukukelvottomiksi ja työnsi
    viimeisen paneelin reunan yli. min-width: max-content pitää huolen siitä,
