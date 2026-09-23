@@ -136,7 +136,7 @@ const DEFAULTS = {
   grav: 250, thrust: 920,
   landVY: 215, landVX: 200,
   bounceFrom: 0.5, bounceLift: 10, bounceKeep: 0.62, hopRate: 2,
-  burn: 12, refuel: 63, price: 0.9,
+  burn: 12, sideBurn: 0.5, refuel: 63, price: 0.9,
   fare: 100, tip: 105, tipTime: 44, exitBonus: 40,
   /* Tippiprofiilit: kerroin perustippiin ja kerroin siihen miten nopeasti
      mittari laskee. Nämä ovat säätimissä, koska oikea tuntuma löytyy vain
@@ -2068,9 +2068,23 @@ function update(dt) {
   }
 
   const throttle = Math.min(1, Math.hypot(v.x, v.y));
-  if (throttle > 0 && !holdRide()) {
+
+  /* Kulutus suuttimen mukaan: **alasuuttimista menee kaksinkertaisesti**
+     sivuihin ja kattoon nähden. Sami 23.9.2026. Ne ovat ne isot, ja ne
+     kannattelevat koko taksia; sivusuuttimet ovat nokare sen rinnalla.
+
+     Suhde tehdään halventamalla sivuja eikä kallistamalla nostoa
+     (`sideBurn` 0,5), koska `burn` on se luku josta kenttien bensabudjetti
+     on laskettu: leijunta maksaa grav/thrust × burn, ja jos nosto
+     kaksinkertaistuisi, jokaisen kentän tankki puolittuisi kerralla. Nyt
+     leijunta maksaa täsmälleen saman kuin ennen ja sivuttainen on halvempaa.
+     Ks. README, "Bensabudjetti". */
+  const lift = Math.max(0, -v.y);                        // alasuuttimet
+  const side = Math.min(1, Math.hypot(v.x, Math.max(0, v.y)));
+  const burnRate = Math.min(1, lift + side * P.sideBurn);
+  if (burnRate > 0 && !holdRide()) {
     const had = fuel;
-    fuel = Math.max(0, fuel - P.burn * throttle * dt);
+    fuel = Math.max(0, fuel - P.burn * burnRate * dt);
     if (had > 0 && fuel <= 0) say(t('msg.dry'), 3);
   }
   jetLevel(throttle);
@@ -3196,7 +3210,8 @@ const SLIDER_GROUPS = [
   { name: 'laskeutuminen', open: false,
     keys: ['landVY', 'landVX', 'bounceFrom', 'bounceLift', 'bounceKeep', 'hopRate'] },
   { name: 'bensa', open: true,
-    keys: ['burn', 'refuel', 'price', 'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
+    keys: ['burn', 'sideBurn', 'refuel', 'price',
+           'dryOn', 'dryOff', 'dryJitter', 'dryLife'] },
   { name: 'savu', open: false,
     keys: ['smokeFrom', 'smokeRate', 'smokeLife', 'smokeSize', 'smokeGrow', 'smokeRise'] },
   { name: 'raha ja tipit', open: false, graph: tipGraph,
@@ -3214,6 +3229,7 @@ const SLIDERS = [
   { key: 'hopRate', label: 'ponnistus × telineen vauhti', min: 0, max: 3, step: 0.25 },
   { key: 'bounceKeep', label: 'pompun jäävä vauhti', min: 0.2, max: 0.9, step: 0.02 },
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
+  { key: 'sideBurn', label: 'sivusuuttimet × kulutus', min: 0, max: 1, step: 0.05 },
   { key: 'refuel', label: 'tankkaus / s', min: 5, max: 80, step: 1 },
   { key: 'price', label: 'bensan hinta', min: 0, max: 3, step: 0.1 },
   { key: 'fare', label: 'perusmaksu', min: 0, max: 200, step: 5 },
@@ -3986,7 +4002,12 @@ function loop(now) {
 
   if (state === ENTER) {
     updateEnter(dt);
-    draw({ x: 0, y: clamp(1 - taxi.vy / 300, 0.25, 1) });
+    /* Miinus, koska luukusta tuleva taksi **jarruttaa**: se hidastaa
+       putoamistaan, ja jarrutus on alasuuttimien työtä. Plussalla liekki
+       piirtyi katolle, mikä näytti siltä että taksi kiihdyttää alaspäin
+       samalla kun se hidastuu. Sami 23.9.2026: *"yksi asia on häirinnyt
+       pitkään."* */
+    draw({ x: 0, y: -clamp(1 - taxi.vy / 300, 0.25, 1) });
     requestAnimationFrame(loop);
     return;
   }
