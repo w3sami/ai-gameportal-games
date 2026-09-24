@@ -47,6 +47,7 @@ function resize(){
   cv.width = Math.round(vw*dpr); cv.height = Math.round(vh*dpr); cv.style.width = vw+'px'; cv.style.height = vh+'px';
   Z = Math.max(Math.min(Math.max(vw/1000, 0.6), 1.15), vw/L.w, vh/L.h);
   placeControls();                                     // nothing in the level art depends on the viewport any more
+  redraw();
 }
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 120); });
 
@@ -132,6 +133,7 @@ function reset(){
   ticks = 0; gTick = 0; running = false; gRec = []; particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
   cam.x = ship.x - vw/(2*Z); cam.y = ship.y - vh/(2*Z);
   snapPrev();                                                // a restart is a jump, not a move: nothing to blend from
+  redraw();
   hud();
 }
 function loadLevel(i){
@@ -622,11 +624,18 @@ function drawRadial(f, t){                                                      
   ctx.stroke();
 }
 
-let last = performance.now(), acc = 0;
+// Outside play the sim is stopped and a menu sits over the scene behind a full-screen backdrop blur. Repainting the
+// scene every frame there made the browser re-blur it every frame too, for a picture that has stopped moving: a steady
+// GPU load, and battery, for as long as someone reads the leaderboard. So once play stops, the scene is drawn for
+// another SETTLE frames (long enough for the camera to come to rest) and then left alone until something changes it.
+// Waterfalls and wind behind a menu hold still as a result. redraw() wakes it: reset and resize call it.
+const SETTLE = 60;
+let last = performance.now(), acc = 0, still = 0;
+function redraw(){ still = 0; }
 function frame(now){
   let dt = (now-last)/1000; last = now; if (dt > 0.1) dt = 0.1;
-  if (mode === 'play'){ acc += dt; while (acc >= DT){ tick(); acc -= DT; } } else acc = 0;
-  render(dt);
+  if (mode === 'play'){ acc += dt; while (acc >= DT){ tick(); acc -= DT; } still = 0; } else acc = 0;
+  if (still < SETTLE){ render(dt); if (mode !== 'play') still++; }
   requestAnimationFrame(frame);
 }
 function render(dt){
