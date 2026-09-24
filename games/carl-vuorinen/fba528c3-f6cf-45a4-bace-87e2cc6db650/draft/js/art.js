@@ -210,14 +210,30 @@ const WALLS = (() => {
         let fi = 0, fd = -1; for (let i=1;i<P.length;i++){ const d = (P[i][0]-P[0][0])**2 + (P[i][1]-P[0][1])**2; if (d > fd){ fd = d; fi = i; } }
         dp(P.slice(0, fi+1), simp); simp.pop(); dp(P.slice(fi), simp);
       } else dp(P, simp);
+      // The front edge is tucked INSET px into the rock so it never shows ahead of the terrain. The offset is taken once per
+      // vertex, along the bisector of its two edges (a miter), so neighbouring faces share their corners exactly. Offsetting
+      // each segment along its own normal split every corner in two and left a thin wedge of backdrop between the faces,
+      // one that grew with the zoom.
+      const V = simp.filter((p, i) => i === 0 || Math.hypot(p[0]-simp[i-1][0], p[1]-simp[i-1][1]) >= 1);
+      const closed = V.length > 2 && Math.hypot(V[0][0]-V[V.length-1][0], V[0][1]-V[V.length-1][1]) < 1;
+      if (closed) V.pop();
+      const nV = V.length; if (nV < 2) continue;
+      const nrm = i => { const a = V[i], b = V[(i+1)%nV], l = Math.hypot(b[0]-a[0], b[1]-a[1]); return [(b[1]-a[1])/l, -(b[0]-a[0])/l]; };
+      const O = V.map((p, i) => {
+        const nA = closed || i > 0 ? nrm((i-1+nV)%nV) : null, nB = closed || i < nV-1 ? nrm(i) : null, A = nA || nB, B = nB || nA;
+        let mx = A[0]+B[0], my = A[1]+B[1]; const ml = Math.hypot(mx, my);
+        if (ml < 1e-6){ mx = A[0]; my = A[1]; } else { mx /= ml; my /= ml; }
+        const k = INSET/Math.max(0.35, mx*A[0]+my*A[1]);              // miter length, capped at sharp spikes
+        return [p[0]-mx*k, p[1]-my*k];
+      });
       const chain = [];
-      for (let i=0;i<simp.length-1;i++){
-        const [x0,y0] = simp[i], [x1,y1] = simp[i+1], dx = x1-x0, dy = y1-y0, l = Math.hypot(dx,dy); if (l < 1) continue;
-        const nx = dy/l, ny = -dx/l, ix = -nx*INSET, iy = -ny*INSET, mx = (x0+x1)/2, my = (y0+y1)/2;   // front edge tucked into the rock
+      for (let i=0; i<(closed ? nV : nV-1); i++){
+        const j = (i+1)%nV, [x0,y0] = V[i], [x1,y1] = V[j], dx = x1-x0, dy = y1-y0, l = Math.hypot(dx,dy);
+        const nx = dy/l, ny = -dx/l, mx = (x0+x1)/2, my = (y0+y1)/2;
         const cs = [col(mx-nx*14, my-ny*14), col(mx-nx*30, my-ny*30)].filter(Boolean);                  // two depths in, past the edge shadow
         let pad = null;
         for (const [k, p] of pads) if (ny < -0.7 && my > p.y-8 && my < p.y+8 && mx > p.x-8 && mx < p.x+p.w+8){ const n = parseInt(PAL[k].slice(1),16); pad = [n>>16, (n>>8)&255, n&255]; }
-        chain.push({x0:x0+ix, y0:y0+iy, x1:x1+ix, y1:y1+iy, nx, ny, l, pad, c: cs.length ? cs.reduce((a, v) => [a[0]+v[0]/cs.length, a[1]+v[1]/cs.length, a[2]+v[2]/cs.length], [0,0,0]) : null,
+        chain.push({x0:O[i][0], y0:O[i][1], x1:O[j][0], y1:O[j][1], nx, ny, l, pad, c: cs.length ? cs.reduce((a, v) => [a[0]+v[0]/cs.length, a[1]+v[1]/cs.length, a[2]+v[2]/cs.length], [0,0,0]) : null,
                     bx0:Math.min(x0,x1), by0:Math.min(y0,y1), bx1:Math.max(x0,x1), by1:Math.max(y0,y1)});
       }
       for (let i=0;i<chain.length;i++){                             // length-weighted colour over SMOOTH px either side, so facets do not stripe the wall
