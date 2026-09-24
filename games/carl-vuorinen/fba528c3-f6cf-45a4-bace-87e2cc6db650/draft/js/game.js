@@ -145,10 +145,10 @@ const Snd = (() => {
     f.node.frequency.setValueAtTime(pts[0][0], x); for (let i=1;i<pts.length;i++) f.node.frequency.exponentialRampToValueAtTime(pts[i][0], x+pts[i][1]); }; return f; };
   const drive = () => { const f = () => { f.node = ac.createWaveShaper(); f.node.curve = sat; }; return f; };
   // No pitched layer: a falling sine with a fast attack is how a kick drum is made, and it read as a hit. The low end is
-  // driven brown noise swelling in over ~40 ms, and the fireball's filter blooms open before it closes: a 'whoomp'.
+  // driven brown noise swelling in over ~40 ms, and the fireball's filter blooms open before it closes: a 'whoomp'. No
+  // snap on top either: even a soft one pulled it back towards a hit.
   function boom(){
     if (!ac || !S.sound) return; const v = () => 0.9+Math.random()*0.2;
-    voice(white,   v(), [bq('highpass', 1800), bq('lowpass', 7000, 2500, 0.06)],          [0.002, 0.3, 0.004, 0.02]);   // snap
     voice(white,   v(), [bqp('lowpass', [[500,0],[2200*v(),0.05],[150,0.75]], 0.8)],      [0.02,  0.8, 0.08,  0.3 ]);   // fireball
     voice(noise,   v(), [bq('lowpass', 150, 70, 1.2, 1.1), drive(), bq('lowpass', 900)],  [0.04,  0.9, 0.12,  0.38]);   // low whoomp; the drive keeps it audible on phone speakers
     voice(noise,   v(), [bq('lowpass', 260, 90, 1.6)],                                    [0.08,  1.1, 0.12,  0.42]);   // rumble
