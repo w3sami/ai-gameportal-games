@@ -119,11 +119,19 @@ const normAng = a => { a = (a+Math.PI) % (2*Math.PI); if (a<0) a += 2*Math.PI; r
 const fmt = t => { const s = t/120, m = Math.floor(s/60); return `${m}:${(s-m*60).toFixed(2).padStart(5,'0')}`; };
 
 function spawn(){ const p = L.pads.start; return {x:p.x+p.w/2, y:p.y-11, vx:0, vy:0, a:0, state:'idle', flame:0}; }
+// Render interpolation. The sim steps at 120 Hz and the display runs at whatever it runs at, so a frame usually lands
+// between two ticks: at 60 Hz that is two ticks a frame give or take jitter, at 90 Hz a 1-1-2 cadence, at 144 Hz some
+// frames get none. Drawing the latest tick as-is shows that cadence as judder against the smoothly following camera.
+// Instead the pose at the start of the last tick is kept, and render() draws the blend at acc/DT between it and the
+// current one. Render-side only: nothing the sim reads is touched, so runs and ghosts stay exact.
+const PREV = {x:0, y:0, a:0}, SR = {x:0, y:0, a:0, flame:0}, GR = {};
+function snapPrev(){ PREV.x = ship.x; PREV.y = ship.y; PREV.a = ship.a; for (const z of hazards){ z.pdy = z.dy; z.pa = z.a; } }
 function reset(){
   ship = spawn(); best = store.bests[li] || null; ghost = null; gPath = null;
   if (best && best.path){ try { gPath = GP.decode(GP.unb64(best.path)); ghost = GP.pose(gPath, 0, {}); } catch (e) { gPath = null; ghost = null; } }
   ticks = 0; gTick = 0; running = false; gRec = []; particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
   cam.x = ship.x - vw/(2*Z); cam.y = ship.y - vh/(2*Z);
+  snapPrev();                                                // a restart is a jump, not a move: nothing to blend from
   hud();
 }
 function loadLevel(i){
@@ -247,6 +255,7 @@ function migrateBests(){
 }
 
 function tick(){
+  snapPrev();
   const inp = readInput();
   if (ship.state === 'dead'){ deadT -= DT; if (deadT <= 0) reset(); }
   else if (ship.state === 'finished'){ doneT -= DT; if (doneT <= 0 && mode === 'play') showComplete(); }
@@ -298,7 +307,7 @@ function buildHazards(){
     return {h, pts, probe, sprite, col: h.kind === 'branch' ? '120,86,52' : null, state:'hang', t:0, a:0, dy:0, vy:0};
   });
 }
-function hazardReset(){ for (const z of hazards){ z.state = 'hang'; z.t = 0; z.a = 0; z.dy = 0; z.vy = 0; } }
+function hazardReset(){ for (const z of hazards){ z.state = 'hang'; z.t = 0; z.a = 0; z.dy = 0; z.vy = 0; z.pa = 0; z.pdy = 0; } }
 const posePts = (z, pts) => { const h = z.h, c = Math.cos(z.a), s = Math.sin(z.a); return pts.map(p => { const dx = p[0]-h.x, dy = p[1]-h.y; return [h.x+dx*c-dy*s, h.y+dx*s+dy*c+z.dy]; }); };
 function pip(px,py,pts){ let inside = false; for (let i=0,j=pts.length-1;i<pts.length;j=i++){ const [xi,yi] = pts[i], [xj,yj] = pts[j]; if ((yi>py) !== (yj>py) && px < (xj-xi)*(py-yi)/(yj-yi)+xi) inside = !inside; } return inside; }
 function updateHazards(s){
@@ -621,16 +630,18 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 function render(dt){
+  const al = mode === 'play' ? Math.min(1, acc/DT) : 1, mix = (a, b) => a+(b-a)*al;   // outside play the sim is still: draw it as it is
+  SR.x = mix(PREV.x, ship.x); SR.y = mix(PREV.y, ship.y); SR.a = PREV.a + normAng(ship.a-PREV.a)*al; SR.flame = ship.flame;
   const k = 1-Math.exp(-5*dt);
-  cam.x += (ship.x + ship.vx*0.3 - vw/(2*Z) - cam.x)*k;
-  cam.y += (ship.y + ship.vy*0.3 - vh/(2*Z) - cam.y)*k;
+  cam.x += (SR.x + ship.vx*0.3 - vw/(2*Z) - cam.x)*k;
+  cam.y += (SR.y + ship.vy*0.3 - vh/(2*Z) - cam.y)*k;
   cam.x = Math.max(0, Math.min(L.w - vw/Z, cam.x)); cam.y = Math.max(0, Math.min(L.h - vh/Z, cam.y));
   shake *= Math.exp(-4*dt);
   const sx = reduced ? 0 : (Math.random()-.5)*shake*14, sy = reduced ? 0 : (Math.random()-.5)*shake*14;
 
   ctx.setTransform(dpr,0,0,dpr,0,0);
   // inside a rock zone the backdrop crossfades to the cave theme's, so a cave carved into a jungle level feels like a cave
-  caveK += ((inRockZone(ship.x, ship.y) ? 1 : 0) - caveK)*(1-Math.exp(-3*dt));
+  caveK += ((inRockZone(SR.x, SR.y) ? 1 : 0) - caveK)*(1-Math.exp(-3*dt));
   const jb = STYLE.bg, k2 = STYLE === THEMES.cave ? 0 : caveK;
   const vg = ctx.createLinearGradient(0,0,0,vh); vg.addColorStop(0,mixHex(jb.top, CAVE_IN.top, k2)); vg.addColorStop(1,mixHex(jb.bottom, CAVE_IN.bottom, k2));   // darker than the cave chapter itself: a hole in the daylight
   ctx.fillStyle = vg; ctx.fillRect(0,0,vw,vh);
@@ -639,7 +650,7 @@ function render(dt){
   if (hazards.length){
     ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
     for (const z of hazards){ if (z.state === 'gone') continue; const h = z.h, sp = z.sprite;
-      ctx.save(); ctx.translate(h.x, h.y+z.dy); ctx.rotate(z.a); ctx.drawImage(sp.c, sp.ox-h.x, sp.oy-h.y); ctx.restore(); }
+      ctx.save(); ctx.translate(h.x, h.y+mix(z.pdy, z.dy)); ctx.rotate(mix(z.pa, z.a)); ctx.drawImage(sp.c, sp.ox-h.x, sp.oy-h.y); ctx.restore(); }
     ctx.restore();
   }
   const tsec = performance.now()/1000;
@@ -649,8 +660,8 @@ function render(dt){
 
   ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
   drawParticles();
-  if (ghost) drawShip(ghost, true);
-  if (ship.state !== 'dead') drawShip(ship, false);
+  if (ghost && gPath) drawShip(GP.pose(gPath, Math.max(0, gTick-1+al), GR), true);   // the path is a spline in ticks: sample it between them
+  if (ship.state !== 'dead') drawShip(SR, false);
   drawForces(tsec, true);
   ctx.restore();
   const mf = 1.3; ctx.fillStyle = STYLE.bg.mote || 'rgba(217,211,199,.16)';
@@ -659,7 +670,7 @@ function render(dt){
   Snd.thrust(mode === 'play' && ship.state === 'flying' && ship.flame);
   Snd.water(mode === 'play' && wet);
   timerEl.textContent = fmt(ticks);
-  if (!S.buttons) hdgEl.style.transform = `rotate(${ship.a}rad) translateY(${-S.radius+4}px)`;
+  if (!S.buttons) hdgEl.style.transform = `rotate(${SR.a}rad) translateY(${-S.radius+4}px)`;
 }
 
 // ---- HUD ----
