@@ -72,7 +72,7 @@ document.addEventListener('webkitfullscreenchange', onFsChange);
 // ---- Audio: everything synthesised, no files ----
 const Snd = (() => {
   let ac = null, noise = null, thrGain = null, thrFilt = null, wetGain = null, thrOn = -1, wetOn = -1;
-  let white = null, crackle = null, fxBus = null, verbIn = null, sat = null;
+  let white = null, fxBus = null, verbIn = null, sat = null;
   let windGain = null, windLp = null, howlA = null, howlB = null, windStep = -1;
   function init(){
     if (ac) return;
@@ -97,13 +97,10 @@ const Snd = (() => {
     const ws = ac.createBufferSource(); ws.buffer = noise; ws.loop = true;                          // waterfall hush: the same noise, brighter
     const wf = ac.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 1400; wf.Q.value = 0.5;
     wetGain = ac.createGain(); wetGain.gain.value = 0; ws.connect(wf).connect(wetGain).connect(ac.destination); ws.start();
-    // Crash kit: white noise, a baked bed of debris clicks, a dark ~1.5 s cave reverb, and a compressor bus so stacked
-    // crashes (crash, R, crash) never clip.
+    // Crash kit: white noise, a dark ~1.5 s cave reverb, and a compressor bus so stacked crashes (crash, R, crash) never
+    // clip. There is no debris layer: a bed of clicks was tried, and read as a rattle even when softened.
     const sr = ac.sampleRate;
     white = ac.createBuffer(1, sr, sr); { const w = white.getChannelData(0); for (let i=0;i<w.length;i++) w[i] = Math.random()*2-1; }
-    crackle = ac.createBuffer(1, Math.round(sr*1.4), sr); { const c = crackle.getChannelData(0);         // sparse clicks, thinning out
-      for (let i=0;i<c.length;i++){ if (Math.random() < 0.006*Math.exp(-i/sr/0.35)){ const a = (0.3+Math.random()*0.7)*(Math.random()<0.5?-1:1), len = 20+(Math.random()*90|0);
-        for (let j=0;j<len && i+j<c.length;j++) c[i+j] += a*(Math.random()*2-1)*Math.exp(-j/(len*0.3)); } } }
     fxBus = ac.createDynamicsCompressor();
     fxBus.threshold.value = -16; fxBus.knee.value = 10; fxBus.ratio.value = 5; fxBus.attack.value = 0.002; fxBus.release.value = 0.3;
     const fxOut = ac.createGain(); fxOut.gain.value = 0.62; fxBus.connect(fxOut).connect(ac.destination);
@@ -151,15 +148,15 @@ const Snd = (() => {
     o.type = type||'sine'; o.frequency.setValueAtTime(freq, t); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
     o.connect(g).connect(ac.destination); o.start(t); o.stop(t+dur+0.05);
   }
-  // One looped (or one-shot) source through a filter chain and an envelope into the crash bus and the cave send.
+  // One looped noise source through a filter chain and an envelope into the crash bus and the cave send.
   // env: [attack, peak, hold, decay τ]. Filter stages are factories that build their node at the start time.
   function voice(buf, rate, filt, env){
-    const t = ac.currentTime+0.005, s = ac.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; s.loop = buf !== crackle;
+    const t = ac.currentTime+0.005, s = ac.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; s.loop = true;
     const g = ac.createGain(), [at, pk, hold, tau] = env, end = t+at+hold+tau*6;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(pk, t+at); g.gain.setTargetAtTime(0, t+at+hold, tau);
     let node = s; for (const f of filt){ f(t); node.connect(f.node); node = f.node; }
     node.connect(g); g.connect(fxBus); g.connect(verbIn);
-    s.start(t, s.loop ? Math.random()*buf.duration : 0); s.stop(end);
+    s.start(t, Math.random()*buf.duration); s.stop(end);
   }
   const bq = (type, f0, f1, dur, q) => { const f = x => { f.node = ac.createBiquadFilter(); f.node.type = type; f.node.Q.value = q||0.7;
     f.node.frequency.setValueAtTime(f0, x); if (f1) f.node.frequency.exponentialRampToValueAtTime(f1, x+dur); }; return f; };
@@ -174,7 +171,6 @@ const Snd = (() => {
     voice(white,   v(), [bqp('lowpass', [[500,0],[2200*v(),0.05],[150,0.55]], 0.8)],      [0.02,  0.8, 0.06,  0.21]);   // fireball
     voice(noise,   v(), [bq('lowpass', 150, 70, 0.85, 1.1), drive(), bq('lowpass', 900)], [0.04,  0.9, 0.08,  0.27]);   // low whoomp; the drive keeps it audible on phone speakers
     voice(noise,   v(), [bq('lowpass', 260, 90, 1.1)],                                    [0.07,  1.1, 0.08,  0.29]);   // rumble
-    voice(crackle, v(), [bq('highpass', 1500*v()), bq('lowpass', 7000, 2000, 0.85)],      [0.05,  0.5, 0.0,   0.35]);   // debris
   }
   return {
     init, resume, thrust, water, wind,
