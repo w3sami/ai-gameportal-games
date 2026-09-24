@@ -72,25 +72,71 @@ document.addEventListener('webkitfullscreenchange', onFsChange);
 // ---- Audio: everything synthesised, no files ----
 const Snd = (() => {
   let ac = null, noise = null, thrGain = null, thrFilt = null, wetGain = null, thrOn = -1, wetOn = -1;
+  let white = null, fxBus = null, verbIn = null, sat = null;
+  let windGain = null, windLp = null, howlA = null, howlB = null, windStep = -1;
   function init(){
     if (ac) return;
     try { ac = new (window.AudioContext||window.webkitAudioContext)(); } catch (e) { return; }
     const n = ac.sampleRate*2; noise = ac.createBuffer(1, n, ac.sampleRate); const d = noise.getChannelData(0); let last = 0;
     for (let i=0;i<n;i++){ const w = Math.random()*2-1; last = (last+0.02*w)/1.02; d[i] = last*3.5; }   // brown noise
-    const src = ac.createBufferSource(); src.buffer = noise; src.loop = true;
-    thrFilt = ac.createBiquadFilter(); thrFilt.type = 'lowpass'; thrFilt.frequency.value = 500;
+    // Thrust: the brown-noise roar, plus a growl (sub-160 Hz noise, driven, then cut at 700 Hz so its overtones fill the low
+    // mids without adding air), both wobbled by an irregular level flutter of held 15–60 ms steps. Nothing above ~1 kHz
+    // is added: brighter versions read as hiss. All of it runs continuously behind thrGain; thrust() only flips that.
+    const sr0 = ac.sampleRate, loopSrc = b => { const s = ac.createBufferSource(); s.buffer = b; s.loop = true; s.start(0, Math.random()*b.duration); return s; };
+    const lpf = (f, q) => { const x = ac.createBiquadFilter(); x.type = 'lowpass'; x.frequency.value = f; x.Q.value = q||0.7; return x; };
+    const gn = v => { const g = ac.createGain(); g.gain.value = v; return g; };
+    const mb = ac.createBuffer(1, sr0*3, sr0), m = mb.getChannelData(0); let lv = 1, sm = 1;
+    for (let i=0, next=0;i<m.length;i++){ if (i >= next){ lv = Math.random() < 0.15 ? 1.7+Math.random()*0.5 : 0.3+Math.random(); next = i + sr0*(0.015+Math.random()*0.045); }
+      sm += (lv-sm)*0.005; m[i] = sm-1; }                                                           // zero-mean, added onto a gain of 1
+    const flut = gn(1); loopSrc(mb).connect(gn(0.55)).connect(flut.gain);
+    thrFilt = lpf(500); loopSrc(noise).connect(thrFilt).connect(flut);
+    const drv = ac.createWaveShaper(), dc = new Float32Array(1024); for (let i=0;i<1024;i++) dc[i] = Math.tanh((i/511.5-1)*3); drv.curve = dc;
+    loopSrc(noise).connect(lpf(160, 1)).connect(gn(2)).connect(drv).connect(lpf(700)).connect(lpf(700)).connect(gn(0.6)).connect(flut);
     thrGain = ac.createGain(); thrGain.gain.value = 0;
-    src.connect(thrFilt).connect(thrGain).connect(ac.destination); src.start();
+    flut.connect(thrGain).connect(ac.destination);
     const ws = ac.createBufferSource(); ws.buffer = noise; ws.loop = true;                          // waterfall hush: the same noise, brighter
     const wf = ac.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 1400; wf.Q.value = 0.5;
     wetGain = ac.createGain(); wetGain.gain.value = 0; ws.connect(wf).connect(wetGain).connect(ac.destination); ws.start();
+    // Crash kit: white noise, a dark ~1.5 s cave reverb, and a compressor bus so stacked crashes (crash, R, crash) never
+    // clip. There is no debris layer: a bed of clicks was tried, and read as a rattle even when softened.
+    const sr = ac.sampleRate;
+    white = ac.createBuffer(1, sr, sr); { const w = white.getChannelData(0); for (let i=0;i<w.length;i++) w[i] = Math.random()*2-1; }
+    fxBus = ac.createDynamicsCompressor();
+    fxBus.threshold.value = -16; fxBus.knee.value = 10; fxBus.ratio.value = 5; fxBus.attack.value = 0.002; fxBus.release.value = 0.3;
+    const fxOut = ac.createGain(); fxOut.gain.value = 0.62; fxBus.connect(fxOut).connect(ac.destination);
+    const ir = ac.createBuffer(2, Math.round(sr*1.8), sr);
+    for (let ch=0;ch<2;ch++){ const r = ir.getChannelData(ch); let lp = 0;
+      for (let i=0;i<r.length;i++){ const t = i/sr; lp += (Math.random()*2-1 - lp)*0.18; r[i] = lp*Math.exp(-t/0.3)*(t < 0.012 ? t/0.012 : 1); } }
+    const verb = ac.createConvolver(); verb.buffer = ir; verbIn = ac.createGain(); verbIn.gain.value = 0.4; verbIn.connect(verb).connect(fxBus);
+    sat = new Float32Array(1024); for (let i=0;i<1024;i++){ const x = i/511.5-1; sat[i] = Math.tanh(x*3)/Math.tanh(3); }
+    // Wind: mostly howl. Two narrow resonant bands of white noise, each drifting on its own slow clock so they wander in
+    // and out of each other, over a quiet whoosh whose lowpass opens with the gust. wind() raises the howls' pitch with
+    // the gust too, so how hard it is pushing can be heard as well as seen.
+    const wander = (secs, rate) => { const b = ac.createBuffer(1, sr*secs, sr), a = b.getChannelData(0); let tg = 0, v = 0;   // smooth zero-mean ±1 drift
+      for (let i=0, nx=0;i<a.length;i++){ if (i >= nx){ tg = Math.random()*2-1; nx = i + sr*rate*(0.5+Math.random()); } v += (tg-v)*0.00003; a[i] = v; }
+      const e = a[a.length-1]; for (let i=0;i<a.length;i++) a[i] -= e*i/a.length;                  // no step at the loop point
+      return b; };
+    const wsum = gn(1), wlo = ac.createBiquadFilter(); wlo.type = 'highpass'; wlo.frequency.value = 180;
+    windLp = lpf(650, 0.5); const swell = gn(1); loopSrc(wander(9, 0.9)).connect(gn(0.35)).connect(swell.gain);
+    loopSrc(white).connect(wlo).connect(windLp).connect(swell).connect(gn(0.3)).connect(wsum);   // whoosh, kept low
+    const band = (f, q, secs, rate, depth, vol) => { const b = ac.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q;
+      loopSrc(wander(secs, rate)).connect(gn(depth)).connect(b.frequency); loopSrc(white).connect(b).connect(gn(vol)).connect(wsum); return b; };
+    howlA = band(600, 7, 11, 1.6, 220, 2.4);
+    howlB = band(950, 9, 13, 2.1, 260, 2.04);
+    windGain = gn(0); wsum.connect(windGain).connect(ac.destination);
   }
   function resume(){ if (ac && ac.state === 'suspended') ac.resume(); }
   // Both are called every frame. Each call used to append fresh automation events to the params' timelines, three per
   // frame and forever; now they only schedule when the state actually flips (the sound toggle counts as a flip).
   function water(on){ if (!ac) return; const k = on && S.sound ? 1 : 0; if (k === wetOn) return; wetOn = k; wetGain.gain.setTargetAtTime(k ? 0.5 : 0, ac.currentTime, on ? 0.05 : 0.2); }
   function thrust(on){ if (!ac) return; const k = on && S.sound ? 1 : 0; if (k === thrOn) return; thrOn = k;
-    thrGain.gain.setTargetAtTime(k ? 0.45 : 0, ac.currentTime, on ? 0.04 : 0.1); thrFilt.frequency.setTargetAtTime(on ? 900 : 400, ac.currentTime, 0.1); }
+    thrGain.gain.setTargetAtTime(k ? 0.26 : 0, ac.currentTime, on ? 0.04 : 0.1); thrFilt.frequency.setTargetAtTime(on ? 900 : 400, ac.currentTime, 0.1); }
+  // k: strength of the wind field the rocket is in, 0 outside. Also called every frame, so it is quantised to twentieths
+  // and only schedules when the step changes, the same rule as water() and thrust().
+  function wind(k){ if (!ac) return; const q = S.sound ? Math.round(k*20) : 0; if (q === windStep) return; windStep = q;
+    const v = q/20, t = ac.currentTime, p = 1+0.45*(v-0.6);
+    windGain.gain.setTargetAtTime(0.285*v, t, 0.12); windLp.frequency.setTargetAtTime(650+850*v, t, 0.2);
+    howlA.frequency.setTargetAtTime(600*p, t, 0.35); howlB.frequency.setTargetAtTime(950*p, t, 0.35); }
   function burst(dur, f0, f1, vol){
     if (!ac || !S.sound) return; const t = ac.currentTime, src = ac.createBufferSource(); src.buffer = noise;
     const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t+dur);
@@ -102,9 +148,33 @@ const Snd = (() => {
     o.type = type||'sine'; o.frequency.setValueAtTime(freq, t); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
     o.connect(g).connect(ac.destination); o.start(t); o.stop(t+dur+0.05);
   }
+  // One looped noise source through a filter chain and an envelope into the crash bus and the cave send.
+  // env: [attack, peak, hold, decay τ]. Filter stages are factories that build their node at the start time.
+  function voice(buf, rate, filt, env){
+    const t = ac.currentTime+0.005, s = ac.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; s.loop = true;
+    const g = ac.createGain(), [at, pk, hold, tau] = env, end = t+at+hold+tau*6;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(pk, t+at); g.gain.setTargetAtTime(0, t+at+hold, tau);
+    let node = s; for (const f of filt){ f(t); node.connect(f.node); node = f.node; }
+    node.connect(g); g.connect(fxBus); g.connect(verbIn);
+    s.start(t, Math.random()*buf.duration); s.stop(end);
+  }
+  const bq = (type, f0, f1, dur, q) => { const f = x => { f.node = ac.createBiquadFilter(); f.node.type = type; f.node.Q.value = q||0.7;
+    f.node.frequency.setValueAtTime(f0, x); if (f1) f.node.frequency.exponentialRampToValueAtTime(f1, x+dur); }; return f; };
+  const bqp = (type, pts, q) => { const f = x => { f.node = ac.createBiquadFilter(); f.node.type = type; f.node.Q.value = q||0.7;
+    f.node.frequency.setValueAtTime(pts[0][0], x); for (let i=1;i<pts.length;i++) f.node.frequency.exponentialRampToValueAtTime(pts[i][0], x+pts[i][1]); }; return f; };
+  const drive = () => { const f = () => { f.node = ac.createWaveShaper(); f.node.curve = sat; }; return f; };
+  // No pitched layer: a falling sine with a fast attack is how a kick drum is made, and it read as a hit. The low end is
+  // driven brown noise swelling in over ~40 ms, and the fireball's filter blooms open before it closes: a 'whoomp'. No
+  // snap on top either: even a soft one pulled it back towards a hit.
+  function boom(){
+    if (!ac || !S.sound) return; const v = () => 0.9+Math.random()*0.2;
+    voice(white,   v(), [bqp('lowpass', [[500,0],[2200*v(),0.05],[150,0.55]], 0.8)],      [0.02,  0.8, 0.06,  0.21]);   // fireball
+    voice(noise,   v(), [bq('lowpass', 150, 70, 0.85, 1.1), drive(), bq('lowpass', 900)], [0.04,  0.9, 0.08,  0.27]);   // low whoomp; the drive keeps it audible on phone speakers
+    voice(noise,   v(), [bq('lowpass', 260, 90, 1.1)],                                    [0.07,  1.1, 0.08,  0.29]);   // rumble
+  }
   return {
-    init, resume, thrust, water,
-    explode(){ burst(1.1, 2600, 90, 1.2); tone(70, 0.5, 0.6, 'sine'); },
+    init, resume, thrust, water, wind,
+    explode: boom,
     land(sp){ const v = Math.min(0.7, 0.15+sp/500); burst(0.18, 700, 120, v); tone(55, 0.25, v*0.8, 'sine'); },
     finish(){ tone(523, 0.18, 0.25, 'triangle'); tone(784, 0.22, 0.25, 'triangle', 0.14); tone(1046, 0.4, 0.22, 'triangle', 0.28); },
     click(){ tone(660, 0.06, 0.08, 'square'); },
@@ -181,6 +251,7 @@ function applyForces(s, tick, fs){
   }
 }
 const inWater = s => (L.forces||[]).some(f => f.kind === 'water' && f.r === undefined && inRect(f, s.x, s.y));
+function windAt(s){ let k = 0; for (const f of L.forces||[]) if (f.kind === 'wind' && f.r === undefined && inRect(f, s.x, s.y)) k = Math.max(k, forceLevel(f, ticks)); return k; }   // for the sound only
 
 // One physics tick. Deterministic: same inputs → same run, which is what makes the ghost replay possible.
 function stepShip(s, inp, tick){
@@ -693,6 +764,7 @@ function render(dt){
 
   Snd.thrust(mode === 'play' && ship.state === 'flying' && ship.flame);
   Snd.water(mode === 'play' && wet);
+  Snd.wind(mode === 'play' && ship.state === 'flying' ? windAt(ship) : 0);
   if (ticks !== hudTicks){ hudTicks = ticks; timerEl.textContent = fmt(ticks); }        // DOM writes only when something shows a change
   if (!S.buttons){ const t = `rotate(${SR.a.toFixed(3)}rad) translateY(${-S.radius+4}px)`; if (t !== hudHdg){ hudHdg = t; hdgEl.style.transform = t; } }
 }
