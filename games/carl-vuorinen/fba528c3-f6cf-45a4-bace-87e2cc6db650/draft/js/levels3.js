@@ -9,7 +9,9 @@ LEVELS.push(
    // fast, but it carries a gust or a dead branch. The sides swap every storey. You start at the top and fly down.
    rooms:[{x:1200,y:350,rx:420,ry:200,wob:0.08,seed:1201},
           {x:1200,y:1270,rx:200,ry:140,wob:0.1,seed:1202}, {x:1200,y:2220,rx:200,ry:140,wob:0.1,seed:1203}, {x:1200,y:3170,rx:200,ry:140,wob:0.1,seed:1204},
-          {x:1200,y:4150,rx:480,ry:200,wob:0.08,seed:1205}],
+          {x:1200,y:4150,rx:480,ry:200,wob:0.08,seed:1205},
+          {x:1580,y:1280,rx:120,ry:75,wob:0.1,seed:1206}, {x:830,y:3225,rx:160,ry:80,wob:0.1,seed:1207},
+          {x:1710,y:1270,rx:70,ry:50,wob:0.1,seed:1208}, {x:950,y:2222,rx:90,ry:50,wob:0.1,seed:1209}, {x:1600,y:2256,rx:110,ry:60,wob:0.1,seed:1212}],   // fillers: carve out the slivers and thin spits left where two strands meet
    corridors:[
      // storey 1: wide left, gust across its drop | tight right
      {pts:[[850,480],[450,650],[350,950],[550,1180],[1080,1260]],w:240},
