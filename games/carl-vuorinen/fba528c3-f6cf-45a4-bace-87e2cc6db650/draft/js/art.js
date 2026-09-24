@@ -217,6 +217,19 @@ const WALLS = (() => {
       const V = simp.filter((p, i) => i === 0 || Math.hypot(p[0]-simp[i-1][0], p[1]-simp[i-1][1]) >= 1);
       const closed = V.length > 2 && Math.hypot(V[0][0]-V[V.length-1][0], V[0][1]-V[V.length-1][1]) < 1;
       if (closed) V.pop();
+      // Pad decks: a pad top is part of whatever floor it sits on, often one long segment across a whole notch. Cut that
+      // segment at the pad's ends, so only the piece under the pad takes the pad colour instead of the whole floor.
+      for (let i=0; i<(closed ? V.length : V.length-1); i++){
+        const a = V[i], b = V[(i+1)%V.length];
+        if (b[0]-a[0] < 1) continue;                                  // pad tops face up: outline running +x
+        let cut = null;                                               // the nearest pad end on this segment; the next pass takes the rest
+        for (const [, p] of pads) for (const bx of [p.x, p.x+p.w]){
+          if (bx <= a[0]+1 || bx >= b[0]-1 || (cut && bx >= cut[0])) continue;
+          const by = a[1]+(b[1]-a[1])*(bx-a[0])/(b[0]-a[0]);
+          if (Math.abs(by-p.y) < 10) cut = [bx, by];
+        }
+        if (cut) V.splice(i+1, 0, cut);
+      }
       const nV = V.length; if (nV < 2) continue;
       const nrm = i => { const a = V[i], b = V[(i+1)%nV], l = Math.hypot(b[0]-a[0], b[1]-a[1]); return [(b[1]-a[1])/l, -(b[0]-a[0])/l]; };
       const O = V.map((p, i) => {
@@ -232,7 +245,7 @@ const WALLS = (() => {
         const nx = dy/l, ny = -dx/l, mx = (x0+x1)/2, my = (y0+y1)/2;
         const cs = [col(mx-nx*14, my-ny*14), col(mx-nx*30, my-ny*30)].filter(Boolean);                  // two depths in, past the edge shadow
         let pad = null;
-        for (const [k, p] of pads) if (ny < -0.7 && my > p.y-8 && my < p.y+8 && mx > p.x-8 && mx < p.x+p.w+8){ const n = parseInt(PAL[k].slice(1),16); pad = [n>>16, (n>>8)&255, n&255]; }
+        for (const [k, p] of pads) if (ny < -0.7 && Math.abs(my-p.y) < 10 && mx > p.x && mx < p.x+p.w){ const n = parseInt(PAL[k].slice(1),16); pad = [n>>16, (n>>8)&255, n&255]; }
         chain.push({x0:O[i][0], y0:O[i][1], x1:O[j][0], y1:O[j][1], nx, ny, l, pad, c: cs.length ? cs.reduce((a, v) => [a[0]+v[0]/cs.length, a[1]+v[1]/cs.length, a[2]+v[2]/cs.length], [0,0,0]) : null,
                     bx0:Math.min(x0,x1), by0:Math.min(y0,y1), bx1:Math.max(x0,x1), by1:Math.max(y0,y1)});
       }
