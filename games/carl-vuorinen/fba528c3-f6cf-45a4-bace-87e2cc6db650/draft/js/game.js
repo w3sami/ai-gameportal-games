@@ -71,7 +71,7 @@ document.addEventListener('webkitfullscreenchange', onFsChange);
 
 // ---- Audio: everything synthesised, no files ----
 const Snd = (() => {
-  let ac = null, noise = null, thrGain = null, thrFilt = null, wetGain = null;
+  let ac = null, noise = null, thrGain = null, thrFilt = null, wetGain = null, thrOn = -1, wetOn = -1;
   function init(){
     if (ac) return;
     try { ac = new (window.AudioContext||window.webkitAudioContext)(); } catch (e) { return; }
@@ -86,8 +86,11 @@ const Snd = (() => {
     wetGain = ac.createGain(); wetGain.gain.value = 0; ws.connect(wf).connect(wetGain).connect(ac.destination); ws.start();
   }
   function resume(){ if (ac && ac.state === 'suspended') ac.resume(); }
-  function water(on){ if (!ac) return; wetGain.gain.setTargetAtTime((on && S.sound) ? 0.5 : 0, ac.currentTime, on ? 0.05 : 0.2); }
-  function thrust(on){ if (!ac) return; const g = (on && S.sound) ? 0.45 : 0; thrGain.gain.setTargetAtTime(g, ac.currentTime, on ? 0.04 : 0.1); thrFilt.frequency.setTargetAtTime(on ? 900 : 400, ac.currentTime, 0.1); }
+  // Both are called every frame. Each call used to append fresh automation events to the params' timelines, three per
+  // frame and forever; now they only schedule when the state actually flips (the sound toggle counts as a flip).
+  function water(on){ if (!ac) return; const k = on && S.sound ? 1 : 0; if (k === wetOn) return; wetOn = k; wetGain.gain.setTargetAtTime(k ? 0.5 : 0, ac.currentTime, on ? 0.05 : 0.2); }
+  function thrust(on){ if (!ac) return; const k = on && S.sound ? 1 : 0; if (k === thrOn) return; thrOn = k;
+    thrGain.gain.setTargetAtTime(k ? 0.45 : 0, ac.currentTime, on ? 0.04 : 0.1); thrFilt.frequency.setTargetAtTime(on ? 900 : 400, ac.currentTime, 0.1); }
   function burst(dur, f0, f1, vol){
     if (!ac || !S.sound) return; const t = ac.currentTime, src = ac.createBufferSource(); src.buffer = noise;
     const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t+dur);
@@ -130,7 +133,7 @@ function snapPrev(){ PREV.x = ship.x; PREV.y = ship.y; PREV.a = ship.a; for (con
 function reset(){
   ship = spawn(); best = store.bests[li] || null; ghost = null; gPath = null;
   if (best && best.path){ try { gPath = GP.decode(GP.unb64(best.path)); ghost = GP.pose(gPath, 0, {}); } catch (e) { gPath = null; ghost = null; } }
-  ticks = 0; gTick = 0; running = false; gRec = []; particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
+  ticks = 0; gTick = 0; running = false; gRec = []; for (const p of particles) PPOOL.push(p); particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
   cam.x = ship.x - vw/(2*Z); cam.y = ship.y - vh/(2*Z);
   snapPrev();                                                // a restart is a jump, not a move: nothing to blend from
   redraw();
@@ -306,7 +309,8 @@ function buildHazards(){
     const pts = h.kind === 'branch' ? branchPts(h) : spikePts(h), tip = pts.reduce((b,p) => Math.hypot(p[0]-h.tx,p[1]-h.ty) < Math.hypot(b[0]-h.tx,b[1]-h.ty) ? p : b);
     const probe = [tip].concat(pts.filter(p => p !== tip && !isSolid(p[0],p[1])));   // landing is judged by the part that hangs in the open
     const sprite = renderSpikeSprite(pts, h.seed, h.kind, {ax:h.x, ay:h.y, bx:h.tx, by:h.ty, w:h.w, taper:h.kind === 'branch' ? 0.35 : 0.85});
-    return {h, pts, probe, sprite, col: h.kind === 'branch' ? '120,86,52' : null, state:'hang', t:0, a:0, dy:0, vy:0};
+    const rad = Math.max(...pts.map(p => Math.hypot(p[0]-h.x, p[1]-h.y)));   // reach from the pivot; rotation keeps it, the drop moves the pivot
+    return {h, pts, probe, sprite, rad, col: h.kind === 'branch' ? '120,86,52' : null, state:'hang', t:0, a:0, dy:0, vy:0};
   });
 }
 function hazardReset(){ for (const z of hazards){ z.state = 'hang'; z.t = 0; z.a = 0; z.dy = 0; z.vy = 0; z.pa = 0; z.pdy = 0; } }
@@ -327,6 +331,9 @@ function updateHazards(s){
       z.vy += P.gravity*HZ.gravity*DT; z.dy += z.vy*DT;
       if (z.dy > 12 && posePts(z, z.probe).some(p => isSolid(p[0],p[1]))){ z.state = 'gone'; shatter(h.tx, h.ty+z.dy, z.vy, z.col); Snd.thud(); continue; }
     }
+    // The rocket's hull reaches 14 px from its centre and the vertex test is 9 px, so beyond rad+16 of the pivot neither
+    // test can hit: skip posing the spike at all. Same answers as before, without two arrays per hazard per tick.
+    if (Math.hypot(s.x-h.x, s.y-h.y-z.dy) > z.rad+16) continue;
     const pts = posePts(z, z.pts), c = Math.cos(s.a), sn = Math.sin(s.a);    // hull points inside the spike, or spike vertices inside the rocket
     for (const [lx,ly] of HULL){ const px = s.x+lx*c-ly*sn, py = s.y+lx*sn+ly*c; if (pip(px,py,pts)) return {px,py,kind:h.kind}; }
     for (const p of pts){ if (Math.hypot(p[0]-s.x, p[1]-s.y) < 9) return {px:p[0], py:p[1], kind:h.kind}; }
@@ -335,48 +342,56 @@ function updateHazards(s){
 }
 
 // ---- Particles ----
+// Pooled: a waterfall throws up 240 droplets a second and the exhaust another 240, each a fresh object that lived half a
+// second. Dead particles go back to PPOOL and are refilled in place, so steady flight allocates nothing.
+const PPOOL = [];
+function addP(x, y, vx, vy, life, max, sz, kind, col){
+  const p = PPOOL.pop() || {};
+  p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.max = max; p.sz = sz; p.kind = kind; p.col = col;
+  particles.push(p);
+}
 function emitThrust(s){
   const dx = -Math.sin(s.a), dy = Math.cos(s.a), ox = s.x+dx*11, oy = s.y+dy*11;
   for (let i=0;i<2;i++){ const sp = 160+Math.random()*180, j = (Math.random()-0.5)*70;
-    particles.push({x:ox,y:oy,vx:dx*sp+dy*j+s.vx*0.5,vy:dy*sp-dx*j+s.vy*0.5,life:0.22+Math.random()*0.18,max:0.4,sz:2.5+Math.random()*2,kind:0,col:null}); }
+    addP(ox, oy, dx*sp+dy*j+s.vx*0.5, dy*sp-dx*j+s.vy*0.5, 0.22+Math.random()*0.18, 0.4, 2.5+Math.random()*2, 0, null); }
 }
 function explode(px,py){
-  for (let i=0;i<50;i++){ const a = Math.random()*6.283, sp = 60+Math.random()*260; particles.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,life:0.8+Math.random()*1.2,max:2,sz:1.5+Math.random()*3,kind:1,col:null}); }
-  for (let i=0;i<40;i++){ const a = Math.random()*6.283, sp = 120+Math.random()*420; particles.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.3+Math.random()*0.5,max:0.8,sz:2+Math.random()*3,kind:0,col:null}); }
-  particles.push({x:px,y:py,vx:0,vy:0,life:0.45,max:0.45,sz:0,kind:2,col:null});
+  for (let i=0;i<50;i++){ const a = Math.random()*6.283, sp = 60+Math.random()*260; addP(px, py, Math.cos(a)*sp, Math.sin(a)*sp-80, 0.8+Math.random()*1.2, 2, 1.5+Math.random()*3, 1, null); }
+  for (let i=0;i<40;i++){ const a = Math.random()*6.283, sp = 120+Math.random()*420; addP(px, py, Math.cos(a)*sp, Math.sin(a)*sp, 0.3+Math.random()*0.5, 0.8, 2+Math.random()*3, 0, null); }
+  addP(px, py, 0, 0, 0.45, 0.45, 0, 2, null);
 }
 function celebrate(px,py){
   const cols = ['90,212,110','184,245,194','255,255,255','227,162,60'];   // rgb triples: the alpha is quantised and cached, see PFX
   for (let i=0;i<140;i++){ const a = -Math.PI*(0.1+0.8*Math.random()), sp = 180+Math.random()*420;
-    particles.push({x:px+(Math.random()-0.5)*40,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1.0+Math.random()*1.4,max:2.4,sz:2.5+Math.random()*3.5,kind:3,col:cols[i%4]}); }
-  for (let i=0;i<3;i++) particles.push({x:px,y:py,vx:0,vy:0,life:0.7+i*0.2,max:0.7+i*0.2,sz:160+i*90,kind:2,col:'rgba(120,235,150,'});
+    addP(px+(Math.random()-0.5)*40, py, Math.cos(a)*sp, Math.sin(a)*sp, 1.0+Math.random()*1.4, 2.4, 2.5+Math.random()*3.5, 3, cols[i%4]); }
+  for (let i=0;i<3;i++) addP(px, py, 0, 0, 0.7+i*0.2, 0.7+i*0.2, 160+i*90, 2, 'rgba(120,235,150,');
 }
 function crumbs(px,py,n,col){
-  for (let i=0;i<n;i++) particles.push({x:px+(Math.random()-0.5)*24,y:py,vx:(Math.random()-0.5)*30,vy:20+Math.random()*50,life:0.4+Math.random()*0.4,max:0.8,sz:1.5+Math.random()*2,kind:1,col:col||null});
+  for (let i=0;i<n;i++) addP(px+(Math.random()-0.5)*24, py, (Math.random()-0.5)*30, 20+Math.random()*50, 0.4+Math.random()*0.4, 0.8, 1.5+Math.random()*2, 1, col||null);
 }
 function shatter(px,py,v,col){
-  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); particles.push({x:px+(Math.random()-0.5)*20,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.7,max:1.2,sz:2+Math.random()*4,kind:1,col:col||null}); }
+  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); addP(px+(Math.random()-0.5)*20, py, Math.cos(a)*sp, Math.sin(a)*sp, 0.5+Math.random()*0.7, 1.2, 2+Math.random()*4, 1, col||null); }
 }
 function spray(s){
   const a = Math.random()*6.283, v = 40+Math.random()*120;
-  particles.push({x:s.x+(Math.random()-0.5)*16,y:s.y+(Math.random()-0.5)*16,vx:Math.cos(a)*v+s.vx*0.3,vy:Math.sin(a)*v-40,life:0.3+Math.random()*0.3,max:0.6,sz:1.5+Math.random()*2,kind:1,col:'200,228,255'});
+  addP(s.x+(Math.random()-0.5)*16, s.y+(Math.random()-0.5)*16, Math.cos(a)*v+s.vx*0.3, Math.sin(a)*v-40, 0.3+Math.random()*0.3, 0.6, 1.5+Math.random()*2, 1, '200,228,255');
 }
 function froth(){                                                                                   // droplets thrown up where each visible waterfall meets its pool
   for (const f of L.forces||[]){ if (f.kind !== 'water' || f.r !== undefined || !f.pool) continue;
     if (f.x+f.w < cam.x-100 || f.x > cam.x+vw/Z+100 || f.y+f.h < cam.y-100 || f.y+f.h-200 > cam.y+vh/Z) continue;
     for (let k=0;k<2;k++){ const px = f.x-30+Math.random()*(f.w+60), py = f.y+f.h-f.pool.h-2, v = 140+Math.random()*260;
-      particles.push({x:px,y:py,vx:(Math.random()-0.5)*220,vy:-v,life:0.4+Math.random()*0.5,max:0.9,sz:3+Math.random()*3.5,kind:1,col:'235,246,255'}); }
+      addP(px, py, (Math.random()-0.5)*220, -v, 0.4+Math.random()*0.5, 0.9, 3+Math.random()*3.5, 1, '235,246,255'); }
   }
 }
 function puff(px,py,sp){
-  for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v*0.4,life:0.3+Math.random()*0.4,max:0.7,sz:2+Math.random()*3,kind:1,col:null}); }
+  for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; addP(px, py, Math.cos(a)*v, Math.sin(a)*v*0.4, 0.3+Math.random()*0.4, 0.7, 2+Math.random()*3, 1, null); }
 }
 function updateParticles(){
   for (let i=particles.length-1;i>=0;i--){ const p = particles[i]; p.life -= DT;
     if (p.kind === 1){ p.vy += P.gravity*0.6*DT; p.x += p.vx*DT; p.y += p.vy*DT; if (isSolid(p.x,p.y)) p.life = 0; }
     else if (p.kind === 3){ p.vy += P.gravity*0.9*DT; p.vx *= 0.995; p.x += p.vx*DT; p.y += p.vy*DT; if (isSolid(p.x,p.y)){ p.vy *= -0.45; p.vx *= 0.6; p.y -= p.vy*DT*2; if (Math.abs(p.vy) < 20) p.life = Math.min(p.life, 0.3); } }
     else if (p.kind === 0){ p.vx *= 0.97; p.vy *= 0.97; p.x += p.vx*DT; p.y += p.vy*DT; }
-    if (p.life <= 0){ particles[i] = particles[particles.length-1]; particles.pop(); }   // swap-remove: what moves down was already stepped this frame
+    if (p.life <= 0){ PPOOL.push(p); particles[i] = particles[particles.length-1]; particles.pop(); }   // swap-remove: what moves down was already stepped this frame
   }
 }
 
@@ -678,9 +693,10 @@ function render(dt){
 
   Snd.thrust(mode === 'play' && ship.state === 'flying' && ship.flame);
   Snd.water(mode === 'play' && wet);
-  timerEl.textContent = fmt(ticks);
-  if (!S.buttons) hdgEl.style.transform = `rotate(${SR.a}rad) translateY(${-S.radius+4}px)`;
+  if (ticks !== hudTicks){ hudTicks = ticks; timerEl.textContent = fmt(ticks); }        // DOM writes only when something shows a change
+  if (!S.buttons){ const t = `rotate(${SR.a.toFixed(3)}rad) translateY(${-S.radius+4}px)`; if (t !== hudHdg){ hudHdg = t; hdgEl.style.transform = t; } }
 }
+let hudTicks = -1, hudHdg = '';
 
 // ---- HUD ----
 const timerEl = $('timer'), lvlEl = $('lvl'), bestEl = $('bestline'), msgMain = $('msgMain'), msgSub = $('msgSub');
