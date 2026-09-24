@@ -2866,7 +2866,7 @@ function drawTaxi(v) {
   /* Kulmat: `flame` piirtää +y:n suuntaan, ja rotate(+π/2) vie sen vasemmalle,
      −π/2 oikealle. Ne olivat ristissä 24.9.2026 asti, ja liekki osoitti
      suuttimesta rungon sisään — rungon alta näkyi vain suuttimen hehku. */
-  const SIDE_L = 39;
+  const SIDE_L = 23;                        // 40 % pois 39:stä, kattoliekin kokoiseksi. Sami 24.9.2026.
   if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, Math.PI / 2, SIDE_L * v.x * j(), SIDE_L * v.x / 3);
   if (v.x < -0.05) flame(TW / 2 + NOZ, 0, -Math.PI / 2, SIDE_L * -v.x * j(), SIDE_L * -v.x / 3);
 
