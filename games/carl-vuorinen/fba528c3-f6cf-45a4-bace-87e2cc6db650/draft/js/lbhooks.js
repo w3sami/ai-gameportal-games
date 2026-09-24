@@ -42,9 +42,10 @@
   };
 
   function attach(ticksBest){
+    const lv = mode === 'menu' ? menuSel : li;                // in the menu, the level picked there, which may not be built yet
     const d = document.createElement('div');
-    d.dataset.lbLevel = li;
-    d.dataset.lbTitle = `${li+1}. ${L.name}`;
+    d.dataset.lbLevel = lv;
+    d.dataset.lbTitle = `${lv+1}. ${LEVELS[lv].name}`;
     if (ticksBest) d.dataset.lbPost = msOf(ticksBest);
     const settings = box.querySelector('.settings');
     if (settings) box.insertBefore(d, settings); else box.append(d);
