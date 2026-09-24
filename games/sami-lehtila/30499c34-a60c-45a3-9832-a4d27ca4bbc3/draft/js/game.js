@@ -2836,16 +2836,19 @@ function drawTaxi(v) {
   ctx.translate(t2.x, t2.y);
   if (ts !== 1) ctx.scale(ts, ts);
 
-  const flame = (dx, dy, rot, len) => {
+  /* `cut` piilottaa liekin tyven: piirretään vain se osa joka alkaa `cut`
+     pikselin päästä, ja se osa tulee suuttimen suulle. */
+  const flame = (dx, dy, rot, len, cut = 0) => {
     ctx.save();
-    ctx.translate(dx, dy); ctx.rotate(rot);
+    ctx.translate(dx, dy); ctx.rotate(rot); ctx.translate(0, -cut);
     const g = ctx.createLinearGradient(0, 0, 0, len);
     g.addColorStop(0, 'rgba(255,240,180,.95)');
     g.addColorStop(0.5, 'rgba(255,150,60,.7)');
     g.addColorStop(1, 'rgba(255,60,60,0)');
     ctx.fillStyle = g;
+    const w = 6 * (1 - cut / len);
     ctx.beginPath();
-    ctx.moveTo(-6, 0); ctx.lineTo(6, 0); ctx.lineTo(0, len);
+    ctx.moveTo(-w, cut); ctx.lineTo(w, cut); ctx.lineTo(0, len);
     ctx.closePath(); ctx.fill();
     ctx.restore();
   };
@@ -2853,9 +2856,16 @@ function drawTaxi(v) {
   if (v.y < -0.05) { const l = 26 * -v.y * j(); flame(-14, TH / 2, 0, l); flame(14, TH / 2, 0, l); }
   if (v.y > 0.05) flame(0, -TH / 2, Math.PI, 18 * v.y * j());
   /* Sivuliekki on hieman pidempi kuin pystyliekki: se tulee kapeammasta
-     suuttimesta, ja lyhyenä se hukkui rungon viereen. Sami 23.9.2026. */
-  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, -Math.PI / 2, 26 * v.x * j());
-  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, Math.PI / 2, 26 * -v.x * j());
+     suuttimesta, ja lyhyenä se hukkui rungon viereen. Sami 23.9.2026.
+     Se näyttää samalta kuin kattoliekki: katolla kyltti peittää liekin
+     vaalean tyven, joten näkyviin jää punaisempi ja suipompi häntä. Sivulla
+     sama saadaan piirtämällä kolmanneksen pidempi liekki ja jättämällä sen
+     ensimmäinen kolmannes pois — jäljelle jäävän tyven leveys on suuttimen
+     korkeus. Sami 24.9.2026: *"liekki voisi olla samanlainen kuin ylhäällä,
+     eli paljon punaisempi."* */
+  const SIDE_L = 39;
+  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, -Math.PI / 2, SIDE_L * v.x * j(), SIDE_L * v.x / 3);
+  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, Math.PI / 2, SIDE_L * -v.x * j(), SIDE_L * -v.x / 3);
 
   /* Sivusuuttimet. Ne ovat olleet aina liekissä muttei rungossa — Sami
      23.9.2026: *"sivuthrustereiden puuttuminen on häirinnyt aina, molemmissa
