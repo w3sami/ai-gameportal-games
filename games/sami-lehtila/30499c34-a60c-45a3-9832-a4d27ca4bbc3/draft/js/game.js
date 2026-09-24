@@ -2863,9 +2863,12 @@ function drawTaxi(v) {
      ensimmäinen kolmannes pois — jäljelle jäävän tyven leveys on suuttimen
      korkeus. Sami 24.9.2026: *"liekki voisi olla samanlainen kuin ylhäällä,
      eli paljon punaisempi."* */
+  /* Kulmat: `flame` piirtää +y:n suuntaan, ja rotate(+π/2) vie sen vasemmalle,
+     −π/2 oikealle. Ne olivat ristissä 24.9.2026 asti, ja liekki osoitti
+     suuttimesta rungon sisään — rungon alta näkyi vain suuttimen hehku. */
   const SIDE_L = 39;
-  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, -Math.PI / 2, SIDE_L * v.x * j(), SIDE_L * v.x / 3);
-  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, Math.PI / 2, SIDE_L * -v.x * j(), SIDE_L * -v.x / 3);
+  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, Math.PI / 2, SIDE_L * v.x * j(), SIDE_L * v.x / 3);
+  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, -Math.PI / 2, SIDE_L * -v.x * j(), SIDE_L * -v.x / 3);
 
   /* Sivusuuttimet. Ne ovat olleet aina liekissä muttei rungossa — Sami
      23.9.2026: *"sivuthrustereiden puuttuminen on häirinnyt aina, molemmissa
