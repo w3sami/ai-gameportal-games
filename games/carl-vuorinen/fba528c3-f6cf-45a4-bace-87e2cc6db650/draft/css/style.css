@@ -7,7 +7,6 @@ button{font:inherit;color:inherit;cursor:pointer}
 #timer{font-size:clamp(34px,6vw,56px);font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
 #lvl{margin-top:6px;font-size:14px;color:var(--accent)}
 #bestline{margin-top:2px;font-size:13px;color:var(--dim)}
-#streakline{margin-top:2px;font-size:13px;font-weight:600;color:var(--gold)}
 #msg{position:fixed;left:0;right:0;top:32%;text-align:center;pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,.95),0 0 18px rgba(0,0,0,.8);padding:0 16px}
 #msgMain{font-size:clamp(26px,5vw,44px);font-weight:600}
 #msgSub{margin-top:6px;font-size:15px;color:var(--dim)}
@@ -52,19 +51,8 @@ kbd{font:inherit;font-size:13px;padding:0 6px;border:1px solid var(--line);borde
 .tile b{display:block;font-size:17px;font-weight:600}
 .tile small{display:block;font-size:11.5px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile em{display:block;font-style:normal;font-size:12px;color:var(--accent);margin-top:4px;font-variant-numeric:tabular-nums}
-.tile.crowned:not(.sel){border-color:rgba(255,204,77,.42);background:rgba(255,204,77,.09)}
-.tile .crown{position:absolute;top:6px;right:6px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
 .tile.sel{border-color:var(--accent);background:rgba(227,162,60,.14)}
 .tile:disabled{opacity:.4;cursor:default}
-/* Streak: the run of levels cleared in order, each on one clean attempt. Gold throughout, so it never reads as a
-   time (amber) or as a personal best (green). */
-.crown{width:14px;height:14px;flex:none;fill:var(--gold)}
-.streakbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-8px 0 18px;font-size:13px;color:var(--dim)}
-.sk-on{display:inline-flex;align-items:center;gap:6px;color:var(--gold);font-weight:600;white-space:nowrap}
-.sk-off{white-space:nowrap}
-.sk-next{flex:1;min-width:150px}
-.sk-best{margin-left:auto;opacity:.8;white-space:nowrap}
-.sk-note{display:flex;align-items:center;gap:8px;color:var(--gold)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .btn{padding:12px 20px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.06);font-size:16px;font-weight:600}
 .btn.pri{background:var(--accent);color:#1a1409;border-color:transparent}
