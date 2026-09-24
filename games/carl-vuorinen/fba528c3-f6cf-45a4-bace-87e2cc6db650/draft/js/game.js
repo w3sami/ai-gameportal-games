@@ -137,7 +137,7 @@ function reset(){
   hud();
 }
 function loadLevel(i){
-  li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; menuCh = chapterOf(li); save();
+  li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; menuCh = chapterOf(li); menuSel = li; save();
   for (const z of hazards) z.sprite.c.width = z.sprite.c.height = 0;
   setGeom(); applyTheme(); buildMain(); buildHazards(); buildMotes(); resize(); reset();
 }
@@ -697,12 +697,12 @@ function closeModal(){ modal.classList.remove('open'); }
 // Levels are grouped into chapters (CHAPTERS in levels.js). The menu shows one chapter at a time, with arrows to move between them.
 const chapterOf = i => { let c = 0; for (let k=0;k<CHAPTERS.length;k++) if (i >= CHAPTERS[k].start) c = k; return c; };
 const chapterRange = c => [CHAPTERS[c].start, c+1 < CHAPTERS.length ? CHAPTERS[c+1].start : LEVELS.length];
-let menuCh = 0;
+let menuCh = 0, menuSel = 0;                                   // menuSel: the level picked in the menu, which is built only once it is flown
 function tiles(){
   const [a,b] = chapterRange(menuCh), ch = CHAPTERS[menuCh];
   return `<div class="chap"><button class="nav" data-ch="-1" ${menuCh===0?'disabled':''} aria-label="Previous chapter">◀</button><h2>Chapter ${menuCh+1}: ${ch.name}</h2><button class="nav" data-ch="1" ${menuCh===CHAPTERS.length-1?'disabled':''} aria-label="Next chapter">▶</button></div>` +
     `<div class="grid">` + LEVELS.slice(a,b).map((l,k) => { const i = a+k, bst = store.bests[i], locked = i > store.unlocked;
-    return `<button class="tile${i===li?' sel':''}" data-l="${i}" ${locked?'disabled':''}><b>${i+1}</b><small>${l.name}</small><em>${locked ? 'locked' : bst ? fmt(bst.ticks) : '—'}</em></button>`; }).join('') + `</div>`;
+    return `<button class="tile${i===menuSel?' sel':''}" data-l="${i}" ${locked?'disabled':''}><b>${i+1}</b><small>${l.name}</small><em>${locked ? 'locked' : bst ? fmt(bst.ticks) : '—'}</em></button>`; }).join('') + `</div>`;
 }
 function settingsRow(){
   return `<div class="settings"><div class="row">
@@ -720,7 +720,7 @@ function showMenu(){
       <div><b>Keyboard</b><br><kbd>◀</kbd> <kbd>▶</kbd> or <kbd>A</kbd> <kbd>D</kbd> steer<br><kbd>Space</kbd> <kbd>▲</kbd> <kbd>W</kbd> thrust<br><kbd>R</kbd> restart, <kbd>Esc</kbd> pause, <kbd>F</kbd> full screen</div>
     </div>
     ${tiles()}
-    <div class="row"><button class="btn pri" data-act="start">Fly level ${li+1}</button></div>${settingsRow()}`);
+    <div class="row"><button class="btn pri" data-act="start">Fly level ${menuSel+1}</button></div>${settingsRow()}`);
 }
 function showPause(){
   mode = 'paused';
@@ -740,10 +740,30 @@ function showComplete(){
     <div class="row">${lastLevel ? `<button class="btn pri" data-act="menu">Levels</button>` : `<button class="btn pri" data-act="next">Next level</button>`}<button class="btn" data-act="restart">Fly again</button>${lastLevel ? '' : `<button class="btn" data-act="menu">Levels</button>`}</div>`);
 }
 function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); Snd.init(); Snd.resume(); placeControls(); }
+// Building a level is synchronous and takes from a tenth of a second to a few on the big jungle levels, during which
+// nothing can paint. So the build goes in a task of its own after a frame that shows "Loading…": the tap visibly lands,
+// and the freeze reads as loading rather than as a hang. busy swallows a second tap queued behind the first.
+const loadEl = document.createElement('div');
+loadEl.textContent = 'Loading…';
+loadEl.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:50;display:none;pointer-events:none;padding:10px 18px;border-radius:10px;background:rgba(13,14,18,.88);border:1px solid rgba(255,255,255,.12);font-weight:600;letter-spacing:.04em';
+document.body.append(loadEl);
+let busy = false;
+function withLoading(fn){
+  if (busy) return; busy = true; loadEl.style.display = 'block';
+  requestAnimationFrame(() => setTimeout(() => { try { fn(); } finally { busy = false; loadEl.style.display = 'none'; } }, 0));
+}
+// Picking a tile only moves the selection; the level is built when it is flown. Browsing chapter 2 used to cost a full
+// build per tap. The scene behind the menu keeps showing the level last flown until then.
+function fly(){
+  if (!mainC || busy) return;                                  // still building the first level
+  if (menuSel !== li) withLoading(() => { loadLevel(menuSel); play(); });
+  else { reset(); play(); }
+}
+function flyNext(){ withLoading(() => { loadLevel(li+1); play(); }); }
 box.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return; Snd.init(); Snd.click();
   if (t.dataset.l !== undefined){ const n = +t.dataset.l;       // first tap picks the level, a second tap on it flies
-    if (n === li){ reset(); play(); } else { loadLevel(n); showMenu(); } return; }
+    if (n === menuSel) fly(); else { menuSel = n; showMenu(); } return; }
   if (t.dataset.ch){ menuCh = Math.max(0, Math.min(CHAPTERS.length-1, menuCh + +t.dataset.ch)); showMenu(); return; }
   if (t.dataset.fs){ toggleFS(); return; }                      // the label is refreshed by onFsChange
   if (t.dataset.set){
@@ -754,10 +774,10 @@ box.addEventListener('click', e => {
     if (mode === 'menu') showMenu(); else showPause(); return;
   }
   switch (t.dataset.act){
-    case 'start': reset(); play(); break;
+    case 'start': fly(); break;
     case 'resume': play(); break;
     case 'restart': reset(); play(); break;
-    case 'next': loadLevel(li+1); play(); break;
+    case 'next': flyNext(); break;
     case 'menu': reset(); showMenu(); break;
   }
 });
@@ -876,9 +896,9 @@ addEventListener('keydown', e => {
   if (e.key.toLowerCase() === 'f'){ toggleFS(); return; }
   if (mode === 'paused' && e.key === 'Escape'){ Snd.init(); play(); }
   else if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); Snd.init();
-    if (mode === 'menu'){ reset(); play(); }
+    if (mode === 'menu') fly();
     else if (mode === 'paused') play();
-    else if (mode === 'complete'){ if (li < LEVELS.length-1){ loadLevel(li+1); play(); } else { reset(); showMenu(); } }
+    else if (mode === 'complete'){ if (li < LEVELS.length-1) flyNext(); else { reset(); showMenu(); } }
   }
   else if (mode === 'complete' && e.key.toLowerCase() === 'r'){ reset(); play(); }
 });
@@ -886,5 +906,6 @@ addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false
 
 // ---- Go ----
 migrateBests();
-li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; menuCh = chapterOf(li); setGeom(); applyTheme();
-resize(); buildMain(); buildHazards(); buildMotes(); reset(); showMenu(); requestAnimationFrame(frame);
+li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; menuCh = chapterOf(li); menuSel = li; setGeom(); applyTheme();
+resize(); showMenu();                                          // the menu goes up first, so a returning pilot on a big level sees it at once
+withLoading(() => { buildMain(); buildHazards(); buildMotes(); reset(); requestAnimationFrame(frame); });
