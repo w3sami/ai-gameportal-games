@@ -30,17 +30,15 @@ let li = 0;
 // ---- Canvas, layers, collision mask ----
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d');
-let vw = 1, vh = 1, dpr = 1, Z = 1, layers = [], mainC = null, mask = null, motes = [];
+let vw = 1, vh = 1, dpr = 1, Z = 1, mainC = null, mask = null, motes = [];
 function buildMain(){
+  freeLayer(mainC);
   mainC = renderLayer(1, STYLE.main, 0, 0);            // tiled; see art.js
   mask = mainC.mask; mainC.mask = null;
+  WALLS.build();                                       // depth walls, traced from the mask; see art.js
 }
 function isSolid(x,y){ if (x<0||y<0||x>=L.w||y>=L.h) return true; return mask[(y|0)*L.w+(x|0)] === 1; }
-function buildLayers(){
-  layers = STYLE.depth.map(st => {
-    const f = st.f, q = f*0.5, padX = Math.ceil(vw*(1-f)/(2*f*Z))+40, padY = Math.ceil(vh*(1-f)/(2*f*Z))+40;
-    return {f, q, padX, padY, c:renderLayer(q, st, padX, padY)};
-  }).reverse();
+function buildMotes(){
   const r = rng(L.rooms[0].seed*13+1); motes = [];
   for (let i=0;i<L.w*L.h/50000;i++) motes.push({x:r()*L.w, y:r()*L.h, s:1+r()*1.6, v:4+r()*8});
 }
@@ -48,7 +46,8 @@ function resize(){
   vw = innerWidth; vh = innerHeight; dpr = Math.min(devicePixelRatio||1, 2);
   cv.width = Math.round(vw*dpr); cv.height = Math.round(vh*dpr); cv.style.width = vw+'px'; cv.style.height = vh+'px';
   Z = Math.max(Math.min(Math.max(vw/1000, 0.6), 1.15), vw/L.w, vh/L.h);
-  buildLayers(); placeControls();
+  placeControls();                                     // nothing in the level art depends on the viewport any more
+  redraw();
 }
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 120); });
 
@@ -72,7 +71,7 @@ document.addEventListener('webkitfullscreenchange', onFsChange);
 
 // ---- Audio: everything synthesised, no files ----
 const Snd = (() => {
-  let ac = null, noise = null, thrGain = null, thrFilt = null, wetGain = null;
+  let ac = null, noise = null, thrGain = null, thrFilt = null, wetGain = null, thrOn = -1, wetOn = -1;
   function init(){
     if (ac) return;
     try { ac = new (window.AudioContext||window.webkitAudioContext)(); } catch (e) { return; }
@@ -87,8 +86,11 @@ const Snd = (() => {
     wetGain = ac.createGain(); wetGain.gain.value = 0; ws.connect(wf).connect(wetGain).connect(ac.destination); ws.start();
   }
   function resume(){ if (ac && ac.state === 'suspended') ac.resume(); }
-  function water(on){ if (!ac) return; wetGain.gain.setTargetAtTime((on && S.sound) ? 0.5 : 0, ac.currentTime, on ? 0.05 : 0.2); }
-  function thrust(on){ if (!ac) return; const g = (on && S.sound) ? 0.45 : 0; thrGain.gain.setTargetAtTime(g, ac.currentTime, on ? 0.04 : 0.1); thrFilt.frequency.setTargetAtTime(on ? 900 : 400, ac.currentTime, 0.1); }
+  // Both are called every frame. Each call used to append fresh automation events to the params' timelines, three per
+  // frame and forever; now they only schedule when the state actually flips (the sound toggle counts as a flip).
+  function water(on){ if (!ac) return; const k = on && S.sound ? 1 : 0; if (k === wetOn) return; wetOn = k; wetGain.gain.setTargetAtTime(k ? 0.5 : 0, ac.currentTime, on ? 0.05 : 0.2); }
+  function thrust(on){ if (!ac) return; const k = on && S.sound ? 1 : 0; if (k === thrOn) return; thrOn = k;
+    thrGain.gain.setTargetAtTime(k ? 0.45 : 0, ac.currentTime, on ? 0.04 : 0.1); thrFilt.frequency.setTargetAtTime(on ? 900 : 400, ac.currentTime, 0.1); }
   function burst(dur, f0, f1, vol){
     if (!ac || !S.sound) return; const t = ac.currentTime, src = ac.createBufferSource(); src.buffer = noise;
     const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t+dur);
@@ -121,16 +123,26 @@ const normAng = a => { a = (a+Math.PI) % (2*Math.PI); if (a<0) a += 2*Math.PI; r
 const fmt = t => { const s = t/120, m = Math.floor(s/60); return `${m}:${(s-m*60).toFixed(2).padStart(5,'0')}`; };
 
 function spawn(){ const p = L.pads.start; return {x:p.x+p.w/2, y:p.y-11, vx:0, vy:0, a:0, state:'idle', flame:0}; }
+// Render interpolation. The sim steps at 120 Hz and the display runs at whatever it runs at, so a frame usually lands
+// between two ticks: at 60 Hz that is two ticks a frame give or take jitter, at 90 Hz a 1-1-2 cadence, at 144 Hz some
+// frames get none. Drawing the latest tick as-is shows that cadence as judder against the smoothly following camera.
+// Instead the pose at the start of the last tick is kept, and render() draws the blend at acc/DT between it and the
+// current one. Render-side only: nothing the sim reads is touched, so runs and ghosts stay exact.
+const PREV = {x:0, y:0, a:0}, SR = {x:0, y:0, a:0, flame:0}, GR = {};
+function snapPrev(){ PREV.x = ship.x; PREV.y = ship.y; PREV.a = ship.a; for (const z of hazards){ z.pdy = z.dy; z.pa = z.a; } }
 function reset(){
   ship = spawn(); best = store.bests[li] || null; ghost = null; gPath = null;
   if (best && best.path){ try { gPath = GP.decode(GP.unb64(best.path)); ghost = GP.pose(gPath, 0, {}); } catch (e) { gPath = null; ghost = null; } }
-  ticks = 0; gTick = 0; running = false; gRec = []; particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
+  ticks = 0; gTick = 0; running = false; gRec = []; for (const p of particles) PPOOL.push(p); particles.length = 0; deadT = 0; doneT = 0; wet = false; setMsg('',''); hazardReset();
   cam.x = ship.x - vw/(2*Z); cam.y = ship.y - vh/(2*Z);
+  snapPrev();                                                // a restart is a jump, not a move: nothing to blend from
+  redraw();
   hud();
 }
 function loadLevel(i){
-  li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; menuCh = chapterOf(li); save();
-  setGeom(); applyTheme(); buildMain(); buildHazards(); resize(); reset();
+  li = Math.max(0, Math.min(LEVELS.length-1, i)); L = LEVELS[li]; store.level = li; menuCh = chapterOf(li); menuSel = li; save();
+  for (const z of hazards) z.sprite.c.width = z.sprite.c.height = 0;
+  setGeom(); applyTheme(); buildMain(); buildHazards(); buildMotes(); resize(); reset();
 }
 
 // ---- Forces: regions that push the rocket (waterfalls, wind, vents, magnets). Level data `forces`:
@@ -248,6 +260,7 @@ function migrateBests(){
 }
 
 function tick(){
+  snapPrev();
   const inp = readInput();
   if (ship.state === 'dead'){ deadT -= DT; if (deadT <= 0) reset(); }
   else if (ship.state === 'finished'){ doneT -= DT; if (doneT <= 0 && mode === 'play') showComplete(); }
@@ -296,10 +309,11 @@ function buildHazards(){
     const pts = h.kind === 'branch' ? branchPts(h) : spikePts(h), tip = pts.reduce((b,p) => Math.hypot(p[0]-h.tx,p[1]-h.ty) < Math.hypot(b[0]-h.tx,b[1]-h.ty) ? p : b);
     const probe = [tip].concat(pts.filter(p => p !== tip && !isSolid(p[0],p[1])));   // landing is judged by the part that hangs in the open
     const sprite = renderSpikeSprite(pts, h.seed, h.kind, {ax:h.x, ay:h.y, bx:h.tx, by:h.ty, w:h.w, taper:h.kind === 'branch' ? 0.35 : 0.85});
-    return {h, pts, probe, sprite, col: h.kind === 'branch' ? '120,86,52' : null, state:'hang', t:0, a:0, dy:0, vy:0};
+    const rad = Math.max(...pts.map(p => Math.hypot(p[0]-h.x, p[1]-h.y)));   // reach from the pivot; rotation keeps it, the drop moves the pivot
+    return {h, pts, probe, sprite, rad, col: h.kind === 'branch' ? '120,86,52' : null, state:'hang', t:0, a:0, dy:0, vy:0};
   });
 }
-function hazardReset(){ for (const z of hazards){ z.state = 'hang'; z.t = 0; z.a = 0; z.dy = 0; z.vy = 0; } }
+function hazardReset(){ for (const z of hazards){ z.state = 'hang'; z.t = 0; z.a = 0; z.dy = 0; z.vy = 0; z.pa = 0; z.pdy = 0; } }
 const posePts = (z, pts) => { const h = z.h, c = Math.cos(z.a), s = Math.sin(z.a); return pts.map(p => { const dx = p[0]-h.x, dy = p[1]-h.y; return [h.x+dx*c-dy*s, h.y+dx*s+dy*c+z.dy]; }); };
 function pip(px,py,pts){ let inside = false; for (let i=0,j=pts.length-1;i<pts.length;j=i++){ const [xi,yi] = pts[i], [xj,yj] = pts[j]; if ((yi>py) !== (yj>py) && px < (xj-xi)*(py-yi)/(yj-yi)+xi) inside = !inside; } return inside; }
 function updateHazards(s){
@@ -317,6 +331,9 @@ function updateHazards(s){
       z.vy += P.gravity*HZ.gravity*DT; z.dy += z.vy*DT;
       if (z.dy > 12 && posePts(z, z.probe).some(p => isSolid(p[0],p[1]))){ z.state = 'gone'; shatter(h.tx, h.ty+z.dy, z.vy, z.col); Snd.thud(); continue; }
     }
+    // The rocket's hull reaches 14 px from its centre and the vertex test is 9 px, so beyond rad+16 of the pivot neither
+    // test can hit: skip posing the spike at all. Same answers as before, without two arrays per hazard per tick.
+    if (Math.hypot(s.x-h.x, s.y-h.y-z.dy) > z.rad+16) continue;
     const pts = posePts(z, z.pts), c = Math.cos(s.a), sn = Math.sin(s.a);    // hull points inside the spike, or spike vertices inside the rocket
     for (const [lx,ly] of HULL){ const px = s.x+lx*c-ly*sn, py = s.y+lx*sn+ly*c; if (pip(px,py,pts)) return {px,py,kind:h.kind}; }
     for (const p of pts){ if (Math.hypot(p[0]-s.x, p[1]-s.y) < 9) return {px:p[0], py:p[1], kind:h.kind}; }
@@ -325,48 +342,56 @@ function updateHazards(s){
 }
 
 // ---- Particles ----
+// Pooled: a waterfall throws up 240 droplets a second and the exhaust another 240, each a fresh object that lived half a
+// second. Dead particles go back to PPOOL and are refilled in place, so steady flight allocates nothing.
+const PPOOL = [];
+function addP(x, y, vx, vy, life, max, sz, kind, col){
+  const p = PPOOL.pop() || {};
+  p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.max = max; p.sz = sz; p.kind = kind; p.col = col;
+  particles.push(p);
+}
 function emitThrust(s){
   const dx = -Math.sin(s.a), dy = Math.cos(s.a), ox = s.x+dx*11, oy = s.y+dy*11;
   for (let i=0;i<2;i++){ const sp = 160+Math.random()*180, j = (Math.random()-0.5)*70;
-    particles.push({x:ox,y:oy,vx:dx*sp+dy*j+s.vx*0.5,vy:dy*sp-dx*j+s.vy*0.5,life:0.22+Math.random()*0.18,max:0.4,sz:2.5+Math.random()*2,kind:0,col:null}); }
+    addP(ox, oy, dx*sp+dy*j+s.vx*0.5, dy*sp-dx*j+s.vy*0.5, 0.22+Math.random()*0.18, 0.4, 2.5+Math.random()*2, 0, null); }
 }
 function explode(px,py){
-  for (let i=0;i<50;i++){ const a = Math.random()*6.283, sp = 60+Math.random()*260; particles.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,life:0.8+Math.random()*1.2,max:2,sz:1.5+Math.random()*3,kind:1,col:null}); }
-  for (let i=0;i<40;i++){ const a = Math.random()*6.283, sp = 120+Math.random()*420; particles.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.3+Math.random()*0.5,max:0.8,sz:2+Math.random()*3,kind:0,col:null}); }
-  particles.push({x:px,y:py,vx:0,vy:0,life:0.45,max:0.45,sz:0,kind:2,col:null});
+  for (let i=0;i<50;i++){ const a = Math.random()*6.283, sp = 60+Math.random()*260; addP(px, py, Math.cos(a)*sp, Math.sin(a)*sp-80, 0.8+Math.random()*1.2, 2, 1.5+Math.random()*3, 1, null); }
+  for (let i=0;i<40;i++){ const a = Math.random()*6.283, sp = 120+Math.random()*420; addP(px, py, Math.cos(a)*sp, Math.sin(a)*sp, 0.3+Math.random()*0.5, 0.8, 2+Math.random()*3, 0, null); }
+  addP(px, py, 0, 0, 0.45, 0.45, 0, 2, null);
 }
 function celebrate(px,py){
   const cols = ['90,212,110','184,245,194','255,255,255','227,162,60'];   // rgb triples: the alpha is quantised and cached, see PFX
   for (let i=0;i<140;i++){ const a = -Math.PI*(0.1+0.8*Math.random()), sp = 180+Math.random()*420;
-    particles.push({x:px+(Math.random()-0.5)*40,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1.0+Math.random()*1.4,max:2.4,sz:2.5+Math.random()*3.5,kind:3,col:cols[i%4]}); }
-  for (let i=0;i<3;i++) particles.push({x:px,y:py,vx:0,vy:0,life:0.7+i*0.2,max:0.7+i*0.2,sz:160+i*90,kind:2,col:'rgba(120,235,150,'});
+    addP(px+(Math.random()-0.5)*40, py, Math.cos(a)*sp, Math.sin(a)*sp, 1.0+Math.random()*1.4, 2.4, 2.5+Math.random()*3.5, 3, cols[i%4]); }
+  for (let i=0;i<3;i++) addP(px, py, 0, 0, 0.7+i*0.2, 0.7+i*0.2, 160+i*90, 2, 'rgba(120,235,150,');
 }
 function crumbs(px,py,n,col){
-  for (let i=0;i<n;i++) particles.push({x:px+(Math.random()-0.5)*24,y:py,vx:(Math.random()-0.5)*30,vy:20+Math.random()*50,life:0.4+Math.random()*0.4,max:0.8,sz:1.5+Math.random()*2,kind:1,col:col||null});
+  for (let i=0;i<n;i++) addP(px+(Math.random()-0.5)*24, py, (Math.random()-0.5)*30, 20+Math.random()*50, 0.4+Math.random()*0.4, 0.8, 1.5+Math.random()*2, 1, col||null);
 }
 function shatter(px,py,v,col){
-  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); particles.push({x:px+(Math.random()-0.5)*20,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.7,max:1.2,sz:2+Math.random()*4,kind:1,col:col||null}); }
+  for (let i=0;i<26;i++){ const a = -Math.PI*Math.random(), sp = 60+Math.random()*Math.min(420, v*0.7); addP(px+(Math.random()-0.5)*20, py, Math.cos(a)*sp, Math.sin(a)*sp, 0.5+Math.random()*0.7, 1.2, 2+Math.random()*4, 1, col||null); }
 }
 function spray(s){
   const a = Math.random()*6.283, v = 40+Math.random()*120;
-  particles.push({x:s.x+(Math.random()-0.5)*16,y:s.y+(Math.random()-0.5)*16,vx:Math.cos(a)*v+s.vx*0.3,vy:Math.sin(a)*v-40,life:0.3+Math.random()*0.3,max:0.6,sz:1.5+Math.random()*2,kind:1,col:'200,228,255'});
+  addP(s.x+(Math.random()-0.5)*16, s.y+(Math.random()-0.5)*16, Math.cos(a)*v+s.vx*0.3, Math.sin(a)*v-40, 0.3+Math.random()*0.3, 0.6, 1.5+Math.random()*2, 1, '200,228,255');
 }
 function froth(){                                                                                   // droplets thrown up where each visible waterfall meets its pool
   for (const f of L.forces||[]){ if (f.kind !== 'water' || f.r !== undefined || !f.pool) continue;
     if (f.x+f.w < cam.x-100 || f.x > cam.x+vw/Z+100 || f.y+f.h < cam.y-100 || f.y+f.h-200 > cam.y+vh/Z) continue;
     for (let k=0;k<2;k++){ const px = f.x-30+Math.random()*(f.w+60), py = f.y+f.h-f.pool.h-2, v = 140+Math.random()*260;
-      particles.push({x:px,y:py,vx:(Math.random()-0.5)*220,vy:-v,life:0.4+Math.random()*0.5,max:0.9,sz:3+Math.random()*3.5,kind:1,col:'235,246,255'}); }
+      addP(px, py, (Math.random()-0.5)*220, -v, 0.4+Math.random()*0.5, 0.9, 3+Math.random()*3.5, 1, '235,246,255'); }
   }
 }
 function puff(px,py,sp){
-  for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v*0.4,life:0.3+Math.random()*0.4,max:0.7,sz:2+Math.random()*3,kind:1,col:null}); }
+  for (let i=0;i<Math.min(40, sp/12);i++){ const a = -Math.PI*Math.random(), v = 40+Math.random()*sp*0.5; addP(px, py, Math.cos(a)*v, Math.sin(a)*v*0.4, 0.3+Math.random()*0.4, 0.7, 2+Math.random()*3, 1, null); }
 }
 function updateParticles(){
   for (let i=particles.length-1;i>=0;i--){ const p = particles[i]; p.life -= DT;
     if (p.kind === 1){ p.vy += P.gravity*0.6*DT; p.x += p.vx*DT; p.y += p.vy*DT; if (isSolid(p.x,p.y)) p.life = 0; }
     else if (p.kind === 3){ p.vy += P.gravity*0.9*DT; p.vx *= 0.995; p.x += p.vx*DT; p.y += p.vy*DT; if (isSolid(p.x,p.y)){ p.vy *= -0.45; p.vx *= 0.6; p.y -= p.vy*DT*2; if (Math.abs(p.vy) < 20) p.life = Math.min(p.life, 0.3); } }
     else if (p.kind === 0){ p.vx *= 0.97; p.vy *= 0.97; p.x += p.vx*DT; p.y += p.vy*DT; }
-    if (p.life <= 0){ particles[i] = particles[particles.length-1]; particles.pop(); }   // swap-remove: what moves down was already stepped this frame
+    if (p.life <= 0){ PPOOL.push(p); particles[i] = particles[particles.length-1]; particles.pop(); }   // swap-remove: what moves down was already stepped this frame
   }
 }
 
@@ -431,6 +456,47 @@ function drawParticles(){
 const CAVE_IN = { top:'#0a0b10', bottom:'#030305' };
 const inRockZone = (x, y) => (L.rockZones||[]).some(z => { const dx = (x-z.x)/z.r, dy = (y-z.y)/(z.ry||z.r); return dx*dx+dy*dy <= 1; });
 const mixHex = (a, b, k) => { const A = parseInt(a.slice(1),16), B = parseInt(b.slice(1),16), ch = sh => Math.round(((A>>sh)&255)*(1-k)+((B>>sh)&255)*k); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
+
+// Backdrop glows: big soft radial lights in level space, drifting at the backdrop's parallax (bf). Painting five or six
+// full-screen radial gradients every frame cost as much as all the terrain together, so each set is baked once into a
+// small canvas laid out in parallax space (level px × Z × bf) and blitted as one scaled image. Source-over is associative,
+// so glows composited among themselves first and then over the sky come out as they did painted one by one. A jungle
+// level keeps a second, cave plane for the crossfade inside rock zones. Rebaked when the level, theme or zoom changes.
+const GLOWS = (() => {
+  let key = '', planes = [];
+  function bake(glows, bf, am){
+    const R = g => g.r*(L.w+L.h)*0.5*Z*0.7, P = glows.map(g => ({g, x:g.u*L.w*Z*bf, y:g.v*L.h*Z*bf, r:R(g)}));
+    const x0 = Math.min(...P.map(p => p.x-p.r)), y0 = Math.min(...P.map(p => p.y-p.r)), x1 = Math.max(...P.map(p => p.x+p.r)), y1 = Math.max(...P.map(p => p.y+p.r));
+    // Painted at twice the kept resolution and halved, so the gradients' own dither averages out instead of being
+    // blown up into a visible mottle when the plane is stretched to the screen.
+    const s = Math.min(0.25, 1024/Math.max(x1-x0, y1-y0)), W = Math.ceil((x1-x0)*s), H = Math.ceil((y1-y0)*s);
+    const big = mkCanvas(2*W, 2*H), x = big.getContext('2d');
+    x.scale(2*s, 2*s); x.translate(-x0, -y0);
+    for (const p of P){                                           // the stops the live version used; am is baked in, not applied as alpha later,
+      const a0 = parseFloat(p.g.c.match(/[\d.]+\)$/)[0]), rg = x.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);   // because overlapping glows do not scale linearly
+      rg.addColorStop(0, p.g.c.replace(/[\d.]+\)$/, (a0*am).toFixed(3)+')')); rg.addColorStop(0.55, p.g.c.replace(/[\d.]+\)$/, (0.12*am).toFixed(3)+')')); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = rg; x.fillRect(p.x-p.r, p.y-p.r, 2*p.r, 2*p.r);
+    }
+    const c = mkCanvas(W, H), cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(big, 0, 0, W, H); big.width = big.height = 0;
+    return {c, x0, y0, s};
+  }
+  function draw(pl, bf, am){
+    if (am < 0.02) return;
+    const ox = pl.x0 - cam.x*Z*bf + vw/2*(1-bf), oy = pl.y0 - cam.y*Z*bf + vh/2*(1-bf), w = pl.c.width/pl.s, h = pl.c.height/pl.s;
+    const ix0 = Math.max(0, ox), iy0 = Math.max(0, oy), ix1 = Math.min(vw, ox+w), iy1 = Math.min(vh, oy+h);
+    if (ix1 <= ix0 || iy1 <= iy0) return;
+    ctx.globalAlpha = am;
+    ctx.drawImage(pl.c, (ix0-ox)*pl.s, (iy0-oy)*pl.s, (ix1-ix0)*pl.s, (iy1-iy0)*pl.s, ix0, iy0, ix1-ix0, iy1-iy0);
+    ctx.globalAlpha = 1;
+  }
+  return (jb, k2) => {
+    const k = li + '|' + Z + '|' + (STYLE === THEMES.cave ? 'c' : 'j');
+    if (k !== key){ key = k; for (const p of planes) p.c.width = p.c.height = 0;
+      planes = [bake(jb.glows, jb.f, 1)]; if (STYLE !== THEMES.cave) planes.push(bake(THEMES.cave.bg.glows, jb.f, 0.6)); }
+    draw(planes[0], jb.f, 1-k2);                                  // exact at either end of the crossfade, a close blend between
+    if (k2 > 0 && planes[1]) draw(planes[1], jb.f, k2);
+  };
+})();
 
 // ---- Wind and gas: streaks along the push, with leaves, grit and dust riding them ----
 // The field's strength is the force's own envelope (forceLevel), read a beat early so the air visibly stirs just before it
@@ -573,44 +639,42 @@ function drawRadial(f, t){                                                      
   ctx.stroke();
 }
 
-let last = performance.now(), acc = 0;
+// Outside play the sim is stopped and a menu sits over the scene behind a full-screen backdrop blur. Repainting the
+// scene every frame there made the browser re-blur it every frame too, for a picture that has stopped moving: a steady
+// GPU load, and battery, for as long as someone reads the leaderboard. So once play stops, the scene is drawn for
+// another SETTLE frames (long enough for the camera to come to rest) and then left alone until something changes it.
+// Waterfalls and wind behind a menu hold still as a result. redraw() wakes it: reset and resize call it.
+const SETTLE = 60;
+let last = performance.now(), acc = 0, still = 0;
+function redraw(){ still = 0; }
 function frame(now){
   let dt = (now-last)/1000; last = now; if (dt > 0.1) dt = 0.1;
-  if (mode === 'play'){ acc += dt; while (acc >= DT){ tick(); acc -= DT; } } else acc = 0;
-  render(dt);
+  if (mode === 'play'){ acc += dt; while (acc >= DT){ tick(); acc -= DT; } still = 0; } else acc = 0;
+  if (still < SETTLE){ render(dt); if (mode !== 'play') still++; }
   requestAnimationFrame(frame);
 }
 function render(dt){
+  const al = mode === 'play' ? Math.min(1, acc/DT) : 1, mix = (a, b) => a+(b-a)*al;   // outside play the sim is still: draw it as it is
+  SR.x = mix(PREV.x, ship.x); SR.y = mix(PREV.y, ship.y); SR.a = PREV.a + normAng(ship.a-PREV.a)*al; SR.flame = ship.flame;
   const k = 1-Math.exp(-5*dt);
-  cam.x += (ship.x + ship.vx*0.3 - vw/(2*Z) - cam.x)*k;
-  cam.y += (ship.y + ship.vy*0.3 - vh/(2*Z) - cam.y)*k;
+  cam.x += (SR.x + ship.vx*0.3 - vw/(2*Z) - cam.x)*k;
+  cam.y += (SR.y + ship.vy*0.3 - vh/(2*Z) - cam.y)*k;
   cam.x = Math.max(0, Math.min(L.w - vw/Z, cam.x)); cam.y = Math.max(0, Math.min(L.h - vh/Z, cam.y));
   shake *= Math.exp(-4*dt);
   const sx = reduced ? 0 : (Math.random()-.5)*shake*14, sy = reduced ? 0 : (Math.random()-.5)*shake*14;
 
   ctx.setTransform(dpr,0,0,dpr,0,0);
   // inside a rock zone the backdrop crossfades to the cave theme's, so a cave carved into a jungle level feels like a cave
-  caveK += ((inRockZone(ship.x, ship.y) ? 1 : 0) - caveK)*(1-Math.exp(-3*dt));
-  const cb = THEMES.cave.bg, jb = STYLE.bg, k2 = STYLE === THEMES.cave ? 0 : caveK;
+  caveK += ((inRockZone(SR.x, SR.y) ? 1 : 0) - caveK)*(1-Math.exp(-3*dt));
+  const jb = STYLE.bg, k2 = STYLE === THEMES.cave ? 0 : caveK;
   const vg = ctx.createLinearGradient(0,0,0,vh); vg.addColorStop(0,mixHex(jb.top, CAVE_IN.top, k2)); vg.addColorStop(1,mixHex(jb.bottom, CAVE_IN.bottom, k2));   // darker than the cave chapter itself: a hole in the daylight
   ctx.fillStyle = vg; ctx.fillRect(0,0,vw,vh);
-  const glow = (g, am) => {
-    const bf = jb.f, gx = (g.u*L.w-cam.x)*Z*bf + vw/2*(1-bf), gy = (g.v*L.h-cam.y)*Z*bf + vh/2*(1-bf), rad = g.r*(L.w+L.h)*0.5*Z*0.7;
-    if (am < 0.02 || gx < -rad || gx > vw+rad || gy < -rad || gy > vh+rad) return;
-    const a0 = parseFloat(g.c.match(/[\d.]+\)$/)[0]), c0 = g.c.replace(/[\d.]+\)$/, (a0*am).toFixed(3)+')');
-    const rg = ctx.createRadialGradient(gx,gy,0,gx,gy,rad); rg.addColorStop(0,c0); rg.addColorStop(0.55,g.c.replace(/[\d.]+\)$/,(0.12*am).toFixed(3)+')')); rg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle = rg; ctx.fillRect(Math.max(0,gx-rad),Math.max(0,gy-rad),Math.min(vw,gx+rad)-Math.max(0,gx-rad),Math.min(vh,gy+rad)-Math.max(0,gy-rad));
-  };
-  for (const g of jb.glows) glow(g, 1-k2);
-  if (k2 > 0) for (const g of cb.glows) glow(g, k2*0.6);
-  for (const ly of layers){   // true perspective about the screen centre: screen = (p - cam)·f·Z + centre·(1-f)
-    const ox = -(cam.x+ly.padX)*Z*ly.f + vw/2*(1-ly.f) + sx*ly.f, oy = -(cam.y+ly.padY)*Z*ly.f + vh/2*(1-ly.f) + sy*ly.f, kk = Z*ly.f/ly.q;
-    drawLayer(ctx, ly.c, ox, oy, kk, vw, vh);
-  }
+  GLOWS(jb, k2);
+  WALLS.draw(sx, sy);
   if (hazards.length){
     ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
     for (const z of hazards){ if (z.state === 'gone') continue; const h = z.h, sp = z.sprite;
-      ctx.save(); ctx.translate(h.x, h.y+z.dy); ctx.rotate(z.a); ctx.drawImage(sp.c, sp.ox-h.x, sp.oy-h.y); ctx.restore(); }
+      ctx.save(); ctx.translate(h.x, h.y+mix(z.pdy, z.dy)); ctx.rotate(mix(z.pa, z.a)); ctx.drawImage(sp.c, sp.ox-h.x, sp.oy-h.y); ctx.restore(); }
     ctx.restore();
   }
   const tsec = performance.now()/1000;
@@ -620,8 +684,8 @@ function render(dt){
 
   ctx.save(); ctx.translate(-cam.x*Z+sx, -cam.y*Z+sy); ctx.scale(Z,Z);
   drawParticles();
-  if (ghost) drawShip(ghost, true);
-  if (ship.state !== 'dead') drawShip(ship, false);
+  if (ghost && gPath) drawShip(GP.pose(gPath, Math.max(0, gTick-1+al), GR), true);   // the path is a spline in ticks: sample it between them
+  if (ship.state !== 'dead') drawShip(SR, false);
   drawForces(tsec, true);
   ctx.restore();
   const mf = 1.3; ctx.fillStyle = STYLE.bg.mote || 'rgba(217,211,199,.16)';
@@ -629,9 +693,10 @@ function render(dt){
 
   Snd.thrust(mode === 'play' && ship.state === 'flying' && ship.flame);
   Snd.water(mode === 'play' && wet);
-  timerEl.textContent = fmt(ticks);
-  if (!S.buttons) hdgEl.style.transform = `rotate(${ship.a}rad) translateY(${-S.radius+4}px)`;
+  if (ticks !== hudTicks){ hudTicks = ticks; timerEl.textContent = fmt(ticks); }        // DOM writes only when something shows a change
+  if (!S.buttons){ const t = `rotate(${SR.a.toFixed(3)}rad) translateY(${-S.radius+4}px)`; if (t !== hudHdg){ hudHdg = t; hdgEl.style.transform = t; } }
 }
+let hudTicks = -1, hudHdg = '';
 
 // ---- HUD ----
 const timerEl = $('timer'), lvlEl = $('lvl'), bestEl = $('bestline'), msgMain = $('msgMain'), msgSub = $('msgSub');
@@ -648,12 +713,12 @@ function closeModal(){ modal.classList.remove('open'); }
 // Levels are grouped into chapters (CHAPTERS in levels.js). The menu shows one chapter at a time, with arrows to move between them.
 const chapterOf = i => { let c = 0; for (let k=0;k<CHAPTERS.length;k++) if (i >= CHAPTERS[k].start) c = k; return c; };
 const chapterRange = c => [CHAPTERS[c].start, c+1 < CHAPTERS.length ? CHAPTERS[c+1].start : LEVELS.length];
-let menuCh = 0;
+let menuCh = 0, menuSel = 0;                                   // menuSel: the level picked in the menu, which is built only once it is flown
 function tiles(){
   const [a,b] = chapterRange(menuCh), ch = CHAPTERS[menuCh];
   return `<div class="chap"><button class="nav" data-ch="-1" ${menuCh===0?'disabled':''} aria-label="Previous chapter">◀</button><h2>Chapter ${menuCh+1}: ${ch.name}</h2><button class="nav" data-ch="1" ${menuCh===CHAPTERS.length-1?'disabled':''} aria-label="Next chapter">▶</button></div>` +
     `<div class="grid">` + LEVELS.slice(a,b).map((l,k) => { const i = a+k, bst = store.bests[i], locked = i > store.unlocked;
-    return `<button class="tile${i===li?' sel':''}" data-l="${i}" ${locked?'disabled':''}><b>${i+1}</b><small>${l.name}</small><em>${locked ? 'locked' : bst ? fmt(bst.ticks) : '—'}</em></button>`; }).join('') + `</div>`;
+    return `<button class="tile${i===menuSel?' sel':''}" data-l="${i}" ${locked?'disabled':''}><b>${i+1}</b><small>${l.name}</small><em>${locked ? 'locked' : bst ? fmt(bst.ticks) : '—'}</em></button>`; }).join('') + `</div>`;
 }
 function settingsRow(){
   return `<div class="settings"><div class="row">
@@ -671,7 +736,7 @@ function showMenu(){
       <div><b>Keyboard</b><br><kbd>◀</kbd> <kbd>▶</kbd> or <kbd>A</kbd> <kbd>D</kbd> steer<br><kbd>Space</kbd> <kbd>▲</kbd> <kbd>W</kbd> thrust<br><kbd>R</kbd> restart, <kbd>Esc</kbd> pause, <kbd>F</kbd> full screen</div>
     </div>
     ${tiles()}
-    <div class="row"><button class="btn pri" data-act="start">Fly level ${li+1}</button></div>${settingsRow()}`);
+    <div class="row"><button class="btn pri" data-act="start">Fly level ${menuSel+1}</button></div>${settingsRow()}`);
 }
 function showPause(){
   mode = 'paused';
@@ -691,10 +756,30 @@ function showComplete(){
     <div class="row">${lastLevel ? `<button class="btn pri" data-act="menu">Levels</button>` : `<button class="btn pri" data-act="next">Next level</button>`}<button class="btn" data-act="restart">Fly again</button>${lastLevel ? '' : `<button class="btn" data-act="menu">Levels</button>`}</div>`);
 }
 function play(){ closeModal(); mode = 'play'; document.body.classList.add('play'); Snd.init(); Snd.resume(); placeControls(); }
+// Building a level is synchronous and takes from a tenth of a second to a few on the big jungle levels, during which
+// nothing can paint. So the build goes in a task of its own after a frame that shows "Loading…": the tap visibly lands,
+// and the freeze reads as loading rather than as a hang. busy swallows a second tap queued behind the first.
+const loadEl = document.createElement('div');
+loadEl.textContent = 'Loading…';
+loadEl.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:50;display:none;pointer-events:none;padding:10px 18px;border-radius:10px;background:rgba(13,14,18,.88);border:1px solid rgba(255,255,255,.12);font-weight:600;letter-spacing:.04em';
+document.body.append(loadEl);
+let busy = false;
+function withLoading(fn){
+  if (busy) return; busy = true; loadEl.style.display = 'block';
+  requestAnimationFrame(() => setTimeout(() => { try { fn(); } finally { busy = false; loadEl.style.display = 'none'; } }, 0));
+}
+// Picking a tile only moves the selection; the level is built when it is flown. Browsing chapter 2 used to cost a full
+// build per tap. The scene behind the menu keeps showing the level last flown until then.
+function fly(){
+  if (!mainC || busy) return;                                  // still building the first level
+  if (menuSel !== li) withLoading(() => { loadLevel(menuSel); play(); });
+  else { reset(); play(); }
+}
+function flyNext(){ withLoading(() => { loadLevel(li+1); play(); }); }
 box.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return; Snd.init(); Snd.click();
   if (t.dataset.l !== undefined){ const n = +t.dataset.l;       // first tap picks the level, a second tap on it flies
-    if (n === li){ reset(); play(); } else { loadLevel(n); showMenu(); } return; }
+    if (n === menuSel) fly(); else { menuSel = n; showMenu(); } return; }
   if (t.dataset.ch){ menuCh = Math.max(0, Math.min(CHAPTERS.length-1, menuCh + +t.dataset.ch)); showMenu(); return; }
   if (t.dataset.fs){ toggleFS(); return; }                      // the label is refreshed by onFsChange
   if (t.dataset.set){
@@ -705,10 +790,10 @@ box.addEventListener('click', e => {
     if (mode === 'menu') showMenu(); else showPause(); return;
   }
   switch (t.dataset.act){
-    case 'start': reset(); play(); break;
+    case 'start': fly(); break;
     case 'resume': play(); break;
     case 'restart': reset(); play(); break;
-    case 'next': loadLevel(li+1); play(); break;
+    case 'next': flyNext(); break;
     case 'menu': reset(); showMenu(); break;
   }
 });
@@ -827,9 +912,9 @@ addEventListener('keydown', e => {
   if (e.key.toLowerCase() === 'f'){ toggleFS(); return; }
   if (mode === 'paused' && e.key === 'Escape'){ Snd.init(); play(); }
   else if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); Snd.init();
-    if (mode === 'menu'){ reset(); play(); }
+    if (mode === 'menu') fly();
     else if (mode === 'paused') play();
-    else if (mode === 'complete'){ if (li < LEVELS.length-1){ loadLevel(li+1); play(); } else { reset(); showMenu(); } }
+    else if (mode === 'complete'){ if (li < LEVELS.length-1) flyNext(); else { reset(); showMenu(); } }
   }
   else if (mode === 'complete' && e.key.toLowerCase() === 'r'){ reset(); play(); }
 });
@@ -837,5 +922,6 @@ addEventListener('keyup', e => { const k = KEYMAP[e.key]; if (k) keys[k] = false
 
 // ---- Go ----
 migrateBests();
-li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; menuCh = chapterOf(li); setGeom(); applyTheme();
-resize(); buildMain(); buildHazards(); reset(); showMenu(); requestAnimationFrame(frame);
+li = Math.min(store.level||0, store.unlocked||0); L = LEVELS[li]; menuCh = chapterOf(li); menuSel = li; setGeom(); applyTheme();
+resize(); showMenu();                                          // the menu goes up first, so a returning pilot on a big level sees it at once
+withLoading(() => { buildMain(); buildHazards(); buildMotes(); reset(); requestAnimationFrame(frame); });
