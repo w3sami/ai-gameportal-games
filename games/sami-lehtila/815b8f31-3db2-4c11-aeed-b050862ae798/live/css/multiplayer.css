@@ -1,0 +1,83 @@
+/* ============================================================
+   multiplayer.css — lisätyylit moninpelin aula- ja huonenäkymille.
+   Perustyylit (paneelit, napit, värit) tulevat styles.css:stä.
+   ============================================================ */
+#authView input, .mpCreateRow input, .mpCreateRow select {
+  width:100%;margin-top:8px;padding:10px 12px;border-radius:10px;font-size:1rem;
+  background:#120d08;color:var(--text);border:1px solid var(--wood);
+}
+.mpError {
+  color:#d98b7f;font-size:.85rem;min-height:1.1em;margin-top:6px;
+}
+.mpLobbyHeader {
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;
+}
+.mpUser { color:var(--gold-bright);font-weight:700;margin-right:8px; }
+.mpColorRow { display:flex;align-items:center;gap:10px;margin:8px 0 4px; }
+.mpColorRow .lbl { margin:0;font-size:.78rem;color:var(--dim);text-transform:none;letter-spacing:0; }
+.mpColorRow .swatches { margin:0; }
+.mpCreateRow {
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;
+}
+.mpCreateRow input { flex:1 1 140px;margin-top:0; }
+.mpCreateRow select { flex:0 0 auto;width:auto;margin-top:0; }
+.mpCreateRow button { flex:0 0 auto;width:auto;padding:10px 16px; }
+.mpVariantRow {
+  display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-top:10px;
+}
+.mpVariantRow select { width:auto;margin-top:4px; }
+.mpCheck {
+  display:flex !important;align-items:center;gap:6px;color:var(--text);
+  font-size:.88rem;text-transform:none !important;letter-spacing:0 !important;cursor:pointer;
+}
+.mpCheck input { width:auto;margin:0; }
+.mpRoomList {
+  margin-top:8px;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;
+}
+.mpRoomRow {
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:#1c150e;border:1px solid var(--wood-light);border-radius:10px;padding:10px 12px;
+}
+.mpRoomRow .name { font-weight:700;color:var(--text); }
+.mpRoomRow .meta { font-size:.78rem;color:var(--dim); }
+.mpRoomRow button {
+  padding:8px 14px;border-radius:8px;border:none;cursor:pointer;font-weight:700;
+  background:var(--gold);color:#241a08;
+}
+.mpRoomRow button:disabled { background:#3a3128;color:var(--dim);cursor:default; }
+.mpEmpty { color:var(--dim);font-size:.85rem;padding:10px 0;text-align:center; }
+
+.mpHistoryHeader {
+  display:flex;align-items:center;justify-content:space-between;margin-top:16px;
+}
+.mpHistoryList {
+  margin-top:8px;max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;
+}
+.mpHistoryRow {
+  background:#1c150e;border:1px solid var(--wood-light);border-radius:10px;padding:10px 12px;
+}
+.mpHistoryTop { display:flex;justify-content:space-between;align-items:center;margin-bottom:4px; }
+.mpHistoryRow .result { font-weight:800;font-size:.85rem;letter-spacing:.04em; }
+.mpHistoryRow .result.win { color:var(--ok); }
+.mpHistoryRow .result.loss { color:#d98b7f; }
+.mpHistoryRow .meta { font-size:.78rem;color:var(--dim); }
+.mpHistoryRow .name { color:var(--text); }
+
+#roomView { flex:1 1 auto;min-height:0;flex-direction:column; }
+.mpLeaveBtn { position:absolute;top:8px;right:10px; }
+.mpPreGame {
+  padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;
+}
+.mpWaitMsg { color:var(--dim);font-size:.9rem; }
+.mpPlayers {
+  display:flex;flex-wrap:wrap;gap:8px;padding:8px 12px;justify-content:center;
+}
+.mpPlayerChip {
+  display:flex;align-items:center;gap:6px;background:#1c150e;border:1px solid var(--wood-light);
+  border-radius:20px;padding:5px 12px;font-size:.85rem;
+}
+.mpPlayerChip.cur { border-color:var(--gold-bright);box-shadow:0 0 8px rgba(255,214,107,.4); }
+.mpPlayerChip.disconnected { opacity:.45; }
+
+/* Toinen napautus poistaa (ks. MpUI.confirmTap). */
+button.armed { background: #b3261e !important; color: #fff !important; }

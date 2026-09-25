@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Yatzy Online – moninpeli</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/multiplayer.css">
+</head>
+<body>
+
+<!-- ---------- Kirjautuminen ---------- -->
+<div class="overlay" id="authView">
+  <div class="panel">
+    <h1>YATZY <span style="font-size:1rem;color:var(--dim)">ONLINE</span></h1>
+    <div class="sub">Kirjaudu tai luo tunnus pelataksesi ystävien kanssa</div>
+    <div id="authError" class="mpError"></div>
+    <label>Käyttäjätunnus</label>
+    <input id="authUsername" type="text" autocomplete="username" maxlength="20">
+    <label>Salasana</label>
+    <input id="authPassword" type="password" autocomplete="current-password" maxlength="72">
+    <button class="bigBtn" id="loginBtn">KIRJAUDU SISÄÄN</button>
+    <button class="bigBtn" id="registerBtn" style="margin-top:10px;background:linear-gradient(180deg,#9fe0af,#7fc98f)">LUO TUNNUS</button>
+    <div style="margin-top:14px;text-align:center"><a href="index.html" style="color:var(--dim);font-size:.85rem">Pelaa yksin (paikallinen, ei tiliä)</a></div>
+  </div>
+</div>
+
+<!-- ---------- Aula ---------- -->
+<div class="overlay" id="lobbyView" style="display:none">
+  <div class="panel" style="max-width:480px;text-align:left">
+    <div class="mpLobbyHeader">
+      <h1 style="font-size:1.6rem">AULA</h1>
+      <div>
+        <span id="lobbyColorDot" class="pdot"></span><span id="lobbyUsername" class="mpUser"></span>
+        <button id="historyBtn" class="hdrBtn" title="Pelihistoria">🕑</button>
+        <button id="logoutBtn" class="hdrBtn" title="Kirjaudu ulos">⎋</button>
+      </div>
+    </div>
+    <div class="mpColorRow">
+      <span class="lbl">Oma väri</span>
+      <div class="swatches" id="colorSwatches"></div>
+    </div>
+    <div id="lobbyError" class="mpError"></div>
+
+    <div id="lobbyRoomsSection">
+      <div class="mpCreateRow">
+        <input id="roomNameInput" type="text" placeholder="Huoneen nimi" maxlength="40">
+        <select id="roomMaxInput">
+          <option value="2">2 pelaajaa</option>
+          <option value="3">3 pelaajaa</option>
+          <option value="4" selected>4 pelaajaa</option>
+          <option value="5">5 pelaajaa</option>
+          <option value="6">6 pelaajaa</option>
+        </select>
+      </div>
+      <div class="mpVariantRow">
+        <label class="mpCheck"><input type="checkbox" id="variantTwoCol"> Tuplasarake</label>
+        <label class="mpCheck"><input type="checkbox" id="variantSixDice"> 6 nopan Yatzy</label>
+        <label class="mpCheck"><input type="checkbox" id="variantBank"> Heittopankki</label>
+      </div>
+      <div class="mpVariantRow">
+        <label style="margin:0;text-transform:none;font-size:.82rem;color:var(--dim)">Heittotapa</label>
+        <select id="variantRollMode">
+          <option value="charge" selected>Paina &amp; pidä (voimaa pidosta)</option>
+          <option value="shake">Ravistus (viritä, ravista puhelinta)</option>
+        </select>
+      </div>
+      <button class="bigBtn" id="createRoomBtn" style="margin-top:10px">LUO HUONE</button>
+      <label style="margin-top:18px">Avoimet ja käynnissä olevat pelit</label>
+      <div id="roomList" class="mpRoomList"></div>
+    </div>
+
+    <div id="historyPanel" style="display:none">
+      <div class="mpHistoryHeader">
+        <label style="margin:0">Pelihistoria</label>
+        <button id="closeHistoryBtn" class="hdrBtn" title="Takaisin aulaan">✕</button>
+      </div>
+      <div id="historyList" class="mpHistoryList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- Pelihuone ---------- -->
+<div id="roomView" style="display:none">
+  <div id="canvasWrap">
+    <canvas id="fx"></canvas>
+    <div id="banner"><span id="bannerText">YATZY!</span></div>
+    <div id="turnBadge">–</div>
+    <button id="gearBtn" title="Asetukset">⚙</button>
+    <button id="leaveRoomBtn" class="hdrBtn mpLeaveBtn" title="Poistu huoneesta" style="right:54px">✕</button>
+    <div id="hint">Heitä nopat • napauta noppaa lukitaksesi sen</div>
+    <div id="quickPicks"></div>
+    <div id="shakePrompt">
+      <div class="cup">🎲</div>
+      <div class="txt">RAVISTA PUHELINTA!</div>
+      <div class="sub2">tai napauta tästä heittääksesi ilman ravistusta</div>
+    </div>
+  </div>
+  <div id="mpPreGame" class="mpPreGame">
+    <div id="mpPlayersPre" class="mpPlayers"></div>
+    <button class="bigBtn" id="mpStartBtn" style="display:none">ALOITA PELI</button>
+    <div id="mpWaitMsg" class="mpWaitMsg">Odotetaan isäntää aloittamaan peli…</div>
+    <button id="mpDeleteRoomBtn" class="hdrBtn" style="display:none;width:auto;padding:8px 14px;margin-top:6px" title="Poistaa huoneen kaikilta — ei voi perua">🗑 Poista huone</button>
+  </div>
+  <div id="controls" style="display:none">
+    <button id="rollBtn">HEITÄ NOPAT</button>
+    <div id="rollsLeft"></div>
+  </div>
+  <div id="mpPlayers" class="mpPlayers" style="display:none"></div>
+  <div id="board" style="display:none">
+    <table id="mpScoreTable"></table>
+  </div>
+</div>
+
+<!-- ---------- Voittaja (peli päättyi) ---------- -->
+<div class="overlay" id="winnerOverlay" style="display:none">
+  <div class="panel" id="winnerPanel" style="position:relative">
+    <button id="closeWin" title="Sulje ja katsele pisteitä">✕</button>
+    <h1>🏆 VOITTAJA</h1>
+    <div id="winnerName"></div>
+    <div id="winnerScore"></div>
+    <div id="finalList"></div>
+    <div id="rematchVariantRow" style="display:none;text-align:left;margin-top:10px">
+      <label style="margin-top:0">Uuden pelin säännöt</label>
+      <div class="mpVariantRow">
+        <label class="mpCheck"><input type="checkbox" id="rematchTwoCol"> Tuplasarake</label>
+        <label class="mpCheck"><input type="checkbox" id="rematchSixDice"> 6 nopan Yatzy</label>
+        <label class="mpCheck"><input type="checkbox" id="rematchBank"> Heittopankki</label>
+      </div>
+      <div class="mpVariantRow">
+        <label style="margin:0;text-transform:none;font-size:.82rem;color:var(--dim)">Heittotapa</label>
+        <select id="rematchRollMode">
+          <option value="charge">Paina &amp; pidä</option>
+          <option value="shake">Ravistus</option>
+        </select>
+      </div>
+    </div>
+    <button class="bigBtn" id="rematchBtn" style="display:none">UUSI PELI (SAMAT PELAAJAT)</button>
+    <div id="mpWaitRematchMsg" class="mpWaitMsg" style="display:none">Odotetaan isäntää aloittamaan uutta peliä…</div>
+  </div>
+</div>
+
+<!-- ---------- Asetukset (per pelaaja, paikallinen — ei jaeta huoneen kanssa) ---------- -->
+<div class="overlay" id="settingsOverlay" style="display:none">
+  <div class="panel">
+    <h1 style="font-size:1.5rem;letter-spacing:.06em">Asetukset</h1>
+    <div class="setRow">
+      <span class="lbl">Tälli napautuksesta<small>Napauta pöytää noppien pyöriessä — 1 tälli per heitto (vain omalla heitollasi)</small></span>
+      <button class="switch" id="swNudge"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">Äänet<small>Kolinat ja fanfaarit</small></span>
+      <button class="switch" id="swSound"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">Yläkerta 0-pohjaisena<small>3 samaa = 0 · esim. neljä kakkosta = +2, kaksi = −2</small></span>
+      <button class="switch" id="swDev"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">Lukitut nopat reunalle<small>Siirtää lukitut nopat pöydän etureunaan heiton alkaessa</small></span>
+      <button class="switch" id="swPark"></button>
+    </div>
+    <button class="bigBtn" id="closeSettings">VALMIS</button>
+  </div>
+</div>
+
+<script src="js/vendor/three.min.js"></script>
+<script src="js/vendor/cannon.min.js"></script>
+<script src="js/vendor/socket.io.min.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/dice3d.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/mp-api.js"></script>
+<script src="js/mp-settings.js"></script>
+<script src="js/mp-ui.js"></script>
+<script src="js/mp-game.js"></script>
+<script src="js/mp-main.js"></script>
+</body>
+</html>
