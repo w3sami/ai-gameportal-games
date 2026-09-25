@@ -380,8 +380,11 @@
     "id": "815b8f31-3db2-4c11-aeed-b050862ae798",
     "slug": "jatsi",
     "title": "3D-Jatsi",
-    "description": "Yatzy aidoilla 3D-fysiikkanopilla. Pelaa yksin tai samalla laitteella kavereiden kanssa, tai kirjaudu moninpeliin ja pelaa verkossa 2–6 pelaajan huoneissa. Pohjoismaiset säännöt, tuplasarake, 6 nopan Yatzy, heittopankki ja ravistusheitto.",
-    "descriptions": {},
+    "description": "Yatzy aidoilla 3D-fysiikkanopilla. Pelaa yksin tai samalla laitteella kavereiden kanssa, tai kirjaudu moninpeliin ja pelaa verkossa 2–6 pelaajan huoneissa — samat tunnukset kuin jatsi.bigbools.fi:ssä. Pohjoismaiset säännöt, tuplasarake, 6 nopan Yatzy, heittopankki ja ravistusheitto.",
+    "descriptions": {
+      "fi": "Yatzy aidoilla 3D-fysiikkanopilla. Pelaa yksin tai samalla laitteella kavereiden kanssa, tai kirjaudu moninpeliin ja pelaa verkossa 2–6 pelaajan huoneissa — samat tunnukset kuin jatsi.bigbools.fi:ssä. Pohjoismaiset säännöt, tuplasarake, 6 nopan Yatzy, heittopankki ja ravistusheitto.",
+      "en": "Yatzy with real 3D physics dice. Play solo or pass-and-play on one device, or sign in to play online in rooms of 2–6 players — same accounts as jatsi.bigbools.fi. Nordic rules, two-column mode, six-dice Yatzy, roll banking and shake-to-roll."
+    },
     "author": "Sami Lehtilä",
     "tags": [
       "noppapeli",
@@ -390,13 +393,13 @@
       "moninpeli",
       "mobiili"
     ],
-    "status": "draft",
+    "status": "published",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
-    "revision": 0,
+    "revision": 1,
     "sizeBytes": 956008,
     "createdAt": "2026-09-25T18:18:37.663Z",
-    "updatedAt": "2026-09-25T18:56:09.056Z"
+    "updatedAt": "2026-09-25T19:09:42.361Z"
   }
 ]
