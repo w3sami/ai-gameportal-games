@@ -281,7 +281,7 @@ window.MpUI = (function () {
     }
   }
 
-  function renderRoomList(el, rooms, myUserId, onJoin, onDelete) {
+  function renderRoomList(el, rooms, myUserId, onJoin, onDelete, onForfeit) {
     el.innerHTML = '';
     if (!rooms.length) {
       el.innerHTML = '<div class="mpEmpty">Ei avoimia pelejä juuri nyt — luo oma huone yllä.</div>';
@@ -320,6 +320,16 @@ window.MpUI = (function () {
       }
       if (!btn.disabled) btn.addEventListener('click', () => onJoin(r.id));
       actions.appendChild(btn);
+      /* Kesken olevasta omasta pelistä poistutaan vain tästä, erikseen
+         varmistettuna — huoneen ✕ vie aulaan mutta pitää paikan. */
+      if (amIIn && r.status === 'playing' && onForfeit) {
+        const quitBtn = document.createElement('button');
+        quitBtn.textContent = 'Luovuta';
+        quitBtn.title = 'Poistu pelistä pysyvästi';
+        quitBtn.style.background = '#3a2015';
+        confirmTap(quitBtn, 'Varmasti?', () => onForfeit(r.id));
+        actions.appendChild(quitBtn);
+      }
       if (amIHost && onDelete) {
         const delBtn = document.createElement('button');
         delBtn.textContent = '🗑';

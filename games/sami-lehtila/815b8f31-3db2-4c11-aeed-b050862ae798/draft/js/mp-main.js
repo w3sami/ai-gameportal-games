@@ -10,6 +10,7 @@
   let me = null;
   let announcedFinishedRoomId = null;
   let lastRenderedState = null;
+  let roomStatus = null; // viimeksi piirretyn huoneen tila (open/playing/finished)
 
   if (window.MpSettings) {
     window.MpSettings.load();
@@ -68,7 +69,7 @@
     renderColorPicker();
     window.MpGame.connect(me);
     window.MpGame.onLobby((rooms) => {
-      window.MpUI.renderRoomList(document.getElementById('roomList'), rooms, me.id, joinRoom, deleteRoomFromLobby);
+      window.MpUI.renderRoomList(document.getElementById('roomList'), rooms, me.id, joinRoom, deleteRoomFromLobby, forfeitRoom);
     });
     window.MpGame.onRoomState((state) => renderRoom(state));
     window.MpGame.onRoomError((msg) => setLobbyError(msg));
@@ -93,6 +94,11 @@
   function deleteRoomFromLobby(roomId) {
     setLobbyError('');
     window.MpGame.deleteRoom(roomId, (res) => { if (!res.ok) setLobbyError(res.error); });
+  }
+
+  function forfeitRoom(roomId) {
+    setLobbyError('');
+    window.MpGame.leaveRoom((res) => { if (res && !res.ok) setLobbyError(res.error); }, roomId);
   }
 
   function joinRoom(roomId) {
@@ -120,6 +126,9 @@
   });
 
   function renderRoom(state) {
+    roomStatus = state.status;
+    document.getElementById('leaveRoomBtn').title = state.status === 'playing'
+      ? 'Takaisin aulaan — paikka säilyy' : 'Poistu huoneesta';
     const amIHost = state.hostId === me.id;
     const preGame = state.status === 'open';
     document.getElementById('mpPreGame').style.display = preGame ? 'flex' : 'none';
@@ -254,7 +263,15 @@
     };
     window.MpGame.rematch(variant, (res) => { if (!res.ok) setLobbyError(res.error); });
   });
+  /* Kesken pelin ✕ vie vain aulaan: paikka ja vuoro säilyvät, ja aulan
+     "Jatka" palauttaa huoneeseen. Aiemmin se poisti pelistä pysyvästi yhdellä
+     napautuksella — ja huoneeseen ei päässyt enää takaisin. Pysyvä poistuminen
+     on aulan "Luovuta". Ennen peliä ja sen jälkeen ✕ poistuu huoneesta. */
   document.getElementById('leaveRoomBtn').addEventListener('click', () => {
+    if (roomStatus === 'playing') {
+      showView('lobby');
+      return;
+    }
     window.MpGame.leaveRoom(() => { announcedFinishedRoomId = null; showView('lobby'); });
   });
 
