@@ -8,6 +8,7 @@ const HULL = [[0,-14],[-9,10],[9,10],[0,11]];                 // nose, fins, tai
 const SKEY = 'thruster-v1';
 const SDEF = { radius:64, dead:0.2, expo:1.3, buttons:0, sound:1 };
 let store = { bests:{}, level:0, unlocked:0, settings:{...SDEF} };
+let devUnlock = false;                                        // every level open in the menu: the portal's debug toggle, see js/devmode.js. Never saved
 try { const s = localStorage.getItem(SKEY); if (s){ const o = JSON.parse(s); store = Object.assign(store, o); store.settings = Object.assign({...SDEF}, o.settings||{}); } } catch (e) {}
 const S = store.settings;
 delete S.relative;                                            // retired: steering is always relative to the rocket
@@ -789,7 +790,7 @@ let menuCh = 0, menuSel = 0;                                   // menuSel: the l
 function tiles(){
   const [a,b] = chapterRange(menuCh), ch = CHAPTERS[menuCh];
   return `<div class="chap"><button class="nav" data-ch="-1" ${menuCh===0?'disabled':''} aria-label="Previous chapter">◀</button><h2>Chapter ${menuCh+1}: ${ch.name}</h2><button class="nav" data-ch="1" ${menuCh===CHAPTERS.length-1?'disabled':''} aria-label="Next chapter">▶</button></div>` +
-    `<div class="grid">` + LEVELS.slice(a,b).map((l,k) => { const i = a+k, bst = store.bests[i], locked = i > store.unlocked;
+    `<div class="grid">` + LEVELS.slice(a,b).map((l,k) => { const i = a+k, bst = store.bests[i], locked = !devUnlock && i > store.unlocked;
     return `<button class="tile${i===menuSel?' sel':''}" data-l="${i}" ${locked?'disabled':''}><b>${i+1}</b><small>${l.name}</small><em>${locked ? 'locked' : bst ? fmt(bst.ticks) : '—'}</em></button>`; }).join('') + `</div>`;
 }
 function settingsRow(){
