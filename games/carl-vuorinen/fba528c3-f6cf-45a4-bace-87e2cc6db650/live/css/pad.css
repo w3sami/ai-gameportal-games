@@ -1,6 +1,0 @@
-/* Controller: the pad's own selection ring, and room for a third help column next to Touch and Keyboard.
-   Kept out of style.css so the whole feature is two tags in index.html. Loaded after it, so these win. */
-.padsel{outline:2px solid var(--accent);outline-offset:2px}
-.ok{color:var(--good)}
-.cols{grid-template-columns:repeat(auto-fit,minmax(148px,1fr))}
-@media (max-width:480px){.cols{grid-template-columns:1fr}}
