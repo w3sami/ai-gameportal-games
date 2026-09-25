@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Yatzy – aidot 3D-nopat</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="canvasWrap">
+  <canvas id="fx"></canvas>
+  <div id="banner"><span id="bannerText">YATZY!</span></div>
+  <div id="turnBadge">–</div>
+  <button id="gearBtn" title="Asetukset">⚙</button>
+  <div id="shakePrompt">
+    <div class="cup">🎲</div>
+    <div class="txt">RAVISTA PUHELINTA!</div>
+    <div class="sub2">tai napauta tästä heittääksesi ilman ravistusta</div>
+  </div>
+  <div id="hint">Heitä nopat • napauta noppaa lukitaksesi sen</div>
+  <div id="quickPicks"></div>
+</div>
+
+<div id="controls">
+  <div id="quickPicks"></div>
+  <button id="rollBtn">HEITÄ NOPAT</button>
+  <button id="undoBtn" title="Peru edellinen merkintä">↩ Peru</button>
+  <button id="newBtn" title="Aloita uusi peli">⟳</button>
+  <div id="rollsLeft"></div>
+</div>
+
+<div id="board">
+  <table id="scoreTable"></table>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <div class="panel">
+    <h1>YATZY</h1>
+    <div class="sub">Aidot fysiikkanopat • pohjoismaiset säännöt • Yatzy = 50 p</div>
+    <label>Pelaajien määrä</label>
+    <div class="segs" id="playerCountSegs"></div>
+    <div id="nameInputs"></div>
+    <label>Variantit</label>
+    <div class="setRow">
+      <span class="lbl">Tuplasarake<small>2 saraketta per pelaaja — valitse merkatessa kumpaan</small></span>
+      <button class="switch" id="swTwoCol"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">6 nopan Yatzy<small>Omat voittoluokat · yläkerran pari 4 kpl (bonusraja 84) · Suur-Yatzy 6 samasta</small></span>
+      <button class="switch" id="swSix"></button>
+    </div>
+    <button class="bigBtn" id="startBtn">ALOITA PELI</button>
+    <button class="bigBtn" id="resumeBtn" style="display:none;margin-top:10px;background:linear-gradient(180deg,#9fe0af,#7fc98f)"></button>
+    <button id="cancelStart">Jatka nykyistä peliä</button>
+    <div style="margin-top:14px;text-align:center"><a href="multiplayer.html" style="color:var(--dim);font-size:.85rem">Pelaa moninpeliä (tili, ystävien kanssa)</a></div>
+  </div>
+</div>
+
+<div class="overlay" id="settingsOverlay" style="display:none">
+  <div class="panel">
+    <h1 style="font-size:1.5rem;letter-spacing:.06em">Asetukset</h1>
+    <div class="setRow">
+      <span class="lbl">Tälli napautuksesta<small>Napauta pöytää noppien pyöriessä — 1 tälli per heitto</small></span>
+      <button class="switch" id="swNudge"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">Äänet<small>Kolinat ja fanfaarit</small></span>
+      <button class="switch" id="swSound"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">Yläkerta 0-pohjaisena<small>3 samaa = 0 · esim. neljä kakkosta = +2, kaksi = −2</small></span>
+      <button class="switch" id="swDev"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">Lukitut nopat reunalle<small>Siirtää lukitut nopat pöydän etureunaan heiton alkaessa</small></span>
+      <button class="switch" id="swPark"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">Heittopankki<small>Merkkaus tallettaa käyttämättömät heitot — käytä ne myöhemmin omalla vuorollasi</small></span>
+      <button class="switch" id="swBank"></button>
+    </div>
+    <div class="setRow">
+      <span class="lbl">Ravistusheitto<small>Ravista puhelinta kuin noppakuppia — voima anturista</small></span>
+      <button class="switch" id="swShake"></button>
+    </div>
+    <div id="motionStatus"></div>
+    <button class="bigBtn" id="closeSettings">VALMIS</button>
+  </div>
+</div>
+
+<div class="overlay" id="winnerOverlay" style="display:none">
+  <div class="panel" id="winnerPanel" style="position:relative">
+    <button id="closeWin" title="Sulje ja katsele pisteitä">✕</button>
+    <h1>🏆 VOITTAJA</h1>
+    <div id="winnerName"></div>
+    <div id="winnerScore"></div>
+    <div id="finalList"></div>
+    <button class="bigBtn" id="againBtn">UUSI PELI</button>
+  </div>
+</div>
+
+<script src="js/vendor/three.min.js"></script>
+<script src="js/vendor/cannon.min.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/dice3d.js"></script>
+<script src="js/game-logic.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
