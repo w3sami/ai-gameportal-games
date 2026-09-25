@@ -141,12 +141,47 @@ window.Dice3D = (function () {
     d.body.velocity.setZero(); d.body.angularVelocity.setZero();
   }
 
+  /* ---------- Tyhjä kanvas -vahti ----------
+     Kaksi tapaa joilla pöytä katosi ja palasi vasta ikkunan koon
+     muutoksella (puhelimessa vasta uudelleenlatauksella):
+     1) Säiliön koko muuttuu ilman window-resize-tapahtumaa (näkymä
+        piilotetaan/näytetään, asettelu elää) — piirtoalue jäi vanhaan
+        kokoonsa. ResizeObserver mittaa aina kun säiliö oikeasti muuttuu.
+     2) Selain heittää WebGL-kontekstin pois (puhelin kun käydään toisessa
+        sovelluksessa, GPU:n nollaus). Silloin luodaan uusi renderöijä samalle
+        scenelle — heti kun selain palauttaa kontekstin, tai 3 s kuluttua
+        siitä kun sivu on taas näkyvissä jos se ei palauta. three.js:n oliot
+        eivät ole sidottuja yhteen renderöijään. */
+  const LOST_REBUILD_MS = 3000;
+  let lostAt = 0;
+  function makeRenderer() {
+    const r = new THREE.WebGLRenderer({antialias:true, alpha:true});
+    r.setPixelRatio(Math.min(devicePixelRatio,2));
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    r.domElement.addEventListener('webglcontextlost', () => { lostAt = performance.now(); });
+    /* Palautukseen ei luoteta: puhelimessa (toisessa sovelluksessa käynnin
+       jälkeen) palautettu konteksti on jäänyt tyhjäksi. Tuore renderöijä
+       lataa kaiken GPU:lle alusta, joten se toimii aina. */
+    r.domElement.addEventListener('webglcontextrestored', () => { if (r === renderer) rebuildRenderer(); });
+    return r;
+  }
+  function rebuildRenderer() {
+    const old = renderer;
+    renderer = makeRenderer();
+    wrap.replaceChild(renderer.domElement, old.domElement);
+    try { old.dispose(); } catch (e) {}
+    lostAt = 0;
+    resize(true);
+  }
+  function watchContext(now) {
+    if (!lostAt || document.visibilityState !== 'visible') return;
+    if (now - lostAt > LOST_REBUILD_MS) rebuildRenderer();
+  }
+
   function init(wrapEl) {
     wrap = wrapEl;
-    renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
-    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer = makeRenderer();
     wrap.insertBefore(renderer.domElement, wrap.firstChild);
 
     scene = new THREE.Scene();
@@ -234,7 +269,16 @@ window.Dice3D = (function () {
 
     fxC = document.getElementById('fx'); fxG = fxC.getContext('2d');
 
-    addEventListener('resize', resize);
+    addEventListener('resize', () => resize());
+    if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
+    /* Taustalta palatessa kontekstin menetyksen kello alkaa vasta nyt —
+       selaimelle annetaan reilu mahdollisuus palauttaa se itse. */
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (lostAt) lostAt = performance.now();
+      resize(true);
+    });
+    addEventListener('pageshow', () => resize(true));
     resize();
     requestAnimationFrame(loop);
   }
@@ -716,6 +760,7 @@ window.Dice3D = (function () {
 
   function loop(now) {
     requestAnimationFrame(loop);
+    watchContext(performance.now());
     const dt=Math.min((now-last)/1000,.05); last=now;
     /* Toiston aikana nopat liikkuvat suoraan tallennetuista kehyksistä
        (KINEMATIC-rungot, ei voimia) — world.step ei tee siinä mitään
@@ -775,7 +820,8 @@ window.Dice3D = (function () {
     renderer.render(scene,camera);
   }
 
-  function resize() {
+  let appliedW = 0, appliedH = 0;
+  function resize(force) {
     /* wrap/renderer voivat olla alustamattomia jos init() ei ole vielä
        ajettu (esim. huoneen odotusnäkymä ennen pelin alkua) — ei tehdä
        mitään silloin sen sijaan että kaadutaan. Myös suojaa tilannetta
@@ -789,6 +835,8 @@ window.Dice3D = (function () {
     if (!wrap || !renderer) return;
     const w=wrap.clientWidth, h=wrap.clientHeight;
     if (!w || !h) return;
+    if (!force && w === appliedW && h === appliedH) return;
+    appliedW = w; appliedH = h;
     renderer.setSize(w,h);
     camera.aspect=w/h; camera.updateProjectionMatrix();
     if(fxC){ fxC.width=w; fxC.height=h; }
