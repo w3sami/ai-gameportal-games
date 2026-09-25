@@ -78,5 +78,37 @@ LEVELS.push(
            {kind:'water',x:6720,y:1217,w:150,h:697,ay:300,drag:1.5,pool:{x:6620,w:350,h:27}},
            {kind:'water',x:7270,y:1230,w:150,h:686,ay:300,drag:1.5,pool:{x:7170,w:350,h:25}}],
    walls:[],
-   pads:{start:{x:600,y:2210,w:120,h:130}, target:{x:8550,y:1430,w:120,h:120}}}
+   pads:{start:{x:600,y:2210,w:120,h:130}, target:{x:8550,y:1430,w:120,h:120}}},
+  {name:'Emergent', theme:'jungle', w:3000, h:5000, groundY:4700, canopyY:330,
+   // one giant tree standing on two legs of root, taller than the canopy. The way up is the gap between it and its neighbour at
+   // the right edge: limbs reach across from both trunks in turn, past each other, so every storey is a traverse — out to the
+   // neighbour, back to the trunk. Higher up the draught blows off the neighbour toward the trunk, against you one storey,
+   // behind you the next. Up past the crown on the right, then back over its top to the landing on the crown.
+   rooms:[{x:700,y:2650,rx:600,ry:2050,wob:0.06,seed:1401}, {x:2050,y:2600,rx:800,ry:2050,wob:0.06,seed:1402}, {x:1350,y:2600,rx:700,ry:2150,wob:0.05,seed:1403},
+          {x:1450,y:600,rx:1300,ry:450,wob:0.07,seed:1404}, {x:500,y:4550,rx:450,ry:280,wob:0.08,seed:1405}, {x:2100,y:4550,rx:650,ry:280,wob:0.08,seed:1406}],
+   corridors:[],
+   rocks:[{x:2350,y:4760,r:140,ry:90,wob:0.22,seed:1407}],
+   // limbs: ours reach right from the trunk, the neighbour's reach left from the edge, alternating storeys
+   spikes:[{x:3000,y:3960,tx:1376,ty:3900,w:220,seed:1410},                                  // a rock shelf low down
+           {x:950,y:3420,tx:2293,ty:3330,w:150,seed:2174,kind:'branch'},
+           {x:2750,y:2930,tx:1374,ty:2870,w:150,seed:2670,kind:'branch'},
+           {x:950,y:2440,tx:2331,ty:2360,w:150,seed:3099,kind:'branch'},
+           {x:2750,y:1930,tx:1355,ty:1880,w:140,seed:3266,kind:'branch'},
+           {x:950,y:1440,tx:2372,ty:1370,w:140,seed:3987,kind:'branch'},
+           // the left side is open to look at, not to fly: it ends under the crown
+           {x:800,y:3000,tx:300,ty:2880,w:120,seed:4104,kind:'branch'}, {x:800,y:2000,tx:280,ty:1900,w:110,seed:4551,kind:'branch'}, {x:40,y:3700,tx:380,ty:3640,w:200,seed:1418}],
+   trunks:[{x:870,y:3950,tx:890,ty:850,w:480,taper:0.3,seed:1420},                            // the trunk
+           {x:430,y:4800,tx:830,ty:3900,w:300,taper:0.35,seed:1421}, {x:1330,y:4800,tx:930,ty:3900,w:300,taper:0.35,seed:1422},   // its two legs
+           {x:2850,y:5200,tx:2830,ty:-200,w:440,taper:0.1,seed:1423},                          // the neighbour
+           {x:-60,y:5200,tx:-60,ty:-200,w:300,taper:0,seed:1424}],
+   foliage:[{x:850,y:800,r:900,ry:320,seed:1430,tone:0}, {x:600,y:700,r:420,ry:180,seed:1431,tone:1}, {x:1250,y:720,r:450,ry:190,seed:1432,tone:1}, {x:900,y:600,r:380,ry:150,seed:1433,tone:2},
+            {x:2253,y:3320,r:170,ry:90,seed:1434,tone:1}, {x:2291,y:2350,r:170,ry:90,seed:1435,tone:0}, {x:2332,y:1360,r:160,ry:85,seed:1436,tone:2},
+            {x:1414,y:2870,r:150,ry:80,seed:1437,tone:0}, {x:1395,y:1880,r:140,ry:75,seed:1438,tone:1},
+            {x:310,y:2880,r:130,ry:70,seed:1439,tone:2}, {x:290,y:1900,r:120,ry:65,seed:1440,tone:0}, {x:2600,y:250,r:350,ry:130,seed:1441,tone:1}],
+   hazards:[{x:1700,y:3375,tx:1705,ty:3620,w:60,seed:1450,kind:'branch'}, {x:1800,y:1400,tx:1805,ty:1620,w:60,seed:1451,kind:'branch'}],
+   forces:[{kind:'wind',x:1000,y:2400,w:1750,h:470,ax:-180,period:6,duty:0.45,phase:0,src:'hollow'},
+           {kind:'wind',x:1000,y:1900,w:1750,h:470,ax:-220,period:5.5,duty:0.45,phase:1.8,src:'hollow'},
+           {kind:'wind',x:1000,y:1400,w:1750,h:470,ax:-260,period:5,duty:0.45,phase:3.6,src:'hollow'}],
+   walls:[],
+   pads:{start:{x:1750,y:4700,w:120,h:150}, target:{x:950,y:470,w:120,h:150,base:'bark'}}}
 );
