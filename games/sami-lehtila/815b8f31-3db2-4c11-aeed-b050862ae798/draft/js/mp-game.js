@@ -397,11 +397,17 @@ window.MpGame = (function () {
   function joinRoom(roomId, cb) {
     socket.emit('room:join', { roomId }, (res) => cb && cb(res));
   }
-  function leaveRoom(cb) {
-    if (!currentRoomId) return cb && cb({ ok: true });
-    disarmShake();
-    myRollInFlight = false;
-    socket.emit('room:leave', { roomId: currentRoomId }, (res) => { currentRoomId = null; lastState = null; cb && cb(res); });
+  /* Poistuu huoneesta pysyvästi (kesken pelin = luovutus). roomId on
+     valinnainen: aulan "Luovuta"-nappi voi osoittaa huonetta suoraan. */
+  function leaveRoom(cb, roomId) {
+    const id = roomId || currentRoomId;
+    if (!id) return cb && cb({ ok: true });
+    const wasCurrent = id === currentRoomId;
+    if (wasCurrent) { disarmShake(); myRollInFlight = false; clearInFlightRoll(); }
+    socket.emit('room:leave', { roomId: id }, (res) => {
+      if (wasCurrent) { currentRoomId = null; lastState = null; }
+      cb && cb(res);
+    });
   }
   function startGame(cb) {
     socket.emit('room:start', { roomId: currentRoomId }, (res) => cb && cb(res));
