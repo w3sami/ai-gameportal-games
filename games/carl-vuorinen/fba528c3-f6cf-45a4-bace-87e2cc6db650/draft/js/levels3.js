@@ -89,7 +89,7 @@ LEVELS.push(
    corridors:[],
    rocks:[{x:2350,y:4760,r:140,ry:90,wob:0.22,seed:1407}],
    // limbs: ours reach right from the trunk, the neighbour's reach left from the edge, alternating storeys
-   spikes:[{x:3000,y:3960,tx:1376,ty:3900,w:220,seed:1410},                                  // a rock shelf low down
+   spikes:[{x:2750,y:3990,tx:1600,ty:3960,w:130,seed:5013,kind:'branch'},                     // the neighbour's low limb, under a thick bank of leaves
            {x:950,y:3420,tx:2293,ty:3330,w:150,seed:2174,kind:'branch'},
            {x:2750,y:2930,tx:1374,ty:2870,w:150,seed:2670,kind:'branch'},
            {x:950,y:2440,tx:2331,ty:2360,w:150,seed:3099,kind:'branch'},
@@ -104,8 +104,11 @@ LEVELS.push(
    foliage:[{x:850,y:800,r:900,ry:320,seed:1430,tone:0}, {x:600,y:700,r:420,ry:180,seed:1431,tone:1}, {x:1250,y:720,r:450,ry:190,seed:1432,tone:1}, {x:900,y:600,r:380,ry:150,seed:1433,tone:2},
             {x:2253,y:3320,r:170,ry:90,seed:1434,tone:1}, {x:2291,y:2350,r:170,ry:90,seed:1435,tone:0}, {x:2332,y:1360,r:160,ry:85,seed:1436,tone:2},
             {x:1414,y:2870,r:150,ry:80,seed:1437,tone:0}, {x:1395,y:1880,r:140,ry:75,seed:1438,tone:1},
-            {x:310,y:2880,r:130,ry:70,seed:1439,tone:2}, {x:290,y:1900,r:120,ry:65,seed:1440,tone:0}, {x:2600,y:250,r:350,ry:130,seed:1441,tone:1}],
-   hazards:[{x:1700,y:3375,tx:1705,ty:3620,w:60,seed:1450,kind:'branch'}, {x:1800,y:1400,tx:1805,ty:1620,w:60,seed:1451,kind:'branch'}],
+            {x:310,y:2880,r:130,ry:70,seed:1439,tone:2}, {x:290,y:1900,r:120,ry:65,seed:1440,tone:0}, {x:2600,y:250,r:350,ry:130,seed:1441,tone:1},
+            {x:2600,y:3930,r:380,ry:190,seed:1460,tone:0}, {x:2150,y:3940,r:380,ry:175,seed:1461,tone:1}, {x:1780,y:3950,r:320,ry:150,seed:1462,tone:0}, {x:1588,y:3955,r:190,ry:110,seed:1463,tone:2},
+            {x:2350,y:3860,r:260,ry:110,seed:1464,tone:2}, {x:1950,y:3880,r:220,ry:95,seed:1465,tone:2}],
+   hazards:[{x:1700,y:3375,tx:1705,ty:3620,w:60,seed:1450,kind:'branch'}, {x:1800,y:1400,tx:1805,ty:1620,w:60,seed:1451,kind:'branch'},
+            {x:1450,y:940,tx:1455,ty:1180,w:60,seed:1452,kind:'branch'}, {x:1300,y:120,tx:1305,ty:330,w:60,seed:1453,kind:'branch'}, {x:2100,y:150,tx:2105,ty:430,w:60,seed:1454,kind:'branch'}],
    forces:[{kind:'wind',x:1000,y:2400,w:1750,h:470,ax:-180,period:6,duty:0.45,phase:0,src:'hollow'},
            {kind:'wind',x:1000,y:1900,w:1750,h:470,ax:-220,period:5.5,duty:0.45,phase:1.8,src:'hollow'},
            {kind:'wind',x:1000,y:1400,w:1750,h:470,ax:-260,period:5,duty:0.45,phase:3.6,src:'hollow'}],
