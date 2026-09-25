@@ -337,7 +337,10 @@ window.MpGame = (function () {
       }
       if (!window.Dice3D.isSettled()) return;
       const state = lastState;
-      if (!isMyTurn(state) || state.rollsUsed === 0 || state.rollsUsed >= 3) return;
+      /* Kolmannen heiton jälkeen lukita saa vain jos pankissa on heittoja —
+         muuten pankkiheitto heittäisi aina kaikki nopat. Sama ehto kuin
+         yksinpelissä (game-logic.js) ja palvelimen hold():ssa. */
+      if (!isMyTurn(state) || state.rollsUsed === 0 || (state.rollsUsed >= 3 && !state.bankAvailable)) return;
       const i = window.Dice3D.hitTestDie(ev.clientX, ev.clientY);
       if (i < 0) return;
       socket.emit('game:hold', { roomId: currentRoomId, index: i }, (res) => { if (!res.ok) err(res.error); });
