@@ -8,7 +8,7 @@ const HULL = [[0,-14],[-9,10],[9,10],[0,11]];                 // nose, fins, tai
 const SKEY = 'thruster-v1';
 const SDEF = { radius:64, dead:0.2, expo:1.3, buttons:0, sound:1 };
 let store = { bests:{}, level:0, unlocked:0, settings:{...SDEF} };
-let devUnlock = false;                                        // every level open in the menu: the portal's debug toggle, see js/devmode.js. Never saved
+let devUnlock = false;                                        // every level open in the menu, and no cap on the view: the portal's debug toggle, see js/devmode.js. Never saved
 try { const s = localStorage.getItem(SKEY); if (s){ const o = JSON.parse(s); store = Object.assign(store, o); store.settings = Object.assign({...SDEF}, o.settings||{}); } } catch (e) {}
 const S = store.settings;
 delete S.relative;                                            // retired: steering is always relative to the rocket
@@ -43,10 +43,14 @@ function buildMotes(){
   const r = rng(L.rooms[0].seed*13+1); motes = [];
   for (let i=0;i<L.w*L.h/50000;i++) motes.push({x:r()*L.w, y:r()*L.h, s:1+r()*1.6, v:4+r()*8});
 }
+// The view is capped by area in level px, not only by zoom: with Z alone topping out at 1.15, a bigger CSS viewport showed
+// more of the level, so a 4K screen saw four times what 1080p does, and browser zoom-out showed nearly the whole map.
+// Nothing at or below 1920×1080 changes. The portal's debug toggle lifts the cap (devUnlock, see js/devmode.js).
+const VIEW_AREA = 1670*940;                                   // what a 1920×1080 viewport sees at Z = 1.15
 function resize(){
   vw = innerWidth; vh = innerHeight; dpr = Math.min(devicePixelRatio||1, 2);
   cv.width = Math.round(vw*dpr); cv.height = Math.round(vh*dpr); cv.style.width = vw+'px'; cv.style.height = vh+'px';
-  Z = Math.max(Math.min(Math.max(vw/1000, 0.6), 1.15), vw/L.w, vh/L.h);
+  Z = Math.max(Math.min(Math.max(vw/1000, 0.6), 1.15), devUnlock ? 0 : Math.sqrt(vw*vh/VIEW_AREA), vw/L.w, vh/L.h);
   placeControls();                                     // nothing in the level art depends on the viewport any more
   redraw();
 }
