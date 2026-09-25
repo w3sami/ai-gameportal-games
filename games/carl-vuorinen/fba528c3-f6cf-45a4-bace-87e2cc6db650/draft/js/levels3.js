@@ -117,5 +117,56 @@ LEVELS.push(
            {kind:'wind',x:1000,y:1900,w:1750,h:470,ax:-220,period:5.5,duty:0.45,phase:1.8,src:'hollow'},
            {kind:'wind',x:1000,y:1400,w:1750,h:470,ax:-260,period:5,duty:0.45,phase:3.6,src:'hollow'}],
    walls:[],
-   pads:{start:{x:1750,y:4700,w:120,h:150}, target:{x:950,y:470,w:120,h:150,base:'bark'}}}
+   pads:{start:{x:1750,y:4700,w:120,h:150}, target:{x:950,y:470,w:120,h:150,base:'bark'}}},
+  {name:'Headwaters', theme:'jungle', w:6200, h:4100, groundY:3700, canopyY:1000,
+   // the finale: up the river to where it starts. Two cascades first — climb the shaft beside each fall, while a gust off the
+   // far wall tries to push you into the water, where you can't hold height. Then in at the foot of a hollow tree and up its
+   // throat, weaving round the stubs inside with the draught coming through the knot holes. Out at the top and back along
+   // under the canopy with the storm behind you, to the spring: the last fall stands between you and the pad.
+   rockZones:[{x:1800,y:3500,r:1300,ry:700,seed:1501}, {x:3700,y:2900,r:1100,ry:800,seed:1502}],
+   rooms:[{x:750,y:3600,rx:550,ry:330,wob:0.07,seed:1510},                                     // where the river ends up
+          {x:1750,y:650,rx:520,ry:300,wob:0.07,seed:1511},                                     // the spring
+          // plunge pools at the foot of each cascade, and under the spring
+          {x:2560,y:3810,rx:200,ry:60,wob:0.1,seed:1512}, {x:4060,y:3235,rx:200,ry:55,wob:0.1,seed:1513}, {x:2380,y:935,rx:190,ry:55,wob:0.1,seed:1514},
+          {x:4115,y:3175,rx:45,ry:35,wob:0.1,seed:1515}],   // filler: a spit left between the second pool and the shaft floor
+   corridors:[{pts:[[1200,3620],[2250,3610]],w:400},                                   // first basin
+              {pts:[[2450,3650],[2450,3050]],w:420},                                   // up beside the first cascade
+              {pts:[[2800,2950],[3850,2940]],w:400},                                   // second basin
+              {pts:[[3950,3000],[3950,2400]],w:420},                                   // up beside the second cascade
+              {pts:[[4300,2300],[5300,2300]],w:400},                                   // third basin, into the foot of the tree
+              {pts:[[5450,2450],[5450,700]],w:600},                                    // the tree's throat
+              {pts:[[5150,700],[3700,720],[2350,700]],w:420},                          // back along under the canopy
+              {pts:[[2380,920],[2385,420]],w:200}],                                    // the crack the spring comes through
+   rocks:[],
+   spikes:[// the ledges the river spills off
+           {x:2760,y:3170,tx:2480,ty:3160,w:170,seed:1520}, {x:4260,y:2520,tx:3980,ty:2510,w:170,seed:1521},
+           // rock in the basins
+           {x:1800,y:3250,tx:1790,ty:3615,w:200,seed:1522}, {x:3300,y:3350,tx:3310,ty:2927,w:220,seed:1523}, {x:4750,y:1950,tx:4740,ty:2290,w:200,seed:1524},
+           // stubs inside the tree, alternate walls, each past the middle
+           {x:5140,y:1990,tx:5491,ty:2000,w:90,seed:1526,kind:'branch'},
+           {x:5760,y:1730,tx:5413,ty:1740,w:90,seed:1527,kind:'branch'}, {x:5140,y:1470,tx:5510,ty:1480,w:90,seed:1528,kind:'branch'},
+           {x:5760,y:1210,tx:5409,ty:1220,w:90,seed:1529,kind:'branch'}, {x:5140,y:960,tx:5489,ty:970,w:90,seed:1525,kind:'branch'},
+           // under the canopy, a stump standing (the leaves hanging are foliage)
+           {x:3800,y:1050,tx:3805,ty:680,w:220,seed:1531}],
+   trunks:[{x:5150,y:2080,tx:5150,ty:900,w:220,taper:0.05,seed:1540},                 // the hollow tree's walls
+           {x:5750,y:2700,tx:5750,ty:250,w:220,taper:0.05,seed:1541},
+           {x:-60,y:4300,tx:-60,ty:-200,w:300,taper:0,seed:1542}],
+   foliage:[{x:4500,y:530,r:190,ry:220,seed:1550,tone:1}, {x:4420,y:470,r:160,ry:120,seed:1553,tone:2}, {x:3100,y:530,r:190,ry:220,seed:1551,tone:0}, {x:3180,y:470,r:160,ry:120,seed:1554,tone:2}, {x:5450,y:380,r:600,ry:200,seed:1552,tone:0}],
+   hazards:[{x:4150,y:450,tx:4155,ty:680,w:60,seed:1560,kind:'branch'}, {x:2750,y:450,tx:2755,ty:680,w:60,seed:1561,kind:'branch'},
+            {x:4400,y:1990,tx:4405,ty:2180,w:60,seed:1562}],
+   forces:[// gusts across each cascade shaft, off the far wall and into the water
+           {kind:'wind',x:2150,y:3180,w:510,h:210,ax:230,period:5,duty:0.45,phase:0,src:'hollow'},
+           {kind:'wind',x:3650,y:2530,w:510,h:195,ax:250,period:5,duty:0.45,phase:2.5,src:'hollow'},
+           // through the knot holes in the tree
+           {kind:'wind',x:5100,y:2010,w:700,h:210,ax:-220,period:4.5,duty:0.45,phase:0,src:'hollow'},
+           {kind:'wind',x:5100,y:1750,w:700,h:210,ax:220,period:4.5,duty:0.45,phase:1.5,src:'hollow'},
+           {kind:'wind',x:5100,y:1230,w:700,h:210,ax:260,period:4.5,duty:0.45,phase:3,src:'hollow'},
+           // the storm under the canopy, out of the tree and along behind you
+           {kind:'wind',x:2500,y:470,w:3300,h:470,ax:-250,period:5,duty:0.5,phase:1,src:'hollow'},
+           // the cascades and the spring
+           {kind:'water',x:2490,y:3178,w:160,h:699,ay:300,drag:1.5,pool:{x:2400,w:340,h:28}},
+           {kind:'water',x:3990,y:2527,w:160,h:770,ay:300,drag:1.5,pool:{x:3900,w:340,h:34}},
+           {kind:'water',x:2310,y:310,w:150,h:719,ay:300,drag:1.5,pool:{x:2290,w:200,h:44}}],
+   walls:[],
+   pads:{start:{x:600,y:3860,w:120,h:130}, target:{x:1650,y:880,w:120,h:130}}}
 );
