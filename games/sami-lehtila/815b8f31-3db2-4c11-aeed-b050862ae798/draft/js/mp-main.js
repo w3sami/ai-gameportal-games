@@ -85,7 +85,7 @@
          (klassinen "kanvas tyhjä kunnes resize" -bugi). Nyt kun näkymä on
          juuri asetettu näkyväksi, pakotetaan uusi mittaus eksplisiittisesti
          sen sijaan että odotettaisiin oikeaa window-resize-tapahtumaa. */
-      if (window.Dice3D) window.Dice3D.resize();
+      if (window.Dice3D) window.Dice3D.resize(true);
     });
     window.MpGame.onDeleted(() => { showView('lobby'); setLobbyError('Isäntä poisti huoneen.'); });
   }
