@@ -1067,6 +1067,7 @@ function toScreen(p, out) {
   return out;
 }
 const _sp = { x: 0, y: 0, z: 0 };
+const FAR_HOOP = 1000;                                      // m
 function updateHUD() {
   if (G.state !== 'playing' && G.state !== 'paused') return;
   setText(hud.time, 'time', fmtTime(G.time));
@@ -1081,7 +1082,7 @@ function updateHUD() {
   body.classList.toggle('is-boosting', P.boosting);
   body.classList.toggle('boost-empty', P.boostLock);
 
-  // off-screen pointer to the next hoop
+  // pointer to the next hoop: at the screen edge when it's out of view, above it when it's in view but over FAR_HOOP away
   let showArrow = false;
   if (G.next < HOOPS.length && G.crashTimer <= 0) {
     const h = HOOPS[G.next].pos;
@@ -1089,14 +1090,24 @@ function updateHUD() {
     camera.getWorldDirection(_camFwd);
     const behind = _rel.copy(h).sub(camera.position).dot(_camFwd) < 0;
     let x = _v.x, y = _v.y;
+    const dist = _rel.length();
     if (behind) { x = -x; y = -y; if (Math.abs(x) + Math.abs(y) < 1e-3) y = -1; }
-    if (behind || Math.abs(x) > 0.9 || Math.abs(y) > 0.85) {
+    const offscreen = behind || Math.abs(x) > 0.9 || Math.abs(y) > 0.85;
+    hud.arrow.classList.toggle('is-above', !offscreen);
+    if (!offscreen && dist > FAR_HOOP) {                    // far but on screen: arrow just above the hoop, pointing down at it
+      showArrow = true;
+      const sx = (x + 1) * 0.5 * view.w, sy = (1 - y) * 0.5 * view.h;
+      const rpx = TUNE.HOOP_R / dist * (view.h / 2) / Math.tan(camera.fov * Math.PI / 360);   // hoop radius on screen
+      hud.arrow.style.transform = `translate(${sx}px, ${Math.max(64, sy - rpx - 26)}px)`;
+      hud.arrowIcon.style.transform = 'rotate(90deg)';
+      setText(hud.arrowDist, 'dist', `${Math.round(dist / 10) * 10} m`);
+    } else if (offscreen) {
       showArrow = true;
       const ang = Math.atan2(y * view.h, x * view.w), c = Math.cos(ang), s = Math.sin(ang);
       const k = Math.min((view.w / 2 - 52) / Math.max(Math.abs(c), 1e-4), (view.h / 2 - 56) / Math.max(Math.abs(s), 1e-4));
       hud.arrow.style.transform = `translate(${view.w / 2 + c * k}px, ${view.h / 2 - s * k}px)`;
       hud.arrowIcon.style.transform = `rotate(${-ang}rad)`;
-      setText(hud.arrowDist, 'dist', `${Math.round(_rel.length() / 10) * 10} m`);
+      setText(hud.arrowDist, 'dist', `${Math.round(dist / 10) * 10} m`);
     }
   }
   hud.arrow.classList.toggle('is-on', showArrow);
