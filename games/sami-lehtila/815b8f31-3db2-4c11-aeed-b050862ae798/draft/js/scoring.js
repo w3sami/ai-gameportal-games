@@ -120,7 +120,10 @@
   }
 
   const upperSum = sc => UPPER.reduce((a,u)=>a+(sc[u.id]??0),0);
-  const bonusOf  = (sc, six) => upperSum(sc)>=bonusLimit(six) ? 50 : 0;
+  /* 6 nopalla yläkerran raja on 84 (4 × 1…6), ja bonus on sen mukaisesti
+     100 — 50 olisi suhteessa pienempi palkinto kovemmasta tavoitteesta. */
+  const bonusValue= (six) => (six ?? sixMode) ? 100 : 50;
+  const bonusOf  = (sc, six) => upperSum(sc)>=bonusLimit(six) ? bonusValue(six) : 0;
   const totalOf  = (sc, six) => allCats(six).reduce((a,k)=>a+(sc[k.id]??0),0) + bonusOf(sc, six);
   const scFull   = (sc, six) => allCats(six).every(c=>sc[c.id]!==undefined);
   const playerTotal = (p, six) => p.scs.reduce((a,s)=>a+totalOf(s, six),0);
@@ -128,7 +131,7 @@
   const api = {
     UPPER, LOWER, LOWER6,
     setSixMode, getSixMode,
-    lowerCats, allCats, upperBase, bonusLimit,
+    lowerCats, allCats, upperBase, bonusLimit, bonusValue,
     counts, scoreCat, upperSum, bonusOf, totalOf, scFull, playerTotal,
   };
 

@@ -57,6 +57,7 @@ window.GameLogic = (function () {
       if(state.gameOver || !state.players.length){ await store.del('yatzy-game'); return; }
       const g={
         v:1, ts:Date.now(), current:state.current, gameCols:state.gameCols, gameSix:S().getSixMode(),
+        gameId:state.gameId,
         players:state.players.map(p=>({name:p.name, color:p.color, bank:p.bank||0, scs:p.scs,
                                  hideUsed:!!p.hideUsed, ownCols:!!p.ownCols}))
       };
@@ -80,6 +81,7 @@ window.GameLogic = (function () {
     state.gameCols=savedGame.gameCols||1;
     S().setSixMode(!!savedGame.gameSix);
     D3().setActiveDiceCount(S().getSixMode()?6:5);
+    state.gameId=savedGame.gameId||('g'+(savedGame.ts||Date.now()));
     state.players=savedGame.players.map(p=>({
       name:p.name, color:p.color||'#ffffff', bank:p.bank||0,
       scs:p.scs.map(sc=>({...sc})), flash:null,
@@ -219,6 +221,15 @@ window.GameLogic = (function () {
     }
     document.getElementById('finalList').innerHTML=listHtml;
     document.getElementById('winnerOverlay').style.display='flex';
+    /* Portaalin tulostaulu: jokaisen pelaajan tulos, ja jokaisen rivin
+       mukana koko pelin tulos. Sama peli lähettää kerran, vaikka se
+       peruttaisiin ja lopetettaisiin uudelleen. */
+    window.JatsiPortal.submitLocalGame(document.getElementById('lbWrap'), {
+      gameKey: 'sp:'+state.gameId,
+      variant: { sixDice: S().getSixMode(), twoCol: state.gameCols===2, bank: !!state.settings.bank,
+                 rollMode: state.settings.shakeRoll ? 'shake' : 'charge' },
+      players: state.players.map(p=>({ name: p.name, score: S().playerTotal(p) })),
+    });
     saveGame();
     window.UI.sndYatzy(); window.UI.burst(160,true);
   }
@@ -235,6 +246,7 @@ window.GameLogic = (function () {
   function startGame(){
     state.gameCols = state.settings.twoCol ? 2 : 1;
     const names = window.UI.nameInputValues();
+    state.gameId = 'g'+Date.now()+Math.random().toString(36).slice(2,6);
     state.players = names.map((val,i)=>({
       name:val.trim()||('Pelaaja '+(i+1)), flash:null,
       scs:Array.from({length:state.gameCols},()=>({})),
