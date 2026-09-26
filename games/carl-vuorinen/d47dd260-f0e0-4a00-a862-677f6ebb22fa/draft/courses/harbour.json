@@ -1,0 +1,76 @@
+{
+  "_format": "See the course section at the top of js/sim.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?]; gate \"G\" = air gate (pylon each side, fly level), \"L\"/\"R\" = single pylon on your left/right, 0 = waypoint.",
+  "id": "harbour",
+  "name": "Harbour Run",
+  "lead": "Race the pylons low over the water. Fly between the blue pairs wings level, and pass each red pylon on the side its arrow points to.",
+  "seeds": {
+    "a": 12,
+    "b": 23,
+    "c": 8,
+    "trees": 64
+  },
+  "terrain": {
+    "size": 4400,
+    "cx": -100,
+    "cz": 100,
+    "n": 200,
+    "water": 0,
+    "edge": 20,
+    "carveR": 900
+  },
+  "relief": {
+    "base": 22,
+    "amp": 230,
+    "pow": 1.7,
+    "freq": 0.0011,
+    "ridgeAmp": 40,
+    "ridgeFreq": 0.003
+  },
+  "lake": {
+    "x": -100,
+    "z": 100,
+    "r": 1900,
+    "depth": 70
+  },
+  "hills": [],
+  "trees": {
+    "near": 900,
+    "scattered": 5000,
+    "maxAlt": 160
+  },
+  "pylon": {
+    "r0": 2.4,
+    "r1": 0.8,
+    "above": 4,
+    "gap": 1.2
+  },
+  "rules": {
+    "pylonHit": 3,
+    "notLevel": 2,
+    "missed": 5,
+    "missR": 70,
+    "levelTol": 15
+  },
+  "points": [
+    [0, 24, 920, 30, 260, 0.01],
+    [0, 16, 700, 30, 260, 0.01, "G"],
+    [0, 16, 520, 30, 260, 0.01, "G"],
+    [-38, 16, 340, 30, 260, 0.01, "R"],
+    [38, 16, 170, 30, 260, 0.01, "L"],
+    [-38, 16, 0, 30, 260, 0.01, "R"],
+    [38, 16, -170, 30, 260, 0.01, "L"],
+    [0, 16, -360, 30, 260, 0.01, "G"],
+    [0, 16, -500, 30, 260, 0.01, 0],
+    [-29.3, 16, -570.7, 30, 260, 0.01, "L"],
+    [-100.0, 16, -600.0, 30, 260, 0.01, "L"],
+    [-170.7, 16, -570.7, 30, 260, 0.01, "L"],
+    [-200, 16, -500, 30, 260, 0.01, 0],
+    [-200, 16, -360, 30, 260, 0.01, "G"],
+    [-162, 16, -190, 30, 260, 0.01, "R"],
+    [-238, 16, -20, 30, 260, 0.01, "L"],
+    [-162, 16, 150, 30, 260, 0.01, "R"],
+    [-200, 16, 330, 30, 260, 0.01, "G"],
+    [-200, 16, 510, 30, 260, 0.01, "G"],
+    [-200, 24, 720, 30, 260, 0.01]
+  ]
+}
