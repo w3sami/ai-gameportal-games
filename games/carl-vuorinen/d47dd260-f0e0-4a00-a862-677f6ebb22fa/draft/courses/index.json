@@ -1,0 +1,6 @@
+{
+  "_format": "Courses in menu order. Each file is loaded only when that course is flown; id also keys the saved best time.",
+  "courses": [
+    { "id": "valley", "name": "Valley Run", "file": "courses/valley.json" }
+  ]
+}
