@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#cfe1ec">
+<title>Skyrace</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%A9%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="state-attract">
+<canvas id="scene" tabindex="-1" aria-label="Flight view"></canvas>
+
+<div class="hud" aria-hidden="true">
+  <div class="chip hud-main">
+    <div class="hud-time" id="hud-time">0:00.00</div>
+    <div class="hud-row">
+      <span class="hud-hoops"><i class="ring"></i><span id="hud-hoops">0</span></span>
+      <span id="hud-speed">0 km/h</span>
+    </div>
+    <div class="boost-bar"><div class="boost-fill" id="hud-boost"></div></div>
+  </div>
+</div>
+<div class="hud-buttons">
+  <button class="icon-btn" id="btn-pause" type="button" aria-label="Pause">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+  </button>
+</div>
+<div class="arrow" id="arrow" aria-hidden="true"><svg id="arrow-icon" viewBox="0 0 40 40"><path d="M11 8 L33 20 L11 32 L17 20 Z"/></svg><span id="arrow-dist"></span></div>
+<div class="reticle" id="reticle" aria-hidden="true"></div>
+<div class="nose" id="nose" aria-hidden="true"></div>
+<div class="stick" id="stick" aria-hidden="true"><div class="stick-knob" id="stick-knob"></div></div>
+<div class="stick-hint" aria-hidden="true">Steer</div>
+<div class="boost-btn" id="boost-btn" aria-hidden="true"><span>Boost</span></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="flash" id="flash" aria-hidden="true"></div>
+
+<section class="panel overlay" id="start" aria-labelledby="start-title">
+  <h1 id="start-title">Skyrace</h1>
+  <div class="route" aria-hidden="true"></div>
+  <p class="course" id="start-course"></p>
+  <p class="lead">Fly through every hoop in order. The clock starts at the first one.</p>
+  <div class="cta-row">
+    <button class="btn primary" id="btn-start" type="button">Start flight</button>
+    <span class="best" id="start-best"></span>
+  </div>
+  <p class="controls for-mouse">Move the mouse to aim and the plane follows. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to boost. <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fly by hand with <kbd>Q</kbd> <kbd>E</kbd> as rudder, and <kbd>Esc</kbd> pauses. A gamepad works too.</p>
+  <p class="controls for-touch">Left thumb steers, right thumb boosts. Let go and the plane levels out.</p>
+  <p class="controls">Boost refills over time and with every hoop.</p>
+  <p class="hint portrait-hint">Turn your phone sideways for a wider view.</p>
+</section>
+
+<section class="panel overlay" id="pause" aria-labelledby="pause-title">
+  <h2 id="pause-title">Paused</h2>
+  <p class="note" id="lock-note" hidden>Resume to take the mouse again.</p>
+  <div class="cta-row">
+    <button class="btn primary" id="btn-resume" type="button">Resume</button>
+    <button class="btn" id="btn-restart" type="button">Restart course</button>
+  </div>
+  <div class="settings">
+    <label class="check"><input type="checkbox" id="opt-invert"> Invert pitch</label>
+    <label class="check"><input type="checkbox" id="opt-sound"> Sound</label>
+    <label class="range for-mouse">Mouse sensitivity <input type="range" id="opt-sens" min="0.4" max="2" step="0.05"></label>
+  </div>
+  <p class="controls for-mouse"><kbd>R</kbd> restarts the course at any time.</p>
+</section>
+
+<section class="panel overlay" id="finish" aria-labelledby="finish-title">
+  <h2 id="finish-title">Course complete</h2>
+  <div class="route" aria-hidden="true"></div>
+  <p class="big-time" id="finish-time">0:00.00</p>
+  <p class="lead" id="finish-best"></p>
+  <div class="cta-row">
+    <button class="btn primary" id="btn-again" type="button">Fly again</button>
+    <button class="btn" id="btn-menu" type="button">Menu</button>
+  </div>
+</section>
+
+<div class="fatal" id="fatal"><p id="fatal-msg"></p></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/game.js"></script>
+<script src="js/boot.js"></script>
+</body>
+</html>
