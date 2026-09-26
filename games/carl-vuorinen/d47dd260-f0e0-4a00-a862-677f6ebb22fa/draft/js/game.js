@@ -288,7 +288,8 @@ const Sound = {
     this.engF = ctx.createBiquadFilter(); this.engF.type = 'lowpass'; this.engF.frequency.value = 420; this.engF.Q.value = 2.5;
     this.eng = ctx.createGain(); this.eng.gain.value = 0;
     this.osc = [['sawtooth', 62], ['square', 124.5]].map(([type, f]) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.connect(this.engF); o.start(); return o; });
-    this.engF.connect(this.eng).connect(this.master);
+    this.cough = ctx.createGain();                          // own stage so sputter() doesn't fight update()'s per-frame automation
+    this.engF.connect(this.eng).connect(this.cough).connect(this.master);
     noise.start();
   },
   update(P, level) {
@@ -326,6 +327,30 @@ const Sound = {
     g.gain.setValueAtTime(0.6, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
     src.connect(f).connect(g).connect(this.master); src.start(t); src.stop(t + 0.85);
   },
+  whoosh() {                                                // boost press: rising band of noise
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const c = this.ctx, t = c.currentTime, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = this.noiseBuf; f.type = 'bandpass'; f.Q.value = 1.2;
+    f.frequency.setValueAtTime(350, t); f.frequency.exponentialRampToValueAtTime(2200, t + 0.4);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.06); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    src.connect(f).connect(g).connect(this.master); src.start(t, Math.random() * 1.2); src.stop(t + 0.6);
+  },
+  sputter() {                                               // boost ran dry: engine coughs three times
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const t = this.ctx.currentTime, g = this.cough.gain;
+    g.cancelScheduledValues(t); g.setValueAtTime(1, t);
+    for (let i = 0; i < 3; i++) {
+      const a = t + i * 0.11;
+      g.linearRampToValueAtTime(0.15, a + 0.02); g.linearRampToValueAtTime(1, a + 0.08);
+      this.pop(a, 0.2 - i * 0.05);
+    }
+  },
+  pop(when, vol) {
+    const c = this.ctx, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = this.noiseBuf; f.type = 'lowpass'; f.frequency.value = 500;
+    g.gain.setValueAtTime(vol, when); g.gain.exponentialRampToValueAtTime(0.0001, when + 0.07);
+    src.connect(f).connect(g).connect(this.master); src.start(when, Math.random() * 1.5); src.stop(when + 0.08);
+  },
   setMuted(m) { if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.05); },
   suspend() { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend().catch(() => {}); },
 };
@@ -337,7 +362,7 @@ const aim = { yaw: 0, pitch: 0 };
 const aimDir = new V3(0, 0, -1);
 const START_POS = new V3(COURSE_DEF[0][0], COURSE_DEF[0][1], COURSE_DEF[0][2]);
 const START_DIR = HOOPS[0].pos.clone().sub(START_POS).normalize();
-const cam = { dir: new V3(0, 0, -1), up: new V3(0, 1, 0), dist: 12.5, fov: 60, shake: 0, vx: 0, vy: 0, boost: 0 };
+const cam = { dir: new V3(0, 0, -1), up: new V3(0, 1, 0), dist: 12.5, fov: 60, shake: 0, vx: 0, vy: 0, boost: 0, punchT: 1e9 };
 
 function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = clamp(pitchOf(dir), -maxPitch, maxPitch); dirFromYawPitch(aim.yaw, aim.pitch, aimDir); }
 
@@ -583,6 +608,7 @@ function autoControl() {                                    // attract mode and 
 
 /* ---------- camera ---------- */
 const BOOST_CAM_BACK = 1.2;                                 // m of extra pull-back while boosting
+const BOOST_FOV_PUNCH = 4, BOOST_PUNCH_RISE = 0.1;          // deg of FOV kick on boost press; s to reach it, then decays at 4/s
 const _cf = new V3(), _cu = new V3(), _want = new V3(), _wantUp = new V3(), _look = new V3();
 function updateCamera(dt, snap) {
   forwardOf(P, _cf);
@@ -620,7 +646,9 @@ function updateCamera(dt, snap) {
   const panel = G.state !== 'playing', portrait = view.h > view.w;
   const tx = panel && !portrait ? 0.21 : 0, ty = panel && portrait ? 0.2 : 0;
   cam.vx = snap ? tx : lerp(cam.vx, tx, damp(3, dt)); cam.vy = snap ? ty : lerp(cam.vy, ty, damp(3, dt));
-  camera.fov = cam.fov;
+  if (snap) cam.punchT = 1e9; else cam.punchT += dt;
+  const pt = cam.punchT, punch = pt < BOOST_PUNCH_RISE ? smoothstep(0, BOOST_PUNCH_RISE, pt) : Math.exp(-(pt - BOOST_PUNCH_RISE) * 4);
+  camera.fov = cam.fov + punch * (reducedMotion ? 0 : BOOST_FOV_PUNCH);
   if (Math.abs(cam.vx) + Math.abs(cam.vy) > 1e-4) camera.setViewOffset(view.w, view.h, -cam.vx * view.w, cam.vy * view.h, view.w, view.h);
   else { camera.clearViewOffset(); }
 }
@@ -864,6 +892,16 @@ canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); pause('
 renderBest();
 
 /* ---------- main loop ---------- */
+// boost edges: press kicks the FOV and whooshes (not on rapid re-taps), running dry sputters
+const fx = { was: false, lock: false, lastStart: -9 };
+function boostEdges() {
+  if (G.state === 'playing') {
+    if (P.boosting && !fx.was && G.clock - fx.lastStart > 0.4) { fx.lastStart = G.clock; cam.punchT = 0; Sound.whoosh(); }
+    if (P.boostLock && !fx.lock) Sound.sputter();
+  }
+  fx.was = P.boosting; fx.lock = P.boostLock;
+}
+
 const prevPos = new V3();
 function update(dt) {
   G.clock += dt;
@@ -898,6 +936,7 @@ function update(dt) {
       }
     }
   }
+  boostEdges();
   updateCamera(dt, false);
   updateVisuals(dt);
   updateHUD();
