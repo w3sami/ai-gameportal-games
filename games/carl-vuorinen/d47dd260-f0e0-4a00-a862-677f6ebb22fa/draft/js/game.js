@@ -108,6 +108,7 @@ function buildScenery() {
   sky.scale.setScalar(k); sunDisc.scale.setScalar(k); sunDist = 4200 * k;
   buildTerrainMesh(worldGroup, Math.max(9000, v.far * 1.4));
   buildTrees(worldGroup);
+  buildRocks(worldGroup);
   buildClouds(worldGroup);
   buildHoops(worldGroup);
 }
@@ -164,7 +165,7 @@ function buildTerrainMesh(group, plainR) {
 function buildTrees(group) {
   const n = TREES.x.length;
   if (!n) return;
-  const geo = new THREE.ConeGeometry(1, 1, 7, 1).translate(0, 0.5, 0).toNonIndexed();
+  const geo = new THREE.ConeGeometry(1, 1, 7, 1, true).translate(0, 0.5, 0).toNonIndexed();   // no base: it's underground
   geo.computeVertexNormals();
   const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V3(), p = new V3(), c = new THREE.Color(), rand = mulberry32(3);
@@ -173,6 +174,24 @@ function buildTrees(group) {
     q.setFromAxisAngle(WORLD_UP, rand() * TAU);
     mesh.setMatrixAt(i, m.compose(p.set(TREES.x[i], TREES.y[i], TREES.z[i]), q, s.set(TREES.r[i], TREES.h[i], TREES.r[i])));
     mesh.setColorAt(i, c.copy(g1).lerp(g2, rand()));
+  }
+  mesh.frustumCulled = false; group.add(mesh);
+}
+
+function buildRocks(group) {                                // boulders (course.rocks): grey, a little snow on the high ones
+  const n = ROCKS.x.length;
+  if (!n) return;
+  const PAL = Object.assign({}, PALETTE, COURSE.palette);
+  const geo = new THREE.IcosahedronGeometry(1, 0).toNonIndexed(); geo.computeVertexNormals();
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new V3(), p = new V3(), c = new THREE.Color(), rand = mulberry32(17);
+  for (let i = 0; i < n; i++) {
+    const r = ROCKS.r[i];
+    q.setFromEuler(e.set((rand() - 0.5) * 0.5, rand() * TAU, (rand() - 0.5) * 0.5));
+    mesh.setMatrixAt(i, m.compose(p.set(ROCKS.x[i], ROCKS.y[i], ROCKS.z[i]), q, s.set(r * (1 + rand() * 0.3), r * 0.75, r)));
+    c.copy(COL.rock).lerp(COL.high, rand() * 0.6).multiplyScalar(0.8 + rand() * 0.25);
+    if (PAL.snow) c.lerp(COL.snow, 0.7 * smoothstep(PAL.snow[0] - 150, PAL.snow[1], ROCKS.y[i]));
+    mesh.setColorAt(i, c);
   }
   mesh.frustumCulled = false; group.add(mesh);
 }
@@ -356,36 +375,51 @@ function makeRacerModel() {                               // race plane: low win
   return { group: g, tips: [new V3(-3.9, -0.38, -0.4), new V3(3.9, -0.38, -0.4)], smoke: new V3(0, 0.1, 3.4),
            update(dt, P) { prop.rotation.z += dt * (P.boosting ? 60 : 42); } };
 }
-function makeWingsuitModel() {                            // belly to the ground, head first; arm wings sweep back when tucked
+function makeWingsuitModel() {                            // flyer belly-down, head first; arm wings sweep back when tucked
   const g = new THREE.Group(), add = modelKit(g);
-  const suit = new THREE.MeshLambertMaterial({ color: '#ff5a1f' }), dark = new THREE.MeshLambertMaterial({ color: '#27313b' });
+  const suit = new THREE.MeshLambertMaterial({ color: '#ff5a1f' }), dark = new THREE.MeshLambertMaterial({ color: '#2a333d' });
   const white = new THREE.MeshLambertMaterial({ color: '#f3f1ea' }), visor = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
-  const plate = (pts) => new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))), { depth: 0.04, bevelEnabled: false }).rotateX(Math.PI / 2);
-  add(new THREE.BoxGeometry(0.4, 0.2, 0.8), dark, 0, 0, -0.18);                        // torso
-  add(new THREE.BoxGeometry(0.34, 0.1, 0.5), white, 0, 0.1, -0.2);                     // rig on the back
-  add(new THREE.SphereGeometry(0.15, 10, 8), white, 0, 0.04, -0.74);                   // helmet
-  add(new THREE.BoxGeometry(0.2, 0.08, 0.1), visor, 0, -0.02, -0.86);
+  // limb from a to b ([x, y, z]), tapering from ra to rb
+  const limb = (k, a, b, ra, rb, mat) => {
+    const d = new V3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length();
+    const m = k(new THREE.CylinderGeometry(rb, ra, L, 7), mat, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+    m.quaternion.setFromUnitVectors(new V3(0, 1, 0), d.normalize());
+    return m;
+  };
+  // inflated wing: outline in plan view [x, z], `t` thick, bevelled so its edges round off
+  const wing = (pts, t) => new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))),
+    { depth: t * 0.4, bevelEnabled: true, bevelThickness: t * 0.3, bevelSize: 0.03, bevelSegments: 1 }).rotateX(Math.PI / 2).translate(0, t * 0.2, 0);
+  // torso: shoulders 0.44 wide tapering to the hips, about half as deep as wide
+  add(new THREE.CylinderGeometry(0.17, 0.22, 0.66, 8).rotateX(Math.PI / 2).scale(1, 0.72, 1), dark, 0, 0, -0.28);
+  add(new THREE.BoxGeometry(0.28, 0.09, 0.36), white, 0, 0.17, -0.32);                   // rig on the back
+  add(new THREE.BoxGeometry(0.4, 0.03, 0.06), suit, 0, 0.13, -0.54);                     // stripe across the shoulders
+  add(new THREE.SphereGeometry(0.13, 12, 9).scale(1, 1, 1.15), white, 0, 0.08, -0.76);   // helmet
+  add(new THREE.SphereGeometry(0.1, 10, 6).scale(1.05, 0.7, 0.8), visor, 0, 0.02, -0.84);
   const arms = [], legs = [];
-  for (const s of [-1, 1]) {                                // arm wing hinged at the shoulder
-    const arm = new THREE.Group(); arm.position.set(s * 0.2, 0, -0.5); g.add(arm);
+  for (const s of [-1, 1]) {
+    // arm, hinged at the shoulder, reaching out and a little back and down; its wing runs from the wrist to the hip
+    const arm = new THREE.Group(); arm.position.set(s * 0.19, 0.02, -0.52); arm.rotation.z = -s * 0.08; g.add(arm);
     const ak = modelKit(arm);
-    ak(plate([[0, 0], [s * 0.7, 0.32], [s * 0.44, 0.58], [s * 0.04, 0.8]]), suit, 0, 0.02, 0);
-    ak(new THREE.BoxGeometry(0.72, 0.07, 0.08), dark, s * 0.35, 0.03, 0.16, 0).rotation.y = -s * Math.atan2(0.32, 0.7);
+    limb(ak, [0, 0, 0], [s * 0.6, -0.02, 0.1], 0.07, 0.05, dark);
+    ak(new THREE.BoxGeometry(0.1, 0.05, 0.12), dark, s * 0.64, -0.02, 0.1);                  // hand
+    ak(wing([[0, -0.03], [s * 0.66, 0.06], [s * 0.6, 0.2], [s * 0.4, 0.38], [s * 0.16, 0.54], [0, 0.56]], 0.07), suit, 0, 0, 0);
     arms.push(arm);
-    const leg = new THREE.Group(); leg.position.set(s * 0.1, 0, 0.2); g.add(leg);
-    modelKit(leg)(new THREE.BoxGeometry(0.12, 0.12, 0.8), dark, s * 0.08, 0, 0.38).rotation.y = -s * 0.2;
+    // leg from the hip to the foot, the foot pointed back
+    const leg = new THREE.Group(); leg.position.set(s * 0.1, -0.01, 0.04); g.add(leg);
+    const lk = modelKit(leg);
+    limb(lk, [0, 0, 0], [s * 0.16, 0, 0.84], 0.085, 0.05, dark);
+    lk(new THREE.BoxGeometry(0.08, 0.09, 0.17), white, s * 0.17, -0.01, 0.93);               // shoe
     legs.push(leg);
   }
-  const tail = add(plate([[-0.08, 0], [0.08, 0], [0.3, 0.75], [0, 0.66], [-0.3, 0.75]]), suit, 0, 0.02, 0.2);   // leg wing
+  const tail = add(wing([[-0.1, 0.02], [0.1, 0.02], [0.28, 0.86], [0.14, 0.9], [0, 0.82], [-0.14, 0.9], [-0.28, 0.86]], 0.06), suit, 0, -0.01, 0.04);   // leg wing
   scene.add(g);
-  const tips = [new V3(-0.9, 0, -0.18), new V3(0.9, 0, -0.18)];
+  const tips = [new V3(-0.85, 0, -0.42), new V3(0.85, 0, -0.42)];
   return { group: g, tips, trails: false, shadow: 0.25,
-           update(dt, P) {
+           update(dt, P) {                                  // tuck: arms sweep back to the sides, legs close, leg wing narrows
              const T = P.tuck || 0;
-             arms.forEach((a, i) => { const s = i ? 1 : -1; a.rotation.y = -s * 1.0 * T; a.scale.x = 1 - 0.3 * T; });
-             legs.forEach((l, i) => { l.rotation.y = (i ? -1 : 1) * 0.2 * T; });   // legs close in
-             tail.scale.x = 1 - 0.6 * T;
-             tips[0].set(-0.9 + 0.55 * T, 0, -0.18 + 0.5 * T); tips[1].set(0.9 - 0.55 * T, 0, -0.18 + 0.5 * T);
+             arms.forEach((a, i) => { const s = i ? 1 : -1; a.rotation.y = -s * 1.05 * T; a.rotation.z = -s * (0.08 + 0.05 * T); });
+             legs.forEach((l, i) => { l.rotation.y = (i ? -1 : 1) * 0.17 * T; });
+             tail.scale.x = 1 - 0.55 * T;
            } };
 }
 const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel(), wingsuit: makeWingsuitModel() };
