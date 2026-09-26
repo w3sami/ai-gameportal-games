@@ -425,5 +425,29 @@
     "sizeBytes": 17414,
     "createdAt": "2026-09-26T07:48:14.890Z",
     "updatedAt": "2026-09-26T07:53:07.658Z"
+  },
+  {
+    "id": "d47dd260-f0e0-4a00-a862-677f6ebb22fa",
+    "slug": "skyrace",
+    "title": "Skyrace",
+    "description": "A low-level air race through a mountain valley. Fly a stunt plane through 18 hoops in order, as fast as you can: the clock starts at the first hoop and a crash puts you back at the last one. Dive to gain speed, climb to trade it away, and save boost for when it counts; it drains while held and refills with every hoop. The touch stick banks and climbs the plane and levels it out when you let go. With a mouse, you aim and the plane follows, and WASD flies it by hand, loops included. Gamepads work too. Everything (terrain, trees, clouds, sound) is generated in code.",
+    "descriptions": {},
+    "author": "Carl Vuorinen",
+    "tags": [
+      "arcade",
+      "flight",
+      "racing",
+      "time-attack",
+      "3d",
+      "mobile"
+    ],
+    "status": "draft",
+    "ownerId": "00467d4f-580d-4f75-882e-24ae9b02a0a4",
+    "ownerFolder": "carl-vuorinen",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 716,
+    "createdAt": "2026-09-26T08:03:53.083Z",
+    "updatedAt": "2026-09-26T08:03:53.105Z"
   }
 ]
