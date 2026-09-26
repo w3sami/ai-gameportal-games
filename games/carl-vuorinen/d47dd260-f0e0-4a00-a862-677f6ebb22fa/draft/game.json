@@ -6,7 +6,8 @@
     "racing",
     "time-attack",
     "3d",
-    "mobile"
+    "mobile",
+    "jet"
   ],
-  "description": "A low-level air race through a mountain valley. Fly a stunt plane through 18 hoops in order, as fast as you can: the clock starts at the first hoop and a crash puts you back at the last one. Dive to gain speed, climb to trade it away, and save boost for when it counts; it drains while held and refills with every hoop. The touch stick banks and climbs the plane and levels it out when you let go. With a mouse, you aim and the plane follows, and WASD flies it by hand, loops included. Gamepads work too. Everything (terrain, trees, clouds, sound) is generated in code."
+  "description": "An air race with two courses, each flown against the clock: the clock starts at the first hoop and a crash puts you back at the last one. Valley Run is a low-level dash through a mountain valley in a stunt plane, 18 hoops: dive to gain speed, climb to trade it away. Summit Run puts you in a fighter jet among snow-capped peaks, 10 hoops kilometres apart and hundreds of metres apart in height, from just above a mountain lake to a saddle beside a summit, then down into a canyon. Boost drains while held and refills with every hoop. On touch, the stunt plane's stick banks and climbs and levels out when you let go; the jet's stick sets roll and pitch rates and holds its attitude, loops and rolls included. With a mouse you aim and the aircraft follows, WASD flies by hand, and gamepads work too. Everything (terrain, trees, clouds, sound) is generated in code."
 }
