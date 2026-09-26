@@ -1,0 +1,9 @@
+{
+  "title": "Aurinkoennuste",
+  "tags": [
+    "työkalu",
+    "aurinko",
+    "kartta"
+  ],
+  "description": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Säädata Open-Meteo."
+}
