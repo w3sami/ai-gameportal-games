@@ -88,6 +88,8 @@ kbd {
 .check { display: flex; align-items: center; gap: 0.65rem; min-height: 34px; cursor: pointer; }
 .check input { width: 1.2rem; height: 1.2rem; margin: 0; accent-color: var(--route); }
 .range { display: grid; gap: 0.35rem; }
+.settings-row { display: flex; flex-wrap: wrap; gap: 0.25rem 1.4rem; margin-top: 0.9rem; }
+.settings-row[hidden] { display: none; }
 .range input { width: 100%; margin: 0; accent-color: var(--route); }
 .for-touch, .portrait-hint { display: none; }
 body.is-touch .for-touch { display: block; }
@@ -103,6 +105,7 @@ body.is-touch.is-portrait .portrait-hint { display: block; }
   .lead { font-size: 1rem; margin-bottom: 0.9rem; }
   .controls { margin-top: 0.6rem; line-height: 1.5; }
   .settings { margin-top: 0.8rem; gap: 0.25rem; }
+  .settings-row { margin-top: 0.5rem; gap: 0.25rem 1.4rem; }
 }
 
 /* ---------- HUD ---------- */
