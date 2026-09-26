@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@700&display=swap">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/fullscreen.css">
 </head>
 <body class="state-attract">
 <canvas id="scene" tabindex="-1" aria-label="Flight view"></canvas>
@@ -45,6 +46,7 @@
   <p class="lead">Fly through every hoop in order. The clock starts at the first one.</p>
   <div class="cta-row">
     <button class="btn primary" id="btn-start" type="button">Start flight</button>
+    <button class="btn fs-btn" type="button" title="Full screen (F)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><g class="fs-off"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></g><g class="fs-on"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></g></svg><span class="fs-off">Full screen</span><span class="fs-on">Exit full screen</span></button>
     <span class="best" id="start-best"></span>
   </div>
   <p class="controls for-mouse">Move the mouse to aim and the plane follows. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to boost. <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fly by hand with <kbd>Q</kbd> <kbd>E</kbd> as rudder, and <kbd>Esc</kbd> pauses. A gamepad works too.</p>
@@ -59,6 +61,7 @@
   <div class="cta-row">
     <button class="btn primary" id="btn-resume" type="button">Resume</button>
     <button class="btn" id="btn-restart" type="button">Restart course</button>
+    <button class="btn fs-btn" type="button" title="Full screen (F)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><g class="fs-off"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></g><g class="fs-on"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></g></svg><span class="fs-off">Full screen</span><span class="fs-on">Exit full screen</span></button>
   </div>
   <div class="settings">
     <label class="check"><input type="checkbox" id="opt-invert"> Invert pitch</label>
@@ -84,6 +87,7 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/game.js"></script>
+<script src="js/fullscreen.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>
