@@ -108,7 +108,6 @@ function buildScenery() {
   sky.scale.setScalar(k); sunDisc.scale.setScalar(k); sunDist = 4200 * k;
   buildTerrainMesh(worldGroup, Math.max(9000, v.far * 1.4));
   buildTrees(worldGroup);
-  buildRocks(worldGroup);
   buildClouds(worldGroup);
   buildHoops(worldGroup);
 }
@@ -165,7 +164,7 @@ function buildTerrainMesh(group, plainR) {
 function buildTrees(group) {
   const n = TREES.x.length;
   if (!n) return;
-  const geo = new THREE.ConeGeometry(1, 1, 7, 1, true).translate(0, 0.5, 0).toNonIndexed();   // no base: it's underground
+  const geo = new THREE.ConeGeometry(1, 1, 7, 1).translate(0, 0.5, 0).toNonIndexed();
   geo.computeVertexNormals();
   const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V3(), p = new V3(), c = new THREE.Color(), rand = mulberry32(3);
@@ -174,24 +173,6 @@ function buildTrees(group) {
     q.setFromAxisAngle(WORLD_UP, rand() * TAU);
     mesh.setMatrixAt(i, m.compose(p.set(TREES.x[i], TREES.y[i], TREES.z[i]), q, s.set(TREES.r[i], TREES.h[i], TREES.r[i])));
     mesh.setColorAt(i, c.copy(g1).lerp(g2, rand()));
-  }
-  mesh.frustumCulled = false; group.add(mesh);
-}
-
-function buildRocks(group) {                                // boulders (course.rocks): grey, a little snow on the high ones
-  const n = ROCKS.x.length;
-  if (!n) return;
-  const PAL = Object.assign({}, PALETTE, COURSE.palette);
-  const geo = new THREE.IcosahedronGeometry(1, 0).toNonIndexed(); geo.computeVertexNormals();
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new V3(), p = new V3(), c = new THREE.Color(), rand = mulberry32(17);
-  for (let i = 0; i < n; i++) {
-    const r = ROCKS.r[i];
-    q.setFromEuler(e.set((rand() - 0.5) * 0.5, rand() * TAU, (rand() - 0.5) * 0.5));
-    mesh.setMatrixAt(i, m.compose(p.set(ROCKS.x[i], ROCKS.y[i], ROCKS.z[i]), q, s.set(r * (1 + rand() * 0.3), r * 0.75, r)));
-    c.copy(COL.rock).lerp(COL.high, rand() * 0.6).multiplyScalar(0.8 + rand() * 0.25);
-    if (PAL.snow) c.lerp(COL.snow, 0.7 * smoothstep(PAL.snow[0] - 150, PAL.snow[1], ROCKS.y[i]));
-    mesh.setColorAt(i, c);
   }
   mesh.frustumCulled = false; group.add(mesh);
 }
@@ -226,21 +207,8 @@ const hoopMat = {
 for (const k in hoopMat) hoopMat[k].userData.shared = true;   // outlive course switches
 const Z_AXIS = new V3(0, 0, 1);
 let hoopMeshes = [];      // per gate: its hoop mesh, or null for a pylon gate
-let pylonGates = [];      // per gate: { caps, chevrons } for a pylon gate, or null for a hoop
-let pylonMeshes = [];     // per PYLONS entry: its group, which deflates when hit
 const gateQ = [];         // per gate: orientation (+Z along the line)
-const pylonMat = {
-  G: new THREE.MeshLambertMaterial({ color: '#2f6fe0' }),       // air gate: between the pair, wings level
-  single: new THREE.MeshLambertMaterial({ color: '#ff4a1c' }),  // single pylon: pass on the chevron's side
-  band: new THREE.MeshLambertMaterial({ color: '#f4f4f0' }),
-};
-for (const k in pylonMat) pylonMat[k].userData.shared = true;
-const chevronGeo = new THREE.ShapeGeometry(new THREE.Shape([[-2.2, 2.3], [-0.5, 2.3], [2.3, 0], [-0.5, -2.3], [-2.2, -2.3], [0.6, 0]].map(([x, y]) => new THREE.Vector2(x, y))));
-const chevronMat = {
-  next: new THREE.MeshBasicMaterial({ color: ROUTE_HEX, side: THREE.DoubleSide }),
-  soon: new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide }),
-};
-for (const k in chevronMat) chevronMat[k].userData.shared = true;
+const pylons = createPylonKit(ROUTE_HEX);   // pylon gates' meshes and highlighting (js/pylons.js)
 const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(gateDisc);
@@ -256,41 +224,10 @@ function buildHoops(group) {
     group.add(m);
     return m;
   });
-  pylonMeshes = PYLONS.map((py) => buildPylon(group, py));
-  pylonGates = HOOPS.map((h, i) => {
-    if (h.kind === 'hoop') return null;
-    const caps = h.pylons.map((k) => pylonMeshes[k].userData.cap), chevrons = [];
-    if (h.kind !== 'G') {                                    // single pylon: a chevron on its face points to the circle
-      const py = PYLONS[h.pylons[0]], x = new V3(h.pos.x - py.x, 0, h.pos.z - py.z).normalize();
-      const z = new V3(-h.normal.x, 0, -h.normal.z).normalize(), y = new V3().crossVectors(z, x);
-      const c = new THREE.Mesh(chevronGeo, chevronMat.next);
-      const r = lerp(py.r0, py.r1, (h.pos.y - py.y0) / (py.y1 - py.y0));
-      c.position.set(py.x, h.pos.y, py.z).addScaledVector(z, r + 0.3);
-      c.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
-      c.visible = false; group.add(c); chevrons.push(c);
-    }
-    return { caps, chevrons, kind: h.kind, bodyMat: h.kind === 'G' ? pylonMat.G : pylonMat.single };
-  });
+  pylons.build(group);
   gateDisc.scale.setScalar((TUNE.HOOP_R - 0.6) / 7.4);
 }
-// tapered pylon, foot at its group's origin: body, a white band, body, and a cap that lights up for the next gate
-function buildPylon(group, py) {
-  const g = new THREE.Group(), H = py.y1 - py.y0, body = HOOPS[py.gate].kind === 'G' ? pylonMat.G : pylonMat.single;
-  const seg = (a, b, mat) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(lerp(py.r0, py.r1, b), lerp(py.r0, py.r1, a), (b - a) * H, 16), mat);
-    m.position.y = (a + b) / 2 * H; g.add(m); return m;
-  };
-  seg(0, 0.62, body); seg(0.62, 0.7, pylonMat.band); seg(0.7, 0.85, body);
-  g.userData.cap = seg(0.85, 1, body);
-  g.position.set(py.x, py.y0, py.z);
-  g.userData.hitT = -1;
-  group.add(g);
-  return g;
-}
-function resetPylons() {
-  PYLONS.forEach((py) => { py.hit = false; });
-  pylonMeshes.forEach((g) => { g.userData.hitT = -1; g.scale.set(1, 1, 1); g.rotation.set(0, 0, 0); });
-}
+function resetPylons() { pylons.reset(); }
 const gateNoun = () => (HOOPS.length && HOOPS[0].kind !== 'hoop' ? 'gate' : 'hoop');
 
 /* ---------- plane models (nose along -Z), one per vehicle; the course's vehicle picks ---------- */
@@ -375,54 +312,7 @@ function makeRacerModel() {                               // race plane: low win
   return { group: g, tips: [new V3(-3.9, -0.38, -0.4), new V3(3.9, -0.38, -0.4)], smoke: new V3(0, 0.1, 3.4),
            update(dt, P) { prop.rotation.z += dt * (P.boosting ? 60 : 42); } };
 }
-function makeWingsuitModel() {                            // flyer belly-down, head first; arm wings sweep back when tucked
-  const g = new THREE.Group(), add = modelKit(g);
-  const suit = new THREE.MeshLambertMaterial({ color: '#ff5a1f' }), dark = new THREE.MeshLambertMaterial({ color: '#2a333d' });
-  const white = new THREE.MeshLambertMaterial({ color: '#f3f1ea' }), visor = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
-  // limb from a to b ([x, y, z]), tapering from ra to rb
-  const limb = (k, a, b, ra, rb, mat) => {
-    const d = new V3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length();
-    const m = k(new THREE.CylinderGeometry(rb, ra, L, 7), mat, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
-    m.quaternion.setFromUnitVectors(new V3(0, 1, 0), d.normalize());
-    return m;
-  };
-  // inflated wing: outline in plan view [x, z], `t` thick, bevelled so its edges round off
-  const wing = (pts, t) => new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))),
-    { depth: t * 0.4, bevelEnabled: true, bevelThickness: t * 0.3, bevelSize: 0.03, bevelSegments: 1 }).rotateX(Math.PI / 2).translate(0, t * 0.2, 0);
-  // torso: shoulders 0.44 wide tapering to the hips, about half as deep as wide
-  add(new THREE.CylinderGeometry(0.17, 0.22, 0.66, 8).rotateX(Math.PI / 2).scale(1, 0.72, 1), dark, 0, 0, -0.28);
-  add(new THREE.BoxGeometry(0.28, 0.09, 0.36), white, 0, 0.17, -0.32);                   // rig on the back
-  add(new THREE.BoxGeometry(0.4, 0.03, 0.06), suit, 0, 0.13, -0.54);                     // stripe across the shoulders
-  add(new THREE.SphereGeometry(0.13, 12, 9).scale(1, 1, 1.15), white, 0, 0.08, -0.76);   // helmet
-  add(new THREE.SphereGeometry(0.1, 10, 6).scale(1.05, 0.7, 0.8), visor, 0, 0.02, -0.84);
-  const arms = [], legs = [];
-  for (const s of [-1, 1]) {
-    // arm, hinged at the shoulder, reaching out and a little back and down; its wing runs from the wrist to the hip
-    const arm = new THREE.Group(); arm.position.set(s * 0.19, 0.02, -0.52); arm.rotation.z = -s * 0.08; g.add(arm);
-    const ak = modelKit(arm);
-    limb(ak, [0, 0, 0], [s * 0.6, -0.02, 0.1], 0.07, 0.05, dark);
-    ak(new THREE.BoxGeometry(0.1, 0.05, 0.12), dark, s * 0.64, -0.02, 0.1);                  // hand
-    ak(wing([[0, -0.03], [s * 0.66, 0.06], [s * 0.6, 0.2], [s * 0.4, 0.38], [s * 0.16, 0.54], [0, 0.56]], 0.07), suit, 0, 0, 0);
-    arms.push(arm);
-    // leg from the hip to the foot, the foot pointed back
-    const leg = new THREE.Group(); leg.position.set(s * 0.1, -0.01, 0.04); g.add(leg);
-    const lk = modelKit(leg);
-    limb(lk, [0, 0, 0], [s * 0.16, 0, 0.84], 0.085, 0.05, dark);
-    lk(new THREE.BoxGeometry(0.08, 0.09, 0.17), white, s * 0.17, -0.01, 0.93);               // shoe
-    legs.push(leg);
-  }
-  const tail = add(wing([[-0.1, 0.02], [0.1, 0.02], [0.28, 0.86], [0.14, 0.9], [0, 0.82], [-0.14, 0.9], [-0.28, 0.86]], 0.06), suit, 0, -0.01, 0.04);   // leg wing
-  scene.add(g);
-  const tips = [new V3(-0.85, 0, -0.42), new V3(0.85, 0, -0.42)];
-  return { group: g, tips, trails: false, shadow: 0.25,
-           update(dt, P) {                                  // tuck: arms sweep back to the sides, legs close, leg wing narrows
-             const T = P.tuck || 0;
-             arms.forEach((a, i) => { const s = i ? 1 : -1; a.rotation.y = -s * 1.05 * T; a.rotation.z = -s * (0.08 + 0.05 * T); });
-             legs.forEach((l, i) => { l.rotation.y = (i ? -1 : 1) * 0.17 * T; });
-             tail.scale.x = 1 - 0.55 * T;
-           } };
-}
-const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel(), wingsuit: makeWingsuitModel() };
+const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel() };
 let planeModel = models.prop;
 function setVehicleModel() {
   for (const k in models) models[k].group.visible = false;
@@ -527,12 +417,6 @@ const Sound = {
     this.windF.frequency.setTargetAtTime(260 + rel * 484, t, 0.1);
     this.hiss.gain.setTargetAtTime(level * smoothstep(1.09, 1.82, rel) * 0.07, t, 0.15);
     if (this.jet !== jet) { this.jet = jet; this.osc[0].type = jet ? 'triangle' : 'sawtooth'; this.osc[1].type = jet ? 'sine' : 'square'; }
-    if (TUNE.VEHICLE === 'wingsuit') {                      // no engine: wind, and fabric buffeting that builds with speed
-      this.eng.gain.setTargetAtTime(0, t, 0.2);
-      this.rumble.gain.setTargetAtTime(level * (0.05 + smoothstep(TUNE.CRUISE, TUNE.BOOST * 1.2, v) * 0.5), t, 0.15);
-      this.rumbleF.frequency.setTargetAtTime(110 + (P.tuck || 0) * 90 + v, t, 0.2);
-      return;
-    }
     if (jet) {                                              // turbine whine over low-passed noise; afterburner opens the roar up
       const w = 780 + rel * 240 + (P.boosting ? 140 : 0);
       this.osc[0].frequency.setTargetAtTime(w, t, 0.25); this.osc[1].frequency.setTargetAtTime(w * 1.51, t, 0.25);
@@ -635,9 +519,7 @@ function resetRun() {
 function respawn() {
   const h = G.next > 0 ? HOOPS[G.next - 1] : null;
   const pos = h ? h.pos.clone().addScaledVector(h.normal, 4) : START_POS;
-  // wingsuit: back at the hoop with the speed you had there, or RESPAWN_SPEED if more, since the next stretch may need it
-  const v = gliding() && h ? Math.max(TUNE.RESPAWN_SPEED || TUNE.CRUISE, G.hoopSpeed || 0) : TUNE.CRUISE;
-  placePlane(P, pos, h ? h.normal : START_DIR, v);
+  placePlane(P, pos, h ? h.normal : START_DIR, TUNE.CRUISE);
   setAimFrom(P.vdir); input.neutral = true;
   G.invuln = 1.2;
   planeModel.group.visible = true;
@@ -648,7 +530,7 @@ function respawn() {
 // missed: a pylon gate passed outside its circle; it counts as flown, with a penalty and no boost refill
 function onHoop(missed = false) {
   const i = G.next, h = HOOPS[i];
-  G.next++; G.hoopSpeed = P.speed;
+  G.next++;
   if (!missed) P.boost = Math.min(1, P.boost + TUNE.BOOST_HOOP);
   const m = hoopMeshes[i];
   if (m) {
@@ -676,10 +558,7 @@ function penalty(sec, what) {
   clearTimeout(penTimer); penTimer = setTimeout(() => hud.time.classList.remove('is-pen'), 1100);
 }
 function onPylonHit(k) {
-  PYLONS[k].hit = true;                                     // one penalty per pylon per run; it stays deflated
-  const g = pylonMeshes[k];
-  g.userData.hitT = 0;
-  g.userData.lean = _nose.set(PYLONS[k].x - P.pos.x, 0, PYLONS[k].z - P.pos.z).normalize().clone();
+  pylons.hit(k, P.pos);
   if (G.state !== 'playing') return;
   cam.shake = reducedMotion ? 0 : 0.45;
   Sound.thump();
@@ -947,17 +826,6 @@ function updateCamera(dt, snap) {
 }
 
 /* ---------- per-frame visuals ---------- */
-// pylon gate: the next gate's caps and chevron light up in the route colour, the one after in white
-function updatePylonGate(i, t) {
-  const pg = pylonGates[i], rel = i - G.next;
-  const capMat = rel === 0 ? hoopMat.next : rel === 1 ? hoopMat.soon : pg.bodyMat;
-  for (const c of pg.caps) c.material = capMat;
-  for (const c of pg.chevrons) {
-    c.visible = rel === 0 || rel === 1;
-    c.material = rel === 0 ? chevronMat.next : chevronMat.soon;
-    c.scale.setScalar(rel === 0 ? 1 + Math.sin(t * 6) * 0.06 : 1);
-  }
-}
 const _v = new V3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _s = new V3(), _ba = new V3(), _bb = new V3(), _camFwd = new V3(), _rel = new V3();
 function updateVisuals(dt) {
   const t = G.clock;
@@ -967,7 +835,7 @@ function updateVisuals(dt) {
 
   for (let i = 0; i < hoopMeshes.length; i++) {
     const m = hoopMeshes[i];
-    if (!m) { updatePylonGate(i, t); continue; }
+    if (!m) continue;
     if (i < G.next) {
       if (m.userData.fade > 0) {
         m.userData.fade = Math.max(0, m.userData.fade - dt * 2.4);
@@ -982,14 +850,8 @@ function updateVisuals(dt) {
     m.material = rel === 0 ? hoopMat.next : rel === 1 ? hoopMat.soon : hoopMat.later;
     m.scale.setScalar(rel === 0 ? 1 + Math.sin(t * 6) * 0.035 : 1);
   }
-  for (const g of pylonMeshes) {                            // hit pylons sag and lean away from the plane
-    const u = g.userData;
-    if (u.hitT < 0 || u.hitT > 1) continue;
-    u.hitT += dt;
-    const k = smoothstep(0, 0.5, u.hitT);
-    g.scale.set(1 + 0.35 * k, 1 - 0.8 * k, 1 + 0.35 * k);
-    g.rotation.set(u.lean.z * 0.5 * k, 0, -u.lean.x * 0.5 * k);
-  }
+  pylons.update(G.next, t);
+  pylons.animate(dt);
   if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
     gateDisc.visible = true;
     gateDisc.position.copy(HOOPS[G.next].pos); gateDisc.quaternion.copy(gateQ[G.next]);
@@ -1007,8 +869,7 @@ function updateVisuals(dt) {
       blob.quaternion.setFromUnitVectors(WORLD_UP, _v);
     } else blob.quaternion.identity();
     _q.setFromAxisAngle(WORLD_UP, yawOf(P.vdir)); blob.quaternion.multiply(_q);
-    const bs = planeModel.shadow || 1;
-    blob.scale.set((9 + alt * 0.05) * bs, 1, (7 + alt * 0.04) * bs);
+    blob.scale.set(9 + alt * 0.05, 1, 7 + alt * 0.04);
     blob.material.opacity = 0.5 * (1 - smoothstep(15, 170, alt));
   }
 
@@ -1036,7 +897,7 @@ function updateVisuals(dt) {
 
   // wingtip trails: pulling hard, going fast, or boosting (boost draws them as strongly as a hard bank)
   const gTrail = clamp((P.gload - TUNE.TRAIL_G) / (TUNE.TRAIL_G * 1.09), 0, 1) * 0.75;
-  const ti = planeModel.group.visible && planeModel.trails !== false ? Math.max(gTrail, cam.boost * 0.75) + smoothstep(TUNE.CRUISE * 1.27, TUNE.CRUISE * 1.59, P.speed) * 0.3 : 0;
+  const ti = planeModel.group.visible ? Math.max(gTrail, cam.boost * 0.75) + smoothstep(TUNE.CRUISE * 1.27, TUNE.CRUISE * 1.59, P.speed) * 0.3 : 0;
   for (let i = 0; i < 2; i++) {
     _v.copy(planeModel.tips[i]).applyQuaternion(P.q).add(P.pos);
     trails[i].push(_v, ti * 0.6, t);
@@ -1067,22 +928,18 @@ function toScreen(p, out) {
   return out;
 }
 const _sp = { x: 0, y: 0, z: 0 };
-const FAR_HOOP = 1000;                                      // m
 function updateHUD() {
   if (G.state !== 'playing' && G.state !== 'paused') return;
   setText(hud.time, 'time', fmtTime(G.time));
   setText(hud.hoops, 'hoops', `${G.next}/${HOOPS.length}`);
   setText(hud.speed, 'speed', `${Math.round(P.speed * 3.6)} km/h`);
-  if (hud.g && gliding()) {                                 // wingsuit: height above the ground instead of g
-    const agl = Math.max(0, P.pos.y - groundAt(P.pos.x, P.pos.z));
-    setText(hud.g, 'g', `${agl < 100 ? Math.round(agl) : Math.round(agl / 10) * 10} m`); hud.g.classList.toggle('is-low', agl < 25);
-  } else if (hud.g) { const gl = Math.max(0, P.gload); setText(hud.g, 'g', `${gl.toFixed(1)} g`); hud.g.classList.toggle('is-high', gl >= 9); }
+  if (hud.g) { const gl = Math.max(0, P.gload); setText(hud.g, 'g', `${gl.toFixed(1)} g`); hud.g.classList.toggle('is-high', gl >= 9); }
   const b = Math.round(P.boost * 100) / 100;
   if (hud.last.boost !== b) { hud.last.boost = b; hud.boost.style.transform = `scaleX(${b})`; hud.boostBtn.style.setProperty('--level', b); }
   body.classList.toggle('is-boosting', P.boosting);
   body.classList.toggle('boost-empty', P.boostLock);
 
-  // pointer to the next hoop: at the screen edge when it's out of view, above it when it's in view but over FAR_HOOP away
+  // off-screen pointer to the next hoop
   let showArrow = false;
   if (G.next < HOOPS.length && G.crashTimer <= 0) {
     const h = HOOPS[G.next].pos;
@@ -1090,24 +947,14 @@ function updateHUD() {
     camera.getWorldDirection(_camFwd);
     const behind = _rel.copy(h).sub(camera.position).dot(_camFwd) < 0;
     let x = _v.x, y = _v.y;
-    const dist = _rel.length();
     if (behind) { x = -x; y = -y; if (Math.abs(x) + Math.abs(y) < 1e-3) y = -1; }
-    const offscreen = behind || Math.abs(x) > 0.9 || Math.abs(y) > 0.85;
-    hud.arrow.classList.toggle('is-above', !offscreen);
-    if (!offscreen && dist > FAR_HOOP) {                    // far but on screen: arrow just above the hoop, pointing down at it
-      showArrow = true;
-      const sx = (x + 1) * 0.5 * view.w, sy = (1 - y) * 0.5 * view.h;
-      const rpx = TUNE.HOOP_R / dist * (view.h / 2) / Math.tan(camera.fov * Math.PI / 360);   // hoop radius on screen
-      hud.arrow.style.transform = `translate(${sx}px, ${Math.max(64, sy - rpx - 26)}px)`;
-      hud.arrowIcon.style.transform = 'rotate(90deg)';
-      setText(hud.arrowDist, 'dist', `${Math.round(dist / 10) * 10} m`);
-    } else if (offscreen) {
+    if (behind || Math.abs(x) > 0.9 || Math.abs(y) > 0.85) {
       showArrow = true;
       const ang = Math.atan2(y * view.h, x * view.w), c = Math.cos(ang), s = Math.sin(ang);
       const k = Math.min((view.w / 2 - 52) / Math.max(Math.abs(c), 1e-4), (view.h / 2 - 56) / Math.max(Math.abs(s), 1e-4));
       hud.arrow.style.transform = `translate(${view.w / 2 + c * k}px, ${view.h / 2 - s * k}px)`;
       hud.arrowIcon.style.transform = `rotate(${-ang}rad)`;
-      setText(hud.arrowDist, 'dist', `${Math.round(dist / 10) * 10} m`);
+      setText(hud.arrowDist, 'dist', `${Math.round(_rel.length() / 10) * 10} m`);
     }
   }
   hud.arrow.classList.toggle('is-on', showArrow);
@@ -1146,13 +993,12 @@ function renderBest() {
   const lead = $('start-lead'), refill = $('start-refill');
   if (lead) lead.textContent = COURSE.lead || 'Fly through every hoop in order. The clock starts at the first one.';
   const pen = gateNoun() === 'gate' ? `Penalties: pylon hit +${RULES.pylonHit} s, banked air gate +${RULES.notLevel} s, missed gate +${RULES.missed} s. ` : '';
-  if (refill) refill.textContent = gliding() ? `There\u2019s no flying back up: a missed hoop adds ${RULES.missed} s, and a crash puts you back at the last one.`
-    : `${pen}Boost refills over time and with every ${gateNoun()}.`;
+  if (refill) refill.textContent = `${pen}Boost refills over time and with every ${gateNoun()}.`;
   renderPicker();
 }
 
 /* ---------- course picker (start screen, shown once there's more than one course) ---------- */
-const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit' };
+const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane' };
 const pickEl = $('course-pick');
 let switching = false;
 function renderPicker() {
@@ -1189,7 +1035,6 @@ function applyCourse() {                                    // scene, plane, sta
   setVehicleModel();
   for (const v in models) body.classList.toggle('vehicle-' + v, TUNE.VEHICLE === v);
   body.classList.toggle('course-pylons', gateNoun() === 'gate');
-  const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : 'Boost';
   smoke.trail.clear();
   renderBest();
 }
@@ -1253,11 +1098,10 @@ function finishRun() {
   if (document.pointerLockElement === canvas) document.exitPointerLock();
   setTimeout(() => {                                        // victory lap behind the results
     if (G.state !== 'finished') return;
-    if (gliding()) { resetRun(); return; }                  // wingsuit: glide out, then fly it again from the top
     G.next = 0;
     hoopMeshes.forEach((m) => { if (!m) return; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
     resetPylons();
-  }, gliding() ? 4000 : 1200);
+  }, 1200);
   focusEl('btn-again');
 }
 function toMenu() {
@@ -1305,21 +1149,20 @@ function update(dt) {
     if (G.crashTimer > 0) {
       G.crashTimer -= dt;
       if (G.state === 'playing' && G.started) G.time += dt;          // crashing costs time
-      // the wingsuit can't fly back to an earlier hoop, so the demo and the lap behind the results start again from the top
-      if (G.crashTimer <= 0) { if (G.state !== 'playing' && gliding()) resetRun(); else respawn(); }
+      if (G.crashTimer <= 0) respawn();
     } else {
       const ctl = G.state === 'playing' ? resolveControl(dt) : autoControl();
       const steps = Math.ceil(dt / (1 / 120)), h = dt / steps;
       for (let s = 0; s < steps; s++) {
         prevPos.copy(P.pos);
-        (gliding() ? stepGlide : stepFlight)(P, ctl, h);
+        stepFlight(P, ctl, h);
         if (G.state === 'playing' && G.started) G.time += h;
         const cross = G.next < HOOPS.length ? gateCross(prevPos, P.pos, G.next) : null;
         if (cross) {
           onHoop(cross === 'miss');
           if (G.state !== 'playing' && G.next >= HOOPS.length) {   // attract lap done: go round again
             if (G.state === 'attract') { resetRun(); break; }
-            if (!gliding()) G.next = 0;                            // wingsuit glides on down the valley (see finishRun)
+            G.next = 0;
           }
         }
         if (G.state === 'playing' && PYLONS.length) { const k = pylonHit(P); if (k >= 0) onPylonHit(k); }
