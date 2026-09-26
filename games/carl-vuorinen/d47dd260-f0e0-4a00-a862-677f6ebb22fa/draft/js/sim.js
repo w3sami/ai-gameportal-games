@@ -88,6 +88,8 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
      lake:    { x, z, r, depth } | null         a basin pressed into the hills
      hills:   [{ x, z, r, h }]                  bumps added to the hills (e.g. to put a ridge under a pass)
      trees:   { near, scattered, maxAlt }       placement attempts along the course and across the map; no trees above maxAlt
+     rocks:   { near, scattered, size }         optional; boulders (placement attempts along the course and across the
+                                                 map, radius [min, max] m), on any slope and above the tree line
      points:  [[x, y, z, clearance, floorHalfWidth, wallSteepness, gate?], ...]
               first = run-in, last = run-out, every point between is a gate, in flying order. The 7th value says
               which kind: left out or 1 = hoop; 0 = waypoint that only shapes the line (e.g. to turn between gates);
@@ -114,6 +116,7 @@ let PYLON = PYLON_DEF, RULES = RULES_DEF;
 let TER = null, TH = null, TDIST = null, TNEAR = null, noiseA = null, noiseB = null, noiseC = null;
 const TREES = { x: [], y: [], z: [], h: [], r: [] };
 const TREE_GRID = new Map(), TREE_CELL = 40;
+const ROCKS = { x: [], y: [], z: [], r: [], h: [] }, ROCK_GRID = new Map();   // same cells as the trees
 const treeKey = (ix, iz) => (ix + 1000) * 4096 + (iz + 1000);
 
 const RELIEF = { base: 62, amp: 300, pow: 1.35, freq: 0.0021, ridgeAmp: 55, ridgeFreq: 0.0045 };
@@ -243,6 +246,32 @@ function buildWorld(course) {
     add(sp.x + (nx / nl) * lat * side + tan.x * along, sp.z + (nz / nl) * lat * side + tan.z * along);
   }
   for (let n = 0; n < course.trees.scattered; n++) add(TER.X0 + 200 + rand() * (TER.SIZE - 400), TER.Z0 + 200 + rand() * (TER.SIZE - 400), true);
+
+  // boulders: sunk a third into the ground; the middle of the valley floor stays clear
+  for (const key in ROCKS) ROCKS[key].length = 0;
+  ROCK_GRID.clear();
+  const RK = course.rocks;
+  if (!RK) return;
+  const rr = mulberry32(course.seeds.trees + 1), sz = RK.size || [2, 7];
+  const addRock = (x, z) => {
+    const y = heightAt(x, z);
+    if (y < TER.WATER + 1) return;
+    const cd = courseDistAt(x, z);
+    if (cd.s && cd.d < cd.s.width * 0.6) return;
+    const r = sz[0] + rr() * rr() * (sz[1] - sz[0]), idx = ROCKS.x.length;
+    ROCKS.x.push(x); ROCKS.y.push(y - r * 0.3); ROCKS.z.push(z); ROCKS.r.push(r); ROCKS.h.push(r * 0.75);
+    const key = treeKey(Math.floor(x / TREE_CELL), Math.floor(z / TREE_CELL));
+    if (!ROCK_GRID.has(key)) ROCK_GRID.set(key, []);
+    ROCK_GRID.get(key).push(idx);
+  };
+  for (let n = 0; n < (RK.near || 0); n++) {
+    const u = rr(), sp = SAMPLES[Math.floor(u * (SAMPLES.length - 1))];
+    curve.getTangentAt(u, tan);
+    const side = rr() < 0.5 ? -1 : 1, lat = sp.width * 0.6 + Math.pow(rr(), 1.4) * 260;
+    const nx = -tan.z, nz = tan.x, nl = Math.hypot(nx, nz) || 1;
+    addRock(sp.x + (nx / nl) * lat * side, sp.z + (nz / nl) * lat * side);
+  }
+  for (let n = 0; n < (RK.scattered || 0); n++) addRock(TER.X0 + 200 + rr() * (TER.SIZE - 400), TER.Z0 + 200 + rr() * (TER.SIZE - 400));
 }
 
 // exact height of the rendered triangle mesh (cells split along the 00-11 diagonal)
@@ -482,8 +511,23 @@ function pylonHit(P) {
   }
   return -1;
 }
+function rockHit(p) {                                    // boulder as a half-ellipsoid: radius r at its base, h tall
+  const ix = Math.floor(p.x / TREE_CELL), iz = Math.floor(p.z / TREE_CELL);
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+    const list = ROCK_GRID.get(treeKey(ix + dx, iz + dz));
+    if (!list) continue;
+    for (const i of list) {
+      const yy = (p.y - ROCKS.y[i]) / ROCKS.h[i];
+      if (yy < -0.5 || yy > 1) continue;
+      const rr = ROCKS.r[i] * Math.sqrt(1 - Math.max(0, yy) * Math.max(0, yy)) + 0.5, ddx = p.x - ROCKS.x[i], ddz = p.z - ROCKS.z[i];
+      if (ddx * ddx + ddz * ddz < rr * rr) return true;
+    }
+  }
+  return false;
+}
 function crashed(P) {
   if (P.pos.y - TUNE.PLANE_R < groundAt(P.pos.x, P.pos.z)) return 'ground';
   if (treeHit(P.pos)) return 'tree';
+  if (ROCKS.x.length && rockHit(P.pos)) return 'rock';
   return null;
 }
