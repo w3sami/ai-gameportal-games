@@ -197,7 +197,7 @@ function buildClouds(group) {
   mesh.frustumCulled = false; group.add(mesh);
 }
 
-/* ---------- hoops ---------- */
+/* ---------- gates: hoops, or pylons beside an invisible circle (course format in js/sim.js) ---------- */
 const ROUTE_HEX = '#ff2b95';
 const hoopMat = {
   next: new THREE.MeshBasicMaterial({ color: ROUTE_HEX }),
@@ -206,21 +206,73 @@ const hoopMat = {
 };
 for (const k in hoopMat) hoopMat[k].userData.shared = true;   // outlive course switches
 const Z_AXIS = new V3(0, 0, 1);
-let hoopMeshes = [];
+let hoopMeshes = [];      // per gate: its hoop mesh, or null for a pylon gate
+let pylonGates = [];      // per gate: { caps, chevrons } for a pylon gate, or null for a hoop
+let pylonMeshes = [];     // per PYLONS entry: its group, which deflates when hit
+const gateQ = [];         // per gate: orientation (+Z along the line)
+const pylonMat = {
+  G: new THREE.MeshLambertMaterial({ color: '#2f6fe0' }),       // air gate: between the pair, wings level
+  single: new THREE.MeshLambertMaterial({ color: '#ff4a1c' }),  // single pylon: pass on the chevron's side
+  band: new THREE.MeshLambertMaterial({ color: '#f4f4f0' }),
+};
+for (const k in pylonMat) pylonMat[k].userData.shared = true;
+const chevronGeo = new THREE.ShapeGeometry(new THREE.Shape([[-2.2, 2.3], [-0.5, 2.3], [2.3, 0], [-0.5, -2.3], [-2.2, -2.3], [0.6, 0]].map(([x, y]) => new THREE.Vector2(x, y))));
+const chevronMat = {
+  next: new THREE.MeshBasicMaterial({ color: ROUTE_HEX, side: THREE.DoubleSide }),
+  soon: new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide }),
+};
+for (const k in chevronMat) chevronMat[k].userData.shared = true;
 const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(gateDisc);
 function buildHoops(group) {
   const geo = new THREE.TorusGeometry(TUNE.HOOP_R, 0.75 * TUNE.HOOP_R / 8, 8, 44);
-  hoopMeshes = HOOPS.map((h) => {
+  gateQ.length = 0;
+  hoopMeshes = HOOPS.map((h, i) => {
+    gateQ[i] = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, h.normal);
+    if (h.kind !== 'hoop') return null;
     const m = new THREE.Mesh(geo, hoopMat.later);
-    m.position.copy(h.pos); m.quaternion.setFromUnitVectors(Z_AXIS, h.normal);
+    m.position.copy(h.pos); m.quaternion.copy(gateQ[i]);
     m.userData.fade = 0; m.userData.flash = null;
     group.add(m);
     return m;
   });
+  pylonMeshes = PYLONS.map((py) => buildPylon(group, py));
+  pylonGates = HOOPS.map((h, i) => {
+    if (h.kind === 'hoop') return null;
+    const caps = h.pylons.map((k) => pylonMeshes[k].userData.cap), chevrons = [];
+    if (h.kind !== 'G') {                                    // single pylon: a chevron on its face points to the circle
+      const py = PYLONS[h.pylons[0]], x = new V3(h.pos.x - py.x, 0, h.pos.z - py.z).normalize();
+      const z = new V3(-h.normal.x, 0, -h.normal.z).normalize(), y = new V3().crossVectors(z, x);
+      const c = new THREE.Mesh(chevronGeo, chevronMat.next);
+      const r = lerp(py.r0, py.r1, (h.pos.y - py.y0) / (py.y1 - py.y0));
+      c.position.set(py.x, h.pos.y, py.z).addScaledVector(z, r + 0.3);
+      c.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+      c.visible = false; group.add(c); chevrons.push(c);
+    }
+    return { caps, chevrons, kind: h.kind, bodyMat: h.kind === 'G' ? pylonMat.G : pylonMat.single };
+  });
   gateDisc.scale.setScalar((TUNE.HOOP_R - 0.6) / 7.4);
 }
+// tapered pylon, foot at its group's origin: body, a white band, body, and a cap that lights up for the next gate
+function buildPylon(group, py) {
+  const g = new THREE.Group(), H = py.y1 - py.y0, body = HOOPS[py.gate].kind === 'G' ? pylonMat.G : pylonMat.single;
+  const seg = (a, b, mat) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(lerp(py.r0, py.r1, b), lerp(py.r0, py.r1, a), (b - a) * H, 16), mat);
+    m.position.y = (a + b) / 2 * H; g.add(m); return m;
+  };
+  seg(0, 0.62, body); seg(0.62, 0.7, pylonMat.band); seg(0.7, 0.85, body);
+  g.userData.cap = seg(0.85, 1, body);
+  g.position.set(py.x, py.y0, py.z);
+  g.userData.hitT = -1;
+  group.add(g);
+  return g;
+}
+function resetPylons() {
+  PYLONS.forEach((py) => { py.hit = false; });
+  pylonMeshes.forEach((g) => { g.userData.hitT = -1; g.scale.set(1, 1, 1); g.rotation.set(0, 0, 0); });
+}
+const gateNoun = () => (HOOPS.length && HOOPS[0].kind !== 'hoop' ? 'gate' : 'hoop');
 
 /* ---------- plane models (nose along -Z), one per vehicle; the course's vehicle picks ---------- */
 function modelKit(g) {
@@ -280,7 +332,31 @@ function makeJetModel() {
              flameMat.opacity = 0.3 + 0.55 * burn;
            } };
 }
-const models = { prop: makePropModel(), jet: makeJetModel() };
+function makeRacerModel() {                               // race plane: low wing, big round cowl, taildragger
+  const g = new THREE.Group(), add = modelKit(g);
+  const white = new THREE.MeshLambertMaterial({ color: '#f5f5f2' }), blue = new THREE.MeshLambertMaterial({ color: '#1d4fd8' });
+  const red = new THREE.MeshLambertMaterial({ color: '#e5262d' }), dark = new THREE.MeshLambertMaterial({ color: '#232b33' });
+  const glass = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
+  add(new THREE.CylinderGeometry(0.64, 0.24, 5.6, 10).rotateX(-Math.PI / 2), white, 0, 0, 0.55);
+  add(new THREE.CylinderGeometry(0.66, 0.74, 1.15, 12).rotateX(-Math.PI / 2), red, 0, 0, -2.75);   // cowl
+  add(new THREE.ConeGeometry(0.34, 0.75, 10).rotateX(-Math.PI / 2), red, 0, 0, -3.7);             // spinner
+  add(new THREE.SphereGeometry(0.5, 12, 8).scale(1, 0.85, 2.3), glass, 0, 0.55, -0.1);            // bubble canopy
+  for (const s of [-1, 1]) {
+    add(new THREE.BoxGeometry(3.4, 0.17, 1.55), blue, s * 2.05, -0.38, -0.95);                  // low wing, no dihedral
+    add(new THREE.BoxGeometry(0.5, 0.18, 1.3), white, s * 3.65, -0.38, -0.95);                  // white tips
+    add(new THREE.BoxGeometry(0.12, 1.25, 0.2), dark, s * 0.8, -0.95, -1.9, s * 0.45);           // gear legs
+    add(new THREE.SphereGeometry(0.3, 10, 6).scale(0.7, 1, 1.9), white, s * 1.08, -1.55, -1.85);   // wheel pants
+  }
+  add(new THREE.BoxGeometry(2.7, 0.12, 0.95), blue, 0, 0.08, 2.85);                               // tailplane
+  add(new THREE.BoxGeometry(0.12, 1.35, 1.1), red, 0, 0.72, 2.95);                                // fin
+  const prop = add(new THREE.BoxGeometry(2.3, 0.2, 0.06), dark, 0, 0, -3.5);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.2, 24), new THREE.MeshBasicMaterial({ color: '#232b33', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
+  disc.position.set(0, 0, -3.52); g.add(disc);
+  scene.add(g);
+  return { group: g, tips: [new V3(-3.9, -0.38, -0.4), new V3(3.9, -0.38, -0.4)], smoke: new V3(0, 0.1, 3.4),
+           update(dt, P) { prop.rotation.z += dt * (P.boosting ? 60 : 42); } };
+}
+const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel() };
 let planeModel = models.prop;
 function setVehicleModel() {
   for (const k in models) models[k].group.visible = false;
@@ -310,8 +386,8 @@ const streakPos = Array.from({ length: STREAKS }, () => new V3(1e9, 0, 0));
 // wingtip vapour trails (camera-facing ribbons, time-based fade)
 const trailMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
 class Trail {
-  constructor(max) {
-    this.max = max; this.pts = []; this.pool = [];
+  constructor(max, w0 = 0.12, w1 = 0.9) {
+    this.max = max; this.pts = []; this.pool = []; this.w0 = w0; this.w1 = w1;
     this.pos = new Float32Array(max * 6); this.col = new Float32Array(max * 8);
     const idx = [];
     for (let i = 0; i < max - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
@@ -333,7 +409,7 @@ class Trail {
       const cur = this.pts[i], a = this.pts[Math.max(0, i - 1)].p, b = this.pts[Math.min(n - 1, i + 1)].p;
       d.copy(a).sub(b); if (d.lengthSq() < 1e-8) d.set(0, 0, 1);
       s.copy(camPos).sub(cur.p).cross(d).normalize();
-      const age = (now - cur.t) / life, w = 0.12 + age * 0.9, al = cur.a * (1 - age) * (1 - age);
+      const age = (now - cur.t) / life, w = this.w0 + age * this.w1, al = cur.a * (1 - age) * (1 - age);
       const o = i * 6;
       this.pos[o] = cur.p.x + s.x * w; this.pos[o + 1] = cur.p.y + s.y * w; this.pos[o + 2] = cur.p.z + s.z * w;
       this.pos[o + 3] = cur.p.x - s.x * w; this.pos[o + 4] = cur.p.y - s.y * w; this.pos[o + 5] = cur.p.z - s.z * w;
@@ -345,6 +421,7 @@ class Trail {
 }
 Trail.d = new V3(); Trail.s = new V3();
 const trails = [new Trail(150), new Trail(150)];
+const smoke = { trail: new Trail(200, 0.25, 2.4), last: 0 };   // race plane's tail smoke, sampled at 60 Hz
 
 /* ---------- sound ---------- */
 const Sound = {
@@ -394,10 +471,10 @@ const Sound = {
       return;
     }
     this.rumble.gain.setTargetAtTime(0, t, 0.2);
-    const f = (P.boosting ? 78 : 58) + v * 0.35;
+    const racer = TUNE.VEHICLE === 'racer', f = ((P.boosting ? 78 : 58) + v * 0.35) * (racer ? 1.15 : 1);   // racer: angrier six-cylinder
     this.osc[0].frequency.setTargetAtTime(f, t, 0.25); this.osc[1].frequency.setTargetAtTime(f * 2.01, t, 0.25);
     this.eng.gain.setTargetAtTime(level * (P.boosting ? 0.06 : 0.035), t, 0.2);
-    this.engF.frequency.setTargetAtTime(P.boosting ? 950 : 420, t, 0.3);
+    this.engF.frequency.setTargetAtTime((P.boosting ? 950 : 420) * (racer ? 1.3 : 1), t, 0.3);
   },
   tone(freq, when, dur, vol, type = 'sine') {
     const c = this.ctx, o = c.createOscillator(), g = c.createGain();
@@ -409,6 +486,16 @@ const Sound = {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const steps = [0, 2, 4, 7, 9], n = steps[i % 5] + 12 * Math.floor(i / 5), f = 440 * Math.pow(2, n / 12), t = this.ctx.currentTime;
     this.tone(f, t, 0.45, 0.16); this.tone(f * 2, t, 0.25, 0.05, 'triangle');
+  },
+  thump() {                                                 // pylon hit: dull whump of an air-filled pylon
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const t = this.ctx.currentTime;
+    this.pop(t, 0.5); this.tone(82, t, 0.35, 0.3); this.tone(61, t + 0.03, 0.4, 0.2, 'triangle');
+  },
+  penalty() {                                               // penalty or missed gate: two falling buzzes
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const t = this.ctx.currentTime;
+    this.tone(330, t, 0.16, 0.06, 'square'); this.tone(247, t + 0.15, 0.24, 0.06, 'square');
   },
   finish() {
     if (!this.ctx || this.ctx.state !== 'running') return;
@@ -453,7 +540,7 @@ const Sound = {
 
 /* ---------- game state ---------- */
 const P = makePlane();
-const G = { state: 'attract', next: 0, started: false, time: 0, invuln: 0, crashTimer: 0, lap: 'attract', pauseReason: null, clock: 0 };
+const G = { state: 'attract', next: 0, started: false, time: 0, pen: 0, invuln: 0, crashTimer: 0, lap: 'attract', pauseReason: null, clock: 0 };
 const aim = { yaw: 0, pitch: 0 };
 const aimDir = new V3(0, 0, -1);
 const START_POS = new V3(), START_DIR = new V3();         // set per course by applyCourse()
@@ -464,10 +551,11 @@ function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = cla
 function resetRun() {
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
   P.boost = 1; P.boostLock = false; P.boosting = false;
-  G.next = 0; G.started = false; G.time = 0; G.invuln = 0.4; G.crashTimer = 0;
+  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0;
   setAimFrom(START_DIR); input.neutral = true;
-  hoopMeshes.forEach((m) => { m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
-  trails.forEach((t) => t.clear());
+  hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
+  resetPylons();
+  trails.forEach((t) => t.clear()); smoke.trail.clear();
   planeModel.group.visible = true;
   updateCamera(0, true);
 }
@@ -479,23 +567,49 @@ function respawn() {
   setAimFrom(P.vdir); input.neutral = true;
   G.invuln = 1.2;
   planeModel.group.visible = true;
-  trails.forEach((t) => t.clear());
+  trails.forEach((t) => t.clear()); smoke.trail.clear();
   updateCamera(0, true);
 }
 
-function onHoop() {
-  const i = G.next;
+// missed: a pylon gate passed outside its circle; it counts as flown, with a penalty and no boost refill
+function onHoop(missed = false) {
+  const i = G.next, h = HOOPS[i];
   G.next++;
-  P.boost = Math.min(1, P.boost + TUNE.BOOST_HOOP);
+  if (!missed) P.boost = Math.min(1, P.boost + TUNE.BOOST_HOOP);
   const m = hoopMeshes[i];
-  if (m.userData.flash) m.userData.flash.dispose();
-  m.userData.flash = hoopMat.next.clone(); m.userData.flash.transparent = true; m.userData.flash.depthWrite = false;
-  m.material = m.userData.flash; m.userData.fade = 1;
+  if (m) {
+    if (m.userData.flash) m.userData.flash.dispose();
+    m.userData.flash = hoopMat.next.clone(); m.userData.flash.transparent = true; m.userData.flash.depthWrite = false;
+    m.material = m.userData.flash; m.userData.fade = 1;
+  }
   if (G.state !== 'playing') return;
   if (i === 0) G.started = true;
-  Sound.hoop(i);
+  if (missed) penalty(RULES.missed, `Missed ${gateNoun()} ${i + 1}`);
+  else {
+    Sound.hoop(i);
+    if (h.kind === 'G' && Math.abs(P.bank) > RULES.levelTol * Math.PI / 180) penalty(RULES.notLevel, 'Not level through the gate');
+  }
   bump($('hud-hoops'));
   if (G.next >= HOOPS.length) finishRun();
+}
+let penTimer = 0;
+function penalty(sec, what) {
+  if (!sec) return;
+  G.time += sec; G.pen += sec;
+  Sound.penalty();
+  showToast(`${what}: +${sec} s`, 1800);
+  hud.time.classList.add('is-pen'); bump(hud.time);
+  clearTimeout(penTimer); penTimer = setTimeout(() => hud.time.classList.remove('is-pen'), 1100);
+}
+function onPylonHit(k) {
+  PYLONS[k].hit = true;                                     // one penalty per pylon per run; it stays deflated
+  const g = pylonMeshes[k];
+  g.userData.hitT = 0;
+  g.userData.lean = _nose.set(PYLONS[k].x - P.pos.x, 0, PYLONS[k].z - P.pos.z).normalize().clone();
+  if (G.state !== 'playing') return;
+  cam.shake = reducedMotion ? 0 : 0.45;
+  Sound.thump();
+  penalty(RULES.pylonHit, 'Pylon hit');
 }
 
 function onCrash(kind) {
@@ -505,7 +619,7 @@ function onCrash(kind) {
   if (G.state !== 'playing') return;
   Sound.crash();
   flash();
-  showToast(G.next > 0 ? `${kind === 'tree' ? 'Clipped a tree' : 'Crashed'}. Back to hoop ${G.next}.` : `${kind === 'tree' ? 'Clipped a tree' : 'Crashed'}. Back to the start.`);
+  showToast(G.next > 0 ? `${kind === 'tree' ? 'Clipped a tree' : 'Crashed'}. Back to ${gateNoun()} ${G.next}.` : `${kind === 'tree' ? 'Clipped a tree' : 'Crashed'}. Back to the start.`);
 }
 
 /* ---------- input ---------- */
@@ -759,6 +873,17 @@ function updateCamera(dt, snap) {
 }
 
 /* ---------- per-frame visuals ---------- */
+// pylon gate: the next gate's caps and chevron light up in the route colour, the one after in white
+function updatePylonGate(i, t) {
+  const pg = pylonGates[i], rel = i - G.next;
+  const capMat = rel === 0 ? hoopMat.next : rel === 1 ? hoopMat.soon : pg.bodyMat;
+  for (const c of pg.caps) c.material = capMat;
+  for (const c of pg.chevrons) {
+    c.visible = rel === 0 || rel === 1;
+    c.material = rel === 0 ? chevronMat.next : chevronMat.soon;
+    c.scale.setScalar(rel === 0 ? 1 + Math.sin(t * 6) * 0.06 : 1);
+  }
+}
 const _v = new V3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _s = new V3(), _ba = new V3(), _bb = new V3(), _camFwd = new V3(), _rel = new V3();
 function updateVisuals(dt) {
   const t = G.clock;
@@ -768,6 +893,7 @@ function updateVisuals(dt) {
 
   for (let i = 0; i < hoopMeshes.length; i++) {
     const m = hoopMeshes[i];
+    if (!m) { updatePylonGate(i, t); continue; }
     if (i < G.next) {
       if (m.userData.fade > 0) {
         m.userData.fade = Math.max(0, m.userData.fade - dt * 2.4);
@@ -782,10 +908,18 @@ function updateVisuals(dt) {
     m.material = rel === 0 ? hoopMat.next : rel === 1 ? hoopMat.soon : hoopMat.later;
     m.scale.setScalar(rel === 0 ? 1 + Math.sin(t * 6) * 0.035 : 1);
   }
-  if (G.next < HOOPS.length) {
+  for (const g of pylonMeshes) {                            // hit pylons sag and lean away from the plane
+    const u = g.userData;
+    if (u.hitT < 0 || u.hitT > 1) continue;
+    u.hitT += dt;
+    const k = smoothstep(0, 0.5, u.hitT);
+    g.scale.set(1 + 0.35 * k, 1 - 0.8 * k, 1 + 0.35 * k);
+    g.rotation.set(u.lean.z * 0.5 * k, 0, -u.lean.x * 0.5 * k);
+  }
+  if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
     gateDisc.visible = true;
-    gateDisc.position.copy(hoopMeshes[G.next].position); gateDisc.quaternion.copy(hoopMeshes[G.next].quaternion);
-    gateDisc.material.opacity = 0.09 + Math.sin(t * 6) * 0.04;
+    gateDisc.position.copy(HOOPS[G.next].pos); gateDisc.quaternion.copy(gateQ[G.next]);
+    gateDisc.material.opacity = (0.09 + Math.sin(t * 6) * 0.04) * (hoopMeshes[G.next] ? 1 : 0.55);
   } else gateDisc.visible = false;
 
   // shadow
@@ -833,6 +967,13 @@ function updateVisuals(dt) {
     trails[i].push(_v, ti * 0.6, t);
     trails[i].update(t, 0.9, camera.position);
   }
+  if (planeModel.smoke) {
+    if (t - smoke.last >= 1 / 60) {
+      smoke.last = t;
+      smoke.trail.push(_v.copy(planeModel.smoke).applyQuaternion(P.q).add(P.pos), planeModel.group.visible ? 0.32 : 0, t);
+    }
+    smoke.trail.update(t, 3, camera.position);
+  }
 
   sky.position.copy(camera.position);
   sunDisc.position.copy(camera.position).addScaledVector(SUN_DIR, sunDist);
@@ -840,7 +981,7 @@ function updateVisuals(dt) {
 }
 
 /* ---------- HUD & UI ---------- */
-const hud = { time: $('hud-time'), hoops: $('hud-hoops'), speed: $('hud-speed'), boost: $('hud-boost'), arrow: $('arrow'), arrowIcon: $('arrow-icon'), arrowDist: $('arrow-dist'),
+const hud = { time: $('hud-time'), hoops: $('hud-hoops'), speed: $('hud-speed'), g: $('hud-g'), boost: $('hud-boost'), arrow: $('arrow'), arrowIcon: $('arrow-icon'), arrowDist: $('arrow-dist'),
   reticle: $('reticle'), nose: $('nose'), boostBtn: $('boost-btn'), last: {} };
 const fmtTime = (s) => { const cs = Math.floor(s * 100 + 1e-6), m = Math.floor(cs / 6000), r = cs % 6000; return `${m}:${String(Math.floor(r / 100)).padStart(2, '0')}.${String(r % 100).padStart(2, '0')}`; };
 function setText(el, key, val) { if (hud.last[key] !== val) { hud.last[key] = val; el.textContent = val; } }
@@ -856,6 +997,7 @@ function updateHUD() {
   setText(hud.time, 'time', fmtTime(G.time));
   setText(hud.hoops, 'hoops', `${G.next}/${HOOPS.length}`);
   setText(hud.speed, 'speed', `${Math.round(P.speed * 3.6)} km/h`);
+  if (hud.g) { const gl = Math.max(0, P.gload); setText(hud.g, 'g', `${gl.toFixed(1)} g`); hud.g.classList.toggle('is-high', gl >= 9); }
   const b = Math.round(P.boost * 100) / 100;
   if (hud.last.boost !== b) { hud.last.boost = b; hud.boost.style.transform = `scaleX(${b})`; hud.boostBtn.style.setProperty('--level', b); }
   body.classList.toggle('is-boosting', P.boosting);
@@ -911,12 +1053,16 @@ function blurActive() { if (document.activeElement && document.activeElement.blu
 function renderBest() {
   const b = getBest();
   $('start-best').textContent = b != null ? `Best ${fmtTime(b)}` : '';
-  $('start-course').textContent = `${COURSE.name}, ${HOOPS.length} hoops`;
+  $('start-course').textContent = `${COURSE.name}, ${HOOPS.length} ${gateNoun()}s`;
+  const lead = $('start-lead'), refill = $('start-refill');
+  if (lead) lead.textContent = COURSE.lead || 'Fly through every hoop in order. The clock starts at the first one.';
+  const pen = gateNoun() === 'gate' ? `Penalties: pylon hit +${RULES.pylonHit} s, banked air gate +${RULES.notLevel} s, missed gate +${RULES.missed} s. ` : '';
+  if (refill) refill.textContent = `${pen}Boost refills over time and with every ${gateNoun()}.`;
   renderPicker();
 }
 
 /* ---------- course picker (start screen, shown once there's more than one course) ---------- */
-const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet' };
+const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane' };
 const pickEl = $('course-pick');
 let switching = false;
 function renderPicker() {
@@ -951,7 +1097,9 @@ function applyCourse() {                                    // scene, plane, sta
   START_DIR.copy(HOOPS[0].pos).sub(START_POS).normalize();
   buildScenery();
   setVehicleModel();
-  body.classList.toggle('vehicle-jet', TUNE.VEHICLE === 'jet');
+  for (const v in models) body.classList.toggle('vehicle-' + v, TUNE.VEHICLE === v);
+  body.classList.toggle('course-pylons', gateNoun() === 'gate');
+  smoke.trail.clear();
   renderBest();
 }
 
@@ -963,7 +1111,7 @@ function startRun() {
   hud.last = {};
   setState('playing');
   if (!isTouchUI() && !input.mouse.locked) tryLock({ onFail: cursorSteer });
-  showToast('The clock starts at the first hoop.', 2600);
+  showToast(`The clock starts at the first ${gateNoun()}.`, 2600);
 }
 function restart() {
   if (G.state === 'attract') return;
@@ -1008,13 +1156,15 @@ function finishRun() {
   $('finish-time').textContent = fmtTime(t);
   $('finish-best').textContent = prev == null ? 'First time on this course, saved as your best.'
     : best ? `New best, ${(prev - t).toFixed(2)} s faster.` : `Best ${fmtTime(prev)}, ${(t - prev).toFixed(2)} s off.`;
+  if (G.pen > 0) $('finish-best').textContent += ` Includes ${G.pen} s of penalties.`;
   renderBest();
   setState('finished');
   if (document.pointerLockElement === canvas) document.exitPointerLock();
   setTimeout(() => {                                        // victory lap behind the results
     if (G.state !== 'finished') return;
     G.next = 0;
-    hoopMeshes.forEach((m) => { m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
+    hoopMeshes.forEach((m) => { if (!m) return; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
+    resetPylons();
   }, 1200);
   focusEl('btn-again');
 }
@@ -1071,13 +1221,15 @@ function update(dt) {
         prevPos.copy(P.pos);
         stepFlight(P, ctl, h);
         if (G.state === 'playing' && G.started) G.time += h;
-        if (G.next < HOOPS.length && passedHoop(prevPos, P.pos, G.next)) {
-          onHoop();
+        const cross = G.next < HOOPS.length ? gateCross(prevPos, P.pos, G.next) : null;
+        if (cross) {
+          onHoop(cross === 'miss');
           if (G.state !== 'playing' && G.next >= HOOPS.length) {   // attract lap done: go round again
             if (G.state === 'attract') { resetRun(); break; }
             G.next = 0;
           }
         }
+        if (G.state === 'playing' && PYLONS.length) { const k = pylonHit(P); if (k >= 0) onPylonHit(k); }
         if (G.invuln > 0) G.invuln -= h;
         else { const c = crashed(P); if (c) { onCrash(c); break; } }
       }
@@ -1101,5 +1253,5 @@ function frame(now) {
 resetRun();
 setState('attract');
 requestAnimationFrame((t) => { last = t; frame(t); });
-window.__ml = { G, P, get HOOPS() { return HOOPS; }, input, settings, finishRun, switchCourse, teleport(i) { G.next = i; respawn(); } };
+window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, teleport(i) { G.next = i; respawn(); } };
 }
