@@ -337,7 +337,7 @@ const aim = { yaw: 0, pitch: 0 };
 const aimDir = new V3(0, 0, -1);
 const START_POS = new V3(COURSE_DEF[0][0], COURSE_DEF[0][1], COURSE_DEF[0][2]);
 const START_DIR = HOOPS[0].pos.clone().sub(START_POS).normalize();
-const cam = { dir: new V3(0, 0, -1), up: new V3(0, 1, 0), dist: 12.5, fov: 60, shake: 0, vx: 0, vy: 0 };
+const cam = { dir: new V3(0, 0, -1), up: new V3(0, 1, 0), dist: 12.5, fov: 60, shake: 0, vx: 0, vy: 0, boost: 0 };
 
 function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = clamp(pitchOf(dir), -maxPitch, maxPitch); dirFromYawPitch(aim.yaw, aim.pitch, aimDir); }
 
@@ -582,6 +582,7 @@ function autoControl() {                                    // attract mode and 
 }
 
 /* ---------- camera ---------- */
+const BOOST_CAM_BACK = 1.2;                                 // m of extra pull-back while boosting
 const _cf = new V3(), _cu = new V3(), _want = new V3(), _wantUp = new V3(), _look = new V3();
 function updateCamera(dt, snap) {
   forwardOf(P, _cf);
@@ -590,7 +591,9 @@ function updateCamera(dt, snap) {
   _want.normalize();
   _cu.set(0, 1, 0).applyQuaternion(P.q);
   _wantUp.copy(WORLD_UP).lerp(_cu, reducedMotion ? 0.12 : 0.3).normalize();      // follow roll only partially
-  const wantDist = 12.5 + clamp(P.speed - TUNE.CRUISE, -15, 30) * 0.07;
+  const boostOn = P.boosting && planeModel.group.visible ? 1 : 0;   // smoothed boost flag: reacts on press, not as speed builds
+  cam.boost = snap ? boostOn : lerp(cam.boost, boostOn, damp(boostOn ? 5 : 2, dt));
+  const wantDist = 12.5 + clamp(P.speed - TUNE.CRUISE, -15, 30) * 0.07 + cam.boost * BOOST_CAM_BACK;
   if (snap) { cam.dir.copy(_want); cam.up.copy(_wantUp); cam.dist = wantDist; }
   else {
     cam.dir.lerp(_want, damp(4.2, dt)).normalize();
@@ -689,8 +692,9 @@ function updateVisuals(dt) {
     streaks.instanceMatrix.needsUpdate = true;
   }
 
-  // wingtip trails: pulling hard or going fast
-  const ti = planeModel.group.visible ? clamp((P.gload - 2.3) / 2.5, 0, 1) * 0.75 + smoothstep(56, 70, P.speed) * 0.3 : 0;
+  // wingtip trails: pulling hard, going fast, or boosting (boost draws them as strongly as a hard bank)
+  const gTrail = clamp((P.gload - 2.3) / 2.5, 0, 1) * 0.75;
+  const ti = planeModel.group.visible ? Math.max(gTrail, cam.boost * 0.75) + smoothstep(56, 70, P.speed) * 0.3 : 0;
   for (let i = 0; i < 2; i++) {
     _v.copy(planeModel.tips[i]).applyQuaternion(P.q).add(P.pos);
     trails[i].push(_v, ti * 0.6, t);
