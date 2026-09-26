@@ -99,16 +99,17 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
               with `wallSteepness`.
      pylon:   { r0, r1, above, gap }             optional; pylon radius at the foot and top, height above the
                                                  circle's top, and the gap between circle and pylon (m)
-     rules:   { pylonHit, notLevel, missed, missR, levelTol }   optional; time penalties (s) for touching a pylon,
-                                                 flying an air gate banked more than levelTol degrees, and passing a
+     rules:   { pylonHit, notLevel, missed, missR, levelTol, hoopMiss }   optional; time penalties (s) for touching a
+                                                 pylon, flying an air gate banked more than levelTol degrees, and passing a
                                                  pylon gate outside its circle but within missR m of its centre (the
-                                                 gate then counts as flown). Hoops never count as missed: fly back.
+                                                 gate then counts as flown). Hoops never count as missed (fly back)
+                                                 unless hoopMiss is true, for vehicles that can't turn back (wingsuit).
      lead:    "..."                             optional; the start screen's one-line brief
    }
    buildWorld(course) (re)builds everything in this section from it. */
 let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SAMPLES = [], PYLONS = [];
 const PYLON_DEF = { r0: 2.4, r1: 0.8, above: 4, gap: 1.2 };
-const RULES_DEF = { pylonHit: 3, notLevel: 2, missed: 5, missR: 70, levelTol: 15 };
+const RULES_DEF = { pylonHit: 3, notLevel: 2, missed: 5, missR: 70, levelTol: 15, hoopMiss: false };
 let PYLON = PYLON_DEF, RULES = RULES_DEF;
 let TER = null, TH = null, TDIST = null, TNEAR = null, noiseA = null, noiseB = null, noiseC = null;
 const TREES = { x: [], y: [], z: [], h: [], r: [] };
@@ -288,6 +289,7 @@ function placePlane(P, pos, dir, speed) {
   // Matrix4.lookAt points local -Z at the target: nose along dir, wings level
   P.q.setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(), P.vdir, WORLD_UP));
   P.speed = speed; P.rp = P.ry = P.rr = 0; P.bank = 0; P.turn = 0; P.gload = 1; P.apAround = false;
+  P.glide = null; P.tuck = 0;                               // glide model (js/glide.js) restarts from vdir
 }
 
 function forwardOf(P, out) { return out.set(0, 0, -1).applyQuaternion(P.q); }
@@ -424,7 +426,7 @@ function autopilotAim(P, hoopIdx, out) {
   const k0 = i > 0 ? HOOPS[i - 1].sample : 0, k1 = h.sample;
   // missed approach: once the hoop is about to go by off-centre, fly out along the line behind it and come round again
   const along = _ax.copy(P.pos).sub(h.pos).dot(h.normal), lat = Math.sqrt(Math.max(0, P.pos.distanceToSquared(h.pos) - along * along));
-  if (along > -v * 0.25 && along < v * 3 && lat > TUNE.HOOP_R + TUNE.HOOP_TOL) P.apAround = true;
+  if (!RULES.hoopMiss && along > -v * 0.25 && along < v * 3 && lat > TUNE.HOOP_R + TUNE.HOOP_TOL) P.apAround = true;
   else if (along < -v * 2.5) P.apAround = false;
   if (P.apAround) {
     const b = SAMPLES[Math.max(k0, k1 - Math.round(v * 4 / (COURSE_LEN / (SAMPLES.length - 1))))];
@@ -459,7 +461,7 @@ function gateCross(a, b, i) {
   const hx = a.x + (b.x - a.x) * t - h.pos.x, hy = a.y + (b.y - a.y) * t - h.pos.y, hz = a.z + (b.z - a.z) * t - h.pos.z;
   const r2 = hx * hx + hy * hy + hz * hz;
   if (r2 < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2) return 'pass';
-  return h.kind !== 'hoop' && r2 < RULES.missR * RULES.missR ? 'miss' : null;
+  return (h.kind !== 'hoop' || RULES.hoopMiss) && r2 < RULES.missR * RULES.missR ? 'miss' : null;
 }
 const passedHoop = (a, b, i) => gateCross(a, b, i) === 'pass';
 // first standing pylon touched by the plane (tested at five points along the wing), or -1
