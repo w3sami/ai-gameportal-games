@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aurinkoennuste</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1f2a33; --muted:#5d6b75; --paper:#eef2f3; --sheet:#ffffff;
+  --line:#d3dade; --sun:#f0a202; --sun-ink:#5a3b00; --sky:#2f5d8a;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#e6ecef; --muted:#9aa8b1; --paper:#141b21; --sheet:#1b242b;
+    --line:#2e3a43; --sun:#f5b333; --sun-ink:#1b1200; --sky:#8fb7de;
+  }
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font:16px/1.45 var(--body)}
+#app{height:100%;display:grid;grid-template-rows:1fr auto}
+@media (min-width:860px){#app{grid-template-rows:none;grid-template-columns:1fr 380px}}
+#mapwrap{position:relative;min-height:0}
+#map{position:absolute;inset:0;background:#cfd8dc}
+.ctrls{position:absolute;top:12px;right:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
+button{font:600 15px/1 var(--body);color:var(--ink);background:var(--sheet);border:1px solid var(--line);
+  border-radius:10px;padding:11px 14px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+button:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--sun);color:var(--sun-ink);border-color:var(--sun)}
+#btnRefresh{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:500;
+  background:var(--ink);color:var(--paper);border-color:var(--ink)}
+#legend{position:absolute;left:10px;bottom:22px;z-index:500;background:var(--sheet);border:1px solid var(--line);
+  border-radius:8px;padding:8px 10px;font-size:13px;min-width:170px}
+#legend .bar{height:10px;border-radius:3px;margin:5px 0 3px}
+#legend .ends{display:flex;justify-content:space-between;color:var(--muted)}
+#sheet{background:var(--sheet);border-top:1px solid var(--line);padding:14px 16px 16px;
+  max-height:50vh;overflow-y:auto}
+@media (min-width:860px){#sheet{max-height:none;border-top:0;border-left:1px solid var(--line)}}
+#days{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+#days button{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:7px 10px;box-shadow:none;min-width:56px}
+#days button .d{font:500 13px/1 var(--body);color:var(--muted)}
+#days button .v{font:700 19px/1 var(--display)}
+#days button[aria-selected="true"]{background:var(--sun);border-color:var(--sun);color:var(--sun-ink)}
+#days button[aria-selected="true"] .d{color:var(--sun-ink)}
+.now{display:flex;align-items:flex-end;gap:14px;margin:14px 0 6px}
+.big{font:700 64px/.85 var(--display);letter-spacing:-.01em}
+.big small{font:500 22px/1 var(--display);margin-left:4px;color:var(--muted)}
+#meta{color:var(--muted);font-size:14px;padding-bottom:4px}
+#hours{width:100%;height:70px;display:block;margin-top:8px}
+.hl{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+#status{min-height:1.4em;font-size:14px;color:var(--muted);margin:10px 0}
+#status.err{color:#c0392b}
+details{border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:600}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;margin-top:10px}
+.form label{display:flex;flex-direction:column;font-size:13px;color:var(--muted);gap:4px}
+.form input,.form select{font:500 16px var(--body);color:var(--ink);background:var(--paper);
+  border:1px solid var(--line);border-radius:8px;padding:8px}
+.note{font-size:13px;color:var(--muted);grid-column:1/-1;margin:0}
+.src{font-size:12px;color:var(--muted);margin:12px 0 0}
+.src a{color:inherit}
+.cell-label{font:700 13px/1 var(--display);color:#1a1a1a;text-shadow:0 0 3px #fff,0 0 3px #fff;
+  text-align:center;white-space:nowrap;pointer-events:none}
+.pin{width:26px;height:26px;border-radius:50%;background:var(--sun);border:3px solid #fff;
+  box-shadow:0 0 0 2px #5a3b00,0 2px 6px rgba(0,0,0,.4)}
+.me{width:14px;height:14px;border-radius:50%;background:#2f7de1;border:2px solid #fff;box-shadow:0 0 0 6px rgba(47,125,225,.25)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="mapwrap">
+    <div id="map" aria-label="Kartta"></div>
+    <div class="ctrls">
+      <button id="btnLocate" type="button">Oma sijainti</button>
+      <button id="btnHeat" type="button" aria-pressed="false">Aurinkokartta</button>
+    </div>
+    <button id="btnRefresh" type="button" hidden>Päivitä aurinkokartta tälle alueelle</button>
+    <div id="legend" hidden>
+      <div id="legTitle">Arvioitu tuotto, kWh/päivä</div>
+      <div class="bar" id="legBar"></div>
+      <div class="ends"><span id="legMin"></span><span id="legMax"></span></div>
+    </div>
+  </div>
+
+  <section id="sheet" aria-live="polite">
+    <div id="days" role="tablist" aria-label="Päivä"></div>
+    <div class="now">
+      <div class="big"><span id="kwh">–</span><small>kWh</small></div>
+      <div id="meta">Siirrä merkkiä tai napauta karttaa.</div>
+    </div>
+    <svg id="hours" viewBox="0 0 240 70" preserveAspectRatio="none" role="img" aria-label="Tuotto tunneittain"></svg>
+    <div class="hl"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>
+    <p id="status"></p>
+    <details>
+      <summary>Paneelit</summary>
+      <div class="form">
+        <label>Teho, kWp<input id="kwp" type="number" step="0.1" min="0.1" inputmode="decimal"></label>
+        <label>Häviökerroin<input id="pr" type="number" step="0.05" min="0.3" max="1" inputmode="decimal"></label>
+        <label>Kallistus, °<input id="tilt" type="number" step="1" min="0" max="90" inputmode="numeric"></label>
+        <label>Suunta
+          <select id="az">
+            <option value="0">Etelä</option><option value="-45">Kaakko</option><option value="45">Lounas</option>
+            <option value="-90">Itä</option><option value="90">Länsi</option><option value="180">Pohjoinen</option>
+          </select>
+        </label>
+        <p class="note">Vaakatasossa (0°) suunnalla ei ole merkitystä. Aurinkokartta käyttää vaakatason säteilyä, joten kallistetuilla paneeleilla se on suuntaa-antava.</p>
+      </div>
+    </details>
+    <p class="src">Säädata <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0). Kartta © OpenStreetMap.</p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+  const API = 'https://api.open-meteo.com/v1/forecast';
+  const DAYS = 7;
+  const RAMP = ['#3b4a8c','#4f7cbf','#7fb9c9','#e9d65b','#f5a524','#e0551f'];
+  const $ = id => document.getElementById(id);
+  const fmt = (n, d = 1) => n.toLocaleString('fi-FI', {minimumFractionDigits: d, maximumFractionDigits: d});
+
+  // ---------- state ----------
+  const S = {lat: 60.40, lon: 25.10, kwp: 2.0, pr: 0.8, tilt: 0, az: 0, day: 0};
+  try { Object.assign(S, JSON.parse(localStorage.getItem('aurinko') || '{}')); } catch (e) {}
+  S.day = 0;
+  const save = () => { try { localStorage.setItem('aurinko', JSON.stringify(S)); } catch (e) {} };
+
+  let point = null;      // {days:[], hourly:[[Wh x24]...], cloud:[], kwh:[]}
+  let grid = null;       // {cells:[{b, mj:[]}], dates:[]}
+  let heatOn = false, gridLayer = null, pointReq = 0, gridReq = 0;
+
+  // ---------- map ----------
+  const map = L.map('map', {zoomControl: false, attributionControl: true}).setView([S.lat, S.lon], 8);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+  L.control.zoom({position: 'bottomright'}).addTo(map);
+
+  const marker = L.marker([S.lat, S.lon], {
+    draggable: true, keyboard: true, title: 'Tarkastelupiste',
+    icon: L.divIcon({className: '', html: '<div class="pin"></div>', iconSize: [26, 26], iconAnchor: [13, 13]})
+  }).addTo(map);
+  let meMarker = null;
+
+  marker.on('dragend', () => setPos(marker.getLatLng()));
+  map.on('click', e => setPos(e.latlng));
+  map.on('moveend', () => { if (heatOn) $('btnRefresh').hidden = false; });
+
+  function setPos(ll) {
+    S.lat = +ll.lat.toFixed(4); S.lon = +ll.lng.toFixed(4);
+    marker.setLatLng([S.lat, S.lon]);
+    save(); loadPoint();
+  }
+
+  function status(msg, err = false) { const el = $('status'); el.textContent = msg || ''; el.classList.toggle('err', err); }
+
+  // ---------- geolocation ----------
+  function locate(auto = false) {
+    if (!navigator.geolocation) { if (!auto) status('Selain ei tue sijaintia.', true); else loadPoint(); return; }
+    status('Haetaan sijaintia…');
+    navigator.geolocation.getCurrentPosition(p => {
+      const ll = L.latLng(p.coords.latitude, p.coords.longitude);
+      if (!meMarker) meMarker = L.marker(ll, {interactive: false, icon: L.divIcon({className: '', html: '<div class="me"></div>', iconSize: [14, 14], iconAnchor: [7, 7]})}).addTo(map);
+      else meMarker.setLatLng(ll);
+      map.setView(ll, Math.max(map.getZoom(), 9));
+      setPos(ll);
+    }, e => {
+      status(e.code === 1 ? 'Sijaintilupa evätty. Siirrä merkkiä kartalla.' : 'Sijaintia ei saatu. Siirrä merkkiä kartalla.', !auto);
+      if (auto) loadPoint();
+    }, {enableHighAccuracy: false, timeout: 15000, maximumAge: 300000});
+  }
+  $('btnLocate').onclick = () => locate(false);
+
+  // ---------- fetch helpers ----------
+  async function om(params) {
+    const r = await fetch(API + '?' + new URLSearchParams(params));
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || j.error) throw new Error((j && j.reason) || ('HTTP ' + r.status));
+    return Array.isArray(j) ? j : [j];
+  }
+  const sysKwh = whPerM2 => whPerM2 / 1000 * S.kwp * S.pr;
+
+  // ---------- point forecast ----------
+  async function loadPoint() {
+    const id = ++pointReq;
+    status('Haetaan ennustetta…');
+    try {
+      const [d] = await om({
+        latitude: S.lat, longitude: S.lon, tilt: S.tilt, azimuth: S.az,
+        hourly: 'global_tilted_irradiance,cloud_cover', forecast_days: DAYS, timezone: 'auto'
+      });
+      if (id !== pointReq) return;
+      const dates = [...new Set(d.hourly.time.map(t => t.slice(0, 10)))].slice(0, DAYS);
+      const hourly = dates.map(() => new Array(24).fill(0));
+      const cloud = dates.map(() => ({s: 0, n: 0}));
+      d.hourly.time.forEach((t, i) => {
+        const di = dates.indexOf(t.slice(0, 10)); if (di < 0) return;
+        const g = Math.max(0, d.hourly.global_tilted_irradiance[i] || 0);   // backward hourly mean W/m² = Wh/m²
+        hourly[di][+t.slice(11, 13)] = sysKwh(g) * 1000;                     // Wh for the system
+        if (g > 20) { cloud[di].s += d.hourly.cloud_cover[i] || 0; cloud[di].n++; }
+      });
+      point = {dates, hourly, cloud: cloud.map(c => c.n ? c.s / c.n : null), kwh: hourly.map(h => h.reduce((a, b) => a + b, 0) / 1000)};
+      status('');
+      renderPoint();
+    } catch (e) {
+      if (id === pointReq) status('Ennusteen haku epäonnistui: ' + e.message, true);
+    }
+  }
+
+  function dayLabel(iso) {
+    const dt = new Date(iso + 'T12:00:00');
+    return dt.toLocaleDateString('fi-FI', {weekday: 'short'}) + ' ' + dt.getDate() + '.' + (dt.getMonth() + 1) + '.';
+  }
+
+  function renderPoint() {
+    if (!point) return;
+    const days = $('days'); days.innerHTML = '';
+    point.dates.forEach((iso, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', i === S.day);
+      b.innerHTML = `<span class="d">${dayLabel(iso)}</span><span class="v">${fmt(point.kwh[i])}</span>`;
+      b.onclick = () => { S.day = i; renderPoint(); renderGrid(); };
+      days.appendChild(b);
+    });
+    const k = point.kwh[S.day];
+    $('kwh').textContent = fmt(k);
+    const c = point.cloud[S.day];
+    $('meta').innerHTML = `${fmt(S.kwp)} kWp, kerroin ${fmt(S.pr, 2)}<br>` +
+      (c == null ? 'Ei päivänvaloa' : `Pilvisyys päivällä ${Math.round(c)} %`) +
+      `<br>${S.lat.toFixed(3)}, ${S.lon.toFixed(3)}`;
+    const h = point.hourly[S.day], max = Math.max(...h, 1), svg = $('hours');
+    svg.innerHTML = h.map((v, i) => {
+      const hh = v / max * 64;
+      return `<rect x="${i * 10 + 1}" y="${70 - hh}" width="8" height="${hh}" rx="1.5" fill="var(--sun)"><title>${i}–${i + 1}: ${Math.round(v)} Wh</title></rect>`;
+    }).join('') + `<line x1="0" y1="69.5" x2="240" y2="69.5" stroke="var(--line)"/>`;
+  }
+
+  // ---------- heatmap ----------
+  async function loadGrid() {
+    const id = ++gridReq;
+    $('btnRefresh').hidden = true;
+    const b = map.getBounds(), size = map.getSize();
+    const cols = 10, rows = Math.min(16, Math.max(6, Math.round(cols * size.y / size.x)));
+    const s = b.getSouth(), n = b.getNorth(), w = b.getWest(), e = b.getEast();
+    const dLat = (n - s) / rows, dLon = (e - w) / cols;
+    const cells = [], lats = [], lons = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const la = s + dLat * (r + .5), lo = w + dLon * (c + .5);
+      cells.push({b: [[s + dLat * r, w + dLon * c], [s + dLat * (r + 1), w + dLon * (c + 1)]]});
+      lats.push(la.toFixed(3)); lons.push(lo.toFixed(3));
+    }
+    status(`Haetaan aurinkokarttaa (${cells.length} pistettä)…`);
+    try {
+      const res = await om({
+        latitude: lats.join(','), longitude: lons.join(','),
+        daily: 'shortwave_radiation_sum', forecast_days: DAYS, timezone: 'auto'
+      });
+      if (id !== gridReq) return;
+      res.forEach((d, i) => { cells[i].mj = d.daily.shortwave_radiation_sum; });
+      grid = {cells, dates: res[0].daily.time};
+      status('');
+      renderGrid();
+    } catch (err) {
+      if (id === gridReq) status('Aurinkokartan haku epäonnistui: ' + err.message, true);
+    }
+  }
+
+  function color(t) {
+    t = Math.min(1, Math.max(0, t)) * (RAMP.length - 1);
+    const i = Math.floor(t), f = t - i, a = RAMP[i], b = RAMP[Math.min(i + 1, RAMP.length - 1)];
+    const p = (h, o) => parseInt(h.slice(o, o + 2), 16);
+    const m = o => Math.round(p(a, o) + (p(b, o) - p(a, o)) * f);
+    return `rgb(${m(1)},${m(3)},${m(5)})`;
+  }
+
+  function renderGrid() {
+    if (gridLayer) { map.removeLayer(gridLayer); gridLayer = null; }
+    if (!heatOn || !grid) { $('legend').hidden = true; return; }
+    const iso = point ? point.dates[S.day] : null;
+    let di = iso ? grid.dates.indexOf(iso) : S.day; if (di < 0) di = S.day;
+    // MJ/m² -> kWh/m² (÷3.6) -> system kWh
+    const vals = grid.cells.map(c => c.mj && c.mj[di] != null ? c.mj[di] / 3.6 * S.kwp * S.pr : null);
+    const ok = vals.filter(v => v != null);
+    if (!ok.length) { $('legend').hidden = true; return; }
+    const lo = Math.min(...ok), hi = Math.max(...ok), span = Math.max(hi - lo, 0.05);
+    gridLayer = L.layerGroup();
+    const cellPx = map.getSize().x / 10;
+    grid.cells.forEach((c, i) => {
+      const v = vals[i]; if (v == null) return;
+      L.rectangle(c.b, {stroke: false, fillColor: color((v - lo) / span), fillOpacity: .5, interactive: false}).addTo(gridLayer);
+      if (cellPx >= 34) {
+        const ctr = L.latLngBounds(c.b).getCenter();
+        L.marker(ctr, {interactive: false, keyboard: false, icon: L.divIcon({className: 'cell-label', html: fmt(v), iconSize: [40, 14], iconAnchor: [20, 7]})}).addTo(gridLayer);
+      }
+    });
+    gridLayer.addTo(map);
+    marker.setZIndexOffset(1000);
+    $('legBar').style.background = `linear-gradient(90deg,${RAMP.join(',')})`;
+    $('legMin').textContent = fmt(lo); $('legMax').textContent = fmt(hi);
+    $('legTitle').textContent = `Arvioitu tuotto ${iso ? dayLabel(iso) : ''}, kWh`;
+    $('legend').hidden = false;
+  }
+
+  $('btnHeat').onclick = () => {
+    heatOn = !heatOn;
+    $('btnHeat').setAttribute('aria-pressed', heatOn);
+    if (heatOn) loadGrid(); else { $('btnRefresh').hidden = true; renderGrid(); }
+  };
+  $('btnRefresh').onclick = loadGrid;
+
+  // ---------- settings ----------
+  const inputs = {kwp: $('kwp'), pr: $('pr'), tilt: $('tilt'), az: $('az')};
+  Object.entries(inputs).forEach(([k, el]) => {
+    el.value = S[k];
+    el.addEventListener('change', () => {
+      const v = parseFloat(el.value); if (!isFinite(v)) { el.value = S[k]; return; }
+      S[k] = v; save();
+      loadPoint();
+      renderGrid();
+    });
+  });
+
+  locate(true);
+})();
+</script>
+</body>
+</html>
