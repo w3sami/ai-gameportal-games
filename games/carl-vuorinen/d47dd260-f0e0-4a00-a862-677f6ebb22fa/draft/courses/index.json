@@ -3,6 +3,7 @@
   "courses": [
     { "id": "valley", "name": "Valley Run", "file": "courses/valley.json", "vehicle": "prop" },
     { "id": "summit", "name": "Summit Run", "file": "courses/summit.json", "vehicle": "jet" },
-    { "id": "harbour", "name": "Harbour Run", "file": "courses/harbour.json", "vehicle": "racer" }
+    { "id": "harbour", "name": "Harbour Run", "file": "courses/harbour.json", "vehicle": "racer" },
+    { "id": "glacier", "name": "Glacier Run", "file": "courses/glacier.json", "vehicle": "wingsuit" }
   ]
 }
