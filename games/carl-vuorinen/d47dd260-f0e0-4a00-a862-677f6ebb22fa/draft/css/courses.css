@@ -1,0 +1,18 @@
+/* Course picker on the start screen (js/game.js builds it), and per-vehicle control texts. */
+.course-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 0.5rem; margin: 0 0 1rem; }
+.course-pick[hidden] { display: none; }
+.pick {
+  display: grid; gap: 0.2rem; min-height: 46px; padding: 0.55rem 0.8rem; text-align: left;
+  font: inherit; color: var(--ink); background: transparent; cursor: pointer; touch-action: manipulation;
+  border: 2px solid var(--panel-edge); border-radius: 8px;
+}
+.pick b { font-size: 1rem; }
+.pick span { font: 700 0.8rem/1.2 var(--font); color: var(--ink-soft); }
+.pick[aria-pressed="true"] { border-color: var(--route); box-shadow: inset 0 0 0 1px var(--route); }
+.pick:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+body.is-loading .pick, body.is-loading #btn-start { opacity: 0.55; pointer-events: none; }
+body:not(.vehicle-jet) .for-jet, body.vehicle-jet .for-prop { display: none; }
+@media (max-height: 460px) {
+  .course-pick { margin-bottom: 0.6rem; }
+  .pick { padding: 0.35rem 0.7rem; }
+}
