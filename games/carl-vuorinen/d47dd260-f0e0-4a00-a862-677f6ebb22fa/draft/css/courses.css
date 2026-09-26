@@ -16,3 +16,9 @@ body:not(.vehicle-jet) .for-jet, body.vehicle-jet .for-prop { display: none; }
   .course-pick { margin-bottom: 0.6rem; }
   .pick { padding: 0.35rem 0.7rem; }
 }
+/* Race plane: g meter in the HUD. Pylon courses: a pylon icon instead of the ring, and the clock flashes on a penalty. */
+.hud-g { font-variant-numeric: tabular-nums; }
+body:not(.vehicle-racer) .hud-g { display: none; }
+.hud-g.is-high { color: var(--route); font-weight: 700; }
+.hud-time.is-pen { color: var(--route); }
+body.course-pylons .ring { width: 9px; height: 13px; border: 0; border-radius: 0; background: var(--route); clip-path: polygon(34% 0, 66% 0, 100% 100%, 0 100%); }
