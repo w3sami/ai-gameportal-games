@@ -65,6 +65,8 @@
 
 #roomView { flex:1 1 auto;min-height:0;flex-direction:column; }
 .mpLeaveBtn { position:absolute;top:8px;right:10px; }
+/* moninpelissä ✕ on rattaan vieressä, joten koko näyttö sen vasemmalla puolella */
+#roomView #fsBtn { right:92px; }
 .mpPreGame {
   padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;
 }
