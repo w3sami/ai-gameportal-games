@@ -14,9 +14,15 @@ const GLIDE_DEFAULTS = {
   TUCK_TRIM_SPEED: 110, TUCK_LEVEL_SPEED: 100, TUCK_GLIDE_RATIO: 2.2,
   TUCK_PATH: 0.7,                // tucked, the stick's centre asks for this dive (rad) instead of the best glide
   TUCK_IN: 3, TUCK_OUT: 2,       // how fast the shape changes (full swing per second)
-  DIVE_MAX: 0.75,                // steepest path angle the stick asks for (rad); level is the shallowest
+  DIVE_MAX: 0.75,                // steepest path angle the stick asks for spread (rad); level is the shallowest
+  TUCK_DIVE_MAX: 1.4,            // ... and tucked: close to straight down
   GAMMA_P: 2.2, GAMMA_RATE: 0.6, // path-angle loop gain (1/s) and fastest commanded change (rad/s)
+  GAMMA_RATE_DOWN: 0.9,          // nosing over: the path follows the body down at up to this rate even where lift alone
+                                 // couldn't bend it that fast (the push is a normal force, so it adds no energy)
+  VMAX: 115,                     // drag climbs steeply toward this speed (m/s), so a long vertical dive tops out near it
   CL_MIN: -0.2, CL_K: 10,        // lift coefficient range (1 = the most the shape makes) and how fast it follows
+  CL_PULL: 1.8,                  // pulling out of a dive the spread suit can briefly make this much (arcade); it fades back
+                                 // to 1 as the path nears level, so holding level still needs LEVEL_SPEED
   GLIDE_ROLL_P: 3, GLIDE_ROLL_RATE: 1.8,   // bank loop (1/s) and roll rate limit (rad/s)
   GLIDE_TURN: 1.5,               // arcade turn gain over a true coordinated turn (turning does no work, so no free energy)
   ALPHA_VIS: 0.2,                // how far the body pitches above its path at full lift (rad, looks only)
@@ -46,10 +52,10 @@ function initGlide(P) {
   P.glide = { gam, psi: yawOf(P.vdir), phi: 0, cl: clamp(TUNE.G * Math.cos(gam) / Math.max(q, 1e-3), 0, 1), tuck: 0, psiDot: 0 };
 }
 
-// stick climb (-1..1) to a path angle: centre = trim (best glide, or TUCK_PATH tucked), up = level, down = DIVE_MAX
-function stickPath(c, trim) {
+// stick climb (-1..1) to a path angle: centre = trim (best glide, or TUCK_PATH tucked), up = level, down = the dive limit
+function stickPath(c, trim, dive) {
   c = clamp(c, -1, 1);
-  return c >= 0 ? lerp(trim, 0, c) : lerp(trim, -TUNE.DIVE_MAX, -c);
+  return c >= 0 ? lerp(trim, 0, c) : lerp(trim, -dive, -c);
 }
 
 const _gq = new THREE.Quaternion(), _gm = new THREE.Matrix4(), _gz = new THREE.Vector3(), _gx = new THREE.Vector3(1, 0, 0);
@@ -60,24 +66,26 @@ function stepGlide(P, ctl, dt) {
   const S = P.glide, G = TUNE.G;
   S.tuck += clamp((ctl.boost ? 1 : 0) - S.tuck, -TUNE.TUCK_OUT * dt, TUNE.TUCK_IN * dt);
   P.tuck = S.tuck; P.boosting = !!ctl.boost; P.boost = 1; P.boostLock = false;   // no meter: height is the cost
-  const ae = glideAero(S.tuck);
+  const ae = glideAero(S.tuck), dive = lerp(TUNE.DIVE_MAX, TUNE.TUCK_DIVE_MAX, S.tuck);
 
   let bankT, gamT;
-  if (ctl.att) { bankT = ctl.att.bank; gamT = stickPath(ctl.att.climb, ae.gam); }
+  if (ctl.att) { bankT = ctl.att.bank; gamT = stickPath(ctl.att.climb, ae.gam, dive); }
   else if (ctl.aim) {                                        // aim: bank toward its heading, glide at its angle
     const he = wrapAngle(yawOf(ctl.aim) - S.psi) - TUNE.ASSIST_LEAD * S.psiDot;   // + = aim to the left
     bankT = clamp(-he * TUNE.BANK_GAIN, -TUNE.MAX_BANK, TUNE.MAX_BANK);
-    gamT = clamp(pitchOf(ctl.aim), -TUNE.DIVE_MAX, 0);
-  } else { bankT = clamp(ctl.r, -1, 1) * TUNE.TOUCH_BANK; gamT = stickPath(ctl.p, ae.gam); }
+    gamT = clamp(pitchOf(ctl.aim), -dive, 0);
+  } else { bankT = clamp(ctl.r, -1, 1) * TUNE.TOUCH_BANK; gamT = stickPath(ctl.p, ae.gam, dive); }
 
   S.phi += clamp((bankT - S.phi) * TUNE.GLIDE_ROLL_P, -TUNE.GLIDE_ROLL_RATE, TUNE.GLIDE_ROLL_RATE) * dt;
   const v = P.speed, q = G * ae.a * v * v, cphi = Math.cos(S.phi);
   // lift for the commanded path-angle change, as far as the shape allows
-  const gdotCmd = clamp((gamT - S.gam) * TUNE.GAMMA_P, -TUNE.GAMMA_RATE, TUNE.GAMMA_RATE);
+  const gdotCmd = clamp((gamT - S.gam) * TUNE.GAMMA_P, -TUNE.GAMMA_RATE_DOWN, TUNE.GAMMA_RATE);
   const need = (v * gdotCmd + G * Math.cos(S.gam)) / Math.max(cphi, 0.2);
-  S.cl += (clamp(need / q, TUNE.CL_MIN, 1) - S.cl) * damp(TUNE.CL_K, dt);
-  const L = q * S.cl, D = G * ae.a * v * v * (ae.cd0 + ae.k * S.cl * S.cl);
-  const gdot = (L * cphi - G * Math.cos(S.gam)) / v;
+  const clMax = lerp(1, TUNE.CL_PULL, smoothstep(0.1, 0.5, -S.gam) * (1 - S.tuck));   // spread only: tucked, spread to pull out
+  S.cl += (clamp(need / q, TUNE.CL_MIN, clMax) - S.cl) * damp(TUNE.CL_K, dt);
+  const L = q * S.cl, D = G * ae.a * v * v * (ae.cd0 + ae.k * S.cl * S.cl) + G * Math.pow(v / TUNE.VMAX, 12);
+  let gdot = (L * cphi - G * Math.cos(S.gam)) / v;
+  if (gdotCmd < 0 && gdot > gdotCmd) gdot = gdotCmd;         // nosing over (see GAMMA_RATE_DOWN)
   S.psiDot = -L * Math.sin(S.phi) / (v * Math.max(Math.cos(S.gam), 0.2)) * TUNE.GLIDE_TURN;   // right bank turns right
   P.speed = Math.max(TUNE.MIN_SPEED, v - (D + G * Math.sin(S.gam)) * dt);
   S.gam = clamp(S.gam + gdot * dt, -1.5, 0);                // never above level: no height is ever gained
@@ -87,7 +95,7 @@ function stepGlide(P, ctl, dt) {
   P.pos.addScaledVector(P.vdir, P.speed * dt);
   // body: along the path, banked, nose up by an angle of attack that grows with lift
   P.q.setFromRotationMatrix(_gm.lookAt(_gz.set(0, 0, 0), P.vdir, WORLD_UP));
-  P.q.multiply(_gq.setFromAxisAngle(_zAxis, -S.phi)).multiply(_gq.setFromAxisAngle(_gx, TUNE.ALPHA_VIS * clamp(S.cl, 0, 1)));
+  P.q.multiply(_gq.setFromAxisAngle(_zAxis, -S.phi)).multiply(_gq.setFromAxisAngle(_gx, TUNE.ALPHA_VIS * clamp(S.cl, 0, 1.3)));
   P.bank = S.phi; P.turn = S.psiDot; P.rp = P.ry = P.rr = 0;
   P.gload = lerp(P.gload, Math.abs(L) / G, damp(6, dt));
 }
