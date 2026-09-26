@@ -60,20 +60,34 @@ const TUNE = {
   WEATHERVANE: 0.25,      // nose drifts toward the flight path (more so near stall)
   BOOST_DRAIN: 0.2, BOOST_REGEN: 0.085, BOOST_HOOP: 0.18,
   HOOP_R: 8, HOOP_TOL: 1.4, PLANE_R: 1.3,
+  // vehicle: which model, sound and touch scheme. TOUCH_MODE 'attitude' = stick sets bank/climb, letting go levels;
+  // 'rate' = stick sets roll/pitch rate, letting go holds the attitude (loops and rolls, no angle limits)
+  VEHICLE: 'prop', TOUCH_MODE: 'attitude',
+  CAM_DIST: 12.5, CAM_HEIGHT: 3.2, CAM_ROLL: 0.3, CAM_UP_K: 3,   // chase camera; CAM_ROLL 1 = follow roll fully
+  TRAIL_G: 2.3,           // g where wingtip vapour starts
+  AP_LEAD: 1.2,           // attract-mode autopilot: how far ahead along the course line it aims (s at cruise)
 };
+// config/flight.json is the base; a course's vehicle file (config/<vehicle>.json) goes over it. boot.js resets from this.
+const TUNE_DEFAULTS = Object.assign({}, TUNE);
 
 /* ---------- course & world ----------
    A course file (courses/<id>.json) describes one race:
    {
      id, name,
      seeds:   { a, b, c, trees }                noise seeds: hills, ridges + forest mask, micro relief, tree scatter
-     terrain: { size, cx, cz, n, water, edge }  square of side `size` m centred on (cx, cz), split into n×n cells;
-                                                 water level, and the height the edges fall away to (m)
+     terrain: { size, cx, cz, n, water, edge, carveR }  square of side `size` m centred on (cx, cz), split into n×n
+                                                 cells; water level, the height the edges fall away to, and how far
+                                                 from the path the valley carving reaches (m, default 440)
+     relief:  { base, amp, pow, freq, ridgeAmp, ridgeFreq }   optional; hill shape (defaults: rolling hills)
+     palette: { dry, forestTop, high, snow }    optional; heights [from, to] where the ground colour blends
+     view:    { near, far, fog: [near, far] }   optional; camera range and fog, for big maps
+     clouds:  { count, y, size, near, nearR, nearY, nearSize }   optional; all but the counts are [min, max]
      lake:    { x, z, r, depth } | null         a basin pressed into the hills
      hills:   [{ x, z, r, h }]                  bumps added to the hills (e.g. to put a ridge under a pass)
-     trees:   { near, scattered }               placement attempts along the course and across the map
-     points:  [[x, y, z, clearance, floorHalfWidth, wallSteepness], ...]
-              first = run-in, last = run-out, every point between is a hoop, in flying order. The terrain is
+     trees:   { near, scattered, maxAlt }       placement attempts along the course and across the map; no trees above maxAlt
+     points:  [[x, y, z, clearance, floorHalfWidth, wallSteepness, hoop?], ...]
+              first = run-in, last = run-out, every point between is a hoop, in flying order, unless its 7th
+              value is 0: then it's a waypoint that only shapes the line (e.g. to turn between hoops). The terrain is
               carved into a valley along the path: floor `clearance` m below it, flat for `floorHalfWidth` m
               either side, walls rising with `wallSteepness`.
    }
@@ -84,10 +98,12 @@ const TREES = { x: [], y: [], z: [], h: [], r: [] };
 const TREE_GRID = new Map(), TREE_CELL = 40;
 const treeKey = (ix, iz) => (ix + 1000) * 4096 + (iz + 1000);
 
+const RELIEF = { base: 62, amp: 300, pow: 1.35, freq: 0.0021, ridgeAmp: 55, ridgeFreq: 0.0045 };
+let REL = RELIEF;
 function baseHeight(x, z) {
-  const n = fbm(noiseA, x * 0.0021 + 11.3, z * 0.0021 - 4.7, 5);
-  const r = 1 - Math.abs(2 * fbm(noiseB, x * 0.0045, z * 0.0045, 3) - 1);
-  let h = 62 + Math.pow(n, 1.35) * 300 + r * 55;
+  const n = fbm(noiseA, x * REL.freq + 11.3, z * REL.freq - 4.7, 5);
+  const r = 1 - Math.abs(2 * fbm(noiseB, x * REL.ridgeFreq, z * REL.ridgeFreq, 3) - 1);
+  let h = REL.base + Math.pow(n, REL.pow) * REL.amp + r * REL.ridgeAmp;
   const L = COURSE.lake;
   if (L) { const dx = x - L.x, dz = z - L.z; h -= L.depth * smoothstep(L.r, L.r * 0.35, Math.sqrt(dx * dx + dz * dz)); }
   for (const hl of COURSE.hills || []) {
@@ -99,6 +115,7 @@ function baseHeight(x, z) {
 
 function buildWorld(course) {
   COURSE = course; COURSE_DEF = course.points;
+  REL = Object.assign({}, RELIEF, course.relief);
   noiseA = makeNoise(course.seeds.a); noiseB = makeNoise(course.seeds.b); noiseC = makeNoise(course.seeds.c);
 
   // path, hoops, dense samples with interpolated valley shape
@@ -107,6 +124,7 @@ function buildWorld(course) {
   COURSE_LEN = curve.getLength();
   HOOPS = [];
   for (let i = 1; i < COURSE_DEF.length - 1; i++) {
+    if (COURSE_DEF[i][6] === 0) continue;                    // waypoint: shapes the line and the carving, no hoop
     HOOPS.push({ pos: new THREE.Vector3(COURSE_DEF[i][0], COURSE_DEF[i][1], COURSE_DEF[i][2]),
                  normal: curve.getTangent(i / (COURSE_DEF.length - 1)).normalize() });
   }
@@ -119,12 +137,16 @@ function buildWorld(course) {
     const a = COURSE_DEF[i0], b = COURSE_DEF[i0 + 1];
     SAMPLES.push({ x: p.x, y: p.y, z: p.z, clr: lerp(a[3], b[3], fr), width: lerp(a[4], b[4], fr), steep: lerp(a[5], b[5], fr) });
   }
+  for (const h of HOOPS) {                                   // nearest sample to each hoop, for the autopilot
+    let bd = Infinity;
+    SAMPLES.forEach((sp, k) => { const d = h.pos.distanceToSquared(p.set(sp.x, sp.y, sp.z)); if (d < bd) { bd = d; h.sample = k; } });
+  }
 
   // terrain heights: hills, carved into a valley along the path, falling away at the edges
   const t = course.terrain;
   TER = { N: t.n, SIZE: t.size, CX: t.cx, CZ: t.cz, WATER: t.water, EDGE: t.edge };
   TER.CELL = TER.SIZE / TER.N; TER.X0 = TER.CX - TER.SIZE / 2; TER.Z0 = TER.CZ - TER.SIZE / 2;
-  const N = TER.N, W = N + 1, cell = TER.CELL, R = 440, rc = Math.ceil(R / cell);
+  const N = TER.N, W = N + 1, cell = TER.CELL, R = t.carveR || 440, rc = Math.ceil(R / cell);
   TH = new Float32Array(W * W); TDIST = new Float32Array(W * W).fill(1e9); TNEAR = new Int32Array(W * W).fill(-1);
   const d2 = new Float32Array(W * W).fill(1e18);
   for (let s = 0; s < SAMPLES.length; s++) {
@@ -155,12 +177,12 @@ function buildWorld(course) {
   // trees: flanking the path, plus clumps where the forest mask says so
   for (const key in TREES) TREES[key].length = 0;
   TREE_GRID.clear();
-  const rand = mulberry32(course.seeds.trees);
+  const rand = mulberry32(course.seeds.trees), treeTop = course.trees.maxAlt == null ? 250 : course.trees.maxAlt;
   const forest = (x, z) => noiseB(x * 0.006 + 40, z * 0.006 - 13);    // same mask the terrain colouring uses
   const add = (x, z, scattered) => {
     if (scattered && forest(x, z) < 0.52 && rand() < 0.85) return;
     const y = heightAt(x, z);
-    if (y < TER.WATER + 1.5 || y > 250) return;
+    if (y < TER.WATER + 1.5 || y > treeTop) return;
     const e = 6, gx = heightAt(x + e, z) - heightAt(x - e, z), gz = heightAt(x, z + e) - heightAt(x, z - e);
     if (Math.hypot(gx, gz) / (2 * e) > 0.9) return;
     const cd = courseDistAt(x, z);
@@ -225,7 +247,7 @@ function placePlane(P, pos, dir, speed) {
   P.pos.copy(pos); P.vdir.copy(dir).normalize();
   // Matrix4.lookAt points local -Z at the target: nose along dir, wings level
   P.q.setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(), P.vdir, WORLD_UP));
-  P.speed = speed; P.rp = P.ry = P.rr = 0; P.bank = 0; P.turn = 0; P.gload = 1;
+  P.speed = speed; P.rp = P.ry = P.rr = 0; P.bank = 0; P.turn = 0; P.gload = 1; P.apAround = false;
 }
 
 function forwardOf(P, out) { return out.set(0, 0, -1).applyQuaternion(P.q); }
@@ -354,15 +376,36 @@ function dirFromYawPitch(yaw, pitch, out) {     // yaw + = left of -Z
 function yawOf(d) { return Math.atan2(-d.x, -d.z); }
 function pitchOf(d) { return Math.asin(clamp(d.y, -1, 1)); }
 
-// autopilot used by the attract mode: line up with the hoop's axis, converge on its center
+// autopilot used by the attract mode: pure pursuit along the course line (which runs through every hoop centre and
+// is what the valley carving keeps clear), aiming AP_LEAD s of cruise ahead of the nearest point on the leg to the next
+// hoop, but never past that hoop
 function autopilotAim(P, hoopIdx, out) {
-  const h = HOOPS[Math.min(hoopIdx, HOOPS.length - 1)];
-  const dist = P.pos.distanceTo(h.pos);
-  out.copy(h.pos).addScaledVector(h.normal, -Math.min(dist * 0.4, 45)).sub(P.pos).normalize();
-  // don't aim into the ground
-  const ahead = _l.copy(P.pos).addScaledVector(P.vdir, 90);
+  const i = Math.min(hoopIdx, HOOPS.length - 1), v = TUNE.CRUISE, h = HOOPS[i];
+  const k0 = i > 0 ? HOOPS[i - 1].sample : 0, k1 = h.sample;
+  // missed approach: once the hoop is about to go by off-centre, fly out along the line behind it and come round again
+  const along = _ax.copy(P.pos).sub(h.pos).dot(h.normal), lat = Math.sqrt(Math.max(0, P.pos.distanceToSquared(h.pos) - along * along));
+  if (along > -v * 0.25 && along < v * 3 && lat > TUNE.HOOP_R + TUNE.HOOP_TOL) P.apAround = true;
+  else if (along < -v * 2.5) P.apAround = false;
+  if (P.apAround) {
+    const b = SAMPLES[Math.max(k0, k1 - Math.round(v * 4 / (COURSE_LEN / (SAMPLES.length - 1))))];
+    out.set(b.x - P.pos.x, b.y - P.pos.y, b.z - P.pos.z).normalize();
+    return avoidGround(P, out, v);
+  }
+  let best = k0, bd = Infinity;
+  for (let k = k0; k <= k1; k++) {
+    const s = SAMPLES[k], dx = s.x - P.pos.x, dy = s.y - P.pos.y, dz = s.z - P.pos.z, d = dx * dx + dy * dy + dz * dz;
+    if (d < bd) { bd = d; best = k; }
+  }
+  const step = COURSE_LEN / (SAMPLES.length - 1);
+  // the aim point stops at the hoop, so the last stretch homes in on its centre instead of cutting the corner
+  const t = SAMPLES[Math.min(k1, best + Math.max(1, Math.round(v * TUNE.AP_LEAD / step)))];
+  out.set(t.x - P.pos.x, t.y - P.pos.y, t.z - P.pos.z).normalize();
+  return avoidGround(P, out, v);
+}
+function avoidGround(P, out, v) {                          // don't aim into the ground (2 s look-ahead)
+  const ahead = _l.copy(P.pos).addScaledVector(P.vdir, v * 2.05), need = v * 0.57;
   const clearance = ahead.y - groundAt(ahead.x, ahead.z);
-  if (clearance < 25) out.y = Math.max(out.y, 0.25 * (1 - clearance / 25));
+  if (clearance < need) out.y = Math.max(out.y, 0.25 * (1 - clearance / need));
   return out.normalize();
 }
 
