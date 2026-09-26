@@ -69,8 +69,9 @@ summary{cursor:pointer;font-weight:600}
 .note{font-size:13px;color:var(--muted);grid-column:1/-1;margin:0}
 .src{font-size:12px;color:var(--muted);margin:12px 0 0}
 .src a{color:inherit}
-.cell-label{font:700 13px/1 var(--display);color:#1a1a1a;text-shadow:0 0 3px #fff,0 0 3px #fff;
-  text-align:center;white-space:nowrap;pointer-events:none}
+.cell-label{display:flex;align-items:center;justify-content:center;pointer-events:none}
+.cell-label span{font:600 12px/1 var(--body);color:#1a1a1a;background:rgba(255,255,255,.85);
+  border-radius:4px;padding:2px 4px;white-space:nowrap}
 .pin{width:26px;height:26px;border-radius:50%;background:var(--sun);border:3px solid #fff;
   box-shadow:0 0 0 2px #5a3b00,0 2px 6px rgba(0,0,0,.4)}
 .me{width:14px;height:14px;border-radius:50%;background:#2f7de1;border:2px solid #fff;box-shadow:0 0 0 6px rgba(47,125,225,.25)}
@@ -301,7 +302,7 @@ summary{cursor:pointer;font-weight:600}
       L.rectangle(c.b, {stroke: false, fillColor: color((v - lo) / span), fillOpacity: .5, interactive: false}).addTo(gridLayer);
       if (cellPx >= 34) {
         const ctr = L.latLngBounds(c.b).getCenter();
-        L.marker(ctr, {interactive: false, keyboard: false, icon: L.divIcon({className: 'cell-label', html: fmt(v), iconSize: [40, 14], iconAnchor: [20, 7]})}).addTo(gridLayer);
+        L.marker(ctr, {interactive: false, keyboard: false, icon: L.divIcon({className: 'cell-label', html: '<span>' + fmt(v) + '</span>', iconSize: [48, 18], iconAnchor: [24, 9]})}).addTo(gridLayer);
       }
     });
     gridLayer.addTo(map);
