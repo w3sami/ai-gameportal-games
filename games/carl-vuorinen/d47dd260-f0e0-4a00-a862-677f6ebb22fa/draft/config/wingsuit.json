@@ -1,5 +1,5 @@
 {
-  "_doc": "Wingsuit tuning (Glacier Run), loaded over config/flight.json for courses whose vehicle is \"wingsuit\"; a key left out keeps the flight.json value, and the glide keys default in js/glide.js. FLIGHT_MODEL \"glide\": no engine, speed only comes from height, and the path never climbs. Each shape is set by LEVEL_SPEED (slowest speed that holds level flight), TRIM_SPEED (speed of its best glide) and GLIDE_RATIO; TUCK_* is the tucked shape (Boost), whose stick centre dives at TUCK_PATH rad. Stick up flattens the glide toward level, down steepens it to DIVE_MAX; TOUCH_CLIMB 1 and TOUCH_CLIMB_EXTRA 0 keep the stick's climb value -1..1, which is what the glide model expects. CRUISE is the start speed (the best-glide speed) and RESPAWN_SPEED the speed back at the last hoop after a crash; BOOST only scales the speed effects.",
+  "_doc": "Wingsuit tuning (Glacier Run), loaded over config/flight.json for courses whose vehicle is \"wingsuit\"; a key left out keeps the flight.json value, and the glide keys default in js/glide.js. FLIGHT_MODEL \"glide\": no engine, speed only comes from height, and the path never climbs. Each shape is set by LEVEL_SPEED (slowest speed that holds level flight), TRIM_SPEED (speed of its best glide) and GLIDE_RATIO; TUCK_* is the tucked shape (Boost), whose stick centre dives at TUCK_PATH rad. Stick up flattens the glide toward level, down steepens it to DIVE_MAX, or TUCK_DIVE_MAX (nearly straight down) when tucked; GAMMA_RATE_DOWN is how fast the path noses over and GAMMA_RATE how fast it pulls up, with CL_PULL extra lift for pulling out of a dive (fading out near level, so level flight still needs LEVEL_SPEED), and drag climbs steeply toward VMAX, which caps a long vertical dive; TOUCH_CLIMB 1 and TOUCH_CLIMB_EXTRA 0 keep the stick's climb value -1..1, which is what the glide model expects. CRUISE is the start speed (the best-glide speed) and RESPAWN_SPEED the speed back at the last hoop after a crash; BOOST only scales the speed effects.",
   "FLIGHT_MODEL": "glide",
   "CRUISE": 48,
   "RESPAWN_SPEED": 65,
@@ -15,6 +15,11 @@
   "TUCK_IN": 3,
   "TUCK_OUT": 2,
   "DIVE_MAX": 0.75,
+  "TUCK_DIVE_MAX": 1.4,
+  "GAMMA_RATE": 1.0,
+  "GAMMA_RATE_DOWN": 0.9,
+  "CL_PULL": 1.8,
+  "VMAX": 115,
   "GLIDE_TURN": 1.5,
   "TOUCH_BANK": 1.0,
   "TOUCH_CLIMB": 1,
