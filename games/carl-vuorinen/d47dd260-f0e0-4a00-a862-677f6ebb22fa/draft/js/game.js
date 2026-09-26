@@ -198,14 +198,21 @@ function buildRocks(group) {                                // boulders (course.
 
 function buildClouds(group) {
   const C = Object.assign({}, CLOUDS, COURSE.clouds), rand = mulberry32(11), puffs = [];
+  const probe = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
   const cloud = (x, y, z, size) => {
-    const n = 4 + Math.floor(rand() * 4);
-    for (let i = 0; i < n; i++) puffs.push([x + (rand() - 0.5) * size * 2.4, y + (rand() - 0.5) * size * 0.5, z + (rand() - 0.5) * size * 1.6, size * (0.55 + rand() * 0.55)]);
+    const n = 4 + Math.floor(rand() * 4), p = [];
+    for (let i = 0; i < n; i++) p.push([x + (rand() - 0.5) * size * 2.4, y + (rand() - 0.5) * size * 0.5, z + (rand() - 0.5) * size * 1.6, size * (0.55 + rand() * 0.55)]);
+    // keep clear of the ground: lift a cloud that dips into a slope, drop one that would sit inside a mountain
+    let lift = 0;
+    for (const [px, py, pz, s] of p) for (const [dx, dz] of probe) lift = Math.max(lift, groundAt(px + dx * s, pz + dz * s) + 10 - (py - s * 0.9));
+    if (lift > 150) return false;
+    for (const q of p) { q[1] += lift; puffs.push(q); }
+    return true;
   };
   for (let i = 0; i < C.count; i++) cloud(TER.X0 + rand() * TER.SIZE, span(C.y, rand()), TER.Z0 + rand() * TER.SIZE, span(C.size, rand()));
-  for (let i = 0; i < C.near; i++) {                        // closer to the course, off to the side
+  for (let i = 0; i < C.near; i++) for (let tries = 0; tries < 8; tries++) {   // closer to the course, off to the side
     const sp = SAMPLES[Math.floor(rand() * SAMPLES.length)], a = rand() * TAU, r = span(C.nearR, rand());
-    cloud(sp.x + Math.cos(a) * r, sp.y + span(C.nearY, rand()), sp.z + Math.sin(a) * r, span(C.nearSize, rand()));
+    if (cloud(sp.x + Math.cos(a) * r, sp.y + span(C.nearY, rand()), sp.z + Math.sin(a) * r, span(C.nearSize, rand()))) break;
   }
   const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: '#ffffff', emissive: '#aab9c6' }), puffs.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new V3(), s = new V3();
