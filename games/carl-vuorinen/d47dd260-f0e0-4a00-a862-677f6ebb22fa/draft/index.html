@@ -12,7 +12,6 @@
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/fullscreen.css">
 <link rel="stylesheet" href="css/courses.css">
-<link rel="stylesheet" href="css/wingsuit.css">
 </head>
 <body class="state-attract">
 <canvas id="scene" tabindex="-1" aria-label="Flight view"></canvas>
@@ -53,10 +52,8 @@
     <button class="btn fs-btn" type="button" title="Full screen (F)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><g class="fs-off"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></g><g class="fs-on"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></g></svg><span class="fs-off">Full screen</span><span class="fs-on">Exit full screen</span></button>
     <span class="best" id="start-best"></span>
   </div>
-  <p class="controls for-mouse for-wingsuit">Aim with the mouse and the suit glides that way; aim above the horizon to level out, if you have the speed. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to tuck in and dive. <kbd>W</kbd> <kbd>S</kbd> flatten and steepen the glide, <kbd>A</kbd> <kbd>D</kbd> bank, and <kbd>Esc</kbd> pauses.</p>
-  <p class="controls for-mouse not-wingsuit">Move the mouse to aim and the plane follows. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to boost. <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fly by hand with <kbd>Q</kbd> <kbd>E</kbd> as rudder, and <kbd>Esc</kbd> pauses.<span class="for-jet"> The jet is fast: aim well ahead.</span> A gamepad works too.</p>
-  <p class="controls for-touch for-wingsuit">Left thumb steers: up flattens the glide, down steepens it. Hold the right thumb to tuck your arms and legs in: you drop faster and pick up speed. Let go of the stick and you settle into your best glide.</p>
-  <p class="controls for-touch not-wingsuit">Left thumb steers, right thumb boosts. <span class="for-prop">Let go and the plane levels out.</span><span class="for-jet">The stick rolls and pitches the jet: roll into a bank and pull to turn. Let go and it holds its attitude, so it keeps turning while banked.</span></p>
+  <p class="controls for-mouse">Move the mouse to aim and the plane follows. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to boost. <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fly by hand with <kbd>Q</kbd> <kbd>E</kbd> as rudder, and <kbd>Esc</kbd> pauses.<span class="for-jet"> The jet is fast: aim well ahead.</span> A gamepad works too.</p>
+  <p class="controls for-touch">Left thumb steers, right thumb boosts. <span class="for-prop">Let go and the plane levels out.</span><span class="for-jet">The stick rolls and pitches the jet: roll into a bank and pull to turn. Let go and it holds its attitude, so it keeps turning while banked.</span></p>
   <p class="controls" id="start-refill">Boost refills over time and with every hoop.</p>
   <p class="hint portrait-hint">Turn your phone sideways for a wider view.</p>
 </section>
@@ -92,7 +89,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
 <script src="js/sim.js"></script>
-<script src="js/glide.js"></script>
+<script src="js/pylons.js"></script>
 <script src="js/game.js"></script>
 <script src="js/fullscreen.js"></script>
 <script src="js/boot.js"></script>
