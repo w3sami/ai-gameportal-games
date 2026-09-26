@@ -2,6 +2,7 @@
   "_format": "Courses in menu order. Each file is loaded only when that course is flown; id also keys the saved best time. vehicle picks the model, sound and controls, and loads config/<vehicle>.json over config/flight.json (prop, the default, is flight.json alone).",
   "courses": [
     { "id": "valley", "name": "Valley Run", "file": "courses/valley.json", "vehicle": "prop" },
-    { "id": "summit", "name": "Summit Run", "file": "courses/summit.json", "vehicle": "jet" }
+    { "id": "summit", "name": "Summit Run", "file": "courses/summit.json", "vehicle": "jet" },
+    { "id": "harbour", "name": "Harbour Run", "file": "courses/harbour.json", "vehicle": "racer" }
   ]
 }
