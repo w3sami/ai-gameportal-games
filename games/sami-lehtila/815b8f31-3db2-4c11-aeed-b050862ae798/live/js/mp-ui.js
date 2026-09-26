@@ -163,7 +163,7 @@ window.MpUI = (function () {
       S_.UPPER.forEach((c) => h += row(c));
     }
     h += `<tr class="sumRow"><td>Summa</td>${entries.map((e) => `<td>${S_.upperSum(e.sc)} / ${S_.bonusLimit(six)}</td>`).join('')}</tr>`;
-    h += `<tr class="bonusRow"><td>Bonus (+50)</td>${entries.map((e) => `<td>${S_.bonusOf(e.sc, six) || '–'}</td>`).join('')}</tr>`;
+    h += `<tr class="bonusRow"><td>Bonus (+${S_.bonusValue(six)})</td>${entries.map((e) => `<td>${S_.bonusOf(e.sc, six) || '–'}</td>`).join('')}</tr>`;
     h += `<tr class="section"><th>Alakerta</th>${entries.map(() => '<td></td>').join('')}</tr>`;
     S_.lowerCats(six).forEach((c) => h += row(c));
     h += `<tr class="totalRow"><td>YHTEENSÄ</td>${entries.map((e) => `<td>${S_.totalOf(e.sc, six)}</td>`).join('')}</tr>`;

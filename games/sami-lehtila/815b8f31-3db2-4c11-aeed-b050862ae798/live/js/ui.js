@@ -202,7 +202,7 @@ window.UI = (function () {
       S.UPPER.forEach(c=>h+=row(c));
     }
     h+=`<tr class="sumRow"><td>Summa</td>${entries.map(e=>`<td>${S.upperSum(e.sc)} / ${S.bonusLimit()}</td>`).join('')}</tr>`;
-    h+=`<tr class="bonusRow"><td>Bonus (+50)</td>${entries.map(e=>{
+    h+=`<tr class="bonusRow"><td>Bonus (+${S.bonusValue()})</td>${entries.map(e=>{
       const d=devTot(e.sc);
       const dTag=`<span class="devTag ${d>=0?'pos':'neg'}">${sgn(d)}</span>`;
       return `<td>${S.bonusOf(e.sc)||'–'} ${dTag}</td>`;

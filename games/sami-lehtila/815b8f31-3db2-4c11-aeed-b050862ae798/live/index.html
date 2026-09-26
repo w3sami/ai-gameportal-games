@@ -13,6 +13,7 @@
   <div id="banner"><span id="bannerText">YATZY!</span></div>
   <div id="turnBadge">–</div>
   <button id="gearBtn" title="Asetukset">⚙</button>
+    <button id="fsBtn" title="Koko näyttö">⛶</button>
   <div id="shakePrompt">
     <div class="cup">🎲</div>
     <div class="txt">RAVISTA PUHELINTA!</div>
@@ -47,7 +48,7 @@
       <button class="switch" id="swTwoCol"></button>
     </div>
     <div class="setRow">
-      <span class="lbl">6 nopan Yatzy<small>Omat voittoluokat · yläkerran pari 4 kpl (bonusraja 84) · Suur-Yatzy 6 samasta</small></span>
+      <span class="lbl">6 nopan Yatzy<small>Omat voittoluokat · yläkerran pari 4 kpl (bonusraja 84, bonus 100) · Suur-Yatzy 6 samasta</small></span>
       <button class="switch" id="swSix"></button>
     </div>
     <button class="bigBtn" id="startBtn">ALOITA PELI</button>
@@ -96,12 +97,14 @@
     <div id="winnerName"></div>
     <div id="winnerScore"></div>
     <div id="finalList"></div>
+    <div id="lbWrap" style="display:none"></div>
     <button class="bigBtn" id="againBtn">UUSI PELI</button>
   </div>
 </div>
 
 <script src="js/vendor/three.min.js"></script>
 <script src="js/vendor/cannon.min.js"></script>
+<script src="js/portal.js"></script>
 <script src="js/scoring.js"></script>
 <script src="js/dice3d.js"></script>
 <script src="js/game-logic.js"></script>

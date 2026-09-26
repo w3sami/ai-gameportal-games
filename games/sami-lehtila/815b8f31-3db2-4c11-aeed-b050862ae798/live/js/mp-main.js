@@ -223,7 +223,16 @@
       listHtml = ranked.map((p, i) => `${i + 1}. ${esc(p.username)} — <b>${p.total}</b>`).join('<br>');
     }
     document.getElementById('finalList').innerHTML = listHtml;
-    document.getElementById('winnerOverlay').style.display = 'flex';
+    /* Avataan vain ensimmäisellä kerralla: tulostaulun rivien id:t saapuvat
+       hetken päästä uutena tilana, eikä se saa avata suljettua ikkunaa. */
+    if (announcedFinishedRoomId !== state.id) document.getElementById('winnerOverlay').style.display = 'flex';
+    /* Portaalin tulostaulu — palvelin kirjoitti kaikkien tulokset
+       (server/leaderboard.js); täällä vain näytetään ja korostetaan oma. */
+    window.JatsiPortal.showBoard(document.getElementById('lbWrap'), {
+      variant: state.variant,
+      key: state.id + ':' + ranked.map((p) => p.total).join(','),
+      highlightId: state.lbEntries && state.lbEntries[me.id],
+    });
 
     /* Uusinnan säännöt voi vaihtaa vain isäntä; muille näytetään pelkkä
        odotusviesti. Esitäytetään nykyisellä variantilla. */
@@ -290,6 +299,8 @@
   document.getElementById('authPassword').addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') doAuth('login');
   });
+  window.JatsiPortal.wireFullscreen(document.getElementById('fsBtn'));
+
   document.getElementById('logoutBtn').addEventListener('click', async () => {
     try { await window.MpApi.logout(); } catch (e) {}
     window.MpGame.disconnect();

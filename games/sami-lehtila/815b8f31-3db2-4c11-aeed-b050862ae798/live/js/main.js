@@ -9,4 +9,5 @@
   window.GameLogic.loadSettings();
   window.GameLogic.loadSavedGame();
   window.UI.updateControls();
+  window.JatsiPortal.wireFullscreen(document.getElementById('fsBtn'));
 })();
