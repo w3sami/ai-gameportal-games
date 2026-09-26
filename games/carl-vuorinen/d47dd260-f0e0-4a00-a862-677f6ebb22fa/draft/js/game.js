@@ -1,9 +1,9 @@
 'use strict';
 /* =========================================================================
    GAME — rendering, input, audio, UI. Uses the simulation core (js/sim.js).
-   startGame() runs once the course has been built (see js/boot.js).
+   startGame(api) runs once the first course has been built (see js/boot.js); api.loadCourse(entry) builds another.
    ========================================================================= */
-function startGame() {
+function startGame(api) {
 const $ = (id) => document.getElementById(id);
 const body = document.body;
 const canvas = $('scene');
@@ -12,7 +12,7 @@ const V3 = THREE.Vector3;
 /* ---------- settings (per-viewer, optional) ---------- */
 const STORE_KEY = 'skyrace.v1', OLD_STORE_KEY = 'magenta-line.v1';   // prototype name; carried over once
 const settings = (() => {
-  const d = { invertPitch: false, muted: false, mouseSens: 1, best: {} };
+  const d = { invertPitch: false, muted: false, mouseSens: 1, best: {}, course: null };   // course: last picked (boot.js reads it)
   let s = d;
   try { s = Object.assign(d, JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem(OLD_STORE_KEY) || '{}')); } catch (e) { /* keep defaults */ }
   if (typeof s.best === 'number') s.best = { valley: s.best };              // single-course prototype saves
@@ -56,7 +56,7 @@ const COL = {
   sky: new THREE.Color('#5c9bd2'), horizon: new THREE.Color('#cfe1ec'),
   meadow: new THREE.Color('#8cab69'), valley: new THREE.Color('#a3bb78'), forest: new THREE.Color('#62834b'),
   dry: new THREE.Color('#aca66e'), rock: new THREE.Color('#8b857a'), high: new THREE.Color('#b5afa3'),
-  sand: new THREE.Color('#cfc190'), water: new THREE.Color('#5a8fb2'),
+  sand: new THREE.Color('#cfc190'), water: new THREE.Color('#5a8fb2'), snow: new THREE.Color('#eef2f4'),
 };
 scene.fog = new THREE.Fog(COL.horizon, 320, 2150);
 scene.background = COL.horizon;
@@ -82,7 +82,38 @@ const sky = (() => {
 const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(95, 32), new THREE.MeshBasicMaterial({ color: '#fff7e3', fog: false, depthWrite: false }));
 sunDisc.renderOrder = -1; scene.add(sunDisc);
 
-(function buildTerrainMesh() {
+/* ---------- scenery: rebuilt whenever a course is loaded ----------
+   Defaults are the Valley Run look; a course file can override palette (heights where colours blend), view (camera
+   range and fog) and clouds (see the course format in js/sim.js). */
+const PALETTE = { dry: [40, 170], forestTop: [150, 225], high: [185, 275], snow: null, pathTint: true };
+const VIEW = { near: 0.5, far: 6500, fog: [320, 2150] };
+const CLOUDS = { count: 46, y: [190, 360], size: [16, 36], near: 18, nearR: [75, 185], nearY: [32, 82], nearSize: [9, 18] };
+const span = (r, t) => r[0] + (r[1] - r[0]) * t;
+let worldGroup = null, sunDist = 4200;
+function disposeGroup(g) {
+  scene.remove(g);
+  g.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    const mats = !o.material ? [] : Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) if (!m.userData.shared) { if (m.map) m.map.dispose(); m.dispose(); }
+  });
+}
+function buildScenery() {
+  if (worldGroup) disposeGroup(worldGroup);
+  worldGroup = new THREE.Group(); scene.add(worldGroup);
+  const v = Object.assign({}, VIEW, COURSE.view);
+  camera.near = v.near; camera.far = v.far; camera.updateProjectionMatrix();
+  scene.fog.near = v.fog[0]; scene.fog.far = v.fog[1];
+  const k = v.far / VIEW.far;                               // sky dome, sun and outer plain grow with the view range
+  sky.scale.setScalar(k); sunDisc.scale.setScalar(k); sunDist = 4200 * k;
+  buildTerrainMesh(worldGroup, Math.max(9000, v.far * 1.4));
+  buildTrees(worldGroup);
+  buildClouds(worldGroup);
+  buildHoops(worldGroup);
+}
+
+function buildTerrainMesh(group, plainR) {
+  const PAL = Object.assign({}, PALETTE, COURSE.palette);
   const N = TER.N, W = N + 1, cell = TER.CELL, pos = new Float32Array(N * N * 18), col = new Float32Array(N * N * 18);
   const rand = mulberry32(5), c = new THREE.Color(), e1 = new V3(), e2 = new V3(), nrm = new V3();
   let o = 0;
@@ -90,13 +121,14 @@ sunDisc.renderOrder = -1; scene.add(sunDisc);
     const s = TNEAR[k] >= 0 ? SAMPLES[TNEAR[k]] : null, d = TDIST[k];
     if (h < TER.WATER + 2.2) c.copy(COL.sand);
     else {
-      c.copy(COL.meadow).lerp(COL.dry, smoothstep(40, 170, h));
+      c.copy(COL.meadow).lerp(COL.dry, smoothstep(PAL.dry[0], PAL.dry[1], h));
       const f = noiseB(x * 0.006 + 40, z * 0.006 - 13);
-      if (f > 0.52) c.lerp(COL.forest, smoothstep(0.52, 0.66, f) * (1 - smoothstep(150, 225, h)));
-      c.lerp(COL.high, smoothstep(185, 275, h));
-      if (s && d < s.width + 25) c.lerp(COL.valley, 0.45 * (1 - smoothstep(s.width, s.width + 25, d)));
+      if (f > 0.52) c.lerp(COL.forest, smoothstep(0.52, 0.66, f) * (1 - smoothstep(PAL.forestTop[0], PAL.forestTop[1], h)));
+      c.lerp(COL.high, smoothstep(PAL.high[0], PAL.high[1], h));
+      if (PAL.pathTint && s && d < s.width + 25) c.lerp(COL.valley, 0.45 * (1 - smoothstep(s.width, s.width + 25, d)));
     }
     c.lerp(COL.rock, smoothstep(0.84, 0.62, ny));
+    if (PAL.snow && h > PAL.snow[0]) c.lerp(COL.snow, smoothstep(PAL.snow[0], PAL.snow[1], h) * smoothstep(0.5, 0.78, ny));   // steep faces stay rock
     const j = 0.93 + rand() * 0.12;
     c.r *= j; c.g *= j; c.b *= j;
   }
@@ -117,22 +149,24 @@ sunDisc.renderOrder = -1; scene.add(sunDisc);
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.computeVertexNormals();                                 // non-indexed: flat, faceted shading
-  scene.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })));
+  group.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })));
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(TER.SIZE, TER.SIZE).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: COL.water }));
-  water.position.set(TER.CX, TER.WATER, TER.CZ); scene.add(water);
+  water.position.set(TER.CX, TER.WATER, TER.CZ); group.add(water);
 
-  const S = TER.SIZE / 2, O = 9000;                         // flat plain beyond the terrain square
+  const S = TER.SIZE / 2, O = plainR;                       // flat plain beyond the terrain square
   const shape = new THREE.Shape([new THREE.Vector2(-O, -O), new THREE.Vector2(O, -O), new THREE.Vector2(O, O), new THREE.Vector2(-O, O)]);
   shape.holes.push(new THREE.Path([new THREE.Vector2(-S, -S), new THREE.Vector2(-S, S), new THREE.Vector2(S, S), new THREE.Vector2(S, -S)]));
   const plain = new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: COL.meadow }));
-  plain.position.set(TER.CX, TER.EDGE - 0.05, TER.CZ); scene.add(plain);
-})();
+  plain.position.set(TER.CX, TER.EDGE - 0.05, TER.CZ); group.add(plain);
+}
 
-(function buildTrees() {
+function buildTrees(group) {
+  const n = TREES.x.length;
+  if (!n) return;
   const geo = new THREE.ConeGeometry(1, 1, 7, 1).translate(0, 0.5, 0).toNonIndexed();
   geo.computeVertexNormals();
-  const n = TREES.x.length, mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V3(), p = new V3(), c = new THREE.Color(), rand = mulberry32(3);
   const g1 = new THREE.Color('#3b6838'), g2 = new THREE.Color('#5d8c46');
   for (let i = 0; i < n; i++) {
@@ -140,19 +174,19 @@ sunDisc.renderOrder = -1; scene.add(sunDisc);
     mesh.setMatrixAt(i, m.compose(p.set(TREES.x[i], TREES.y[i], TREES.z[i]), q, s.set(TREES.r[i], TREES.h[i], TREES.r[i])));
     mesh.setColorAt(i, c.copy(g1).lerp(g2, rand()));
   }
-  mesh.frustumCulled = false; scene.add(mesh);
-})();
+  mesh.frustumCulled = false; group.add(mesh);
+}
 
-(function buildClouds() {
-  const rand = mulberry32(11), puffs = [];
+function buildClouds(group) {
+  const C = Object.assign({}, CLOUDS, COURSE.clouds), rand = mulberry32(11), puffs = [];
   const cloud = (x, y, z, size) => {
     const n = 4 + Math.floor(rand() * 4);
     for (let i = 0; i < n; i++) puffs.push([x + (rand() - 0.5) * size * 2.4, y + (rand() - 0.5) * size * 0.5, z + (rand() - 0.5) * size * 1.6, size * (0.55 + rand() * 0.55)]);
   };
-  for (let i = 0; i < 46; i++) cloud(TER.X0 + rand() * TER.SIZE, 190 + rand() * 170, TER.Z0 + rand() * TER.SIZE, 16 + rand() * 20);
-  for (let i = 0; i < 18; i++) {                             // closer to the course, off to the side
-    const sp = SAMPLES[Math.floor(rand() * SAMPLES.length)], a = rand() * TAU, r = 75 + rand() * 110;
-    cloud(sp.x + Math.cos(a) * r, sp.y + 32 + rand() * 50, sp.z + Math.sin(a) * r, 9 + rand() * 9);
+  for (let i = 0; i < C.count; i++) cloud(TER.X0 + rand() * TER.SIZE, span(C.y, rand()), TER.Z0 + rand() * TER.SIZE, span(C.size, rand()));
+  for (let i = 0; i < C.near; i++) {                        // closer to the course, off to the side
+    const sp = SAMPLES[Math.floor(rand() * SAMPLES.length)], a = rand() * TAU, r = span(C.nearR, rand());
+    cloud(sp.x + Math.cos(a) * r, sp.y + span(C.nearY, rand()), sp.z + Math.sin(a) * r, span(C.nearSize, rand()));
   }
   const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: '#ffffff', emissive: '#aab9c6' }), puffs.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new V3(), s = new V3();
@@ -160,38 +194,45 @@ sunDisc.renderOrder = -1; scene.add(sunDisc);
     q.setFromEuler(e.set(rand() * 3, rand() * 3, rand() * 3));
     mesh.setMatrixAt(i, m.compose(p.set(pf[0], pf[1], pf[2]), q, s.set(pf[3], pf[3] * 0.62, pf[3])));
   });
-  mesh.frustumCulled = false; scene.add(mesh);
-})();
+  mesh.frustumCulled = false; group.add(mesh);
+}
 
 /* ---------- hoops ---------- */
 const ROUTE_HEX = '#ff2b95';
-const hoopGeo = new THREE.TorusGeometry(TUNE.HOOP_R, 0.75, 8, 44);
 const hoopMat = {
   next: new THREE.MeshBasicMaterial({ color: ROUTE_HEX }),
   soon: new THREE.MeshBasicMaterial({ color: '#ffffff' }),
   later: new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.5, depthWrite: false }),
 };
+for (const k in hoopMat) hoopMat[k].userData.shared = true;   // outlive course switches
 const Z_AXIS = new V3(0, 0, 1);
-const hoopMeshes = HOOPS.map((h) => {
-  const m = new THREE.Mesh(hoopGeo, hoopMat.later);
-  m.position.copy(h.pos); m.quaternion.setFromUnitVectors(Z_AXIS, h.normal);
-  m.userData.fade = 0; m.userData.flash = null;
-  scene.add(m);
-  return m;
-});
-const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(TUNE.HOOP_R - 0.6, 40),
+let hoopMeshes = [];
+const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(gateDisc);
+function buildHoops(group) {
+  const geo = new THREE.TorusGeometry(TUNE.HOOP_R, 0.75 * TUNE.HOOP_R / 8, 8, 44);
+  hoopMeshes = HOOPS.map((h) => {
+    const m = new THREE.Mesh(geo, hoopMat.later);
+    m.position.copy(h.pos); m.quaternion.setFromUnitVectors(Z_AXIS, h.normal);
+    m.userData.fade = 0; m.userData.flash = null;
+    group.add(m);
+    return m;
+  });
+  gateDisc.scale.setScalar((TUNE.HOOP_R - 0.6) / 7.4);
+}
 
-/* ---------- plane model (nose along -Z) ---------- */
-const planeModel = (() => {
-  const g = new THREE.Group();
-  const white = new THREE.MeshLambertMaterial({ color: '#f3f1ea' }), orange = new THREE.MeshLambertMaterial({ color: '#ff5a1f' });
-  const dark = new THREE.MeshLambertMaterial({ color: '#27313b' }), glass = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
-  const add = (geo, mat, x, y, z, rz = 0) => {
+/* ---------- plane models (nose along -Z), one per vehicle; the course's vehicle picks ---------- */
+function modelKit(g) {
+  return (geo, mat, x, y, z, rz = 0) => {
     const flat = geo.index ? geo.toNonIndexed() : geo; flat.computeVertexNormals();
     const m = new THREE.Mesh(flat, mat); m.position.set(x, y, z); m.rotation.z = rz; g.add(m); return m;
   };
+}
+function makePropModel() {
+  const g = new THREE.Group(), add = modelKit(g);
+  const white = new THREE.MeshLambertMaterial({ color: '#f3f1ea' }), orange = new THREE.MeshLambertMaterial({ color: '#ff5a1f' });
+  const dark = new THREE.MeshLambertMaterial({ color: '#27313b' }), glass = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
   add(new THREE.CylinderGeometry(0.62, 0.3, 6.2, 8).rotateX(-Math.PI / 2), white, 0, 0, 0.35);
   add(new THREE.CylinderGeometry(0.52, 0.64, 1.0, 8).rotateX(-Math.PI / 2), orange, 0, 0, -3.1);
   add(new THREE.ConeGeometry(0.3, 0.7, 8).rotateX(-Math.PI / 2), dark, 0, 0, -3.95);
@@ -204,8 +245,48 @@ const planeModel = (() => {
   const disc = new THREE.Mesh(new THREE.CircleGeometry(1.55, 24), new THREE.MeshBasicMaterial({ color: '#27313b', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
   disc.position.set(0, 0, -3.74); g.add(disc);
   scene.add(g);
-  return { group: g, prop, tips: [new V3(-4.7, 0.1, 0.3), new V3(4.7, 0.1, 0.3)] };
-})();
+  return { group: g, tips: [new V3(-4.7, 0.1, 0.3), new V3(4.7, 0.1, 0.3)],
+           update(dt, P) { prop.rotation.z += dt * (P.boosting ? 55 : 34); } };
+}
+function makeJetModel() {
+  const g = new THREE.Group(), add = modelKit(g);
+  const skin = new THREE.MeshLambertMaterial({ color: '#a3adb7' }), dark = new THREE.MeshLambertMaterial({ color: '#2a333c' });
+  const orange = new THREE.MeshLambertMaterial({ color: '#ff5a1f' }), glass = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
+  // flat plates drawn in plan view: [x, z] outline, extruded `depth` downwards
+  const plate = (pts, depth) => new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))), { depth, bevelEnabled: false }).rotateX(Math.PI / 2);
+  add(new THREE.CylinderGeometry(0.85, 0.72, 10, 10).rotateX(-Math.PI / 2), skin, 0, 0, 0.8);
+  add(new THREE.ConeGeometry(0.85, 4.2, 10).rotateX(-Math.PI / 2), skin, 0, 0, -6.3);
+  add(new THREE.ConeGeometry(0.3, 1.1, 10).rotateX(-Math.PI / 2), dark, 0, 0, -8.0);
+  add(new THREE.SphereGeometry(0.62, 12, 8).scale(1, 0.8, 2.8), glass, 0, 0.62, -4.0);
+  add(new THREE.CylinderGeometry(0.66, 0.74, 1.1, 12).rotateX(-Math.PI / 2), dark, 0, 0, 6.3);   // nozzle
+  for (const s of [-1, 1]) {
+    add(new THREE.BoxGeometry(0.75, 1.0, 3.4), dark, s * 1.05, -0.2, -0.6);                          // intakes
+    add(plate([[0.6 * s, -2.4], [5.6 * s, 2.6], [5.6 * s, 3.5], [0.6 * s, 4.4]], 0.18), skin, 0, -0.02, 0);   // delta wing
+    add(plate([[0.6 * s, 5.0], [3.1 * s, 6.6], [3.1 * s, 7.2], [0.6 * s, 7.1]], 0.14), skin, 0, 0.1, 0);     // tailplane
+    const fin = new THREE.ExtrudeGeometry(new THREE.Shape([[0, 0], [2.9, 0], [3.3, 2.6], [2.2, 2.6]].map(([a, b]) => new THREE.Vector2(a, b))),
+      { depth: 0.14, bevelEnabled: false }).rotateY(-Math.PI / 2);                                // twin fins, canted out
+    add(fin, orange, s * 0.85, 0.55, 3.6, -s * 0.32);
+  }
+  const flameMat = new THREE.MeshBasicMaterial({ color: '#ffb35c', transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.55, 4, 12, 1, true).rotateX(Math.PI / 2).translate(0, 0, 2), flameMat);   // base at origin, tip aft
+  flame.position.z = 6.85; g.add(flame);
+  scene.add(g);
+  let burn = 0, t = 0;
+  return { group: g, tips: [new V3(-5.6, 0, 3.05), new V3(5.6, 0, 3.05)],
+           update(dt, P) {                                  // afterburner: flame grows and flickers while boosting
+             t += dt; burn = lerp(burn, P.boosting ? 1 : 0, damp(8, dt));
+             const w = 0.8 + 0.3 * burn;
+             flame.scale.set(w, w, 0.25 + burn * (1 + 0.15 * Math.sin(t * 60)));
+             flameMat.opacity = 0.3 + 0.55 * burn;
+           } };
+}
+const models = { prop: makePropModel(), jet: makeJetModel() };
+let planeModel = models.prop;
+function setVehicleModel() {
+  for (const k in models) models[k].group.visible = false;
+  planeModel = models[TUNE.VEHICLE] || models.prop;
+  planeModel.group.visible = true;
+}
 
 // altitude cue: soft shadow directly under the plane
 const blob = (() => {
@@ -290,14 +371,29 @@ const Sound = {
     this.osc = [['sawtooth', 62], ['square', 124.5]].map(([type, f]) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.connect(this.engF); o.start(); return o; });
     this.cough = ctx.createGain();                          // own stage so sputter() doesn't fight update()'s per-frame automation
     this.engF.connect(this.eng).connect(this.cough).connect(this.master);
+    this.rumbleF = ctx.createBiquadFilter(); this.rumbleF.type = 'lowpass'; this.rumbleF.frequency.value = 150;   // jet roar
+    this.rumble = ctx.createGain(); this.rumble.gain.value = 0;
+    noise.connect(this.rumbleF).connect(this.rumble).connect(this.cough);
     noise.start();
   },
   update(P, level) {
     if (!this.ctx || this.ctx.state !== 'running') return;
-    const t = this.ctx.currentTime, v = P.speed, s = clamp(v / TUNE.BOOST, 0, 1.3);
+    // speeds relative to cruise, so the jet's wind sounds like the plane's rather than a whistle
+    const t = this.ctx.currentTime, v = P.speed, rel = v / TUNE.CRUISE, s = clamp(v / TUNE.BOOST, 0, 1.3), jet = TUNE.VEHICLE === 'jet';
     this.wind.gain.setTargetAtTime(level * (0.05 + s * s * 0.45), t, 0.1);
-    this.windF.frequency.setTargetAtTime(260 + v * 11, t, 0.1);
-    this.hiss.gain.setTargetAtTime(level * smoothstep(48, 80, v) * 0.07, t, 0.15);
+    this.windF.frequency.setTargetAtTime(260 + rel * 484, t, 0.1);
+    this.hiss.gain.setTargetAtTime(level * smoothstep(1.09, 1.82, rel) * 0.07, t, 0.15);
+    if (this.jet !== jet) { this.jet = jet; this.osc[0].type = jet ? 'triangle' : 'sawtooth'; this.osc[1].type = jet ? 'sine' : 'square'; }
+    if (jet) {                                              // turbine whine over low-passed noise; afterburner opens the roar up
+      const w = 780 + rel * 240 + (P.boosting ? 140 : 0);
+      this.osc[0].frequency.setTargetAtTime(w, t, 0.25); this.osc[1].frequency.setTargetAtTime(w * 1.51, t, 0.25);
+      this.eng.gain.setTargetAtTime(level * 0.014, t, 0.2);
+      this.engF.frequency.setTargetAtTime(4000, t, 0.3);
+      this.rumble.gain.setTargetAtTime(level * (P.boosting ? 0.55 : 0.2), t, 0.2);
+      this.rumbleF.frequency.setTargetAtTime(P.boosting ? 260 : 150, t, 0.3);
+      return;
+    }
+    this.rumble.gain.setTargetAtTime(0, t, 0.2);
     const f = (P.boosting ? 78 : 58) + v * 0.35;
     this.osc[0].frequency.setTargetAtTime(f, t, 0.25); this.osc[1].frequency.setTargetAtTime(f * 2.01, t, 0.25);
     this.eng.gain.setTargetAtTime(level * (P.boosting ? 0.06 : 0.035), t, 0.2);
@@ -360,8 +456,7 @@ const P = makePlane();
 const G = { state: 'attract', next: 0, started: false, time: 0, invuln: 0, crashTimer: 0, lap: 'attract', pauseReason: null, clock: 0 };
 const aim = { yaw: 0, pitch: 0 };
 const aimDir = new V3(0, 0, -1);
-const START_POS = new V3(COURSE_DEF[0][0], COURSE_DEF[0][1], COURSE_DEF[0][2]);
-const START_DIR = HOOPS[0].pos.clone().sub(START_POS).normalize();
+const START_POS = new V3(), START_DIR = new V3();         // set per course by applyCourse()
 const cam = { dir: new V3(0, 0, -1), up: new V3(0, 1, 0), dist: 12.5, fov: 60, shake: 0, vx: 0, vy: 0, boost: 0, punchT: 1e9 };
 
 function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = clamp(pitchOf(dir), -maxPitch, maxPitch); dirFromYawPitch(aim.yaw, aim.pitch, aimDir); }
@@ -575,12 +670,19 @@ function resolveControl(dt) {
     return ctl;
   }
   input.manual = false;
+  if (input.stick.active && TUNE.TOUCH_MODE === 'rate') {  // jet touch: roll and pitch rates, no angle limits
+    ctl.r = input.stick.x; ctl.p = input.stick.y * inv;
+    input.neutral = true;
+    syncAim();
+    return ctl;
+  }
   if (input.stick.active) {                                 // touch: horizontal = bank angle, vertical = climb angle
     ctl.att = { bank: input.stick.x * TUNE.TOUCH_BANK, climb: touchClimb(input.climb, input.stick.y * inv, dt) };
     input.neutral = true;
     syncAim();
     return ctl;
   }
+  if (input.neutral && TUNE.TOUCH_MODE === 'rate' && input.device === 'touch') { syncAim(); return ctl; }   // let go: hold attitude
   if (input.neutral) {                                      // nothing held: roll level, flatten out, keep heading
     ctl.att = { bank: 0, climb: 0 };
     syncAim();
@@ -616,20 +718,23 @@ function updateCamera(dt, snap) {
   if (G.state === 'playing' && input.device === 'mouse' && !input.manual) _want.addScaledVector(aimDir, 0.45);
   _want.normalize();
   _cu.set(0, 1, 0).applyQuaternion(P.q);
-  _wantUp.copy(WORLD_UP).lerp(_cu, reducedMotion ? 0.12 : 0.3).normalize();      // follow roll only partially
+  // follow roll partially; CAM_ROLL 1 (jet) follows fully, since a part-rolled up vector goes degenerate in a loop
+  const follow = TUNE.CAM_ROLL >= 1 ? 1 : reducedMotion ? Math.min(0.12, TUNE.CAM_ROLL) : TUNE.CAM_ROLL;
+  _wantUp.copy(WORLD_UP).lerp(_cu, follow).normalize();
+  const cs = TUNE.CAM_DIST / 12.5;                          // camera scale relative to the stunt plane's
   const boostOn = P.boosting && planeModel.group.visible ? 1 : 0;   // smoothed boost flag: reacts on press, not as speed builds
   cam.boost = snap ? boostOn : lerp(cam.boost, boostOn, damp(boostOn ? 5 : 2, dt));
-  const wantDist = 12.5 + clamp(P.speed - TUNE.CRUISE, -15, 30) * 0.07 + cam.boost * BOOST_CAM_BACK;
+  const wantDist = TUNE.CAM_DIST + (clamp((P.speed - TUNE.CRUISE) / TUNE.CRUISE, -0.34, 0.68) * 3.08 + cam.boost * BOOST_CAM_BACK) * cs;
   if (snap) { cam.dir.copy(_want); cam.up.copy(_wantUp); cam.dist = wantDist; }
   else {
     cam.dir.lerp(_want, damp(4.2, dt)).normalize();
-    cam.up.lerp(_wantUp, damp(3, dt)).normalize();
+    cam.up.lerp(_wantUp, damp(TUNE.CAM_UP_K, dt)).normalize();
     cam.dist = lerp(cam.dist, wantDist, damp(2.5, dt));
   }
-  camera.position.copy(P.pos).addScaledVector(cam.dir, -cam.dist).addScaledVector(cam.up, 3.2);
+  camera.position.copy(P.pos).addScaledVector(cam.dir, -cam.dist).addScaledVector(cam.up, TUNE.CAM_HEIGHT);
   const floor = groundAt(camera.position.x, camera.position.z) + 1.5;
   if (camera.position.y < floor) camera.position.y = floor;
-  _look.copy(P.pos).addScaledVector(cam.dir, 16).addScaledVector(cam.up, 1.2);
+  _look.copy(P.pos).addScaledVector(cam.dir, 16 * cs).addScaledVector(cam.up, 1.2 * cs);
   camera.up.copy(cam.up);
   camera.lookAt(_look);
 
@@ -659,7 +764,7 @@ function updateVisuals(dt) {
   const t = G.clock;
   planeModel.group.position.copy(P.pos);
   planeModel.group.quaternion.copy(P.q);
-  planeModel.prop.rotation.z += dt * (P.boosting ? 55 : 34);
+  planeModel.update(dt, P);
 
   for (let i = 0; i < hoopMeshes.length; i++) {
     const m = hoopMeshes[i];
@@ -707,11 +812,11 @@ function updateVisuals(dt) {
     _q.setFromUnitVectors(Z_AXIS, P.vdir);
     _ba.crossVectors(P.vdir, WORLD_UP); if (_ba.lengthSq() < 0.01) _ba.set(1, 0, 0); _ba.normalize();
     _bb.crossVectors(_ba, P.vdir).normalize();
-    const len = P.speed * 0.09;
+    const len = P.speed * 0.09, reach = 90 * TUNE.CAM_DIST / 12.5;   // recycle range grows with the chase distance
     for (let i = 0; i < STREAKS; i++) {
       const p = streakPos[i];
       _rel.copy(p).sub(camera.position);
-      if (_rel.dot(_camFwd) < 1 || _rel.lengthSq() > 8100) {
+      if (_rel.dot(_camFwd) < 1 || _rel.lengthSq() > reach * reach) {
         const r = 4 + Math.random() * 20, a = Math.random() * TAU;
         p.copy(P.pos).addScaledVector(P.vdir, 25 + Math.random() * 60).addScaledVector(_ba, Math.cos(a) * r).addScaledVector(_bb, Math.sin(a) * r);
       }
@@ -721,8 +826,8 @@ function updateVisuals(dt) {
   }
 
   // wingtip trails: pulling hard, going fast, or boosting (boost draws them as strongly as a hard bank)
-  const gTrail = clamp((P.gload - 2.3) / 2.5, 0, 1) * 0.75;
-  const ti = planeModel.group.visible ? Math.max(gTrail, cam.boost * 0.75) + smoothstep(56, 70, P.speed) * 0.3 : 0;
+  const gTrail = clamp((P.gload - TUNE.TRAIL_G) / (TUNE.TRAIL_G * 1.09), 0, 1) * 0.75;
+  const ti = planeModel.group.visible ? Math.max(gTrail, cam.boost * 0.75) + smoothstep(TUNE.CRUISE * 1.27, TUNE.CRUISE * 1.59, P.speed) * 0.3 : 0;
   for (let i = 0; i < 2; i++) {
     _v.copy(planeModel.tips[i]).applyQuaternion(P.q).add(P.pos);
     trails[i].push(_v, ti * 0.6, t);
@@ -730,7 +835,7 @@ function updateVisuals(dt) {
   }
 
   sky.position.copy(camera.position);
-  sunDisc.position.copy(camera.position).addScaledVector(SUN_DIR, 4200);
+  sunDisc.position.copy(camera.position).addScaledVector(SUN_DIR, sunDist);
   sunDisc.lookAt(camera.position);
 }
 
@@ -807,9 +912,51 @@ function renderBest() {
   const b = getBest();
   $('start-best').textContent = b != null ? `Best ${fmtTime(b)}` : '';
   $('start-course').textContent = `${COURSE.name}, ${HOOPS.length} hoops`;
+  renderPicker();
+}
+
+/* ---------- course picker (start screen, shown once there's more than one course) ---------- */
+const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet' };
+const pickEl = $('course-pick');
+let switching = false;
+function renderPicker() {
+  if (!pickEl) return;
+  pickEl.hidden = api.courses.length < 2;
+  pickEl.replaceChildren(...api.courses.map((c) => {
+    const b = document.createElement('button'), name = document.createElement('b'), meta = document.createElement('span');
+    const best = settings.best[c.id];
+    b.type = 'button'; b.className = 'pick'; b.setAttribute('aria-pressed', String(c.id === COURSE.id));
+    name.textContent = c.name;
+    meta.textContent = (VEHICLE_NAME[c.vehicle || 'prop'] || c.vehicle) + (best != null ? ` · ${fmtTime(best)}` : '');
+    b.append(name, meta);
+    b.addEventListener('click', () => switchCourse(c));
+    return b;
+  }));
+}
+async function switchCourse(entry) {
+  if (switching || G.state !== 'attract' || entry.id === COURSE.id) return;
+  switching = true; body.classList.add('is-loading');
+  try {
+    await api.loadCourse(entry);                            // rebuilds the sim world; the scene follows here
+    settings.course = entry.id; saveSettings();
+    applyCourse(); resetRun();
+    focusEl('btn-start');
+  } catch (err) {
+    console.error(err);
+    showToast('That course didn\u2019t load. Try again.');
+  } finally { switching = false; body.classList.remove('is-loading'); }
+}
+function applyCourse() {                                    // scene, plane, start point and texts for the loaded course
+  START_POS.set(COURSE_DEF[0][0], COURSE_DEF[0][1], COURSE_DEF[0][2]);
+  START_DIR.copy(HOOPS[0].pos).sub(START_POS).normalize();
+  buildScenery();
+  setVehicleModel();
+  body.classList.toggle('vehicle-jet', TUNE.VEHICLE === 'jet');
+  renderBest();
 }
 
 function startRun() {
+  if (switching) return;
   Sound.init();
   blurActive();
   resetRun();
@@ -887,9 +1034,9 @@ invertEl.checked = settings.invertPitch; soundEl.checked = !settings.muted; sens
 invertEl.addEventListener('change', () => { settings.invertPitch = invertEl.checked; saveSettings(); });
 soundEl.addEventListener('change', () => { settings.muted = !soundEl.checked; Sound.setMuted(settings.muted); saveSettings(); });
 sensEl.addEventListener('input', () => { settings.mouseSens = parseFloat(sensEl.value) || 1; saveSettings(); });
+applyCourse();
 document.addEventListener('visibilitychange', () => { if (document.hidden) { pause('hidden'); Sound.suspend(); } });
 canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); pause('hidden'); });
-renderBest();
 
 /* ---------- main loop ---------- */
 // boost edges: press kicks the FOV and whooshes (not on rapid re-taps), running dry sputters
@@ -954,5 +1101,5 @@ function frame(now) {
 resetRun();
 setState('attract');
 requestAnimationFrame((t) => { last = t; frame(t); });
-window.__ml = { G, P, HOOPS, input, settings, finishRun, teleport(i) { G.next = i; respawn(); } };
+window.__ml = { G, P, get HOOPS() { return HOOPS; }, input, settings, finishRun, switchCourse, teleport(i) { G.next = i; respawn(); } };
 }
