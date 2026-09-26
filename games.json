@@ -417,13 +417,13 @@
       "aurinko",
       "kartta"
     ],
-    "status": "published",
+    "status": "draft",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
     "revision": 1,
     "sizeBytes": 17310,
     "createdAt": "2026-09-26T07:48:14.890Z",
-    "updatedAt": "2026-09-26T07:49:25.840Z"
+    "updatedAt": "2026-09-26T07:52:16.509Z"
   }
 ]
