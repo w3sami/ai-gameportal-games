@@ -430,8 +430,11 @@
     "id": "d47dd260-f0e0-4a00-a862-677f6ebb22fa",
     "slug": "skyrace",
     "title": "Skyrace",
-    "description": "A low-level air race through a mountain valley. Fly a stunt plane through 18 hoops in order, as fast as you can: the clock starts at the first hoop and a crash puts you back at the last one. Dive to gain speed, climb to trade it away, and save boost for when it counts; it drains while held and refills with every hoop. The touch stick banks and climbs the plane and levels it out when you let go. With a mouse, you aim and the plane follows, and WASD flies it by hand, loops included. Gamepads work too. Everything (terrain, trees, clouds, sound) is generated in code.",
-    "descriptions": {},
+    "description": "An air race with four courses, each flown against the clock: the clock starts at the first gate and a crash puts you back at the last one. Valley Run is a low-level dash through a mountain valley in a stunt plane, 18 hoops: dive to gain speed, climb to trade it away. Summit Run puts you in a fighter jet among snow-capped peaks, 10 hoops kilometres apart and hundreds of metres apart in height. Harbour Run is a pylon race low over the water in a race plane that pulls 10 g: fly between the blue air gates wings level and round the red pylons on the marked side; touching a pylon, a banked air gate or a missed pylon adds seconds. Glacier Run swaps the engine for a wingsuit, 15 hoops from a snowy summit down a gorge to a lake: nothing climbs, so boost becomes a tuck that dives for speed, and you have to carry enough speed to level out over the flat stretches; a missed hoop adds 3 s. In the planes, boost drains while held and refills with every gate. On touch, the propeller planes' stick banks and climbs and levels out when you let go, the wingsuit's banks and flattens or steepens the glide; the jet's stick sets roll and pitch rates and holds its attitude, loops and rolls included. With a mouse you aim and the aircraft follows, WASD flies by hand, and gamepads work too. Everything (terrain, trees, clouds, sound) is generated in code.",
+    "descriptions": {
+      "fi": "An air race with four courses, each flown against the clock: the clock starts at the first gate and a crash puts you back at the last one. Valley Run is a low-level dash through a mountain valley in a stunt plane, 18 hoops: dive to gain speed, climb to trade it away. Summit Run puts you in a fighter jet among snow-capped peaks, 10 hoops kilometres apart and hundreds of metres apart in height. Harbour Run is a pylon race low over the water in a race plane that pulls 10 g: fly between the blue air gates wings level and round the red pylons on the marked side; touching a pylon, a banked air gate or a missed pylon adds seconds. Glacier Run swaps the engine for a wingsuit, 15 hoops from a snowy summit down a gorge to a lake: nothing climbs, so boost becomes a tuck that dives for speed, and you have to carry enough speed to level out over the flat stretches; a missed hoop adds 3 s. In the planes, boost drains while held and refills with every gate. On touch, the propeller planes' stick banks and climbs and levels out when you let go, the wingsuit's banks and flattens or steepens the glide; the jet's stick sets roll and pitch rates and holds its attitude, loops and rolls included. With a mouse you aim and the aircraft follows, WASD flies by hand, and gamepads work too. Everything (terrain, trees, clouds, sound) is generated in code.",
+      "en": "An air race with four courses, each flown against the clock: the clock starts at the first gate and a crash puts you back at the last one. Valley Run is a low-level dash through a mountain valley in a stunt plane, 18 hoops: dive to gain speed, climb to trade it away. Summit Run puts you in a fighter jet among snow-capped peaks, 10 hoops kilometres apart and hundreds of metres apart in height. Harbour Run is a pylon race low over the water in a race plane that pulls 10 g: fly between the blue air gates wings level and round the red pylons on the marked side; touching a pylon, a banked air gate or a missed pylon adds seconds. Glacier Run swaps the engine for a wingsuit, 15 hoops from a snowy summit down a gorge to a lake: nothing climbs, so boost becomes a tuck that dives for speed, and you have to carry enough speed to level out over the flat stretches; a missed hoop adds 3 s. In the planes, boost drains while held and refills with every gate. On touch, the propeller planes' stick banks and climbs and levels out when you let go, the wingsuit's banks and flattens or steepens the glide; the jet's stick sets roll and pitch rates and holds its attitude, loops and rolls included. With a mouse you aim and the aircraft follows, WASD flies by hand, and gamepads work too. Everything (terrain, trees, clouds, sound) is generated in code."
+    },
     "author": "Carl Vuorinen",
     "tags": [
       "arcade",
@@ -439,15 +442,18 @@
       "racing",
       "time-attack",
       "3d",
-      "mobile"
+      "mobile",
+      "jet",
+      "pylon-race",
+      "wingsuit"
     ],
-    "status": "draft",
+    "status": "published",
     "ownerId": "00467d4f-580d-4f75-882e-24ae9b02a0a4",
     "ownerFolder": "carl-vuorinen",
     "entryFile": "index.html",
-    "revision": 0,
+    "revision": 1,
     "sizeBytes": 159576,
     "createdAt": "2026-09-26T08:03:53.083Z",
-    "updatedAt": "2026-09-26T14:37:37.748Z"
+    "updatedAt": "2026-09-26T18:08:23.208Z"
   }
 ]
