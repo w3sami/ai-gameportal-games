@@ -7,7 +7,7 @@
   "relief": {"base": 60, "amp": 4200, "pow": 3, "freq": 0.0005, "ridgeAmp": 450, "ridgeFreq": 0.0012},
   "palette": {"dry": [300, 1100], "forestTop": [750, 1100], "high": [1300, 1900], "snow": [1950, 2350]},
   "view": {"near": 1, "far": 30000, "fog": [2500, 13000]},
-  "clouds": {"count": 60, "y": [2500, 3300], "size": [70, 150], "near": 24, "nearR": [300, 700], "nearY": [-150, 250]},
+  "clouds": {"count": 60, "y": [2500, 3300], "size": [70, 150], "near": 24, "nearR": [300, 700], "nearY": [-150, 250], "nearSize": [40, 90]},
   "lake": {"x": -5900, "z": -4400, "r": 1300, "depth": 420},
   "hills": [],
   "trees": {"near": 1500, "scattered": 6000, "maxAlt": 1000},
