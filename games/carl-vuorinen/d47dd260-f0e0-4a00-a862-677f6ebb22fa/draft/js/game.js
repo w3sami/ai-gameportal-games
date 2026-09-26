@@ -87,7 +87,8 @@ sunDisc.renderOrder = -1; scene.add(sunDisc);
    range and fog) and clouds (see the course format in js/sim.js). */
 const PALETTE = { dry: [40, 170], forestTop: [150, 225], high: [185, 275], snow: null, pathTint: true };
 const VIEW = { near: 0.5, far: 6500, fog: [320, 2150] };
-const CLOUDS = { count: 46, y: [190, 360], size: [16, 36], near: 18, nearR: [75, 185], nearY: [32, 82], nearSize: [9, 18] };
+// clear: the least gap between a cloud's lowest puff and the ground under it (m); a cloud that dips lower is lifted
+const CLOUDS = { count: 46, y: [190, 360], size: [16, 36], near: 18, nearR: [75, 185], nearY: [32, 82], nearSize: [9, 18], clear: 10 };
 const span = (r, t) => r[0] + (r[1] - r[0]) * t;
 let worldGroup = null, sunDist = 4200;
 function disposeGroup(g) {
@@ -204,7 +205,7 @@ function buildClouds(group) {
     for (let i = 0; i < n; i++) p.push([x + (rand() - 0.5) * size * 2.4, y + (rand() - 0.5) * size * 0.5, z + (rand() - 0.5) * size * 1.6, size * (0.55 + rand() * 0.55)]);
     // keep clear of the ground: lift a cloud that dips into a slope, drop one that would sit inside a mountain
     let lift = 0;
-    for (const [px, py, pz, s] of p) for (const [dx, dz] of probe) lift = Math.max(lift, groundAt(px + dx * s, pz + dz * s) + 10 - (py - s * 0.9));
+    for (const [px, py, pz, s] of p) for (const [dx, dz] of probe) lift = Math.max(lift, groundAt(px + dx * s, pz + dz * s) + C.clear - (py - s * 0.9));
     if (lift > 150) return false;
     for (const q of p) { q[1] += lift; puffs.push(q); }
     return true;
