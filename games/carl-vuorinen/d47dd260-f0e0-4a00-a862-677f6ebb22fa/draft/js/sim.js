@@ -51,6 +51,7 @@ const TUNE = {
   MAX_PITCH: 1.15, MAX_ROLL: 2.8, MAX_YAW: 0.45,  // rad/s at full authority
   RATE_K: 9,              // control-rate smoothing (1/s)
   TURN_ASSIST: 0.72,      // bank-to-turn gain: turn rate = TURN_ASSIST * turnCurve(bank) (rad/s)
+  TURN_COS_MIN: 0.5,      // turnCurve follows tan(bank) until cos(bank) reaches this (0.5 = 60°), then only sin grows
   // heading-hold steering (mouse aim, autopilot); ROLL_P ~1.1 keeps the roll loop near critically damped
   BANK_GAIN: 2.0, MAX_BANK: 1.22, ROLL_P: 1.1, PITCH_P: 2.4, YAW_P: 2.0, ASSIST_LEAD: 0.15,
   // attitude steering (touch stick, and easing back to neutral): target bank + target climb, no heading to return to
@@ -60,12 +61,14 @@ const TUNE = {
   WEATHERVANE: 0.25,      // nose drifts toward the flight path (more so near stall)
   BOOST_DRAIN: 0.2, BOOST_REGEN: 0.085, BOOST_HOOP: 0.18,
   HOOP_R: 8, HOOP_TOL: 1.4, PLANE_R: 1.3,
+  WING_HALF: 4.7,         // half span (m): pylon hits are tested along the wing, so a steep bank passes closer
   // vehicle: which model, sound and touch scheme. TOUCH_MODE 'attitude' = stick sets bank/climb, letting go levels;
   // 'rate' = stick sets roll/pitch rate, letting go holds the attitude (loops and rolls, no angle limits)
   VEHICLE: 'prop', TOUCH_MODE: 'attitude',
   CAM_DIST: 12.5, CAM_HEIGHT: 3.2, CAM_ROLL: 0.3, CAM_UP_K: 3,   // chase camera; CAM_ROLL 1 = follow roll fully
   TRAIL_G: 2.3,           // g where wingtip vapour starts
   AP_LEAD: 1.2,           // attract-mode autopilot: how far ahead along the course line it aims (s at cruise)
+  AP_CLEAR: 0,            // autopilot ground clearance it holds 2 s ahead (m); 0 = 0.57 s of cruise (scales with speed)
 };
 // config/flight.json is the base; a course's vehicle file (config/<vehicle>.json) goes over it. boot.js resets from this.
 const TUNE_DEFAULTS = Object.assign({}, TUNE);
@@ -85,14 +88,28 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
      lake:    { x, z, r, depth } | null         a basin pressed into the hills
      hills:   [{ x, z, r, h }]                  bumps added to the hills (e.g. to put a ridge under a pass)
      trees:   { near, scattered, maxAlt }       placement attempts along the course and across the map; no trees above maxAlt
-     points:  [[x, y, z, clearance, floorHalfWidth, wallSteepness, hoop?], ...]
-              first = run-in, last = run-out, every point between is a hoop, in flying order, unless its 7th
-              value is 0: then it's a waypoint that only shapes the line (e.g. to turn between hoops). The terrain is
-              carved into a valley along the path: floor `clearance` m below it, flat for `floorHalfWidth` m
-              either side, walls rising with `wallSteepness`.
+     points:  [[x, y, z, clearance, floorHalfWidth, wallSteepness, gate?], ...]
+              first = run-in, last = run-out, every point between is a gate, in flying order. The 7th value says
+              which kind: left out or 1 = hoop; 0 = waypoint that only shapes the line (e.g. to turn between gates);
+              "L" / "R" = single pylon on your left / right as you pass; "G" = air gate, a pylon either side, flown
+              wings level. Every kind is scored the same way: a circle of radius HOOP_R centred on the point,
+              facing along the line. Pylons stand beside that circle, from the ground or water to PYLON above its
+              top, so the circle is invisible and the pylon shows where it is. The terrain is carved into a valley
+              along the path: floor `clearance` m below it, flat for `floorHalfWidth` m either side, walls rising
+              with `wallSteepness`.
+     pylon:   { r0, r1, above, gap }             optional; pylon radius at the foot and top, height above the
+                                                 circle's top, and the gap between circle and pylon (m)
+     rules:   { pylonHit, notLevel, missed, missR, levelTol }   optional; time penalties (s) for touching a pylon,
+                                                 flying an air gate banked more than levelTol degrees, and passing a
+                                                 pylon gate outside its circle but within missR m of its centre (the
+                                                 gate then counts as flown). Hoops never count as missed: fly back.
+     lead:    "..."                             optional; the start screen's one-line brief
    }
    buildWorld(course) (re)builds everything in this section from it. */
-let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SAMPLES = [];
+let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SAMPLES = [], PYLONS = [];
+const PYLON_DEF = { r0: 2.4, r1: 0.8, above: 4, gap: 1.2 };
+const RULES_DEF = { pylonHit: 3, notLevel: 2, missed: 5, missR: 70, levelTol: 15 };
+let PYLON = PYLON_DEF, RULES = RULES_DEF;
 let TER = null, TH = null, TDIST = null, TNEAR = null, noiseA = null, noiseB = null, noiseC = null;
 const TREES = { x: [], y: [], z: [], h: [], r: [] };
 const TREE_GRID = new Map(), TREE_CELL = 40;
@@ -122,11 +139,15 @@ function buildWorld(course) {
   curve = new THREE.CatmullRomCurve3(COURSE_DEF.map((p) => new THREE.Vector3(p[0], p[1], p[2])), false, 'centripetal');
   curve.arcLengthDivisions = 2000;
   COURSE_LEN = curve.getLength();
+  PYLON = Object.assign({}, PYLON_DEF, course.pylon);
+  RULES = Object.assign({}, RULES_DEF, course.rules);
   HOOPS = [];
   for (let i = 1; i < COURSE_DEF.length - 1; i++) {
-    if (COURSE_DEF[i][6] === 0) continue;                    // waypoint: shapes the line and the carving, no hoop
+    const g = COURSE_DEF[i][6];
+    if (g === 0) continue;                                   // waypoint: shapes the line and the carving, no gate
     HOOPS.push({ pos: new THREE.Vector3(COURSE_DEF[i][0], COURSE_DEF[i][1], COURSE_DEF[i][2]),
-                 normal: curve.getTangent(i / (COURSE_DEF.length - 1)).normalize() });
+                 normal: curve.getTangent(i / (COURSE_DEF.length - 1)).normalize(),
+                 kind: typeof g === 'string' ? g : 'hoop', pylons: [] });
   }
   SAMPLES = [];
   const NS = 900, nseg = COURSE_DEF.length - 1, p = new THREE.Vector3();
@@ -173,6 +194,25 @@ function buildWorld(course) {
       TH[k] = lerp(h, TER.EDGE, smoothstep(0.8, 0.98, e));
     }
   }
+
+  // pylons: beside each pylon gate's circle, standing on the ground or the water
+  PYLONS = [];
+  HOOPS.forEach((h, gi) => {
+    const sides = h.kind === 'L' ? [-1] : h.kind === 'R' ? [1] : h.kind === 'G' ? [-1, 1] : [];
+    if (!sides.length) return;
+    const right = new THREE.Vector3().crossVectors(h.normal, WORLD_UP).setY(0).normalize();
+    for (const s of sides) {
+      // axis far enough out that the pylon's surface at circle height clears the circle by `gap`
+      let d = TUNE.HOOP_R + PYLON.gap + PYLON.r0, x = 0, z = 0, y0 = 0;
+      const y1 = h.pos.y + TUNE.HOOP_R + PYLON.above;
+      for (let it = 0; it < 3; it++) {
+        x = h.pos.x + right.x * s * d; z = h.pos.z + right.z * s * d; y0 = groundAt(x, z) - 0.5;
+        d = TUNE.HOOP_R + PYLON.gap + lerp(PYLON.r0, PYLON.r1, clamp((h.pos.y - y0) / (y1 - y0), 0, 1));
+      }
+      h.pylons.push(PYLONS.length);
+      PYLONS.push({ x, z, y0, y1, r0: PYLON.r0, r1: PYLON.r1, gate: gi, side: s, hit: false });
+    }
+  });
 
   // trees: flanking the path, plus clumps where the forest mask says so
   for (const key in TREES) TREES[key].length = 0;
@@ -265,7 +305,7 @@ function computeBank(P, f) {
 const _R = new THREE.Vector3(), _U = new THREE.Vector3(), _B = new THREE.Vector3();
 // tan-shaped like a real coordinated turn (gentle at small bank, strong past ~45°), capped so knife-edge
 // doesn't explode, fading to zero when inverted
-const turnCurve = (bank) => Math.sin(bank) / Math.max(Math.cos(bank), 0.5);
+const turnCurve = (bank) => Math.sin(bank) / Math.max(Math.cos(bank), TUNE.TURN_COS_MIN);
 // current heading rate of the nose (+ = turning left), from the smoothed body rates plus bank-to-turn
 function headingRate(P, bank, horiz, auth) {
   _R.set(1, 0, 0).applyQuaternion(P.q); _U.set(0, 1, 0).applyQuaternion(P.q); _B.set(0, 0, 1).applyQuaternion(P.q);
@@ -403,20 +443,42 @@ function autopilotAim(P, hoopIdx, out) {
   return avoidGround(P, out, v);
 }
 function avoidGround(P, out, v) {                          // don't aim into the ground (2 s look-ahead)
-  const ahead = _l.copy(P.pos).addScaledVector(P.vdir, v * 2.05), need = v * 0.57;
+  const ahead = _l.copy(P.pos).addScaledVector(P.vdir, v * 2.05), need = TUNE.AP_CLEAR || v * 0.57;
   const clearance = ahead.y - groundAt(ahead.x, ahead.z);
   if (clearance < need) out.y = Math.max(out.y, 0.25 * (1 - clearance / need));
   return out.normalize();
 }
 
-// did the segment a->b pass through hoop i in the course direction?
-function passedHoop(a, b, i) {
+// segment a->b crossing gate i's plane in the course direction: 'pass' inside its circle; for pylon gates, 'miss'
+// when outside it (wrong side of the pylon, too wide, too high) but within RULES.missR of the centre; else null
+function gateCross(a, b, i) {
   const h = HOOPS[i];
   const d0 = _ax.copy(a).sub(h.pos).dot(h.normal), d1 = _l.copy(b).sub(h.pos).dot(h.normal);
-  if (!(d0 < 0 && d1 >= 0)) return false;
+  if (!(d0 < 0 && d1 >= 0)) return null;
   const t = d0 / (d0 - d1);
   const hx = a.x + (b.x - a.x) * t - h.pos.x, hy = a.y + (b.y - a.y) * t - h.pos.y, hz = a.z + (b.z - a.z) * t - h.pos.z;
-  return hx * hx + hy * hy + hz * hz < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2;
+  const r2 = hx * hx + hy * hy + hz * hz;
+  if (r2 < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2) return 'pass';
+  return h.kind !== 'hoop' && r2 < RULES.missR * RULES.missR ? 'miss' : null;
+}
+const passedHoop = (a, b, i) => gateCross(a, b, i) === 'pass';
+// first standing pylon touched by the plane (tested at five points along the wing), or -1
+function pylonHit(P) {
+  _R.set(1, 0, 0).applyQuaternion(P.q);
+  const W = TUNE.WING_HALF;
+  for (let k = 0; k < PYLONS.length; k++) {
+    const py = PYLONS[k];
+    if (py.hit) continue;
+    const dx0 = P.pos.x - py.x, dz0 = P.pos.z - py.z, reach = W + py.r0 + 1;
+    if (dx0 * dx0 + dz0 * dz0 > reach * reach) continue;
+    for (let s = -2; s <= 2; s++) {
+      const e = W * s / 2, x = P.pos.x + _R.x * e, y = P.pos.y + _R.y * e, z = P.pos.z + _R.z * e;
+      if (y < py.y0 || y > py.y1) continue;
+      const r = lerp(py.r0, py.r1, (y - py.y0) / (py.y1 - py.y0)) + 0.25, dx = x - py.x, dz = z - py.z;
+      if (dx * dx + dz * dz < r * r) return k;
+    }
+  }
+  return -1;
 }
 function crashed(P) {
   if (P.pos.y - TUNE.PLANE_R < groundAt(P.pos.x, P.pos.z)) return 'ground';
