@@ -83,6 +83,7 @@ const sky = (() => {
 const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(95, 32), new THREE.MeshBasicMaterial({ color: '#fff7e3', fog: false, depthWrite: false }));
 sunDisc.renderOrder = -1; scene.add(sunDisc);
 const cloudDeck = createCloudDeck({ scene, sky, sunDisc, sun: sunLight, hemi: hemiLight, renderer });   // js/clouddeck.js
+Atmosphere.init({ sunDir: SUN_DIR, sun: sunLight, sky });   // sun-tinted fog and low haze (js/atmosphere.js)
 
 /* ---------- scenery: rebuilt whenever a course is loaded ----------
    Defaults are the Valley Run look; a course file can override palette (heights where colours blend), view (camera
@@ -93,6 +94,7 @@ const VIEW = { near: 0.5, far: 6500, fog: [320, 2150] };
 const CLOUDS = { count: 46, y: [190, 360], size: [16, 36], near: 18, nearR: [75, 185], nearY: [32, 82], nearSize: [9, 18], clear: 10 };
 const span = (r, t) => r[0] + (r[1] - r[0]) * t;
 let worldGroup = null, sunDist = 4200;
+const lightStats = {};
 function disposeGroup(g) {
   scene.remove(g);
   g.traverse((o) => {
@@ -107,6 +109,8 @@ function buildScenery() {
   const v = Object.assign({}, VIEW, COURSE.view);
   camera.near = v.near; camera.far = v.far; camera.updateProjectionMatrix();
   scene.fog.near = v.fog[0]; scene.fog.far = v.fog[1];
+  Atmosphere.configure(v, COURSE);
+  lightStats.bake = Sunlight.bake(SUN_DIR);                 // terrain shadows and occlusion (js/sunlight.js)
   const k = v.far / VIEW.far;                               // sky dome, sun and outer plain grow with the view range
   sky.scale.setScalar(k); sunDisc.scale.setScalar(k); sunDist = 4200 * k;
   buildTerrainMesh(worldGroup, Math.max(9000, v.far * 1.4));
@@ -117,6 +121,7 @@ function buildScenery() {
   buildClouds(worldGroup);
   cloudDeck.build(worldGroup, v);
   buildHoops(worldGroup);
+  Object.assign(lightStats, Sunlight.apply(worldGroup, scene));
 }
 
 function buildTerrainMesh(group, plainR) {
@@ -163,12 +168,14 @@ function buildTerrainMesh(group, plainR) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.computeVertexNormals();                                 // non-indexed: flat, faceted shading
-  group.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })));
+  const terrain = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  terrain.userData.sunGrid = true; group.add(terrain);
 
   const openSea = TER.EDGE < TER.WATER, wsize = openSea ? plainR * 2 : TER.SIZE;   // edges below the water: sea all round
   const wmat = new THREE.MeshLambertMaterial({ color: sea });
   if (clearSea) { wmat.transparent = true; wmat.opacity = PAL.waterOpacity; }
   const water = new THREE.Mesh(new THREE.PlaneGeometry(wsize, wsize).rotateX(-Math.PI / 2), wmat);
+  water.userData.sunTex = true;
   water.renderOrder = -1;                                   // see-through: drawn before the other see-through things
   water.position.set(TER.CX, TER.WATER, TER.CZ); group.add(water);
 
@@ -986,7 +993,7 @@ function updateVisuals(dt) {
     _q.setFromAxisAngle(WORLD_UP, yawOf(P.vdir)); blob.quaternion.multiply(_q);
     const bs = planeModel.shadow || 1;
     blob.scale.set((9 + alt * 0.05) * bs, 1, (7 + alt * 0.04) * bs);
-    blob.material.opacity = 0.5 * (1 - smoothstep(15, 170, alt));
+    blob.material.opacity = 0.5 * (1 - smoothstep(15, 170, alt)) * lerp(0.5, 1, Sunlight.visAt(P.pos.x, P.pos.z));   // fainter on shaded ground
   }
 
   // streaks
@@ -1031,6 +1038,7 @@ function updateVisuals(dt) {
   sunDisc.position.copy(camera.position).addScaledVector(SUN_DIR, sunDist);
   sunDisc.lookAt(camera.position);
   cloudDeck.update(camera.position.y);
+  Atmosphere.update(scene.fog);                             // after the deck: it sets the fog colour and sunlight
 }
 
 /* ---------- HUD & UI ---------- */
@@ -1331,5 +1339,5 @@ function frame(now) {
 resetRun();
 setState('attract');
 requestAnimationFrame((t) => { last = t; frame(t); });
-window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, menu, teleport(i) { G.next = i; respawn(); } };
+window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, menu, lightStats, teleport(i) { G.next = i; respawn(); } };
 }
