@@ -236,6 +236,7 @@ const Z_AXIS = new V3(0, 0, 1);
 let hoopMeshes = [];      // per gate: its hoop mesh, or null for a pylon gate
 const gateQ = [];         // per gate: orientation (+Z along the line)
 const pylons = createPylonKit(ROUTE_HEX);   // pylon gates' meshes and highlighting (js/pylons.js)
+const bridges = createBridgeKit(ROUTE_HEX); // bridge gates, the same for bridges (js/bridges.js)
 const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(gateDisc);
@@ -252,9 +253,10 @@ function buildHoops(group) {
     return m;
   });
   pylons.build(group);
+  bridges.build(group);
   gateDisc.scale.setScalar((TUNE.HOOP_R - 0.6) / 7.4);
 }
-function resetPylons() { pylons.reset(); }
+function resetPylons() { pylons.reset(); bridges.reset(); }
 const gateNoun = () => (HOOPS.length && HOOPS[0].kind !== 'hoop' ? 'gate' : 'hoop');
 
 /* ---------- plane models (nose along -Z), one per vehicle; the course's vehicle picks ---------- */
@@ -622,7 +624,7 @@ function onHoop(missed = false) {
   }
   if (G.state !== 'playing') return;
   if (i === 0) G.started = true;
-  if (missed) penalty(RULES.missed, `Missed ${gateNoun()} ${i + 1}`);
+  if (missed) penalty(RULES.missed, h.kind === 'B' ? 'Not under the bridge' : `Missed ${gateNoun()} ${i + 1}`);
   else {
     Sound.hoop(i);
     if (h.kind === 'G' && Math.abs(P.bank) > RULES.levelTol * Math.PI / 180) penalty(RULES.notLevel, 'Not level through the gate');
@@ -654,7 +656,8 @@ function onCrash(kind) {
   if (G.state !== 'playing') return;
   Sound.crash();
   flash();
-  showToast(G.next > 0 ? `${kind === 'tree' ? 'Clipped a tree' : 'Crashed'}. Back to ${gateNoun()} ${G.next}.` : `${kind === 'tree' ? 'Clipped a tree' : 'Crashed'}. Back to the start.`);
+  const what = kind === 'tree' ? 'Clipped a tree' : kind === 'bridge' ? 'Hit the bridge' : 'Crashed';
+  showToast(G.next > 0 ? `${what}. Back to ${gateNoun()} ${G.next}.` : `${what}. Back to the start.`);
 }
 
 /* ---------- input ---------- */
@@ -934,7 +937,8 @@ function updateVisuals(dt) {
   }
   pylons.update(G.next, t);
   pylons.animate(dt);
-  if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
+  bridges.update(G.next, t, dt);
+  if (G.next < HOOPS.length && HOOPS[G.next].kind !== 'B') {   // faint target disc on the next gate (pylons: the scoring circle; bridges light their own opening)
     gateDisc.visible = true;
     gateDisc.position.copy(HOOPS[G.next].pos); gateDisc.quaternion.copy(gateQ[G.next]);
     gateDisc.material.opacity = (0.09 + Math.sin(t * 6) * 0.04) * (hoopMeshes[G.next] ? 1 : 0.55);
