@@ -1132,6 +1132,8 @@ const menu = createMenu({
   load: switchCourse,
   isMenu: () => G.state === 'attract',
   toMenu: () => toMenu(),
+  restart: () => restart(),
+  run: () => ({ started: G.started, time: G.time }),
 });
 function applyCourse() {                                    // scene, plane, start point and texts for the loaded course
   START_POS.set(COURSE_DEF[0][0], COURSE_DEF[0][1], COURSE_DEF[0][2]);
@@ -1171,6 +1173,7 @@ function pause(reason) {
   input.keys.clear(); stickEnd(); boostEnd();
   Sound.suspend();
   if (document.pointerLockElement === canvas) document.exitPointerLock();
+  menu.onPause();
   focusEl('btn-resume');
 }
 function resume() {
@@ -1221,7 +1224,7 @@ function toMenu() {
 
 $('btn-start').addEventListener('click', startRun);
 $('btn-resume').addEventListener('click', resumeFromUser);
-$('btn-restart').addEventListener('click', restart);
+// pause screen's Restart and Menu: js/menu.js, which asks first once the clock is running (R restarts at once)
 $('btn-again').addEventListener('click', startRun);
 $('btn-menu').addEventListener('click', toMenu);
 $('btn-pause').addEventListener('click', () => pause('button'));
