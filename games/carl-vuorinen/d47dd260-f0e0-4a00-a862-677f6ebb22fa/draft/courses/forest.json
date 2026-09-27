@@ -1,0 +1,32 @@
+{
+  "_format": "See the course section at the top of js/sim.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, hoop?]; first = exit point, last = run-out, the rest are hoops in flying order. High stretches skim the treetops (trees.under lets them stand under the line); low ones drop into gullies cut through the forest.",
+  "id": "forest",
+  "name": "Forest Run",
+  "lead": "Down through the big forest below the glacier, 12 hoops in tight turns. Skim the treetops, then drop into the gullies and fly between the trees.",
+  "seeds": { "a": 41, "b": 7, "c": 23, "trees": 19 },
+  "terrain": { "size": 6000, "cx": 0, "cz": -1700, "n": 360, "water": 60, "edge": 40, "carveR": 520 },
+  "relief": { "base": 1800, "amp": 150, "pow": 1.3, "freq": 0.0011, "ridgeAmp": 45, "ridgeFreq": 0.003, "tilt": [0, 0.6] },
+  "palette": { "dry": [700, 1800], "forestTop": [1660, 1760], "high": [1740, 2050], "snow": [2250, 2600] },
+  "view": { "near": 0.3, "far": 10000, "fog": [800, 6000] },
+  "clouds": { "count": 30, "y": [2700, 3200], "size": [60, 120], "near": 0, "clear": 120 },
+  "trees": { "near": 14000, "scattered": 8000, "maxAlt": 1720, "size": [18, 34], "gap": 9, "under": 14, "spread": 260, "mask": 0.3, "colors": ["#2c5530", "#4d7a3e"] },
+  "rocks": { "near": 500, "scattered": 500, "size": [1.5, 6] },
+  "rules": { "hoopMiss": true, "missed": 3, "missR": 60, "respawnMax": 58 },
+  "autopilot": { "lead": 1.2, "clear": 9, "ahead": 1.2 },
+  "points": [
+    [0, 1934.1, 0, 22, 30, 0.1],
+    [70, 1795.2, -260, 34, 40, 0.1],
+    [-50, 1650.4, -500, 50, 60, 0.05],
+    [90, 1480, -740, 50, 60, 0.05],
+    [-40, 1332.9, -980, 50, 60, 0.05],
+    [60, 1143.2, -1210, 15, 12, 0.12],
+    [-80, 1010.7, -1420, 15, 12, 0.12],
+    [30, 893.6, -1640, 15, 12, 0.12],
+    [-60, 800, -1890, 50, 60, 0.05],
+    [50, 610.2, -2120, 15, 12, 0.12],
+    [150, 494.8, -2330, 15, 12, 0.12],
+    [40, 366.8, -2570, 20, 20, 0.08],
+    [-20, 237.7, -2800, 30, 90, 0.03],
+    [-40, 82, -3150, 30, 200, 0.02]
+  ]
+}
