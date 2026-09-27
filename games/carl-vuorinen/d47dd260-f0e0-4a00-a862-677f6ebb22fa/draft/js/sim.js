@@ -87,7 +87,8 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
      clouds:  { count, y, size, near, nearR, nearY, nearSize }   optional; all but the counts are [min, max]
      lake:    { x, z, r, depth } | [...] | null  a basin pressed into the hills (or a list of them)
      river:   { w, depth, bank }                optional; a river channel along the whole path, below the water level:
-                                                 half-width w m, bed depth m below the water, banks rising `bank` m per m
+                                                 half-width w m, bed depth m below the water, banks rising `bank` m per m.
+                                                 Where a bridge's hoop is in a side span, the river swings under its main span.
      hills:   [{ x, z, r, h }]                  bumps added to the hills (e.g. to put a ridge under a pass)
      trees:   { near, scattered, maxAlt }       placement attempts along the course and across the map; no trees above maxAlt
      rocks:   { near, scattered, size }         optional; boulders (placement attempts along the course and across the
@@ -96,8 +97,8 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
               first = run-in, last = run-out, every point between is a gate, in flying order. The 7th value says
               which kind: left out or 1 = hoop; 0 = waypoint that only shapes the line (e.g. to turn between gates);
               "L" / "R" = single pylon on your left / right as you pass; "G" = air gate, a pylon either side, flown
-              wings level; "B" = bridge, flown under (8th value: { type, open, top, ... }, see js/bridges.js).
-              Every kind except bridges is scored the same way: a circle of radius HOOP_R centred on the point,
+              wings level; "B" = hoop with a bridge over it (8th value: { type, top, span, ... }, see js/bridges.js).
+              Every kind is scored the same way: a circle of radius HOOP_R centred on the point,
               facing along the line. Pylons stand beside that circle, from the ground or water to PYLON above its
               top, so the circle is invisible and the pylon shows where it is. The terrain is carved into a valley
               along the path: floor `clearance` m below it, flat for `floorHalfWidth` m either side, walls rising
@@ -155,18 +156,23 @@ function buildWorld(course) {
     if (g === 0) continue;                                   // waypoint: shapes the line and the carving, no gate
     const hp = { pos: new THREE.Vector3(COURSE_DEF[i][0], COURSE_DEF[i][1], COURSE_DEF[i][2]),
                  normal: curve.getTangent(i / (COURSE_DEF.length - 1)).normalize(),
-                 kind: typeof g === 'string' ? g : 'hoop', pylons: [] };
-    if (hp.kind === 'B') { hp.normal.setY(0).normalize(); hp.spec = COURSE_DEF[i][7] || {}; }   // bridges stand level
+                 kind: typeof g === 'string' && g !== 'B' ? g : 'hoop', pylons: [] };
+    if (g === 'B') hp.bridgeSpec = COURSE_DEF[i][7] || {};    // a hoop with a bridge over it (js/bridges.js)
     HOOPS.push(hp);
   }
   SAMPLES = [];
-  const NS = 900, nseg = COURSE_DEF.length - 1, p = new THREE.Vector3();
+  const NS = 900, nseg = COURSE_DEF.length - 1, p = new THREE.Vector3(), tg = new THREE.Vector3();
+  // river offset (m, + = right of the path) per point: under the main span of a bridge whose hoop is in a side span
+  const rOff = COURSE_DEF.map((q) => (q[6] === 'B' && q[7] ? -bridgeSpanOffset(q[7]) : 0));
   for (let i = 0; i <= NS; i++) {
     const u = curve.getUtoTmapping(i / NS);
     curve.getPoint(u, p);
     const seg = Math.min(u * nseg, nseg - 1e-6), i0 = Math.floor(seg), fr = seg - i0;
     const a = COURSE_DEF[i0], b = COURSE_DEF[i0 + 1];
-    SAMPLES.push({ x: p.x, y: p.y, z: p.z, clr: lerp(a[3], b[3], fr), width: lerp(a[4], b[4], fr), steep: lerp(a[5], b[5], fr) });
+    const sp = { x: p.x, y: p.y, z: p.z, clr: lerp(a[3], b[3], fr), width: lerp(a[4], b[4], fr), steep: lerp(a[5], b[5], fr), rx: p.x, rz: p.z };
+    const off = lerp(rOff[i0], rOff[i0 + 1], smoothstep(0, 1, fr));   // eased, so the river runs parallel at each point
+    if (off) { curve.getTangent(u, tg); const L = Math.hypot(tg.x, tg.z) || 1; sp.rx -= tg.z / L * off; sp.rz += tg.x / L * off; sp.off = off; }
+    SAMPLES.push(sp);
   }
   for (const h of HOOPS) {                                   // nearest sample to each hoop, for the autopilot
     let bd = Infinity;
@@ -179,7 +185,19 @@ function buildWorld(course) {
   TER.CELL = TER.SIZE / TER.N; TER.X0 = TER.CX - TER.SIZE / 2; TER.Z0 = TER.CZ - TER.SIZE / 2;
   const N = TER.N, W = N + 1, cell = TER.CELL, R = t.carveR || 440, rc = Math.ceil(R / cell), RV = course.river;
   TH = new Float32Array(W * W); TDIST = new Float32Array(W * W).fill(1e9); TNEAR = new Int32Array(W * W).fill(-1);
-  const d2 = new Float32Array(W * W).fill(1e18);
+  const d2 = new Float32Array(W * W).fill(1e18), dR = RV ? new Float32Array(W * W).fill(1e18) : null;
+  // squared distance to the river line, as far out as the valley carving (its banks keep rising, so it shapes the valley
+  // sides too): where the river follows the path it's the path distance, found below; this adds where it swings off it
+  if (RV) {
+    for (const sp of SAMPLES) {
+      if (!sp.off) continue;
+      const gi = Math.round((sp.rx - TER.X0) / cell), gj = Math.round((sp.rz - TER.Z0) / cell);
+      for (let j = Math.max(0, gj - rc); j <= Math.min(N, gj + rc); j++) for (let i = Math.max(0, gi - rc); i <= Math.min(N, gi + rc); i++) {
+        const dx = TER.X0 + i * cell - sp.rx, dz = TER.Z0 + j * cell - sp.rz, k = j * W + i;
+        dR[k] = Math.min(dR[k], dx * dx + dz * dz);
+      }
+    }
+  }
   for (let s = 0; s < SAMPLES.length; s++) {
     const sp = SAMPLES[s], gi = Math.round((sp.x - TER.X0) / cell), gj = Math.round((sp.z - TER.Z0) / cell);
     for (let j = Math.max(0, gj - rc); j <= Math.min(N, gj + rc); j++) {
@@ -187,6 +205,7 @@ function buildWorld(course) {
       for (let i = Math.max(0, gi - rc); i <= Math.min(N, gi + rc); i++) {
         const dx = TER.X0 + i * cell - sp.x, dd = dx * dx + dz * dz, k = j * W + i;
         if (dd < d2[k]) { d2[k] = dd; TNEAR[k] = s; }
+        if (dR && !sp.off && dd < dR[k]) dR[k] = dd;
       }
     }
   }
@@ -198,8 +217,10 @@ function buildWorld(course) {
         const sp = SAMPLES[TNEAR[k]], d = Math.sqrt(d2[k]);
         TDIST[k] = d;
         h = Math.min(h, sp.y - sp.clr + sp.steep * Math.pow(Math.max(0, d - sp.width), 1.5));
-        // river: bed below the water in the middle, just above it at the edge, banks rising from there
-        if (RV) h = Math.min(h, TER.WATER - RV.depth + (RV.depth + 1.2) * smoothstep(RV.w * 0.35, RV.w, d) + Math.max(0, d - RV.w) * RV.bank);
+      }
+      if (RV && dR[k] < 1e17) {                             // river: bed below the water in the middle, just above it at the edge
+        const r = Math.sqrt(dR[k]);
+        h = Math.min(h, TER.WATER - RV.depth + (RV.depth + 1.2) * smoothstep(RV.w * 0.35, RV.w, r) + Math.max(0, r - RV.w) * RV.bank);
       }
       h += (noiseC(x * 0.03, z * 0.03) - 0.5) * 5;                     // micro relief
       const e = Math.max(Math.abs(x - TER.CX), Math.abs(z - TER.CZ)) / (TER.SIZE / 2);
@@ -501,8 +522,7 @@ function gateCross(a, b, i) {
   const t = d0 / (d0 - d1);
   const hx = a.x + (b.x - a.x) * t - h.pos.x, hy = a.y + (b.y - a.y) * t - h.pos.y, hz = a.z + (b.z - a.z) * t - h.pos.z;
   const r2 = hx * hx + hy * hy + hz * hz;
-  if (h.kind === 'B') { if (bridgeOpening(h.bridge, hx, hy + h.pos.y, hz)) return 'pass'; }
-  else if (r2 < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2) return 'pass';
+  if (r2 < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2) return 'pass';
   return (h.kind !== 'hoop' || RULES.hoopMiss) && r2 < RULES.missR * RULES.missR ? 'miss' : null;
 }
 const passedHoop = (a, b, i) => gateCross(a, b, i) === 'pass';
