@@ -8,7 +8,8 @@
     ] },
     { "id": "summit", "name": "Mountain", "vehicle": "jet", "levels": [
       { "id": "summit", "name": "Summit Run", "file": "courses/summit.json" },
-      { "id": "cloud", "name": "Cloud Run", "file": "courses/cloud.json" }
+      { "id": "cloud", "name": "Cloud Run", "file": "courses/cloud.json" },
+      { "id": "gorge", "name": "Gorge Run", "file": "courses/gorge.json" }
     ] },
     { "id": "harbour", "name": "Harbour", "vehicle": "racer", "levels": [
       { "id": "harbour", "name": "Harbour Run", "file": "courses/harbour.json" }
