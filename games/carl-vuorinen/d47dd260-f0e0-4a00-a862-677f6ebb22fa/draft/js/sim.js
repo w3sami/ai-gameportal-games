@@ -110,6 +110,10 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
                                                  flanking trees reach (default 200 m); the forest mask's threshold
                                                  (default 0.52, lower = more of the map is forest; the ground colour
                                                  follows it); two "#hex" colours the trees are shaded between
+              width, trunk, fixed                optional: crown radius as a share of the height [min, max] (default
+                                                 [0.26, 0.34]); the share of the height that is bare trunk below the
+                                                 crown (default 0: cones to the ground); fixed [[x, z, h, r], ...]: trees
+                                                 placed by hand (height and crown radius in m), standing wherever they are
      rocks:   { near, scattered, size }         optional; boulders (placement attempts along the course and across the
                                                  map, radius [min, max] m), on any slope and above the tree line
      points:  [[x, y, z, clearance, floorHalfWidth, wallSteepness, gate?], ...]
@@ -133,11 +137,12 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
      overhangs: [{ type, at, ... }]              optional; rock ledges, arches and big boulders along the line (js/overhangs.js)
      shore:   { piers, boats, umbrellas, huts }  optional; piers, boats and beach life (js/shore.js)
      lead:    "..."                             optional; the start screen's one-line brief
-     autopilot: { clear, ahead, lead }          optional; ground clearance the attract-mode autopilot holds (m), for
+     autopilot: { clear, ahead, lead, through } optional; ground clearance the attract-mode autopilot holds (m), for
                                                  courses flown lower than AP_CLEAR allows (under bridges), and how far
                                                  ahead it checks it (s, default 2.05; shorter in narrow bends, where a
                                                  long look-ahead lands on the canyon wall and it pulls up over the hoop); lead
-                                                 overrides AP_LEAD, shorter to cut less of the corner in tight bends)
+                                                 overrides AP_LEAD, shorter to cut less of the corner in tight bends; through:
+                                                 it keeps aiming along the line past each hoop instead of stopping at it)
    }
    buildWorld(course) (re)builds everything in this section from it. */
 let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SAMPLES = [], PYLONS = [];
@@ -147,6 +152,8 @@ let PYLON = PYLON_DEF, RULES = RULES_DEF;
 let TER = null, TH = null, TDIST = null, TNEAR = null, noiseA = null, noiseB = null, noiseC = null;
 const TREES = { x: [], y: [], z: [], h: [], r: [] };
 const TREE_GRID = new Map(), TREE_CELL = 40;
+let TREE_TRUNK = 0;                                          // course.trees.trunk: bare-trunk share of each tree's height
+const trunkR = (h) => 0.35 + h * 0.022;                      // trunk radius (m)
 const ROCKS = { x: [], y: [], z: [], r: [], h: [] }, ROCK_GRID = new Map();   // same cells as the trees
 const treeKey = (ix, iz) => (ix + 1000) * 4096 + (iz + 1000);
 
@@ -293,10 +300,14 @@ function buildWorld(course) {
   const TR = course.trees, rand = mulberry32(course.seeds.trees), treeTop = TR.maxAlt == null ? 250 : TR.maxAlt;
   const treeFoot = TR.minAlt == null ? TER.WATER + 1.5 : TR.minAlt;
   const tsz = TR.size || [9, 17], gap = TR.gap == null ? 12 : TR.gap, under = TR.under, mask = TR.mask == null ? 0.52 : TR.mask;
+  const tw = TR.width || [0.26, 0.34], kt = TREE_TRUNK = TR.trunk || 0;
+  // crown radius of a tree (height th, radius tr) at yy m above its foot; the trunk below the crown counts as the crown
+  // base here, which keeps other trees and the line a crown's width away from it
+  const crownAt = (th, tr, yy) => { const yb = kt * th; return yy <= yb ? tr : tr * (1 - (yy - yb) / (th - yb)); };
   const forest = (x, z) => noiseB(x * 0.006 + 40, z * 0.006 - 13);    // same mask the terrain colouring uses
   // the random draws stay in the original order for courses without `under`, so their forests don't move
   let h = 0, r = 0;
-  const draw = () => { h = tsz[0] + rand() * (tsz[1] - tsz[0]); r = h * (0.26 + rand() * 0.08); };
+  const draw = () => { h = tsz[0] + rand() * (tsz[1] - tsz[0]); r = h * (tw[0] + rand() * (tw[1] - tw[0])); };
   const add = (x, z, scattered) => {
     if (scattered && forest(x, z) < mask && rand() < 0.85) return;
     const y = heightAt(x, z);
@@ -308,18 +319,26 @@ function buildWorld(course) {
     if (cd.s && under == null && cd.d < cd.s.width + gap) return;
     if (cd.s && under != null && y - 0.8 + h > cd.s.y - under) {    // reaches up to the line: its crown keeps gap m clear
       const yy = cd.s.y - (y - 0.8);
-      if (cd.d - (yy > 0 ? r * (1 - yy / h) : r) - 0.8 < cd.s.width + gap) return;
+      if (cd.d - (yy > 0 ? crownAt(h, r, yy) : r) - 0.8 < cd.s.width + gap) return;
     }
     if (bridgeNear(x, z, 14)) return;
     if (overhangNear(x, z, 6)) return;
     if (SHORE.boxes.length && shoreNear(x, z, 6)) return;
     if (under == null) draw();
+    if (fixedNear(x, z, r)) return;
+    plant(x, y, z, h, r);
+  };
+  const plant = (x, y, z, th, tr) => {
     const idx = TREES.x.length;
-    TREES.x.push(x); TREES.y.push(y - 0.8); TREES.z.push(z); TREES.h.push(h); TREES.r.push(r);
+    TREES.x.push(x); TREES.y.push(y - 0.8); TREES.z.push(z); TREES.h.push(th); TREES.r.push(tr);
     const key = treeKey(Math.floor(x / TREE_CELL), Math.floor(z / TREE_CELL));
     if (!TREE_GRID.has(key)) TREE_GRID.set(key, []);
     TREE_GRID.get(key).push(idx);
   };
+  // hand-placed trees first; the scattered ones keep their crowns out of theirs
+  const FX = TR.fixed || [];
+  const fixedNear = (x, z, tr) => { for (const f of FX) { const d = tr + (f[3] || f[2] * 0.2) + 2; if ((x - f[0]) ** 2 + (z - f[1]) ** 2 < d * d) return true; } return false; };
+  for (const f of FX) plant(f[0], heightAt(f[0], f[1]), f[1], f[2], f[3] || f[2] * 0.2);
   const tan = new THREE.Vector3();
   for (let n = 0; n < course.trees.near; n++) {
     const u = rand(), sp = SAMPLES[Math.floor(u * (SAMPLES.length - 1))];
@@ -391,9 +410,10 @@ function treeHit(p) {
     const list = TREE_GRID.get(treeKey(ix + dx, iz + dz));
     if (!list) continue;
     for (const i of list) {
-      const yy = p.y - TREES.y[i];
-      if (yy < -2 || yy > TREES.h[i]) continue;
-      const rr = TREES.r[i] * (1 - yy / TREES.h[i]) + 0.8, ddx = p.x - TREES.x[i], ddz = p.z - TREES.z[i];
+      const yy = p.y - TREES.y[i], th = TREES.h[i];
+      if (yy < -2 || yy > th) continue;
+      const yb = TREE_TRUNK * th;                          // bare trunk below yb (course.trees.trunk)
+      const rr = (yb > 0 && yy < yb ? trunkR(th) : TREES.r[i] * (1 - (yy - yb) / (th - yb))) + 0.8, ddx = p.x - TREES.x[i], ddz = p.z - TREES.z[i];
       if (ddx * ddx + ddz * ddz < rr * rr) return true;
     }
   }
@@ -558,15 +578,18 @@ function autopilotAim(P, hoopIdx, out) {
     out.set(b.x - P.pos.x, b.y - P.pos.y, b.z - P.pos.z).normalize();
     return avoidGround(P, out, v);
   }
+  // autopilot.through: keep looking along the line past the hoop (weaving courses, where stopping at each hoop and then
+  // turning for the next bend overshoots)
+  const thru = COURSE.autopilot && COURSE.autopilot.through, kEnd = thru ? SAMPLES.length - 1 : k1;
   let best = k0, bd = Infinity;
-  for (let k = k0; k <= k1; k++) {
+  for (let k = k0; k <= Math.min(kEnd, k1 + (thru ? 20 : 0)); k++) {
     const s = SAMPLES[k], dx = s.x - P.pos.x, dy = s.y - P.pos.y, dz = s.z - P.pos.z, d = dx * dx + dy * dy + dz * dz;
     if (d < bd) { bd = d; best = k; }
   }
   const step = COURSE_LEN / (SAMPLES.length - 1);
   // the aim point stops at the hoop, so the last stretch homes in on its centre instead of cutting the corner
   const lead = (COURSE.autopilot && COURSE.autopilot.lead) || TUNE.AP_LEAD;
-  const t = SAMPLES[Math.min(k1, best + Math.max(1, Math.round(v * lead / step)))];
+  const t = SAMPLES[Math.min(kEnd, best + Math.max(1, Math.round(v * lead / step)))];
   out.set(t.x - P.pos.x, t.y - P.pos.y, t.z - P.pos.z).normalize();
   return avoidGround(P, out, v);
 }
