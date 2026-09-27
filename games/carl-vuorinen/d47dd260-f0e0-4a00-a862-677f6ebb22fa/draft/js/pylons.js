@@ -45,7 +45,7 @@ function createPylonKit(routeHex) {
     meshes = PYLONS.map((py) => buildPylon(group, py));
     const chevronGeo = new THREE.ShapeGeometry(new THREE.Shape(CHEVRON_PTS.map(([x, y]) => new THREE.Vector2(x, y))));
     gates = HOOPS.map((h) => {
-      if (h.kind === 'hoop') return null;
+      if (!h.pylons.length) return null;                     // hoops and bridges
       const gate = { pylons: h.pylons.map((k) => meshes[k]), chevrons: [], colour: h.kind === 'G' ? MAT.G : MAT.single, state: null };
       if (h.kind !== 'G') {                                  // chevron on the pylon's face, pointing at the circle
         const py = PYLONS[h.pylons[0]], x = new THREE.Vector3(h.pos.x - py.x, 0, h.pos.z - py.z).normalize();
