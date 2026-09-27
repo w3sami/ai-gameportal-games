@@ -1,7 +1,8 @@
 'use strict';
 /* =========================================================================
    CLOUDS — the scattered cloud puffs (buildClouds in js/game.js) get softer shapes and light:
-   - rounder puffs (a once-subdivided icosahedron, flat-faceted like the terrain, or smooth: FACETED) with flat bottoms
+   - rounder puffs with flat bottoms: a low-poly ball of 40 facets (the hull of 22 points spread over a sphere, a little
+     irregular), flat-faceted like the terrain, or smooth (FACETED)
    - puffs stand upright (they keep their heading, lose the random tilt) so every cloud has its flat base down
    - bright tops, pale grey-blue bellies; sunlight wraps round the sides instead of cutting off at a hard terminator,
      and the bellies take their light from the sky (scattered through the cloud) more than from the ground
@@ -10,27 +11,47 @@
    ========================================================================= */
 const Clouds = (() => {
   const FLAT = -0.32;                                       // puff bottom (unit sphere): below this it's squashed flat
-  const DETAIL = 1, FACETED = true;                         // icosahedron subdivision; flat facets (like the terrain) or round
+  const POINTS = 22, FACETED = true;                        // ball corners (a hull of n points has 2n - 4 facets); flat or round
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');
   const isPuffs = (o) => o.isInstancedMesh && o.geometry.type === 'IcosahedronGeometry' && o.material.emissive && o.material.emissive.getHex() === 0xaab9c6;
 
-  function puffGeometry() {
-    const g = new THREE.IcosahedronGeometry(1, DETAIL), p = g.attributes.position;   // non-indexed: 3 vertices per face
-    const nrm = new Float32Array(p.count * 3), col = new Float32Array(p.count * 3), c = new THREE.Color(), ys = [];
-    for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      ys.push(y);
-      nrm[i * 3] = x; nrm[i * 3 + 1] = y; nrm[i * 3 + 2] = z;                  // round: sphere normals
-      if (y < FLAT) { p.setY(i, FLAT + (y - FLAT) * 0.12); nrm[i * 3] *= 0.4; nrm[i * 3 + 1] = -1; nrm[i * 3 + 2] *= 0.4; }
+  // convex hull of POINTS points spread evenly (Fibonacci) over the unit sphere, nudged a little so facets vary;
+  // few enough points to test every triple
+  function ball() {
+    const rand = mulberry32(23), P = [], tris = [];
+    for (let i = 0; i < POINTS; i++) {
+      const y = 1 - 2 * (i + 0.5) / POINTS, r = Math.sqrt(1 - y * y), a = i * Math.PI * (3 - Math.sqrt(5)) + (rand() - 0.5) * 0.35;
+      P.push(new THREE.Vector3(Math.cos(a) * r, y + (rand() - 0.5) * 0.08, Math.sin(a) * r).normalize());
     }
-    for (let i = 0; i < p.count; i++) {                     // faceted: one colour per face, from its middle
-      const y = FACETED ? (ys[i - i % 3] + ys[i - i % 3 + 1] + ys[i - i % 3 + 2]) / 3 : ys[i];
-      c.copy(BELLY).lerp(TOP, smoothstep(-0.4, 0.55, y));
+    const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), n = new THREE.Vector3();
+    for (let a = 0; a < POINTS; a++) for (let b = a + 1; b < POINTS; b++) for (let c = b + 1; c < POINTS; c++) {
+      n.crossVectors(e1.subVectors(P[b], P[a]), e2.subVectors(P[c], P[a]));
+      let pos = 0, neg = 0;
+      for (let k = 0; k < POINTS; k++) { if (k === a || k === b || k === c) continue; const d = n.dot(e1.subVectors(P[k], P[a])); if (d > 1e-9) pos++; else if (d < -1e-9) neg++; }
+      if (pos && neg) continue;
+      tris.push(pos ? [a, c, b] : [a, b, c]);                // wind so the face looks outward
+    }
+    const pos = new Float32Array(tris.length * 9);
+    tris.forEach((t, f) => t.forEach((k, v) => P[k].toArray(pos, f * 9 + v * 3)));
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(pos.slice(), 3));   // round: the sphere's own normals
+    return g;
+  }
+  function puffGeometry() {
+    const g = ball(), p = g.attributes.position;
+    const nrm = g.attributes.normal, col = new Float32Array(p.count * 3), c = new THREE.Color();
+    for (let i = 0; i < p.count; i++) {                     // squash the bottom flat; its normals point down
+      const y = p.getY(i);
+      if (y < FLAT) { p.setY(i, FLAT + (y - FLAT) * 0.12); nrm.setXYZ(i, nrm.getX(i) * 0.4, -1, nrm.getZ(i) * 0.4); }
+    }
+    if (FACETED) g.computeVertexNormals();                  // non-indexed: one flat normal per triangle
+    else g.normalizeNormals();
+    for (let i = 0; i < p.count; i++) {                     // bright top, pale belly: by which way the face (or point) looks
+      c.copy(BELLY).lerp(TOP, smoothstep(-0.7, 0.6, nrm.getY(i)));
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    if (FACETED) g.computeVertexNormals();                  // non-indexed: flat face normals
-    else { g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.normalizeNormals(); }
     return g;
   }
 
