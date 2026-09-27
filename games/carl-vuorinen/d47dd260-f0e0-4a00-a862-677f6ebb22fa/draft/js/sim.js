@@ -85,7 +85,9 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
      palette: { dry, forestTop, high, snow }    optional; heights [from, to] where the ground colour blends
      view:    { near, far, fog: [near, far] }   optional; camera range and fog, for big maps
      clouds:  { count, y, size, near, nearR, nearY, nearSize }   optional; all but the counts are [min, max]
-     lake:    { x, z, r, depth } | null         a basin pressed into the hills
+     lake:    { x, z, r, depth } | [...] | null  a basin pressed into the hills (or a list of them)
+     river:   { w, depth, bank }                optional; a river channel along the whole path, below the water level:
+                                                 half-width w m, bed depth m below the water, banks rising `bank` m per m
      hills:   [{ x, z, r, h }]                  bumps added to the hills (e.g. to put a ridge under a pass)
      trees:   { near, scattered, maxAlt }       placement attempts along the course and across the map; no trees above maxAlt
      rocks:   { near, scattered, size }         optional; boulders (placement attempts along the course and across the
@@ -94,7 +96,8 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
               first = run-in, last = run-out, every point between is a gate, in flying order. The 7th value says
               which kind: left out or 1 = hoop; 0 = waypoint that only shapes the line (e.g. to turn between gates);
               "L" / "R" = single pylon on your left / right as you pass; "G" = air gate, a pylon either side, flown
-              wings level. Every kind is scored the same way: a circle of radius HOOP_R centred on the point,
+              wings level; "B" = bridge, flown under (8th value: { type, open, top, ... }, see js/bridges.js).
+              Every kind except bridges is scored the same way: a circle of radius HOOP_R centred on the point,
               facing along the line. Pylons stand beside that circle, from the ground or water to PYLON above its
               top, so the circle is invisible and the pylon shows where it is. The terrain is carved into a valley
               along the path: floor `clearance` m below it, flat for `floorHalfWidth` m either side, walls rising
@@ -107,6 +110,8 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
                                                  gate then counts as flown). Hoops never count as missed (fly back)
                                                  unless hoopMiss is true, for vehicles that can't turn back (wingsuit).
      lead:    "..."                             optional; the start screen's one-line brief
+     autopilot: { clear }                       optional; ground clearance the attract-mode autopilot holds (m), for
+                                                 courses flown lower than AP_CLEAR allows (under bridges)
    }
    buildWorld(course) (re)builds everything in this section from it. */
 let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SAMPLES = [], PYLONS = [];
@@ -125,8 +130,7 @@ function baseHeight(x, z) {
   const n = fbm(noiseA, x * REL.freq + 11.3, z * REL.freq - 4.7, 5);
   const r = 1 - Math.abs(2 * fbm(noiseB, x * REL.ridgeFreq, z * REL.ridgeFreq, 3) - 1);
   let h = REL.base + Math.pow(n, REL.pow) * REL.amp + r * REL.ridgeAmp;
-  const L = COURSE.lake;
-  if (L) { const dx = x - L.x, dz = z - L.z; h -= L.depth * smoothstep(L.r, L.r * 0.35, Math.sqrt(dx * dx + dz * dz)); }
+  for (const L of [].concat(COURSE.lake || [])) { const dx = x - L.x, dz = z - L.z; h -= L.depth * smoothstep(L.r, L.r * 0.35, Math.sqrt(dx * dx + dz * dz)); }
   for (const hl of COURSE.hills || []) {
     const dx = x - hl.x, dz = z - hl.z;
     h += hl.h * Math.exp(-(dx * dx + dz * dz) / (hl.r * hl.r));
@@ -149,9 +153,11 @@ function buildWorld(course) {
   for (let i = 1; i < COURSE_DEF.length - 1; i++) {
     const g = COURSE_DEF[i][6];
     if (g === 0) continue;                                   // waypoint: shapes the line and the carving, no gate
-    HOOPS.push({ pos: new THREE.Vector3(COURSE_DEF[i][0], COURSE_DEF[i][1], COURSE_DEF[i][2]),
+    const hp = { pos: new THREE.Vector3(COURSE_DEF[i][0], COURSE_DEF[i][1], COURSE_DEF[i][2]),
                  normal: curve.getTangent(i / (COURSE_DEF.length - 1)).normalize(),
-                 kind: typeof g === 'string' ? g : 'hoop', pylons: [] });
+                 kind: typeof g === 'string' ? g : 'hoop', pylons: [] };
+    if (hp.kind === 'B') { hp.normal.setY(0).normalize(); hp.spec = COURSE_DEF[i][7] || {}; }   // bridges stand level
+    HOOPS.push(hp);
   }
   SAMPLES = [];
   const NS = 900, nseg = COURSE_DEF.length - 1, p = new THREE.Vector3();
@@ -171,7 +177,7 @@ function buildWorld(course) {
   const t = course.terrain;
   TER = { N: t.n, SIZE: t.size, CX: t.cx, CZ: t.cz, WATER: t.water, EDGE: t.edge };
   TER.CELL = TER.SIZE / TER.N; TER.X0 = TER.CX - TER.SIZE / 2; TER.Z0 = TER.CZ - TER.SIZE / 2;
-  const N = TER.N, W = N + 1, cell = TER.CELL, R = t.carveR || 440, rc = Math.ceil(R / cell);
+  const N = TER.N, W = N + 1, cell = TER.CELL, R = t.carveR || 440, rc = Math.ceil(R / cell), RV = course.river;
   TH = new Float32Array(W * W); TDIST = new Float32Array(W * W).fill(1e9); TNEAR = new Int32Array(W * W).fill(-1);
   const d2 = new Float32Array(W * W).fill(1e18);
   for (let s = 0; s < SAMPLES.length; s++) {
@@ -192,12 +198,16 @@ function buildWorld(course) {
         const sp = SAMPLES[TNEAR[k]], d = Math.sqrt(d2[k]);
         TDIST[k] = d;
         h = Math.min(h, sp.y - sp.clr + sp.steep * Math.pow(Math.max(0, d - sp.width), 1.5));
+        // river: bed below the water in the middle, just above it at the edge, banks rising from there
+        if (RV) h = Math.min(h, TER.WATER - RV.depth + (RV.depth + 1.2) * smoothstep(RV.w * 0.35, RV.w, d) + Math.max(0, d - RV.w) * RV.bank);
       }
       h += (noiseC(x * 0.03, z * 0.03) - 0.5) * 5;                     // micro relief
       const e = Math.max(Math.abs(x - TER.CX), Math.abs(z - TER.CZ)) / (TER.SIZE / 2);
       TH[k] = lerp(h, TER.EDGE, smoothstep(0.8, 0.98, e));
     }
   }
+
+  buildBridges();                                            // js/bridges.js: needs the terrain, before the trees
 
   // pylons: beside each pylon gate's circle, standing on the ground or the water
   PYLONS = [];
@@ -231,6 +241,7 @@ function buildWorld(course) {
     if (Math.hypot(gx, gz) / (2 * e) > 0.9) return;
     const cd = courseDistAt(x, z);
     if (cd.s && cd.d < cd.s.width + 12) return;
+    if (bridgeNear(x, z, 14)) return;
     const h = 9 + rand() * 8, r = h * (0.26 + rand() * 0.08), idx = TREES.x.length;
     TREES.x.push(x); TREES.y.push(y - 0.8); TREES.z.push(z); TREES.h.push(h); TREES.r.push(r);
     const key = treeKey(Math.floor(x / TREE_CELL), Math.floor(z / TREE_CELL));
@@ -474,7 +485,8 @@ function autopilotAim(P, hoopIdx, out) {
   return avoidGround(P, out, v);
 }
 function avoidGround(P, out, v) {                          // don't aim into the ground (2 s look-ahead)
-  const ahead = _l.copy(P.pos).addScaledVector(P.vdir, v * 2.05), need = TUNE.AP_CLEAR || v * 0.57;
+  const ahead = _l.copy(P.pos).addScaledVector(P.vdir, v * 2.05);
+  const need = (COURSE.autopilot && COURSE.autopilot.clear) || TUNE.AP_CLEAR || v * 0.57;
   const clearance = ahead.y - groundAt(ahead.x, ahead.z);
   if (clearance < need) out.y = Math.max(out.y, 0.25 * (1 - clearance / need));
   return out.normalize();
@@ -489,7 +501,8 @@ function gateCross(a, b, i) {
   const t = d0 / (d0 - d1);
   const hx = a.x + (b.x - a.x) * t - h.pos.x, hy = a.y + (b.y - a.y) * t - h.pos.y, hz = a.z + (b.z - a.z) * t - h.pos.z;
   const r2 = hx * hx + hy * hy + hz * hz;
-  if (r2 < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2) return 'pass';
+  if (h.kind === 'B') { if (bridgeOpening(h.bridge, hx, hy + h.pos.y, hz)) return 'pass'; }
+  else if (r2 < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2) return 'pass';
   return (h.kind !== 'hoop' || RULES.hoopMiss) && r2 < RULES.missR * RULES.missR ? 'miss' : null;
 }
 const passedHoop = (a, b, i) => gateCross(a, b, i) === 'pass';
@@ -529,5 +542,6 @@ function crashed(P) {
   if (P.pos.y - TUNE.PLANE_R < groundAt(P.pos.x, P.pos.z)) return 'ground';
   if (treeHit(P.pos)) return 'tree';
   if (ROCKS.x.length && rockHit(P.pos)) return 'rock';
+  if (BRIDGES.length && bridgeHit(P.pos)) return 'bridge';
   return null;
 }
