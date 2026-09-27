@@ -236,7 +236,7 @@ const Z_AXIS = new V3(0, 0, 1);
 let hoopMeshes = [];      // per gate: its hoop mesh, or null for a pylon gate
 const gateQ = [];         // per gate: orientation (+Z along the line)
 const pylons = createPylonKit(ROUTE_HEX);   // pylon gates' meshes and highlighting (js/pylons.js)
-const bridges = createBridgeKit(ROUTE_HEX); // bridge gates, the same for bridges (js/bridges.js)
+const bridges = createBridgeKit();          // bridges over some hoops (js/bridges.js)
 const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(gateDisc);
@@ -256,7 +256,7 @@ function buildHoops(group) {
   bridges.build(group);
   gateDisc.scale.setScalar((TUNE.HOOP_R - 0.6) / 7.4);
 }
-function resetPylons() { pylons.reset(); bridges.reset(); }
+function resetPylons() { pylons.reset(); }
 const gateNoun = () => (HOOPS.length && HOOPS[0].kind !== 'hoop' ? 'gate' : 'hoop');
 
 /* ---------- plane models (nose along -Z), one per vehicle; the course's vehicle picks ---------- */
@@ -624,7 +624,7 @@ function onHoop(missed = false) {
   }
   if (G.state !== 'playing') return;
   if (i === 0) G.started = true;
-  if (missed) penalty(RULES.missed, h.kind === 'B' ? 'Not under the bridge' : `Missed ${gateNoun()} ${i + 1}`);
+  if (missed) penalty(RULES.missed, `Missed ${gateNoun()} ${i + 1}`);
   else {
     Sound.hoop(i);
     if (h.kind === 'G' && Math.abs(P.bank) > RULES.levelTol * Math.PI / 180) penalty(RULES.notLevel, 'Not level through the gate');
@@ -937,8 +937,7 @@ function updateVisuals(dt) {
   }
   pylons.update(G.next, t);
   pylons.animate(dt);
-  bridges.update(G.next, t, dt);
-  if (G.next < HOOPS.length && HOOPS[G.next].kind !== 'B') {   // faint target disc on the next gate (pylons: the scoring circle; bridges light their own opening)
+  if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
     gateDisc.visible = true;
     gateDisc.position.copy(HOOPS[G.next].pos); gateDisc.quaternion.copy(gateQ[G.next]);
     gateDisc.material.opacity = (0.09 + Math.sin(t * 6) * 0.04) * (hoopMeshes[G.next] ? 1 : 0.55);
@@ -1212,13 +1211,9 @@ function finishRun() {
   if (fin.note) $('finish-best').textContent += ' ' + fin.note;
   setState('finished');
   if (document.pointerLockElement === canvas) document.exitPointerLock();
-  setTimeout(() => {                                        // victory lap behind the results
-    if (G.state !== 'finished') return;
-    if (gliding()) { resetRun(); return; }                  // wingsuit: glide out, then fly it again from the top
-    G.next = 0;
-    hoopMeshes.forEach((m) => { if (!m) return; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
-    resetPylons();
-  }, gliding() ? 4000 : 1200);
+  // victory lap behind the results: fly on down the run-out, then fly the course again from the start (heading back
+  // to the first gate from here would cut straight across the hills)
+  setTimeout(() => { if (G.state === 'finished') resetRun(); }, gliding() ? 4000 : 2500);
   focusEl(fin.focus);
 }
 function toMenu() {
@@ -1278,10 +1273,7 @@ function update(dt) {
         const cross = G.next < HOOPS.length ? gateCross(prevPos, P.pos, G.next) : null;
         if (cross) {
           onHoop(cross === 'miss');
-          if (G.state !== 'playing' && G.next >= HOOPS.length) {   // attract lap done: go round again
-            if (G.state === 'attract') { resetRun(); break; }
-            if (!gliding()) G.next = 0;                            // wingsuit glides on down the valley (see finishRun)
-          }
+          if (G.state !== 'playing' && G.next >= HOOPS.length) { resetRun(); break; }   // demo or victory lap done: again from the start
         }
         if (G.state === 'playing' && PYLONS.length) { const k = pylonHit(P); if (k >= 0) onPylonHit(k); }
         if (G.invuln > 0) G.invuln -= h;
