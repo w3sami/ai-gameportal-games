@@ -1,0 +1,39 @@
+/* Start menu (js/menu.js): the theme view, then the level view with its back button. #start[data-view] picks which shows. */
+#start[data-view="themes"] .menu-levels, #start[data-view="levels"] .menu-themes { display: none; }
+.menu-themes > .course { margin-bottom: 0.6rem; }
+.menu-themes .cta-row { margin-top: 0; }
+.pick { position: relative; }
+.pick:disabled { cursor: default; }
+/* theme cards: finished-levels count in the corner */
+.theme-pick .pick { padding-right: 2.9rem; }
+.pick-count { position: absolute; top: 0.6rem; right: 0.7rem; font: 700 0.8rem/1 var(--mono); font-style: normal; color: var(--ink-soft); }
+.pick-count.is-full { color: var(--route); }
+/* level cards: number on the left, lock when not yet open */
+.pick.level { grid-template-columns: auto 1fr; column-gap: 0.65rem; align-items: center; }
+.pick.level b, .pick.level span { grid-column: 2; }
+.pick-n {
+  grid-row: 1 / span 2; display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 50%;
+  border: 2px solid var(--route); font: 700 0.9rem/1 var(--mono); font-style: normal; color: var(--ink);
+}
+.pick.is-locked { opacity: 0.5; }
+.pick.is-locked .pick-n { border-color: var(--panel-edge); }
+.pick span svg { width: 0.85em; height: 0.85em; margin-right: 0.3em; vertical-align: -0.05em; fill: none; stroke: currentColor; stroke-width: 1.8; }
+/* level view header: back to themes, theme name and aircraft */
+.level-head { display: flex; align-items: center; gap: 0.8rem; margin: 0 0 0.9rem; }
+.back-btn {
+  flex: none; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; cursor: pointer;
+  border: 2px solid var(--panel-edge); border-radius: 8px; background: transparent; color: var(--ink); touch-action: manipulation;
+}
+.back-btn:hover { border-color: var(--ink); }
+.back-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.back-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.level-title { display: grid; gap: 0.15rem; font-size: 1.35rem; line-height: 1.1; }
+.level-title small { font: 700 0.85rem/1.2 var(--font); color: var(--ink-soft); letter-spacing: 0; }
+#btn-start:disabled { opacity: 0.55; cursor: default; }
+/* while a level loads, the old course's texts fade until the new ones arrive */
+body.is-loading .menu-levels .course, body.is-loading .menu-levels .lead, body.is-loading .menu-levels .controls { opacity: 0.35; }
+/* short landscape phones: the level view drops the title so Start fits without scrolling */
+@media (max-height: 460px) {
+  #start[data-view="levels"] h1, #start[data-view="levels"] .route { display: none; }
+  .level-head { margin-bottom: 0.6rem; }
+}
