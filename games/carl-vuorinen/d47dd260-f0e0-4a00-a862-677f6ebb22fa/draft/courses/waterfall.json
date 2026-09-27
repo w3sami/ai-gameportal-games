@@ -33,7 +33,7 @@
       [18.7, -1781, 26, 5.3]
     ] },
   "rocks": { "near": 700, "scattered": 400, "size": [1.5, 7] },
-  "creek": { "w": 9, "depth": 1.5, "bank": 1.2, "falls": [[2, 3], [10, 11], [17, 18]], "cave": [15, 17], "caveRoof": 19 },
+  "creek": { "w": 9, "depth": 1.5, "bank": 1.2, "falls": [[2, 3], [10, 11], [17, 18]], "cave": [15, 17], "caveRoof": 22 },
   "rules": { "hoopMiss": true, "missed": 3, "missR": 60, "respawnMax": 50 },
   "autopilot": { "lead": 0.8, "clear": 8, "ahead": 1, "through": true },
   "points": [
