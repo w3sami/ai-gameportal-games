@@ -1,7 +1,7 @@
 'use strict';
 /* =========================================================================
    CLOUDS — the scattered cloud puffs (buildClouds in js/game.js) get softer shapes and light:
-   - rounder puffs (a once-subdivided icosahedron with smooth normals) with flattened bottoms
+   - rounder puffs (a once-subdivided icosahedron, flat-faceted like the terrain, or smooth: FACETED) with flat bottoms
    - puffs stand upright (they keep their heading, lose the random tilt) so every cloud has its flat base down
    - bright tops, pale grey-blue bellies; sunlight wraps round the sides instead of cutting off at a hard terminator,
      and the bellies take their light from the sky (scattered through the cloud) more than from the ground
@@ -10,22 +10,27 @@
    ========================================================================= */
 const Clouds = (() => {
   const FLAT = -0.32;                                       // puff bottom (unit sphere): below this it's squashed flat
+  const DETAIL = 1, FACETED = true;                         // icosahedron subdivision; flat facets (like the terrain) or round
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');
   const isPuffs = (o) => o.isInstancedMesh && o.geometry.type === 'IcosahedronGeometry' && o.material.emissive && o.material.emissive.getHex() === 0xaab9c6;
 
   function puffGeometry() {
-    const g = new THREE.IcosahedronGeometry(1, 1), p = g.attributes.position;
-    const nrm = new Float32Array(p.count * 3), col = new Float32Array(p.count * 3), c = new THREE.Color();
+    const g = new THREE.IcosahedronGeometry(1, DETAIL), p = g.attributes.position;   // non-indexed: 3 vertices per face
+    const nrm = new Float32Array(p.count * 3), col = new Float32Array(p.count * 3), c = new THREE.Color(), ys = [];
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      ys.push(y);
       nrm[i * 3] = x; nrm[i * 3 + 1] = y; nrm[i * 3 + 2] = z;                  // round: sphere normals
       if (y < FLAT) { p.setY(i, FLAT + (y - FLAT) * 0.12); nrm[i * 3] *= 0.4; nrm[i * 3 + 1] = -1; nrm[i * 3 + 2] *= 0.4; }
+    }
+    for (let i = 0; i < p.count; i++) {                     // faceted: one colour per face, from its middle
+      const y = FACETED ? (ys[i - i % 3] + ys[i - i % 3 + 1] + ys[i - i % 3 + 2]) / 3 : ys[i];
       c.copy(BELLY).lerp(TOP, smoothstep(-0.4, 0.55, y));
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
-    g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-    g.normalizeNormals();
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (FACETED) g.computeVertexNormals();                  // non-indexed: flat face normals
+    else { g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.normalizeNormals(); }
     return g;
   }
 
