@@ -1,7 +1,7 @@
 'use strict';
 /* =========================================================================
    CLOUDS — the scattered cloud puffs (buildClouds in js/game.js) get softer shapes and light:
-   - rounder puffs with flat bottoms: a low-poly ball of 40 facets (the hull of 22 points spread over a sphere, a little
+   - rounder puffs with flat bottoms: a low-poly ball of 60 facets (the hull of 32 points spread over a sphere, a little
      irregular), flat-faceted like the terrain, or smooth (FACETED)
    - puffs stand upright (they keep their heading, lose the random tilt) so every cloud has its flat base down
    - bright tops, pale grey-blue bellies; sunlight wraps round the sides instead of cutting off at a hard terminator,
@@ -11,13 +11,21 @@
    ========================================================================= */
 const Clouds = (() => {
   const FLAT = -0.32;                                       // puff bottom (unit sphere): below this it's squashed flat
-  const POINTS = 22, FACETED = true;                        // ball corners (a hull of n points has 2n - 4 facets); flat or round
+  const POINTS = 32, FACETED = true;                        // ball corners (a hull of n points has 2n - 4 facets); flat or round
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');
   const isPuffs = (o) => o.isInstancedMesh && o.geometry.type === 'IcosahedronGeometry' && o.material.emissive && o.material.emissive.getHex() === 0xaab9c6;
 
   // convex hull of POINTS points spread evenly (Fibonacci) over the unit sphere, nudged a little so facets vary;
-  // few enough points to test every triple
+  // few enough points to test every triple (a few ms, so worked out once and kept)
+  let hull = null;
   function ball() {
+    if (!hull) hull = makeHull();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(hull.slice(), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(hull.slice(), 3));   // round: the sphere's own normals
+    return g;
+  }
+  function makeHull() {
     const rand = mulberry32(23), P = [], tris = [];
     for (let i = 0; i < POINTS; i++) {
       const y = 1 - 2 * (i + 0.5) / POINTS, r = Math.sqrt(1 - y * y), a = i * Math.PI * (3 - Math.sqrt(5)) + (rand() - 0.5) * 0.35;
@@ -33,10 +41,7 @@ const Clouds = (() => {
     }
     const pos = new Float32Array(tris.length * 9);
     tris.forEach((t, f) => t.forEach((k, v) => P[k].toArray(pos, f * 9 + v * 3)));
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(pos.slice(), 3));   // round: the sphere's own normals
-    return g;
+    return pos;
   }
   function puffGeometry() {
     const g = ball(), p = g.attributes.position;
