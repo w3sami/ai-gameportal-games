@@ -17,12 +17,14 @@ const Atmosphere = (() => {
     atmSunDir: { value: new THREE.Vector3(0, 1, 0) },
     atmSun: { value: new THREE.Vector4(1, 1, 1, 0) },          // rgb: fog colour toward the sun, a: glow strength
     atmHaze: { value: new THREE.Vector4(0, 0, 100, 0) },       // density (1/m), base (m), scale height (m), max
+    atmSunK: { value: 1 },                                       // sunlight getting through, 0..1 (less under a cloud deck)
   };
   // shared by the fog and the sky dome: the fog colour seen along direction d
   const GLSL = `
 uniform vec3 atmSunDir;
 uniform vec4 atmSun;
 uniform vec4 atmHaze;
+uniform float atmSunK;
 vec3 atmFogColor( vec3 d, vec3 base ) {
   float mu = dot( d, atmSunDir );
   float toward = max( mu, 0.0 ), away = max( - mu, 0.0 );
@@ -108,6 +110,7 @@ ${GLSL}
   // every frame: the sun tint follows the fog colour and the sunlight (both change under a cloud deck)
   function update(fog) {
     const k = sunLight ? clamp(sunLight.intensity / sunBase, 0, 1) : 1;
+    U.atmSunK.value = k;
     const c = U.atmSun.value, f = fog.color;
     c.set(lerp(f.r, warm.r, 0.75) * 1.06, lerp(f.g, warm.g, 0.75) * 1.06, lerp(f.b, warm.b, 0.75) * 1.06, glow * k * k);
   }
