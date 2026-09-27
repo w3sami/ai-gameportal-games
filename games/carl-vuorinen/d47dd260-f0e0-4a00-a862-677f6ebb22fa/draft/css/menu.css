@@ -37,3 +37,8 @@ body.is-loading .menu-levels .course, body.is-loading .menu-levels .lead, body.i
   #start[data-view="levels"] h1, #start[data-view="levels"] .route { display: none; }
   .level-head { margin-bottom: 0.6rem; }
 }
+/* pause screen: the are-you-sure question takes the place of the buttons and settings (js/menu.js) */
+#pause.is-confirming .pause-actions, #pause.is-confirming .pause-settings, #pause.is-confirming .pause-hint { display: none; }
+.pause-confirm { margin-top: 1rem; }
+.pause-confirm[hidden] { display: none; }
+.pause-confirm .lead { margin-bottom: 0.9rem; }
