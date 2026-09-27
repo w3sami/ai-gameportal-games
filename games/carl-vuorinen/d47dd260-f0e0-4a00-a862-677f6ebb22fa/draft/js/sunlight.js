@@ -11,7 +11,13 @@
                       darkened a little near the ground so buildings and piers sit on it
    Shadow takes away direct sunlight only; occlusion takes away sky light only. Emissive materials (clouds,
    spray) and unlit ones are left alone. Terrain casts shadow; objects don't.
+   The texture's blue channel is the water depth over the terrain (0..25.5 m), for js/water.js.
+   Other modules plug in without touching js/game.js:
+     SCENERY_PLUGINS  functions run on the finished scenery group (before the lighting goes on)
+     material.userData.sunHooks = [{ key, fn(shader) }]  extra shader edits, applied after this module's own;
+                      a 'tex' material's fragment shader has vec4 sunTexel (the texel) and vec2 sunAOv to use
    ========================================================================= */
+const SCENERY_PLUGINS = [];
 const Sunlight = (() => {
   const SOFT = 10;            // shadow edge softness: 1 / tan(penumbra angle)
   const AO_STRENGTH = 0.5;    // how much a fully enclosed spot loses of its sky light
@@ -106,7 +112,10 @@ const Sunlight = (() => {
     timing = { vis: t1 - t0, ao: t2 - t1, fill: performance.now() - t2, edges: edges / (W * W) };
     // texture for surfaces sampled per pixel (water)
     const px = new Uint8Array(W * W * 4);
-    for (let k = 0; k < W * W; k++) { px[k * 4] = Math.round(vis[k] * 255); px[k * 4 + 1] = Math.round(ao[k] * 255); px[k * 4 + 3] = 255; }
+    for (let k = 0; k < W * W; k++) {
+      px[k * 4] = Math.round(vis[k] * 255); px[k * 4 + 1] = Math.round(ao[k] * 255);
+      px[k * 4 + 2] = Math.round(clamp((TER.WATER - TH[k]) * 10, 0, 255)); px[k * 4 + 3] = 255;   // water depth, 0.1 m steps
+    }
     if (U.sunTex.value) U.sunTex.value.dispose();
     const tex = new THREE.DataTexture(px, W, W, THREE.RGBAFormat);
     tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -139,8 +148,9 @@ const Sunlight = (() => {
     'getDirectionalLightInfo( directionalLight, directLight );',
     'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= ' + FLOOR.toFixed(3) + ' + ' + (1 - FLOOR).toFixed(3) + ' * sunAOv.x;');
   function patch(material, mode) {                          // mode: 'attr' (vertex attribute sunAO) or 'tex'
-    if (material.userData.sunMode === mode) return;
-    material.userData.sunMode = mode;
+    const hooks = material.userData.sunHooks || [], sig = [mode, ...hooks.map((h) => h.key)].join('+');
+    if (material.userData.sunMode === sig) return;
+    material.userData.sunMode = sig;
     const tex = mode === 'tex';
     material.onBeforeCompile = (sh) => {
       Atmosphere.inject(sh);
@@ -151,10 +161,11 @@ const Sunlight = (() => {
           : '\tvSunAO = sunAO;'));
       sh.fragmentShader = (tex ? 'uniform sampler2D sunTex;\nvarying vec2 vSunUV;\n' : 'varying vec2 vSunAO;\n') +
         sh.fragmentShader
-          .replace('#include <lights_fragment_begin>', (tex ? 'vec2 sunAOv = texture2D( sunTex, vSunUV ).rg;\n' : 'vec2 sunAOv = vSunAO;\n') + lightsBegin)
+          .replace('#include <lights_fragment_begin>', (tex ? 'vec4 sunTexel = texture2D( sunTex, vSunUV );\nvec2 sunAOv = sunTexel.rg;\n' : 'vec2 sunAOv = vSunAO;\n') + lightsBegin)
           .replace('#include <lights_fragment_end>', 'irradiance *= sunAOv.y;\n#include <lights_fragment_end>');
+      for (const h of hooks) h.fn(sh);
     };
-    material.customProgramCacheKey = () => 'sun-' + mode;
+    material.customProgramCacheKey = () => 'sun-' + sig;
     material.needsUpdate = true;
   }
   function unpatch(material) {
@@ -168,6 +179,7 @@ const Sunlight = (() => {
   const _v = new THREE.Vector3(), _m = new THREE.Matrix4(), _c = new THREE.Vector3();
   function apply(group, scene) {
     const t0 = performance.now();
+    for (const plug of SCENERY_PLUGINS) plug(group);
     const users = new Map();                                // material -> meshes using it anywhere in the scene
     scene.traverse((o) => {
       if (!o.isMesh || !o.material) return;
