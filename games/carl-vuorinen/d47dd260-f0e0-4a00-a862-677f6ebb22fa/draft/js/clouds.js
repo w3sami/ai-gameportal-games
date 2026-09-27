@@ -7,13 +7,14 @@
    - bright tops, pale grey-blue bellies; sunlight wraps round the sides instead of cutting off at a hard terminator,
      and the bellies take their light from the sky (scattered through the cloud) more than from the ground
    The light follows the scene's sun and sky, so puffs dim under a cloud deck (js/clouddeck.js) like everything else.
-   Plugs in through SCENERY_PLUGINS (js/sunlight.js): finds the puff mesh by its geometry and emissive colour.
+   Plugs in through SCENERY_PLUGINS (js/sunlight.js): finds the puff mesh by its userData.clouds tag.
    ========================================================================= */
 const Clouds = (() => {
   const FLAT = -0.32;                                       // puff bottom (unit sphere): below this it's squashed flat
   const POINTS = 32, FACETED = true;                        // ball corners (a hull of n points has 2n - 4 facets); flat or round
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');
-  const isPuffs = (o) => o.isInstancedMesh && o.geometry.type === 'IcosahedronGeometry' && o.material.emissive && o.material.emissive.getHex() === 0xaab9c6;
+  const isPuffs = (o) => o.isInstancedMesh && (o.userData.clouds ||      // tagged in js/game.js; before the tag, by shape and glow
+    (o.geometry.type === 'IcosahedronGeometry' && o.material.emissive && o.material.emissive.getHex() === 0xaab9c6));
 
   // convex hull of POINTS points spread evenly (Fibonacci) over the unit sphere, nudged a little so facets vary;
   // few enough points to test every triple (a few ms, so worked out once and kept)
