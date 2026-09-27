@@ -182,17 +182,27 @@ function buildTerrainMesh(group, plainR) {
 function buildTrees(group) {
   const n = TREES.x.length;
   if (!n) return;
-  const geo = new THREE.ConeGeometry(1, 1, 7, 1, true).translate(0, 0.5, 0).toNonIndexed();   // no base: it's underground
+  const k = TREE_TRUNK;                                     // course.trees.trunk: crown on a bare trunk, so it needs a base
+  const geo = new THREE.ConeGeometry(1, 1, 7, 1, !k).translate(0, 0.5, 0).toNonIndexed();   // cones to the ground: no base
   geo.computeVertexNormals();
   const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V3(), p = new V3(), c = new THREE.Color(), rand = mulberry32(3);
   const tc = COURSE.trees.colors || ['#3b6838', '#5d8c46'], g1 = new THREE.Color(tc[0]), g2 = new THREE.Color(tc[1]);
   for (let i = 0; i < n; i++) {
     q.setFromAxisAngle(WORLD_UP, rand() * TAU);
-    mesh.setMatrixAt(i, m.compose(p.set(TREES.x[i], TREES.y[i], TREES.z[i]), q, s.set(TREES.r[i], TREES.h[i], TREES.r[i])));
+    const h = TREES.h[i];
+    mesh.setMatrixAt(i, m.compose(p.set(TREES.x[i], TREES.y[i] + k * h, TREES.z[i]), q, s.set(TREES.r[i], h * (1 - k), TREES.r[i])));
     mesh.setColorAt(i, c.copy(g1).lerp(g2, rand()));
   }
   mesh.frustumCulled = false; group.add(mesh);
+  if (!k) return;
+  const tg = new THREE.CylinderGeometry(0.7, 1, 1, 5, 1, true).translate(0, 0.5, 0).toNonIndexed(); tg.computeVertexNormals();
+  const trunks = new THREE.InstancedMesh(tg, new THREE.MeshLambertMaterial({ color: '#5b4633' }), n);
+  for (let i = 0; i < n; i++) {
+    const h = TREES.h[i], tr = trunkR(h);
+    trunks.setMatrixAt(i, m.compose(p.set(TREES.x[i], TREES.y[i], TREES.z[i]), q.identity(), s.set(tr, k * h + 1, tr)));
+  }
+  trunks.frustumCulled = false; group.add(trunks);
 }
 
 function buildRocks(group) {                                // boulders (course.rocks): grey, a little snow on the high ones
