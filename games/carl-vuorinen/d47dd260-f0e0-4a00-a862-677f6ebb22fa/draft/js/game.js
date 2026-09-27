@@ -61,7 +61,8 @@ const COL = {
 scene.fog = new THREE.Fog(COL.horizon, 320, 2150);
 scene.background = COL.horizon;
 const SUN_DIR = new V3(-0.42, 0.62, 0.66).normalize();
-scene.add(new THREE.HemisphereLight('#e0eeff', '#56663e', 1.3));
+const hemiLight = new THREE.HemisphereLight('#e0eeff', '#56663e', 1.3);
+scene.add(hemiLight);
 const sunLight = new THREE.DirectionalLight('#fff3df', 2.4);
 sunLight.position.copy(SUN_DIR).multiplyScalar(100);
 scene.add(sunLight);
@@ -81,10 +82,11 @@ const sky = (() => {
 })();
 const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(95, 32), new THREE.MeshBasicMaterial({ color: '#fff7e3', fog: false, depthWrite: false }));
 sunDisc.renderOrder = -1; scene.add(sunDisc);
+const cloudDeck = createCloudDeck({ scene, sky, sunDisc, sun: sunLight, hemi: hemiLight, renderer });   // js/clouddeck.js
 
 /* ---------- scenery: rebuilt whenever a course is loaded ----------
    Defaults are the Valley Run look; a course file can override palette (heights where colours blend), view (camera
-   range and fog) and clouds (see the course format in js/sim.js). */
+   range and fog) and clouds (see the course format in js/sim.js), and add a cloud deck (js/clouddeck.js). */
 const PALETTE = { dry: [40, 170], forestTop: [150, 225], high: [185, 275], snow: null, pathTint: true };
 const VIEW = { near: 0.5, far: 6500, fog: [320, 2150] };
 // clear: the least gap between a cloud's lowest puff and the ground under it (m); a cloud that dips lower is lifted
@@ -111,6 +113,7 @@ function buildScenery() {
   buildTrees(worldGroup);
   buildRocks(worldGroup);
   buildClouds(worldGroup);
+  cloudDeck.build(worldGroup, v);
   buildHoops(worldGroup);
 }
 
@@ -1000,6 +1003,7 @@ function updateVisuals(dt) {
   sky.position.copy(camera.position);
   sunDisc.position.copy(camera.position).addScaledVector(SUN_DIR, sunDist);
   sunDisc.lookAt(camera.position);
+  cloudDeck.update(camera.position.y);
 }
 
 /* ---------- HUD & UI ---------- */
