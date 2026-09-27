@@ -82,7 +82,8 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
                                                  n×n cells; water level, the height the edges fall away to (below the
                                                  water: open sea all round), how far from the path the valley carving
                                                  reaches (m, default 440), and the micro relief's height range (m, default 5)
-     relief:  { base, amp, pow, freq, ridgeAmp, ridgeFreq }   optional; hill shape (defaults: rolling hills)
+     relief:  { base, amp, pow, freq, ridgeAmp, ridgeFreq, tilt }   optional; hill shape (defaults: rolling hills);
+                                                 tilt [dx, dz]: the whole map slopes, rising dx m per m of x and dz per m of z
      palette: { dry, forestTop, high, snow }    optional; heights [from, to] where the ground colour blends; for a beach
               sand: [full, none]                  sand up to `full` m above the water, fading out by `none`
               sandColor, water, deepWater: "#hex", waterOpacity   the see-through sea: the bed darkens to deepWater
@@ -101,6 +102,14 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
      hills:   [{ x, z, r, h }]                  bumps added to the hills (e.g. to put a ridge under a pass)
      trees:   { near, scattered, maxAlt, minAlt }   placement attempts along the course and across the map; no trees
                                                  above maxAlt, nor below minAlt (default 1.5 m above the water)
+              size, gap, under, spread, mask, colors   optional: height range [min, max] m (default [9, 17]); how far
+                                                 past the valley floor's edge a trunk stands at least (default 12); under:
+                                                 trees may also stand closer, even under the line, where their tops stay
+                                                 this many m below it (for flying over the treetops), and gap then counts
+                                                 from the edge of the crown at the line's height; how far out the
+                                                 flanking trees reach (default 200 m); the forest mask's threshold
+                                                 (default 0.52, lower = more of the map is forest; the ground colour
+                                                 follows it); two "#hex" colours the trees are shaded between
      rocks:   { near, scattered, size }         optional; boulders (placement attempts along the course and across the
                                                  map, radius [min, max] m), on any slope and above the tree line
      points:  [[x, y, z, clearance, floorHalfWidth, wallSteepness, gate?], ...]
@@ -115,18 +124,20 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
               with `wallSteepness`.
      pylon:   { r0, r1, above, gap }             optional; pylon radius at the foot and top, height above the
                                                  circle's top, and the gap between circle and pylon (m)
-     rules:   { pylonHit, notLevel, missed, missR, levelTol, hoopMiss }   optional; time penalties (s) for touching a
+     rules:   { pylonHit, notLevel, missed, missR, levelTol, hoopMiss, respawnMax }   optional; time penalties (s) for touching a
                                                  pylon, flying an air gate banked more than levelTol degrees, and passing a
                                                  pylon gate outside its circle but within missR m of its centre (the
                                                  gate then counts as flown). Hoops never count as missed (fly back)
                                                  unless hoopMiss is true, for vehicles that can't turn back (wingsuit).
+                                                 respawnMax: fastest speed back at the last hoop after a crash (m/s).
      overhangs: [{ type, at, ... }]              optional; rock ledges, arches and big boulders along the line (js/overhangs.js)
      shore:   { piers, boats, umbrellas, huts }  optional; piers, boats and beach life (js/shore.js)
      lead:    "..."                             optional; the start screen's one-line brief
-     autopilot: { clear, ahead }                optional; ground clearance the attract-mode autopilot holds (m), for
+     autopilot: { clear, ahead, lead }          optional; ground clearance the attract-mode autopilot holds (m), for
                                                  courses flown lower than AP_CLEAR allows (under bridges), and how far
                                                  ahead it checks it (s, default 2.05; shorter in narrow bends, where a
-                                                 long look-ahead lands on the canyon wall and it pulls up over the hoop)
+                                                 long look-ahead lands on the canyon wall and it pulls up over the hoop); lead
+                                                 overrides AP_LEAD, shorter to cut less of the corner in tight bends)
    }
    buildWorld(course) (re)builds everything in this section from it. */
 let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SAMPLES = [], PYLONS = [];
@@ -145,6 +156,7 @@ function baseHeight(x, z) {
   const n = fbm(noiseA, x * REL.freq + 11.3, z * REL.freq - 4.7, 5);
   const r = 1 - Math.abs(2 * fbm(noiseB, x * REL.ridgeFreq, z * REL.ridgeFreq, 3) - 1);
   let h = REL.base + Math.pow(n, REL.pow) * REL.amp + r * REL.ridgeAmp;
+  if (REL.tilt) h += x * REL.tilt[0] + z * REL.tilt[1];
   if (COURSE.coast) h = coastHeight(x, z, h);
   for (const L of [].concat(COURSE.lake || [])) { const dx = x - L.x, dz = z - L.z; h -= L.depth * smoothstep(L.r, L.r * 0.35, Math.sqrt(dx * dx + dz * dz)); }
   for (const hl of COURSE.hills || []) {
@@ -278,21 +290,31 @@ function buildWorld(course) {
   // trees: flanking the path, plus clumps where the forest mask says so
   for (const key in TREES) TREES[key].length = 0;
   TREE_GRID.clear();
-  const rand = mulberry32(course.seeds.trees), treeTop = course.trees.maxAlt == null ? 250 : course.trees.maxAlt;
-  const treeFoot = course.trees.minAlt == null ? TER.WATER + 1.5 : course.trees.minAlt;
+  const TR = course.trees, rand = mulberry32(course.seeds.trees), treeTop = TR.maxAlt == null ? 250 : TR.maxAlt;
+  const treeFoot = TR.minAlt == null ? TER.WATER + 1.5 : TR.minAlt;
+  const tsz = TR.size || [9, 17], gap = TR.gap == null ? 12 : TR.gap, under = TR.under, mask = TR.mask == null ? 0.52 : TR.mask;
   const forest = (x, z) => noiseB(x * 0.006 + 40, z * 0.006 - 13);    // same mask the terrain colouring uses
+  // the random draws stay in the original order for courses without `under`, so their forests don't move
+  let h = 0, r = 0;
+  const draw = () => { h = tsz[0] + rand() * (tsz[1] - tsz[0]); r = h * (0.26 + rand() * 0.08); };
   const add = (x, z, scattered) => {
-    if (scattered && forest(x, z) < 0.52 && rand() < 0.85) return;
+    if (scattered && forest(x, z) < mask && rand() < 0.85) return;
     const y = heightAt(x, z);
     if (y < treeFoot || y > treeTop) return;
     const e = 6, gx = heightAt(x + e, z) - heightAt(x - e, z), gz = heightAt(x, z + e) - heightAt(x, z - e);
     if (Math.hypot(gx, gz) / (2 * e) > 0.9) return;
-    const cd = courseDistAt(x, z);
-    if (cd.s && cd.d < cd.s.width + 12) return;
+    if (under != null) draw();
+    const cd = under != null ? lineDistAt(x, z) : courseDistAt(x, z);
+    if (cd.s && under == null && cd.d < cd.s.width + gap) return;
+    if (cd.s && under != null && y - 0.8 + h > cd.s.y - under) {    // reaches up to the line: its crown keeps gap m clear
+      const yy = cd.s.y - (y - 0.8);
+      if (cd.d - (yy > 0 ? r * (1 - yy / h) : r) - 0.8 < cd.s.width + gap) return;
+    }
     if (bridgeNear(x, z, 14)) return;
     if (overhangNear(x, z, 6)) return;
     if (SHORE.boxes.length && shoreNear(x, z, 6)) return;
-    const h = 9 + rand() * 8, r = h * (0.26 + rand() * 0.08), idx = TREES.x.length;
+    if (under == null) draw();
+    const idx = TREES.x.length;
     TREES.x.push(x); TREES.y.push(y - 0.8); TREES.z.push(z); TREES.h.push(h); TREES.r.push(r);
     const key = treeKey(Math.floor(x / TREE_CELL), Math.floor(z / TREE_CELL));
     if (!TREE_GRID.has(key)) TREE_GRID.set(key, []);
@@ -302,7 +324,7 @@ function buildWorld(course) {
   for (let n = 0; n < course.trees.near; n++) {
     const u = rand(), sp = SAMPLES[Math.floor(u * (SAMPLES.length - 1))];
     curve.getTangentAt(u, tan);
-    const side = rand() < 0.5 ? -1 : 1, lat = sp.width + 14 + Math.pow(rand(), 1.6) * 200, along = (rand() - 0.5) * 40;
+    const side = rand() < 0.5 ? -1 : 1, lat = (under != null ? 0 : sp.width + gap + 2) + Math.pow(rand(), 1.6) * (TR.spread || 200), along = (rand() - 0.5) * 40;
     const nx = -tan.z, nz = tan.x, nl = Math.hypot(nx, nz) || 1;
     add(sp.x + (nx / nl) * lat * side + tan.x * along, sp.z + (nz / nl) * lat * side + tan.z * along);
   }
@@ -349,6 +371,19 @@ function courseDistAt(x, z) {
   const i = clamp(Math.round((x - TER.X0) / TER.CELL), 0, TER.N), j = clamp(Math.round((z - TER.Z0) / TER.CELL), 0, TER.N);
   const k = j * (TER.N + 1) + i;
   return { d: TDIST[k], s: TNEAR[k] >= 0 ? SAMPLES[TNEAR[k]] : null };
+}
+// exact distance to the line near (x, z): courseDistAt's answer is off by up to a grid cell; this searches the samples
+// around its nearest one (for trees that stand right beside the line)
+function lineDistAt(x, z) {
+  const i = clamp(Math.round((x - TER.X0) / TER.CELL), 0, TER.N), j = clamp(Math.round((z - TER.Z0) / TER.CELL), 0, TER.N);
+  const k0 = TNEAR[j * (TER.N + 1) + i];
+  if (k0 < 0) return { d: 1e9, s: null };
+  let bd = Infinity, bs = null;
+  for (let k = Math.max(0, k0 - 15); k <= Math.min(SAMPLES.length - 1, k0 + 15); k++) {
+    const s = SAMPLES[k], d = (s.x - x) * (s.x - x) + (s.z - z) * (s.z - z);
+    if (d < bd) { bd = d; bs = s; }
+  }
+  return { d: Math.sqrt(bd), s: bs };
 }
 function treeHit(p) {
   const ix = Math.floor(p.x / TREE_CELL), iz = Math.floor(p.z / TREE_CELL);
@@ -530,7 +565,8 @@ function autopilotAim(P, hoopIdx, out) {
   }
   const step = COURSE_LEN / (SAMPLES.length - 1);
   // the aim point stops at the hoop, so the last stretch homes in on its centre instead of cutting the corner
-  const t = SAMPLES[Math.min(k1, best + Math.max(1, Math.round(v * TUNE.AP_LEAD / step)))];
+  const lead = (COURSE.autopilot && COURSE.autopilot.lead) || TUNE.AP_LEAD;
+  const t = SAMPLES[Math.min(k1, best + Math.max(1, Math.round(v * lead / step)))];
   out.set(t.x - P.pos.x, t.y - P.pos.y, t.z - P.pos.z).normalize();
   return avoidGround(P, out, v);
 }
