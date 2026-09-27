@@ -1272,8 +1272,9 @@ function update(dt) {
         if (G.state === 'playing' && G.started) G.time += h;
         const cross = G.next < HOOPS.length ? gateCross(prevPos, P.pos, G.next) : null;
         if (cross) {
+          const lap = G.state !== 'playing';                       // demo or victory lap (read before onHoop: finishing changes the state)
           onHoop(cross === 'miss');
-          if (G.state !== 'playing' && G.next >= HOOPS.length) { resetRun(); break; }   // demo or victory lap done: again from the start
+          if (lap && G.next >= HOOPS.length) { resetRun(); break; }   // lap done: again from the start
         }
         if (G.state === 'playing' && PYLONS.length) { const k = pylonHit(P); if (k >= 0) onPylonHit(k); }
         if (G.invuln > 0) G.invuln -= h;
