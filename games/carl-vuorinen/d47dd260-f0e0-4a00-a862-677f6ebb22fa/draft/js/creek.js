@@ -8,9 +8,9 @@
              foot point's floor level; the line keeps its own shape (plan it to dive down beside the fall)
      color   "#hex" water colour (optional)
      cave    [from, to]: point indices. Between them the creek runs through a tunnel: the hillside is drawn on over the
-             valley (the same terrain, as if never carved), with a vaulted ceiling roof m over the line inside
-             (caveRoof, default 19) and a rock face over each mouth. The ceiling is solid; the walls are the carved
-             terrain, as everywhere else.
+             valley (the same terrain, as if never carved), with a rough rock ceiling about roof m over the line inside
+             (caveRoof, default 22; lumpy, so up to ~6 m lower in places) and a rough rock face over each mouth, with
+             boulders on the banks. The ceiling and boulders are solid; the walls are the carved terrain, as everywhere.
    }
    The water runs along the valley floor: the line minus its clearance, never running uphill. The creek cuts its channel
    and the plunge pools into the terrain after the valley carving, so pick clearances that keep the floor below the
@@ -19,7 +19,12 @@
    buildShore(); createCreekKit() draws the water, the falls, foam and spray, and the cave. */
 const CREEK = { bed: null, falls: [], cave: null };
 const CAVE_HW = 22;                                          // the ceiling's half width (m): its edges stay inside the walls
-const caveCeil = (roof, v) => roof - roof * 0.45 * Math.min(1, (v / CAVE_HW) ** 2);   // ceiling height over the line
+const caveCeil = (roof, v) => roof - roof * 0.3 * Math.min(1, (v / CAVE_HW) ** 2);   // the ceiling's broad shape
+// the ceiling over the line at (x, z), v m across it: lumpy and a little lopsided, the same for the eye and the crash test
+function caveRoofAt(x, z, v, roof) {
+  const n = noiseC(x * 0.07 + 31.7, z * 0.07 - 12.9) - 0.5, m = noiseB(x * 0.21 - 5.3, z * 0.21 + 8.1) - 0.5;
+  return caveCeil(roof, v) + n * 7 + m * 2.5 + v * 0.1;
+}
 const CREEK_NONE = -1e6;                                    // tree-free zones are shore boxes far underground: never hit
 
 function buildCreek() {
@@ -53,13 +58,33 @@ function buildCreek() {
     shoreBox('creek', (a.x + b.x) / 2, (a.z + b.z) / 2, (b.x - a.x) / L, (b.z - a.z) / L, L / 2 + 1, w + 3, CREEK_NONE, CREEK_NONE);
   }
   if (C.cave) {                                            // tunnel: solid ceiling, and no trees on the hillside over it
-    const k0 = sampleOf(C.cave[0]), k1 = sampleOf(C.cave[1]), roof = C.caveRoof || 19;
-    CREEK.cave = { k0, k1, roof };
+    const k0 = sampleOf(C.cave[0]), k1 = sampleOf(C.cave[1]), roof = C.caveRoof || 22;
+    CREEK.cave = { k0, k1, roof, boulders: [] };
+    // the ceiling as boxes: each starts at the lowest point of the lumpy roof over its patch, so it never sits above it
+    const lowest = (a, b, ux, uz, v0, v1) => {
+      let lo = Infinity;
+      for (const t of [0, 0.5, 1]) for (let i = 0; i <= 4; i++) {
+        const v = lerp(v0, v1, i / 4), x = lerp(a.x, b.x, t) - uz * v, z = lerp(a.z, b.z, t) + ux * v;
+        lo = Math.min(lo, lerp(a.y, b.y, t) + caveRoofAt(x, z, v, roof));
+      }
+      return lo;
+    };
     for (let k = k0; k < k1; k += 2) {
       const a = S[k], b = S[Math.min(k1, k + 2)], L = Math.hypot(b.x - a.x, b.z - a.z) || 1, ux = (b.x - a.x) / L, uz = (b.z - a.z) / L;
-      const cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2, y = (a.y + b.y) / 2;
-      shoreBox('cave', cx, cz, ux, uz, L / 2 + 0.3, 8, y + caveCeil(roof, 8), y + 500);
-      for (const sd of [-1, 1]) shoreBox('cave', cx - uz * sd * 13, cz + ux * sd * 13, ux, uz, L / 2 + 0.3, 5, y + caveCeil(roof, 18), y + 500);
+      const cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2;
+      shoreBox('cave', cx, cz, ux, uz, L / 2 + 0.3, 8, lowest(a, b, ux, uz, -8, 8), 1e5);
+      for (const sd of [-1, 1]) shoreBox('cave', cx - uz * sd * 13, cz + ux * sd * 13, ux, uz, L / 2 + 0.3, 5, lowest(a, b, ux, uz, sd * 8, sd * 18), 1e5);
+    }
+    // boulders tumbled on the banks at each mouth, clear of the flying line
+    const br = mulberry32(COURSE.seeds.trees * 7 + 3);
+    for (const [k, out] of [[k0, -1], [k1, 1]]) {
+      const a = S[Math.max(0, k - 2)], b = S[Math.min(n - 1, k + 2)], L = Math.hypot(b.x - a.x, b.z - a.z) || 1, ux = (b.x - a.x) / L, uz = (b.z - a.z) / L;
+      for (let i = 0; i < 4; i++) {
+        const sd = i % 2 ? 1 : -1, v = sd * (17 + br() * 10), u = out * (4 + br() * 18), r = 3 + br() * 4;
+        const x = S[k].x + ux * u - uz * v, z = S[k].z + uz * u + ux * v, g = heightAt(x, z);
+        CREEK.cave.boulders.push({ x, z, y: g - r * 0.3, r, seed: br() });
+        shoreBox('boulder', x, z, ux, uz, r * 0.75, r * 0.75, g - 5, g + r * 0.6);
+      }
     }
     for (let k = Math.max(0, k0 - 6); k < Math.min(n - 6, k1 + 6); k += 6) {
       const a = S[k], b = S[k + 6], L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
@@ -126,7 +151,7 @@ function createCreekKit() {
   const _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3(), _nm = new THREE.Vector3();
   const normalY = (a, b, c) => { _e1.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]); _e2.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]); return Math.abs(_nm.crossVectors(_e1, _e2).normalize().y); };
 
-  // the tunnel: the hillside drawn over the carved valley, a vaulted ceiling inside, and a rock face over each mouth
+  // the cave: the hillside drawn over the carved valley, a rough rock ceiling inside, and a rock face over each mouth
   function buildCave(group) {
     const CV = CREEK.cave, S = SAMPLES, micro = COURSE.terrain.micro == null ? 5 : COURSE.terrain.micro;
     const hill = (x, z) => baseHeight(x, z) + (noiseC(x * 0.03, z * 0.03) - 0.5) * micro;   // the terrain, uncarved
@@ -156,22 +181,54 @@ function createCreekKit() {
     }
     const topMat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2, side: THREE.DoubleSide });
     const tm = top.mesh(topMat); if (tm) group.add(tm);
-    // vaulted ceiling and the faces over the two mouths, in dark rock
-    const rock = faceted(), R = (base) => new THREE.Color(base).multiplyScalar(0.85 + crnd() * 0.25);
-    const ceil = (r, v) => [r.s.x + r.nx * v, r.s.y + caveCeil(CV.roof, v), r.s.z + r.nz * v];
-    const CC = 8;
-    for (let i = 0; i < rows.length - 1; i++) for (let c = 0; c < CC; c++) {
-      const v0 = (c / CC - 0.5) * 2 * CAVE_HW, v1 = ((c + 1) / CC - 0.5) * 2 * CAVE_HW;
-      const a = ceil(rows[i], v0), b = ceil(rows[i], v1), d = ceil(rows[i + 1], v0), e = ceil(rows[i + 1], v1);
-      rock.tri(a, d, e, R('#6e6960')); rock.tri(a, e, b, R('#6e6960'));
+    // the ceiling: lumpy dark rock, mossy near the mouths, darker deeper in
+    const rock = faceted(), jit = () => 0.85 + crnd() * 0.25;
+    const ROCK = new THREE.Color('#6e6960'), DEEP = new THREE.Color('#4a4640'), MOSS = new THREE.Color('#5d7a45'), cc = new THREE.Color();
+    const ceil = (r, v) => { const x = r.s.x + r.nx * v, z = r.s.z + r.nz * v; return [x, r.s.y + caveRoofAt(x, z, v, CV.roof), z]; };
+    const CC = 10, nR = rows.length - 1;
+    for (let i = 0; i < nR; i++) {
+      const fromMouth = Math.min(i, nR - 1 - i) / Math.max(1, nR / 2);
+      for (let c = 0; c < CC; c++) {
+        const v0 = (c / CC - 0.5) * 2 * CAVE_HW, v1 = ((c + 1) / CC - 0.5) * 2 * CAVE_HW;
+        const A = ceil(rows[i], v0), B = ceil(rows[i], v1), D = ceil(rows[i + 1], v0), E = ceil(rows[i + 1], v1);
+        for (const [p, q, t] of [[A, D, E], [A, E, B]]) {
+          cc.copy(ROCK).lerp(DEEP, smoothstep(0.2, 0.8, fromMouth)).lerp(MOSS, 0.7 * (1 - smoothstep(0, 0.25, fromMouth)) * (0.5 + crnd() * 0.5));
+          rock.tri(p, q, t, cc.clone().multiplyScalar(jit()));
+        }
+      }
     }
-    for (const r of [rows[0], rows[rows.length - 1]]) {
-      const bot = (p) => { const g = heightAt(p[0], p[2]); return Math.abs(p[3]) < CAVE_HW ? Math.max(g, r.s.y + caveCeil(CV.roof, p[3])) : g; };
+    // each mouth: a rough rock face from the ceiling's edge up to the hillside, bulging out and in, so the opening has
+    // a ragged outline; its bottom and top rows stay put, meeting the ceiling and the hillside exactly
+    const NH = 6, FACE = new THREE.Color('#857f75');
+    for (const [r, out] of [[rows[0], -1], [rows[rows.length - 1], 1]]) {
+      const ux = r.nz, uz = -r.nx;                          // along the line (the row's normal turned back)
+      const bot = (p) => { const g = heightAt(p[0], p[2]); return Math.abs(p[3]) < CAVE_HW ? Math.max(g, r.s.y + caveRoofAt(p[0], p[2], p[3], CV.roof)) : g; };
+      const grid = r.pts.map((p) => {
+        const b0 = Math.min(bot(p), p[1]), col = [];
+        for (let j = 0; j <= NH; j++) {
+          const t = j / NH, h = lerp(b0, p[1], t);
+          const o = Math.sin(Math.PI * t) * (2 + (noiseC(p[0] * 0.09 + 7.1, h * 0.09 + p[2] * 0.05) - 0.3) * 12);
+          col.push([p[0] + ux * out * o, h, p[2] + uz * out * o, p[1] - b0]);
+        }
+        return col;
+      });
       for (let c = 0; c < cols; c++) {
-        const p = r.pts[c], q = r.pts[c + 1], pb = bot(p), qb = bot(q);
-        if (p[1] - pb < 0.2 && q[1] - qb < 0.2) continue;
-        const A = [p[0], p[1], p[2]], B = [q[0], q[1], q[2]], C2 = [q[0], Math.min(qb, q[1]), q[2]], D = [p[0], Math.min(pb, p[1]), p[2]];
-        rock.tri(A, D, C2, R('#857f75')); rock.tri(A, C2, B, R('#857f75'));
+        if (grid[c][0][3] < 0.2 && grid[c + 1][0][3] < 0.2) continue;
+        for (let j = 0; j < NH; j++) {
+          const A = grid[c][j], B = grid[c + 1][j], D = grid[c][j + 1], E = grid[c + 1][j + 1];
+          const moss = j === 0 ? 0.5 : 0.15 * crnd();
+          rock.tri(A, D, E, cc.copy(FACE).lerp(MOSS, moss).multiplyScalar(jit()).clone());
+          rock.tri(A, E, B, cc.copy(FACE).lerp(MOSS, moss).multiplyScalar(jit()).clone());
+        }
+      }
+    }
+    // boulders on the banks
+    const bg = new THREE.IcosahedronGeometry(1, 0).toNonIndexed(), bp = bg.attributes.position, m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v3 = new THREE.Vector3(), sc = new THREE.Vector3();
+    for (const bd of CV.boulders) {
+      q.setFromEuler(e.set(bd.seed * 3, bd.seed * 7, bd.seed * 5)); m4.compose(v3.set(bd.x, bd.y, bd.z), q, sc.set(bd.r * 1.2, bd.r * 0.8, bd.r));
+      for (let i = 0; i < bp.count; i += 3) {
+        const tri = [0, 1, 2].map((d) => { const w = new THREE.Vector3().fromBufferAttribute(bp, i + d).applyMatrix4(m4); return [w.x, w.y, w.z]; });
+        rock.tri(tri[0], tri[1], tri[2], cc.copy(FACE).lerp(MOSS, 0.25 * crnd()).multiplyScalar(jit()).clone());
       }
     }
     const rm = rock.mesh(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
