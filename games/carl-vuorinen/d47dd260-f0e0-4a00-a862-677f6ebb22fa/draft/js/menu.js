@@ -109,6 +109,8 @@ function createMenu(ctx) {
     pickLevel(nx);
   });
   $('btn-themes').addEventListener('click', () => show('themes'));
+  const pauseMenu = $('btn-pause-menu');                     // pause screen: abandon the run, back to this theme's levels
+  if (pauseMenu) pauseMenu.addEventListener('click', () => ctx.toMenu());
   window.addEventListener('keydown', (e) => {
     if (view !== 'levels' || !ctx.isMenu() || (e.code !== 'Escape' && e.code !== 'Backspace')) return;
     e.preventDefault(); show('themes');
