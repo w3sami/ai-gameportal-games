@@ -13,7 +13,8 @@
     ] },
     { "id": "harbour", "name": "Harbour", "vehicle": "racer", "levels": [
       { "id": "harbour", "name": "Bay Run", "file": "courses/harbour.json" },
-      { "id": "beach", "name": "Beach Run", "file": "courses/beach.json" }
+      { "id": "beach", "name": "Beach Run", "file": "courses/beach.json" },
+      { "id": "port", "name": "Harbour Run", "file": "courses/port.json" }
     ] },
     { "id": "glacier", "name": "Glacier", "vehicle": "wingsuit", "levels": [
       { "id": "glacier", "name": "Glacier Run", "file": "courses/glacier.json" }
