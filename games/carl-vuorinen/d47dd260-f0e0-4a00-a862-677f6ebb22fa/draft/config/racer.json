@@ -1,5 +1,5 @@
 {
-  "_doc": "Race plane tuning (Harbour Run), loaded over config/flight.json for courses whose vehicle is \"racer\"; a key left out keeps the flight.json value. Faster than the stunt plane and built to bank hard: TOUCH_BANK/MAX_BANK go to ~80\u00b0, and TURN_COS_MIN 0.3 keeps the turn rate growing like tan(bank) up to ~72\u00b0, so a gentle bank barely turns and a steep one pulls 10 g. INDUCED bleeds speed in sustained hard turns. Touch uses the stunt plane's attitude stick (let go = wings level), which suits the level-flight air gates. WING_HALF is the model's half span for pylon hits.",
+  "_doc": "Race plane tuning (Harbour theme), loaded over config/flight.json for courses whose vehicle is \"racer\"; a key left out keeps the flight.json value. Faster than the stunt plane and built to bank hard: TOUCH_BANK/MAX_BANK go to ~80\u00b0, and TURN_COS_MIN 0.3 keeps the turn rate growing like tan(bank) up to ~72\u00b0, so a gentle bank barely turns and a steep one pulls 10 g. INDUCED bleeds speed in sustained hard turns. Touch uses the stunt plane's attitude stick (let go = wings level), which suits the level-flight air gates. WING_HALF is the model's half span for pylon hits.",
   "CRUISE": 70,
   "BOOST": 90,
   "MIN_SPEED": 18,
