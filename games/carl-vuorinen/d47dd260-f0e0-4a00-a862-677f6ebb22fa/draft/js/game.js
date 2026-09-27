@@ -1,7 +1,7 @@
 'use strict';
 /* =========================================================================
    GAME — rendering, input, audio, UI. Uses the simulation core (js/sim.js).
-   startGame(api) runs once the first course has been built (see js/boot.js); api.loadCourse(entry) builds another.
+   startGame(api) runs once the first course has been built (see js/boot.js); api.loadCourse(entry) builds another; api.themes feeds the menu (js/menu.js).
    ========================================================================= */
 function startGame(api) {
 const $ = (id) => document.getElementById(id);
@@ -1092,40 +1092,47 @@ function renderBest() {
   const pen = gateNoun() === 'gate' ? `Penalties: pylon hit +${RULES.pylonHit} s, banked air gate +${RULES.notLevel} s, missed gate +${RULES.missed} s. ` : '';
   if (refill) refill.textContent = gliding() ? `There\u2019s no flying back up: a missed hoop adds ${RULES.missed} s, and a crash puts you back at the last one.`
     : `${pen}Boost refills over time and with every ${gateNoun()}.`;
-  renderPicker();
+  menu.render();
 }
 
-/* ---------- course picker (start screen, shown once there's more than one course) ---------- */
+/* ---------- start menu: themes, then levels (js/menu.js) ---------- */
 const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit' };
-const pickEl = $('course-pick');
-let switching = false;
-function renderPicker() {
-  if (!pickEl) return;
-  pickEl.hidden = api.courses.length < 2;
-  pickEl.replaceChildren(...api.courses.map((c) => {
-    const b = document.createElement('button'), name = document.createElement('b'), meta = document.createElement('span');
-    const best = settings.best[c.id];
-    b.type = 'button'; b.className = 'pick'; b.setAttribute('aria-pressed', String(c.id === COURSE.id));
-    name.textContent = c.name;
-    meta.textContent = (VEHICLE_NAME[c.vehicle || 'prop'] || c.vehicle) + (best != null ? ` · ${fmtTime(best)}` : '');
-    b.append(name, meta);
-    b.addEventListener('click', () => switchCourse(c));
-    return b;
-  }));
+// Loads run one at a time; picking again while one loads just retargets it, and the last pick wins.
+let switching = null, wantCourse = null;
+function switchCourse(entry) {
+  if (G.state !== 'attract') return Promise.resolve(false);
+  wantCourse = entry;
+  if (switching) return switching;
+  body.classList.add('is-loading');
+  switching = (async () => {
+    try {
+      while (wantCourse && wantCourse.id !== COURSE.id) {
+        const e = wantCourse;
+        try {
+          await api.loadCourse(e);                        // rebuilds the sim world; the scene follows here
+          settings.course = e.id; saveSettings();
+          applyCourse(); resetRun();
+        } catch (err) {
+          console.error(err);
+          showToast('That course didn\u2019t load. Try again.');
+          if (wantCourse === e) wantCourse = null;
+        }
+      }
+    } finally { switching = null; wantCourse = null; body.classList.remove('is-loading'); }
+    return true;
+  })();
+  return switching;
 }
-async function switchCourse(entry) {
-  if (switching || G.state !== 'attract' || entry.id === COURSE.id) return;
-  switching = true; body.classList.add('is-loading');
-  try {
-    await api.loadCourse(entry);                            // rebuilds the sim world; the scene follows here
-    settings.course = entry.id; saveSettings();
-    applyCourse(); resetRun();
-    focusEl('btn-start');
-  } catch (err) {
-    console.error(err);
-    showToast('That course didn\u2019t load. Try again.');
-  } finally { switching = false; body.classList.remove('is-loading'); }
-}
+const menu = createMenu({
+  themes: api.themes,
+  best: () => settings.best,
+  courseId: () => COURSE.id,
+  vehicleName: (v) => VEHICLE_NAME[v] || v,
+  fmtTime,
+  load: switchCourse,
+  isMenu: () => G.state === 'attract',
+  toMenu: () => toMenu(),
+});
 function applyCourse() {                                    // scene, plane, start point and texts for the loaded course
   START_POS.set(COURSE_DEF[0][0], COURSE_DEF[0][1], COURSE_DEF[0][2]);
   START_DIR.copy(HOOPS[0].pos).sub(START_POS).normalize();
@@ -1140,6 +1147,7 @@ function applyCourse() {                                    // scene, plane, sta
 
 function startRun() {
   if (switching) return;
+  if (G.state === 'attract' && !menu.canStart()) { menu.show('levels'); return; }
   Sound.init();
   blurActive();
   resetRun();
@@ -1193,6 +1201,8 @@ function finishRun() {
     : best ? `New best, ${(prev - t).toFixed(2)} s faster.` : `Best ${fmtTime(prev)}, ${(t - prev).toFixed(2)} s off.`;
   if (G.pen > 0) $('finish-best').textContent += ` Includes ${G.pen} s of penalties.`;
   renderBest();
+  const fin = menu.onFinish(prev == null);
+  if (fin.note) $('finish-best').textContent += ' ' + fin.note;
   setState('finished');
   if (document.pointerLockElement === canvas) document.exitPointerLock();
   setTimeout(() => {                                        // victory lap behind the results
@@ -1202,11 +1212,11 @@ function finishRun() {
     hoopMeshes.forEach((m) => { if (!m) return; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
     resetPylons();
   }, gliding() ? 4000 : 1200);
-  focusEl('btn-again');
+  focusEl(fin.focus);
 }
 function toMenu() {
   if (document.pointerLockElement === canvas) document.exitPointerLock();
-  resetRun(); setState('attract'); focusEl('btn-start');
+  resetRun(); setState('attract'); menu.show('levels');
 }
 
 $('btn-start').addEventListener('click', startRun);
@@ -1290,5 +1300,5 @@ function frame(now) {
 resetRun();
 setState('attract');
 requestAnimationFrame((t) => { last = t; frame(t); });
-window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, teleport(i) { G.next = i; respawn(); } };
+window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, menu, teleport(i) { G.next = i; respawn(); } };
 }
