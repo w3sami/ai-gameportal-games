@@ -34,6 +34,7 @@ try {
   showFatal('This game needs WebGL, which is turned off or unavailable in this browser.');
   return;
 }
+const resolution = createResolution(renderer);              // pixel ratio that steps down when frames run slow (js/resolution.js)
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 6500);
 const view = { w: 1, h: 1 };
@@ -41,7 +42,7 @@ function resize() {
   const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
   if (w === view.w && h === view.h) return;
   view.w = w; view.h = h;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));   // DPR 3 costs 2.25x the pixels
+  renderer.setPixelRatio(resolution.ratio());               // at most DPR 2 (DPR 3 costs 2.25x the pixels), less when slow
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -254,6 +255,7 @@ function buildClouds(group) {
     q.setFromEuler(e.set(rand() * 3, rand() * 3, rand() * 3));
     mesh.setMatrixAt(i, m.compose(p.set(pf[0], pf[1], pf[2]), q, s.set(pf[3], pf[3] * 0.62, pf[3])));
   });
+  mesh.userData.clouds = true;                              // js/clouds.js reshapes and relights the puffs
   mesh.frustumCulled = false; group.add(mesh);
 }
 
@@ -1143,6 +1145,8 @@ const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race pla
 let switching = null, wantCourse = null;
 function switchCourse(entry) {
   if (G.state !== 'attract') return Promise.resolve(false);
+  if (!switching && entry && entry.id === COURSE.id) return Promise.resolve(true);   // already loaded (else the async body
+                                                                                     // finishes before `switching` is set, and sticks)
   wantCourse = entry;
   if (switching) return switching;
   body.classList.add('is-loading');
@@ -1332,6 +1336,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - last) / 1000, 1 / 20);   // clamp: tab switches and hitches don't teleport the plane
   last = now;
+  resolution.frame(now, G.perf ? G.perf.update + G.perf.render : 0);
   if (dt <= 0) return;
   try { const t0 = performance.now(); update(dt); const t1 = performance.now(); renderer.render(scene, camera); G.perf = { update: t1 - t0, render: performance.now() - t1 }; }
   catch (err) { if (!errShown) { errShown = true; console.error(err); showToast('Something broke: ' + (err && err.message), 8000); } }
@@ -1339,5 +1344,5 @@ function frame(now) {
 resetRun();
 setState('attract');
 requestAnimationFrame((t) => { last = t; frame(t); });
-window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, menu, lightStats, teleport(i) { G.next = i; respawn(); } };
+window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, menu, lightStats, resolution, teleport(i) { G.next = i; respawn(); } };
 }
