@@ -1,7 +1,8 @@
 'use strict';
-/* Loads the tuning and a course, then starts the game; the start screen's picker loads other courses on demand.
-   A course's vehicle (courses/index.json) picks the tuning: config/flight.json is the base (the stunt plane) and
-   config/<vehicle>.json goes over it for anything else. The last picked course is remembered in the game's settings.
+/* Loads the tuning and a course, then starts the game; the start menu (js/menu.js) loads other levels on demand.
+   courses/index.json lists themes and their levels. A level's vehicle (its theme's, unless it sets its own) picks
+   the tuning: config/flight.json is the base (the stunt plane) and config/<vehicle>.json goes over it for anything else.
+   The last picked level is remembered in the game's settings.
    Single-file builds (the private preview) can't fetch neighbouring files, so they set window.SKYRACE_DATA
    with the same files inlined, keyed by path. */
 (async function boot() {
@@ -25,16 +26,17 @@
     const course = await getJSON(entry.file);
     for (const k of Object.keys(TUNE)) delete TUNE[k];
     Object.assign(TUNE, TUNE_DEFAULTS, base, vehicles[v], { VEHICLE: v });
-    buildWorld(course);
+    buildWorld(Object.assign(course, { id: entry.id, name: entry.name || course.name }));   // the index's id and name win: a copied course file can't clash
   }
   try {
-    const index = await getJSON('courses/index.json');
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem('skyrace.v1') || '{}').course; } catch (e) { /* no storage */ }
-    const pick = index.courses.find((c) => c.id === saved);
-    if (pick) await loadCourse(pick).catch(() => loadCourse(index.courses[0]));
-    else await loadCourse(index.courses[0]);
-    startGame({ courses: index.courses, loadCourse });
+    const themes = Levels.themes(await getJSON('courses/index.json')), levels = Levels.all(themes);
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('skyrace.v1') || '{}') || {}; } catch (e) { /* no storage */ }
+    const best = saved.best && typeof saved.best === 'object' ? saved.best : {};
+    const pick = levels.find((l) => l.id === saved.course && Levels.open(l, best));   // a level locked since isn't reopened
+    if (pick) await loadCourse(pick).catch(() => loadCourse(levels[0]));
+    else await loadCourse(levels[0]);
+    startGame({ themes, loadCourse });
   } catch (err) {
     console.error(err);
     fatal('The course didn\u2019t load. Reload the page to try again.');
