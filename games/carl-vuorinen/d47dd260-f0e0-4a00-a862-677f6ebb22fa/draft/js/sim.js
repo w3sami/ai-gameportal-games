@@ -110,6 +110,7 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
                                                  pylon gate outside its circle but within missR m of its centre (the
                                                  gate then counts as flown). Hoops never count as missed (fly back)
                                                  unless hoopMiss is true, for vehicles that can't turn back (wingsuit).
+     overhangs: [{ type, at, ... }]              optional; rock ledges, arches and big boulders along the line (js/overhangs.js)
      lead:    "..."                             optional; the start screen's one-line brief
      autopilot: { clear, ahead }                optional; ground clearance the attract-mode autopilot holds (m), for
                                                  courses flown lower than AP_CLEAR allows (under bridges), and how far
@@ -231,6 +232,7 @@ function buildWorld(course) {
   }
 
   buildBridges();                                            // js/bridges.js: needs the terrain, before the trees
+  buildOverhangs();                                          // js/overhangs.js: ledges, arches, boulders; before the trees
 
   // pylons: beside each pylon gate's circle, standing on the ground or the water
   PYLONS = [];
@@ -265,6 +267,7 @@ function buildWorld(course) {
     const cd = courseDistAt(x, z);
     if (cd.s && cd.d < cd.s.width + 12) return;
     if (bridgeNear(x, z, 14)) return;
+    if (overhangNear(x, z, 6)) return;
     const h = 9 + rand() * 8, r = h * (0.26 + rand() * 0.08), idx = TREES.x.length;
     TREES.x.push(x); TREES.y.push(y - 0.8); TREES.z.push(z); TREES.h.push(h); TREES.r.push(r);
     const key = treeKey(Math.floor(x / TREE_CELL), Math.floor(z / TREE_CELL));
@@ -566,5 +569,6 @@ function crashed(P) {
   if (treeHit(P.pos)) return 'tree';
   if (ROCKS.x.length && rockHit(P.pos)) return 'rock';
   if (BRIDGES.length && bridgeHit(P.pos)) return 'bridge';
+  if (OVERHANGS.length && overhangHit(P.pos)) return 'rock';
   return null;
 }
