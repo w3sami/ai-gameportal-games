@@ -111,8 +111,10 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
                                                  gate then counts as flown). Hoops never count as missed (fly back)
                                                  unless hoopMiss is true, for vehicles that can't turn back (wingsuit).
      lead:    "..."                             optional; the start screen's one-line brief
-     autopilot: { clear }                       optional; ground clearance the attract-mode autopilot holds (m), for
-                                                 courses flown lower than AP_CLEAR allows (under bridges)
+     autopilot: { clear, ahead }                optional; ground clearance the attract-mode autopilot holds (m), for
+                                                 courses flown lower than AP_CLEAR allows (under bridges), and how far
+                                                 ahead it checks it (s, default 2.05; shorter in narrow bends, where a
+                                                 long look-ahead lands on the canyon wall and it pulls up over the hoop)
    }
    buildWorld(course) (re)builds everything in this section from it. */
 let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SAMPLES = [], PYLONS = [];
@@ -506,8 +508,9 @@ function autopilotAim(P, hoopIdx, out) {
   return avoidGround(P, out, v);
 }
 function avoidGround(P, out, v) {                          // don't aim into the ground (2 s look-ahead)
-  const ahead = _l.copy(P.pos).addScaledVector(P.vdir, v * 2.05);
-  const need = (COURSE.autopilot && COURSE.autopilot.clear) || TUNE.AP_CLEAR || v * 0.57;
+  const AP = COURSE.autopilot || {};
+  const ahead = _l.copy(P.pos).addScaledVector(P.vdir, v * (AP.ahead || 2.05));
+  const need = AP.clear || TUNE.AP_CLEAR || v * 0.57;
   const clearance = ahead.y - groundAt(ahead.x, ahead.z);
   if (clearance < need) out.y = Math.max(out.y, 0.25 * (1 - clearance / need));
   return out.normalize();
