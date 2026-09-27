@@ -135,8 +135,8 @@ function buildTerrainMesh(group, plainR) {
       if (clearSea && h < TER.WATER) c.lerp(deep, smoothstep(TER.WATER - 0.3, TER.WATER - (PAL.deep || 14), h));
     } else {
       c.copy(COL.meadow).lerp(COL.dry, smoothstep(PAL.dry[0], PAL.dry[1], h));
-      const f = noiseB(x * 0.006 + 40, z * 0.006 - 13);
-      if (f > 0.52) c.lerp(COL.forest, smoothstep(0.52, 0.66, f) * (1 - smoothstep(PAL.forestTop[0], PAL.forestTop[1], h)));
+      const f = noiseB(x * 0.006 + 40, z * 0.006 - 13), fm = COURSE.trees.mask == null ? 0.52 : COURSE.trees.mask;   // same mask as the trees
+      if (f > fm) c.lerp(COL.forest, smoothstep(fm, fm + 0.14, f) * (1 - smoothstep(PAL.forestTop[0], PAL.forestTop[1], h)));
       c.lerp(COL.high, smoothstep(PAL.high[0], PAL.high[1], h));
       if (PAL.pathTint && s && d < s.width + 25) c.lerp(COL.valley, 0.45 * (1 - smoothstep(s.width, s.width + 25, d)));
       if (PAL.sand) c.lerp(sand, 1 - smoothstep(TER.WATER + PAL.sand[0], TER.WATER + PAL.sand[1], h));
@@ -186,7 +186,7 @@ function buildTrees(group) {
   geo.computeVertexNormals();
   const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V3(), p = new V3(), c = new THREE.Color(), rand = mulberry32(3);
-  const g1 = new THREE.Color('#3b6838'), g2 = new THREE.Color('#5d8c46');
+  const tc = COURSE.trees.colors || ['#3b6838', '#5d8c46'], g1 = new THREE.Color(tc[0]), g2 = new THREE.Color(tc[1]);
   for (let i = 0; i < n; i++) {
     q.setFromAxisAngle(WORLD_UP, rand() * TAU);
     mesh.setMatrixAt(i, m.compose(p.set(TREES.x[i], TREES.y[i], TREES.z[i]), q, s.set(TREES.r[i], TREES.h[i], TREES.r[i])));
@@ -620,7 +620,9 @@ function respawn() {
   const h = G.next > 0 ? HOOPS[G.next - 1] : null;
   const pos = h ? h.pos.clone().addScaledVector(h.normal, 4) : START_POS;
   // wingsuit: back at the hoop with the speed you had there, or RESPAWN_SPEED if more, since the next stretch may need it
-  const v = gliding() && h ? Math.max(TUNE.RESPAWN_SPEED || TUNE.CRUISE, G.hoopSpeed || 0) : TUNE.CRUISE;
+  // (capped at the course's rules.respawnMax, where tight turns right after a hoop can't be made any faster)
+  let v = gliding() && h ? Math.max(TUNE.RESPAWN_SPEED || TUNE.CRUISE, G.hoopSpeed || 0) : TUNE.CRUISE;
+  if (h && RULES.respawnMax) v = Math.min(v, RULES.respawnMax);
   placePlane(P, pos, h ? h.normal : START_DIR, v);
   setAimFrom(P.vdir); input.neutral = true;
   G.invuln = 1.2;
