@@ -63,7 +63,7 @@ function buildBridges() {
     if (b.type === 'arch') {
       // one wall, road wide: the main arch, then either equal side arches (span) or a small flood arch each side
       b.holes = [{ c: 0, a: b.a, b: b.top }];
-      const a2 = Math.min(13, b.top * 0.55);
+      const a2 = Math.min(13, b.top * 0.55), flood = [];
       for (const s of [-1, 1]) {
         const L = s < 0 ? b.L0 : b.L1;
         if (b.span) {                                       // row of equal arches: the one each side always, more while the floodplain lasts
@@ -75,8 +75,9 @@ function buildBridges() {
           continue;
         }
         const c = s * (b.a + 6 + a2);
-        if (Math.abs(c) + a2 + 5 < L && b.ground(c) < b.y0 + a2 * 0.6) b.holes.push({ c, a: a2, b: a2 * 1.15 });
+        if (Math.abs(c) + a2 + 5 < L && b.ground(c) < b.y0 + a2 * 0.6) flood.push({ c, a: a2, b: a2 * 1.15 });
       }
+      if (flood.length === 2) b.holes.push(...flood);       // flood arches in pairs only: one on its own looks lopsided
       b.base = Math.min(b.y0 - 4, footAt(-b.L0, b.L1));
       solid(-b.L0, b.L1, b.base, b.deckTop + 1.1, b.road / 2, b.holes);
     } else if (b.type === 'suspension') {
