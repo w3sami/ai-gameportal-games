@@ -9,8 +9,8 @@
      big flat water (userData.sunTex)  per pixel, from a small texture of the grid
      everything else  per vertex (per instance for instanced meshes), ray-marched from where it stands,
                       darkened a little near the ground so buildings and piers sit on it
-   Shadow takes away direct sunlight only; occlusion takes away sky light only. Emissive materials (clouds,
-   spray) and unlit ones are left alone. Terrain casts shadow; objects don't.
+   Shadow takes away direct sunlight only; occlusion takes away sky light only. Emissive materials (spray), unlit
+   ones and any with userData.noSun (clouds) are left alone. Terrain casts shadow; objects don't.
    The texture's blue channel is the water depth over the terrain (0..25.5 m), for js/water.js.
    Other modules plug in without touching js/game.js:
      SCENERY_PLUGINS  functions run on the finished scenery group (before the lighting goes on)
@@ -174,7 +174,7 @@ const Sunlight = (() => {
     delete material.onBeforeCompile; delete material.customProgramCacheKey;   // back to the prototype's
     material.needsUpdate = true;
   }
-  const lit = (m) => (m.isMeshLambertMaterial || m.isMeshPhongMaterial || m.isMeshStandardMaterial) && !(m.emissive && (m.emissive.r + m.emissive.g + m.emissive.b) > 0);
+  const lit = (m) => (m.isMeshLambertMaterial || m.isMeshPhongMaterial || m.isMeshStandardMaterial) && !m.userData.noSun && !(m.emissive && (m.emissive.r + m.emissive.g + m.emissive.b) > 0);
 
   const _v = new THREE.Vector3(), _m = new THREE.Matrix4(), _c = new THREE.Vector3();
   function apply(group, scene) {
