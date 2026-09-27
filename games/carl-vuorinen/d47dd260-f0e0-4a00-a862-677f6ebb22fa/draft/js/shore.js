@@ -12,12 +12,16 @@
      umbrellas: { count, band: [from, to], clear }   on the sand; band = heights above the water (m)
      huts:      { count, band: [from, to], clear }   beach huts at the back of the sand
    }
-   Everything is a crash. Sim part (no DOM): buildShore() (buildWorld, after the terrain), shoreHit(p) -> 'pier' |
-   'boat' | 'beach' | null, shoreNear(x, z, pad). createShoreKit(): the meshes. */
+   Everything is a crash. Sim part (no DOM): buildShore() (buildWorld, after the terrain), shoreHit(p) -> the kind of
+   whatever was hit ('pier', 'boat', 'beach', or a plugin's) | null, shoreNear(x, z, pad). createShoreKit(): the meshes.
+   Plugins: other structure modules (js/port.js) push { build, createKit } onto SHORE_PLUGINS. build() runs after the
+   shore's own and files its boxes with shoreBox(), so the same crash test and tree exclusion cover them; createKit()
+   returns { build(group) }, called with the shore's meshes. createMesher() is the shared mesh builder. */
 const SHORE = { piers: [], boats: [], umbrellas: [], huts: [], boxes: [], grid: new Map() };
 const SHORE_CELL = 40, SHORE_MARGIN = 14;                  // boxes are filed in every cell within their reach + margin
 const PIER_DEF = { len: 140, w: 4, head: 0, kiosk: false, lamps: 24 };
 const DECK_UP = 2.4;                                        // pier deck top above the water (m)
+const SHORE_PLUGINS = [];
 
 function shoreBox(kind, x, z, ux, uz, hu, hv, y0, y1) {    // oriented box: u along (ux, uz), v across
   const b = { kind, x, z, ux, uz, hu, hv, y0, y1 }, R = Math.hypot(hu, hv) + SHORE_MARGIN;
@@ -50,8 +54,10 @@ function shoreNear(x, z, pad) {                             // anything within p
 function buildShore() {
   for (const k of ['piers', 'boats', 'umbrellas', 'huts', 'boxes']) SHORE[k].length = 0;
   SHORE.grid.clear();
-  const S = COURSE.shore;
-  if (!S) return;
+  if (COURSE.shore) buildShoreItems(COURSE.shore);
+  for (const p of SHORE_PLUGINS) p.build();
+}
+function buildShoreItems(S) {
   const W = TER.WATER, deck = W + DECK_UP, rand = mulberry32(COURSE.seeds.trees * 7 + 3);
   const sea = (COURSE.coast && COURSE.coast.toSea) || [-1, 0];
   const lineDist = (x, z) => courseDistAt(x, z).d;
@@ -168,19 +174,69 @@ function buildShore() {
 }
 
 /* ---------- look ---------- */
+// merged flat-shaded mesh built from unit parts: frame() sets a local frame (x right, y up, z back: forward = -z along
+// (fx, fz)), part() adds a scaled, rotated unit geometry in it with one colour, tri2() a double-sided triangle
+function createMesher() {
+  const flat = (g) => (g.index ? g.toNonIndexed() : g).attributes.position;
+  const G = {
+    BOX: flat(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)),          // base at y = 0
+    CBOX: flat(new THREE.BoxGeometry(1, 1, 1)),                              // centred
+    CYL: flat(new THREE.CylinderGeometry(1, 1, 1, 6, 1).translate(0, 0.5, 0)),
+    CONE: flat(new THREE.ConeGeometry(1, 1, 8, 1).translate(0, 0.5, 0)),
+    PYR: flat(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4, 1).rotateY(Math.PI / 4).translate(0, 0.5, 0)),
+    ICO: flat(new THREE.IcosahedronGeometry(1, 0)),
+    // roof prism: 1 wide at the base, 1 high, 1 long, centred along z
+    PRISM: flat(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(-0.5, 0), new THREE.Vector2(0.5, 0), new THREE.Vector2(0, 1)]),
+      { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5)),
+  };
+  let pos = [], col = [], jseed = 12345;
+  const F = new THREE.Matrix4(), Lm = new THREE.Matrix4(), M = new THREE.Matrix4();
+  const v = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), pp = new THREE.Vector3();
+  const ax = new THREE.Vector3(), ay = new THREE.Vector3(0, 1, 0), az = new THREE.Vector3();
+  const jit = () => { jseed = (jseed * 16807) % 2147483647; return 0.93 + (jseed / 2147483647) * 0.12; };
+  return {
+    G, flat,
+    reset() { pos = []; col = []; jseed = 12345; },
+    frame(x, y, z, fx, fz) { F.makeBasis(ax.set(-fz, 0, fx), ay, az.set(-fx, 0, -fz)).setPosition(x, y, z); },
+    part(geo, c, px, py, pz, sx, sy, sz, ry = 0, rx = 0) {
+      q.setFromEuler(e.set(rx, ry, 0));
+      Lm.compose(pp.set(px, py, pz), q, sc.set(sx, sy, sz));
+      M.multiplyMatrices(F, Lm);
+      const j = jit();
+      for (let i = 0; i < geo.count; i++) {
+        v.fromBufferAttribute(geo, i).applyMatrix4(M);
+        pos.push(v.x, v.y, v.z); col.push(c.r * j, c.g * j, c.b * j);
+      }
+    },
+    tri2(c, a, b, d) {
+      const j = jit();
+      for (const [p1, p2, p3] of [[a, b, d], [a, d, b]]) for (const pt of [p1, p2, p3]) {
+        v.set(pt[0], pt[1], pt[2]).applyMatrix4(F);
+        pos.push(v.x, v.y, v.z); col.push(c.r * j, c.g * j, c.b * j);
+      }
+    },
+    mesh(mat) {                                             // the parts so far as one mesh (null if none), and start over
+      if (!pos.length) return null;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.computeVertexNormals();                             // non-indexed: flat faces
+      pos = []; col = [];
+      return new THREE.Mesh(g, mat);
+    },
+  };
+}
+
 function createShoreKit() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   mat.userData.shared = true;
-  const flatPos = (g) => (g.index ? g.toNonIndexed() : g).attributes.position;
-  const BOX = flatPos(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0));          // base at y = 0
-  const CYL = flatPos(new THREE.CylinderGeometry(1, 1, 1, 6, 1).translate(0, 0.5, 0));
-  const CONE = flatPos(new THREE.ConeGeometry(1, 1, 8, 1).translate(0, 0.5, 0));
-  const PYR = flatPos(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4, 1).rotateY(Math.PI / 4).translate(0, 0.5, 0));
+  const Mx = createMesher(), { BOX, CYL, CONE, PYR } = Mx.G, frame = Mx.frame, part = Mx.part, tri2 = Mx.tri2;
   // hull plan: 1 wide, 1 long, bow at -z, straight sides to a rounded point; extruded 1 up
   const hs = new THREE.Shape();
   hs.moveTo(-0.5, -0.5); hs.lineTo(0.5, -0.5); hs.lineTo(0.5, 0.1);
   hs.quadraticCurveTo(0.45, 0.38, 0, 0.5); hs.quadraticCurveTo(-0.45, 0.38, -0.5, 0.1); hs.lineTo(-0.5, -0.5);
-  const HULL = flatPos(new THREE.ExtrudeGeometry(hs, { depth: 1, bevelEnabled: false, curveSegments: 4 }).rotateX(-Math.PI / 2));
+  const HULL = Mx.flat(new THREE.ExtrudeGeometry(hs, { depth: 1, bevelEnabled: false, curveSegments: 4 }).rotateX(-Math.PI / 2));
+  const kits = SHORE_PLUGINS.map((p) => p.createKit());
 
   const C = (h) => new THREE.Color(h);
   const WOOD = C('#a07c55'), PILE = C('#5a4735'), RAIL = C('#e9e4d8'), METAL = C('#4d5358'), LAMP = C('#fff4c8');
@@ -192,31 +248,6 @@ function createShoreKit() {
   const HUT = ['#e9f0f4', '#f6d3cf', '#cfe3f6', '#fbe7b0', '#d8efd7'].map(C);
   const ROOF = C('#9e3b30');
 
-  let pos = [], col = [];
-  const F = new THREE.Matrix4(), Lm = new THREE.Matrix4(), M = new THREE.Matrix4();
-  const v = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), pp = new THREE.Vector3();
-  const ax = new THREE.Vector3(), ay = new THREE.Vector3(0, 1, 0), az = new THREE.Vector3();
-  let jseed = 1;
-  const jit = () => { jseed = (jseed * 16807) % 2147483647; return 0.93 + (jseed / 2147483647) * 0.12; };
-  // local frame: x right, y up, z back (forward = -z along (fx, fz))
-  function frame(x, y, z, fx, fz) { F.makeBasis(ax.set(-fz, 0, fx), ay, az.set(-fx, 0, -fz)).setPosition(x, y, z); }
-  function part(geo, c, px, py, pz, sx, sy, sz, ry = 0, rx = 0) {
-    q.setFromEuler(e.set(rx, ry, 0));
-    Lm.compose(pp.set(px, py, pz), q, sc.set(sx, sy, sz));
-    M.multiplyMatrices(F, Lm);
-    const j = jit();
-    for (let i = 0; i < geo.count; i++) {
-      v.fromBufferAttribute(geo, i).applyMatrix4(M);
-      pos.push(v.x, v.y, v.z); col.push(c.r * j, c.g * j, c.b * j);
-    }
-  }
-  function tri2(c, a, b, d) {                               // a double-sided triangle in the local frame
-    const j = jit();
-    for (const [p1, p2, p3] of [[a, b, d], [a, d, b]]) for (const pt of [p1, p2, p3]) {
-      v.set(pt[0], pt[1], pt[2]).applyMatrix4(F);
-      pos.push(v.x, v.y, v.z); col.push(c.r * j, c.g * j, c.b * j);
-    }
-  }
 
   function pier(p) {
     const W = TER.WATER, d = p.deck, L = p.len, w = p.w;
@@ -297,15 +328,11 @@ function createShoreKit() {
   }
 
   function build(group) {
-    if (!SHORE.piers.length && !SHORE.boats.length && !SHORE.umbrellas.length && !SHORE.huts.length) return;
-    pos = []; col = []; jseed = 12345;
+    Mx.reset();
     SHORE.piers.forEach(pier); SHORE.boats.forEach(boat); SHORE.umbrellas.forEach(umbrella); SHORE.huts.forEach(hut);
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    g.computeVertexNormals();                                                       // non-indexed: flat faces
-    group.add(new THREE.Mesh(g, mat));
-    pos = []; col = [];
+    const m = Mx.mesh(mat);
+    if (m) group.add(m);
+    for (const k of kits) k.build(group);
   }
   return { build };
 }
