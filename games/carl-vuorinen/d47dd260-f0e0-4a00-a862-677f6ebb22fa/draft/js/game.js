@@ -112,6 +112,7 @@ function buildScenery() {
   buildTerrainMesh(worldGroup, Math.max(9000, v.far * 1.4));
   buildTrees(worldGroup);
   buildRocks(worldGroup);
+  overhangs.build(worldGroup);
   buildClouds(worldGroup);
   cloudDeck.build(worldGroup, v);
   buildHoops(worldGroup);
@@ -240,6 +241,7 @@ let hoopMeshes = [];      // per gate: its hoop mesh, or null for a pylon gate
 const gateQ = [];         // per gate: orientation (+Z along the line)
 const pylons = createPylonKit(ROUTE_HEX);   // pylon gates' meshes and highlighting (js/pylons.js)
 const bridges = createBridgeKit();          // bridges over some hoops (js/bridges.js)
+const overhangs = createOverhangKit();      // rock ledges, arches, boulders (js/overhangs.js)
 const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(gateDisc);
