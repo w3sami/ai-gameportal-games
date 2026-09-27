@@ -3,7 +3,8 @@
   "themes": [
     { "id": "valley", "name": "Valley", "vehicle": "prop", "levels": [
       { "id": "valley", "name": "Valley Run", "file": "courses/valley.json" },
-      { "id": "river", "name": "River Run", "file": "courses/river.json" }
+      { "id": "river", "name": "River Run", "file": "courses/river.json" },
+      { "id": "canyon", "name": "Canyon Run", "file": "courses/canyon.json" }
     ] },
     { "id": "summit", "name": "Summit", "vehicle": "jet", "levels": [
       { "id": "summit", "name": "Summit Run", "file": "courses/summit.json" }
