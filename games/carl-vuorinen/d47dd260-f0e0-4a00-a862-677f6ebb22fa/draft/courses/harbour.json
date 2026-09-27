@@ -1,7 +1,7 @@
 {
   "_format": "See the course section at the top of js/sim.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?]; gate \"G\" = air gate (pylon each side, fly level), \"L\"/\"R\" = single pylon on your left/right, 0 = waypoint.",
   "id": "harbour",
-  "name": "Harbour Run",
+  "name": "Bay Run",
   "lead": "Race the pylons low over the water. Fly between the blue pairs wings level, and pass each red pylon on the side its arrow points to.",
   "seeds": {
     "a": 12,
