@@ -1,9 +1,17 @@
 {
-  "_format": "Courses in menu order. Each file is loaded only when that course is flown; id also keys the saved best time. vehicle picks the model, sound and controls, and loads config/<vehicle>.json over config/flight.json (prop, the default, is flight.json alone).",
-  "courses": [
-    { "id": "valley", "name": "Valley Run", "file": "courses/valley.json", "vehicle": "prop" },
-    { "id": "summit", "name": "Summit Run", "file": "courses/summit.json", "vehicle": "jet" },
-    { "id": "harbour", "name": "Harbour Run", "file": "courses/harbour.json", "vehicle": "racer" },
-    { "id": "glacier", "name": "Glacier Run", "file": "courses/glacier.json", "vehicle": "wingsuit" }
+  "_format": "Themes in menu order, each with its own aircraft; all themes are open from the start. vehicle picks the model, sound and controls, and loads config/<vehicle>.json over config/flight.json (prop, the default, is flight.json alone). levels are flown in order: level 1 is always open, each later one opens once the one before it has been finished. A level's id keys its saved best time, so keep ids unique across all themes and don't rename them; the id and name here override the ones inside the course file. A level may set its own vehicle to override the theme's.",
+  "themes": [
+    { "id": "valley", "name": "Valley", "vehicle": "prop", "levels": [
+      { "id": "valley", "name": "Valley Run", "file": "courses/valley.json" }
+    ] },
+    { "id": "summit", "name": "Summit", "vehicle": "jet", "levels": [
+      { "id": "summit", "name": "Summit Run", "file": "courses/summit.json" }
+    ] },
+    { "id": "harbour", "name": "Harbour", "vehicle": "racer", "levels": [
+      { "id": "harbour", "name": "Harbour Run", "file": "courses/harbour.json" }
+    ] },
+    { "id": "glacier", "name": "Glacier", "vehicle": "wingsuit", "levels": [
+      { "id": "glacier", "name": "Glacier Run", "file": "courses/glacier.json" }
+    ] }
   ]
 }
