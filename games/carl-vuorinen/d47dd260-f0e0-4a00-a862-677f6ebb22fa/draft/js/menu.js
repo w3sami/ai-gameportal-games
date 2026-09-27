@@ -109,15 +109,43 @@ function createMenu(ctx) {
     pickLevel(nx);
   });
   $('btn-themes').addEventListener('click', () => show('themes'));
-  const pauseMenu = $('btn-pause-menu');                     // pause screen: abandon the run, back to this theme's levels
-  if (pauseMenu) pauseMenu.addEventListener('click', () => ctx.toMenu());
+
+  // Pause screen: Restart and Menu throw the run away, so once the clock has started they ask first.
+  // The question replaces the pause buttons in place (no window.confirm: it would drop full screen on some phones).
+  const pausePanel = $('pause'), ask = $('pause-confirm');
+  let onYes = null;
+  function confirmRun(action, label, question) {
+    const run = ctx.run ? ctx.run() : { started: false };
+    if (!run.started || !ask) { action(); return; }
+    onYes = action;
+    $('confirm-msg').textContent = `${question} This run (${ctx.fmtTime(run.time)} so far) won\u2019t count.`;
+    $('btn-confirm-yes').textContent = label;
+    ask.hidden = false; pausePanel.classList.add('is-confirming');
+    focus($('btn-confirm-no'));                              // the safe choice has the focus
+  }
+  function closeConfirm(refocus) {
+    onYes = null;
+    if (!ask) return;
+    ask.hidden = true; pausePanel.classList.remove('is-confirming');
+    if (refocus) focus($('btn-resume'));
+  }
+  if (ask) {
+    $('btn-confirm-yes').addEventListener('click', () => { const a = onYes; closeConfirm(false); if (a) a(); });
+    $('btn-confirm-no').addEventListener('click', () => closeConfirm(true));
+  }
+  $('btn-restart').addEventListener('click', () => confirmRun(() => ctx.restart(), 'Restart', 'Restart the course?'));
+  const pauseMenu = $('btn-pause-menu');                     // back to this theme's levels
+  if (pauseMenu) pauseMenu.addEventListener('click', () => confirmRun(() => ctx.toMenu(), 'Leave', 'Leave for the menu?'));
+
   window.addEventListener('keydown', (e) => {
+    if (onYes && e.code === 'Escape') { e.preventDefault(); closeConfirm(true); return; }   // Esc backs out of the question
     if (view !== 'levels' || !ctx.isMenu() || (e.code !== 'Escape' && e.code !== 'Backspace')) return;
     e.preventDefault(); show('themes');
   });
 
   return {
     render, show, onFinish,
+    onPause: () => closeConfirm(false),                     // each pause opens on its buttons, not a stale question
     get view() { return view; },
     canStart: () => view === 'levels' && current().theme === (theme || current().theme),
   };
