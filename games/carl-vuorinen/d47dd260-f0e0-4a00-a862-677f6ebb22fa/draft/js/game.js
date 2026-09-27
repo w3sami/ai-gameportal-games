@@ -113,6 +113,7 @@ function buildScenery() {
   buildTrees(worldGroup);
   buildRocks(worldGroup);
   overhangs.build(worldGroup);
+  shore.build(worldGroup);
   buildClouds(worldGroup);
   cloudDeck.build(worldGroup, v);
   buildHoops(worldGroup);
@@ -122,16 +123,23 @@ function buildTerrainMesh(group, plainR) {
   const PAL = Object.assign({}, PALETTE, COURSE.palette);
   const N = TER.N, W = N + 1, cell = TER.CELL, pos = new Float32Array(N * N * 18), col = new Float32Array(N * N * 18);
   const rand = mulberry32(5), c = new THREE.Color(), e1 = new V3(), e2 = new V3(), nrm = new V3();
+  // a beach course's own sand and sea (palette.sand...); the see-through sea shows the bed darkening with depth
+  const sand = new THREE.Color(PAL.sandColor || COL.sand), sea = new THREE.Color(PAL.water || COL.water);
+  const deep = new THREE.Color(PAL.deepWater || PAL.water || COL.water), clearSea = PAL.waterOpacity != null && PAL.waterOpacity < 1;
+  const sandTop = PAL.sand ? PAL.sand[0] : 2.2;
   let o = 0;
   function colour(x, z, h, ny, k) {
     const s = TNEAR[k] >= 0 ? SAMPLES[TNEAR[k]] : null, d = TDIST[k];
-    if (h < TER.WATER + 2.2) c.copy(COL.sand);
-    else {
+    if (h < TER.WATER + sandTop) {
+      c.copy(sand);
+      if (clearSea && h < TER.WATER) c.lerp(deep, smoothstep(TER.WATER - 0.3, TER.WATER - (PAL.deep || 14), h));
+    } else {
       c.copy(COL.meadow).lerp(COL.dry, smoothstep(PAL.dry[0], PAL.dry[1], h));
       const f = noiseB(x * 0.006 + 40, z * 0.006 - 13);
       if (f > 0.52) c.lerp(COL.forest, smoothstep(0.52, 0.66, f) * (1 - smoothstep(PAL.forestTop[0], PAL.forestTop[1], h)));
       c.lerp(COL.high, smoothstep(PAL.high[0], PAL.high[1], h));
       if (PAL.pathTint && s && d < s.width + 25) c.lerp(COL.valley, 0.45 * (1 - smoothstep(s.width, s.width + 25, d)));
+      if (PAL.sand) c.lerp(sand, 1 - smoothstep(TER.WATER + PAL.sand[0], TER.WATER + PAL.sand[1], h));
     }
     c.lerp(COL.rock, smoothstep(0.84, 0.62, ny));
     if (PAL.snow && h > PAL.snow[0]) c.lerp(COL.snow, smoothstep(PAL.snow[0], PAL.snow[1], h) * smoothstep(0.5, 0.78, ny));   // steep faces stay rock
@@ -157,13 +165,17 @@ function buildTerrainMesh(group, plainR) {
   g.computeVertexNormals();                                 // non-indexed: flat, faceted shading
   group.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })));
 
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(TER.SIZE, TER.SIZE).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: COL.water }));
+  const openSea = TER.EDGE < TER.WATER, wsize = openSea ? plainR * 2 : TER.SIZE;   // edges below the water: sea all round
+  const wmat = new THREE.MeshLambertMaterial({ color: sea });
+  if (clearSea) { wmat.transparent = true; wmat.opacity = PAL.waterOpacity; }
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(wsize, wsize).rotateX(-Math.PI / 2), wmat);
+  water.renderOrder = -1;                                   // see-through: drawn before the other see-through things
   water.position.set(TER.CX, TER.WATER, TER.CZ); group.add(water);
 
   const S = TER.SIZE / 2, O = plainR;                       // flat plain beyond the terrain square
   const shape = new THREE.Shape([new THREE.Vector2(-O, -O), new THREE.Vector2(O, -O), new THREE.Vector2(O, O), new THREE.Vector2(-O, O)]);
   shape.holes.push(new THREE.Path([new THREE.Vector2(-S, -S), new THREE.Vector2(-S, S), new THREE.Vector2(S, S), new THREE.Vector2(S, -S)]));
-  const plain = new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: COL.meadow }));
+  const plain = new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: openSea ? deep : COL.meadow }));
   plain.position.set(TER.CX, TER.EDGE - 0.05, TER.CZ); group.add(plain);
 }
 
@@ -242,6 +254,7 @@ const gateQ = [];         // per gate: orientation (+Z along the line)
 const pylons = createPylonKit(ROUTE_HEX);   // pylon gates' meshes and highlighting (js/pylons.js)
 const bridges = createBridgeKit();          // bridges over some hoops (js/bridges.js)
 const overhangs = createOverhangKit();      // rock ledges, arches, boulders (js/overhangs.js)
+const shore = createShoreKit();              // piers, boats, beach umbrellas and huts (js/shore.js)
 const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(gateDisc);
@@ -661,7 +674,7 @@ function onCrash(kind) {
   if (G.state !== 'playing') return;
   Sound.crash();
   flash();
-  const what = kind === 'tree' ? 'Clipped a tree' : kind === 'bridge' ? 'Hit the bridge' : 'Crashed';
+  const what = { tree: 'Clipped a tree', bridge: 'Hit the bridge', pier: 'Hit the pier', boat: 'Hit a boat' }[kind] || 'Crashed';
   showToast(G.next > 0 ? `${what}. Back to ${gateNoun()} ${G.next}.` : `${what}. Back to the start.`);
 }
 
