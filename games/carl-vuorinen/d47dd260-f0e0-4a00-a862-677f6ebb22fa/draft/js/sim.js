@@ -78,11 +78,20 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
    {
      id, name,
      seeds:   { a, b, c, trees }                noise seeds: hills, ridges + forest mask, micro relief, tree scatter
-     terrain: { size, cx, cz, n, water, edge, carveR }  square of side `size` m centred on (cx, cz), split into n×n
-                                                 cells; water level, the height the edges fall away to, and how far
-                                                 from the path the valley carving reaches (m, default 440)
+     terrain: { size, cx, cz, n, water, edge, carveR, micro }  square of side `size` m centred on (cx, cz), split into
+                                                 n×n cells; water level, the height the edges fall away to (below the
+                                                 water: open sea all round), how far from the path the valley carving
+                                                 reaches (m, default 440), and the micro relief's height range (m, default 5)
      relief:  { base, amp, pow, freq, ridgeAmp, ridgeFreq }   optional; hill shape (defaults: rolling hills)
-     palette: { dry, forestTop, high, snow }    optional; heights [from, to] where the ground colour blends
+     palette: { dry, forestTop, high, snow }    optional; heights [from, to] where the ground colour blends; for a beach
+              sand: [full, none]                  sand up to `full` m above the water, fading out by `none`
+              sandColor, water, deepWater: "#hex", waterOpacity   the see-through sea: the bed darkens to deepWater
+              deep                                by `deep` m down (default 14)
+     coast:   { x, z, toSea, slope, depth, shelf, hills, wobble, wobbleFreq }   optional; open sea past a wavy shoreline
+                                                 through (x, z), toSea [dx, dz] pointing out to sea: the sand rises
+                                                 `slope` m per m, the bed falls to `depth` m below the water (63% of it
+                                                 `shelf` m out), the hills fade in from hills[0] to hills[1] m inland,
+                                                 and the shoreline wanders up to `wobble` m either way
      view:    { near, far, fog: [near, far] }   optional; camera range and fog, for big maps
      clouds:  { count, y, size, near, nearR, nearY, nearSize }   optional; all but the counts are [min, max]
      lake:    { x, z, r, depth } | [...] | null  a basin pressed into the hills (or a list of them)
@@ -90,7 +99,8 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
                                                  half-width w m, bed depth m below the water, banks rising `bank` m per m.
                                                  Where a bridge's hoop is in a side span, the river swings under its main span.
      hills:   [{ x, z, r, h }]                  bumps added to the hills (e.g. to put a ridge under a pass)
-     trees:   { near, scattered, maxAlt }       placement attempts along the course and across the map; no trees above maxAlt
+     trees:   { near, scattered, maxAlt, minAlt }   placement attempts along the course and across the map; no trees
+                                                 above maxAlt, nor below minAlt (default 1.5 m above the water)
      rocks:   { near, scattered, size }         optional; boulders (placement attempts along the course and across the
                                                  map, radius [min, max] m), on any slope and above the tree line
      points:  [[x, y, z, clearance, floorHalfWidth, wallSteepness, gate?], ...]
@@ -111,6 +121,7 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
                                                  gate then counts as flown). Hoops never count as missed (fly back)
                                                  unless hoopMiss is true, for vehicles that can't turn back (wingsuit).
      overhangs: [{ type, at, ... }]              optional; rock ledges, arches and big boulders along the line (js/overhangs.js)
+     shore:   { piers, boats, umbrellas, huts }  optional; piers, boats and beach life (js/shore.js)
      lead:    "..."                             optional; the start screen's one-line brief
      autopilot: { clear, ahead }                optional; ground clearance the attract-mode autopilot holds (m), for
                                                  courses flown lower than AP_CLEAR allows (under bridges), and how far
@@ -134,12 +145,22 @@ function baseHeight(x, z) {
   const n = fbm(noiseA, x * REL.freq + 11.3, z * REL.freq - 4.7, 5);
   const r = 1 - Math.abs(2 * fbm(noiseB, x * REL.ridgeFreq, z * REL.ridgeFreq, 3) - 1);
   let h = REL.base + Math.pow(n, REL.pow) * REL.amp + r * REL.ridgeAmp;
+  if (COURSE.coast) h = coastHeight(x, z, h);
   for (const L of [].concat(COURSE.lake || [])) { const dx = x - L.x, dz = z - L.z; h -= L.depth * smoothstep(L.r, L.r * 0.35, Math.sqrt(dx * dx + dz * dz)); }
   for (const hl of COURSE.hills || []) {
     const dx = x - hl.x, dz = z - hl.z;
     h += hl.h * Math.exp(-(dx * dx + dz * dz) / (hl.r * hl.r));
   }
   return h;
+}
+
+// open sea past a wavy shoreline (course.coast): the bed shelving away, a gently rising beach, then the hills
+function coastHeight(x, z, h) {
+  const C = COURSE.coast, sea = C.toSea || [-1, 0], L = Math.hypot(sea[0], sea[1]) || 1, hills = C.hills || [150, 500];
+  const w = C.wobble ? (fbm(noiseB, x * (C.wobbleFreq || 0.002) + 71.3, z * (C.wobbleFreq || 0.002) - 33.1, 3) - 0.5) * 2 * C.wobble : 0;
+  const s = w - ((x - C.x) * sea[0] + (z - C.z) * sea[1]) / L;          // m inland of the waterline (negative: out at sea)
+  const beach = TER.WATER + (s >= 0 ? Math.min(s, hills[1]) * (C.slope || 0.035) : -(C.depth || 25) * (1 - Math.exp(s / (C.shelf || 200))));
+  return Math.max(beach, lerp(beach, h, smoothstep(hills[0], hills[1], s)));
 }
 
 function buildWorld(course) {
@@ -225,7 +246,7 @@ function buildWorld(course) {
         const r = Math.sqrt(dR[k]);
         h = Math.min(h, TER.WATER - RV.depth + (RV.depth + 1.2) * smoothstep(RV.w * 0.35, RV.w, r) + Math.max(0, r - RV.w) * RV.bank);
       }
-      h += (noiseC(x * 0.03, z * 0.03) - 0.5) * 5;                     // micro relief
+      h += (noiseC(x * 0.03, z * 0.03) - 0.5) * (t.micro == null ? 5 : t.micro);   // micro relief
       const e = Math.max(Math.abs(x - TER.CX), Math.abs(z - TER.CZ)) / (TER.SIZE / 2);
       TH[k] = lerp(h, TER.EDGE, smoothstep(0.8, 0.98, e));
     }
@@ -233,6 +254,7 @@ function buildWorld(course) {
 
   buildBridges();                                            // js/bridges.js: needs the terrain, before the trees
   buildOverhangs();                                          // js/overhangs.js: ledges, arches, boulders; before the trees
+  buildShore();                                              // js/shore.js: piers, boats, beach; before the trees
 
   // pylons: beside each pylon gate's circle, standing on the ground or the water
   PYLONS = [];
@@ -257,17 +279,19 @@ function buildWorld(course) {
   for (const key in TREES) TREES[key].length = 0;
   TREE_GRID.clear();
   const rand = mulberry32(course.seeds.trees), treeTop = course.trees.maxAlt == null ? 250 : course.trees.maxAlt;
+  const treeFoot = course.trees.minAlt == null ? TER.WATER + 1.5 : course.trees.minAlt;
   const forest = (x, z) => noiseB(x * 0.006 + 40, z * 0.006 - 13);    // same mask the terrain colouring uses
   const add = (x, z, scattered) => {
     if (scattered && forest(x, z) < 0.52 && rand() < 0.85) return;
     const y = heightAt(x, z);
-    if (y < TER.WATER + 1.5 || y > treeTop) return;
+    if (y < treeFoot || y > treeTop) return;
     const e = 6, gx = heightAt(x + e, z) - heightAt(x - e, z), gz = heightAt(x, z + e) - heightAt(x, z - e);
     if (Math.hypot(gx, gz) / (2 * e) > 0.9) return;
     const cd = courseDistAt(x, z);
     if (cd.s && cd.d < cd.s.width + 12) return;
     if (bridgeNear(x, z, 14)) return;
     if (overhangNear(x, z, 6)) return;
+    if (SHORE.boxes.length && shoreNear(x, z, 6)) return;
     const h = 9 + rand() * 8, r = h * (0.26 + rand() * 0.08), idx = TREES.x.length;
     TREES.x.push(x); TREES.y.push(y - 0.8); TREES.z.push(z); TREES.h.push(h); TREES.r.push(r);
     const key = treeKey(Math.floor(x / TREE_CELL), Math.floor(z / TREE_CELL));
@@ -570,5 +594,6 @@ function crashed(P) {
   if (ROCKS.x.length && rockHit(P.pos)) return 'rock';
   if (BRIDGES.length && bridgeHit(P.pos)) return 'bridge';
   if (OVERHANGS.length && overhangHit(P.pos)) return 'rock';
+  if (SHORE.boxes.length) { const k = shoreHit(P.pos); if (k) return k; }
   return null;
 }
