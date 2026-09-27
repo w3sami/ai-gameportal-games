@@ -12,6 +12,8 @@
              as the floodplain has room for.
      deck, road, pier, step, truss, towerH   deck thickness, road width, pier thickness, spacing of the approach
              piers, truss height above the deck, tower height above the deck (m)
+     below   top (and an arch's holes) count from this many m under the hoop's centre instead of from the water level:
+             for a bridge over a mountain creek far above the sea
    The point's height is the hoop's centre, so pick it and `top` so the hoop fits under the span. The deck runs out to
    where the ground on either bank reaches it. Everything solid is a crash.
    Sim part (no DOM): bridgeSpanOffset(spec) (buildWorld uses it for the river), buildBridges(), bridgeHit(p),
@@ -44,7 +46,7 @@ function buildBridges() {
     b.vx = -b.uz; b.vz = b.ux;                              // along it: right of the flying direction
     const off = bridgeSpanOffset(h.bridgeSpec);             // the hoop's section is on the path, so the middle is beside it
     b.ox = h.pos.x - b.vx * off; b.oz = h.pos.z - b.vz * off;
-    b.y0 = TER.WATER; b.a = b.open / 2; b.under = b.y0 + b.top; b.deckTop = b.under + b.deck;
+    b.y0 = b.below != null ? h.pos.y - b.below : TER.WATER; b.a = b.open / 2; b.under = b.y0 + b.top; b.deckTop = b.under + b.deck;
     const at = (v, u) => heightAt(b.ox + b.vx * v + b.ux * u, b.oz + b.vz * v + b.uz * u);
     b.ground = (v) => Math.min(at(v, -b.road / 2), at(v, 0), at(v, b.road / 2));
     // each end: the first place outside the spans that must exist where the bank is up to the deck (then a little into it)
