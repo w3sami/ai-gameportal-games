@@ -78,8 +78,8 @@
     {"type": "arch", "at": 3.55, "above": 115, "a": 230, "drop": 60, "thick": 64, "depth": 80},
     {"type": "boulder", "at": 4.35, "side": -1, "off": 140, "r": 60},
     {"type": "ledge", "at": 8.5, "side": -1, "above": 90, "reach": 20, "thick": 44, "depth": 120},
-    {"type": "ledge", "at": 12, "side": -1, "above": 84, "reach": 40, "thick": 40, "depth": 100},
-    {"type": "arch", "at": 14, "above": 92, "drop": 40, "thick": 50, "depth": 60},
+    {"type": "ledge", "at": 12, "side": -1, "above": 78, "reach": 40, "thick": 40, "depth": 100},
+    {"type": "arch", "at": 14, "above": 86, "drop": 40, "thick": 50, "depth": 60},
     {"type": "ledge", "at": 14.55, "side": -1, "above": 72, "reach": 25, "thick": 38, "depth": 90}
   ]
 }
