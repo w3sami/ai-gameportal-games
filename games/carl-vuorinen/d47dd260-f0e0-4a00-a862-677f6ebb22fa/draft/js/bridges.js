@@ -1,62 +1,85 @@
 'use strict';
-/* Bridge gates (course format in js/sim.js): a point with gate "B" puts a bridge across the path there, and the gate is
-   flown by passing under it. The 8th value of the point sets the bridge: { type, open, top, ... } (any key of
-   BRIDGE_DEF below overrides the type's default):
-     type    "beam" (concrete road bridge on piers), "arch" (stone, the opening is the arch), "truss" (steel rail bridge,
-             truss above the main span), "suspension" (footbridge hung from two towers)
-     open    clear width of the opening (m), centred on the path
-     top     height of the underside above the water at the centre (for an arch: the crown)
+/* Bridges over hoops (course format in js/sim.js): a point with gate "B" is an ordinary hoop with a bridge across the
+   path over it. The 8th value of the point sets the bridge: { type, top, open, span, ... } (any key of BRIDGE_DEF below
+   overrides the type's default):
+     type    "beam" (concrete road bridge on piers), "arch" (stone), "truss" (steel rail bridge, truss above the main
+             span), "suspension" (footbridge hung from two towers)
+     top     height of the main span's underside above the water (for an arch: its crown)
+     open    clear width of the main span (m)
+     span    which section the hoop is in: 0 (default) the main span; 1 / -1 the next span to the right / left as you
+             fly. The bridge then shifts sideways so that section is on the path, and the river swings under its main
+             span. Beam and truss: the first approach span; arch: the bridge becomes a row of equal arches, as many
+             as the floodplain has room for.
      deck, road, pier, step, truss, towerH   deck thickness, road width, pier thickness, spacing of the approach
              piers, truss height above the deck, tower height above the deck (m)
-   The deck runs out to where the ground on either bank reaches it. Everything solid is a crash; passing the gate outside
-   the opening but within rules.missR of it (over the bridge) counts as flown, with the rules.missed penalty.
-   Sim part (no DOM): buildBridges() from buildWorld(), bridgeHit(p), bridgeOpening(), bridgeNear().
-   createBridgeKit(routeHex): the meshes and the next-gate highlight, like js/pylons.js. */
+   The point's height is the hoop's centre, so pick it and `top` so the hoop fits under the span. The deck runs out to
+   where the ground on either bank reaches it. Everything solid is a crash.
+   Sim part (no DOM): bridgeSpanOffset(spec) (buildWorld uses it for the river), buildBridges(), bridgeHit(p),
+   bridgeNear(). createBridgeKit(): the meshes. */
 const BRIDGE_DEF = {
-  beam: { open: 46, top: 20, deck: 2.4, road: 11, pier: 3, step: 34 },
-  arch: { open: 52, top: 22, deck: 3.4, road: 9 },
-  truss: { open: 58, top: 20, deck: 1.8, road: 8, pier: 4.5, step: 30, truss: 9 },
-  suspension: { open: 72, top: 17, deck: 1.1, road: 5, towerH: 24 },
+  beam: { open: 46, top: 22, deck: 2.4, road: 11, pier: 3, step: 34 },
+  arch: { open: 52, top: 24, deck: 3.4, road: 9, archPier: 7 },
+  truss: { open: 58, top: 21, deck: 1.8, road: 8, pier: 4.5, step: 30, truss: 9 },
+  suspension: { open: 72, top: 21, deck: 1.1, road: 5, towerH: 24 },
 };
 const BRIDGES = [];
+const bridgeSpec = (spec) => {
+  const type = BRIDGE_DEF[spec.type] ? spec.type : 'beam';
+  return Object.assign({}, BRIDGE_DEF[type], spec, { type, span: type === 'suspension' ? 0 : Math.sign(spec.span || 0) });
+};
+// where the hoop sits across the bridge: its section's centre, relative to the middle of the main span (+ = right)
+function bridgeSpanOffset(spec) {
+  const b = bridgeSpec(spec);
+  if (!b.span) return 0;
+  return b.span * (b.type === 'arch' ? b.open + b.archPier : b.open / 2 + b.pier / 2 + b.step / 2);
+}
 
 function buildBridges() {
   BRIDGES.length = 0;
   HOOPS.forEach((h, gi) => {
-    if (h.kind !== 'B') return;
-    const type = BRIDGE_DEF[h.spec.type] ? h.spec.type : 'beam';
-    const b = Object.assign({}, BRIDGE_DEF[type], h.spec, { type, gate: gi });
-    b.ox = h.pos.x; b.oz = h.pos.z; b.ux = h.normal.x; b.uz = h.normal.z;
-    b.vx = -b.uz; b.vz = b.ux;                              // right of the flying direction (normal x up)
+    if (!h.bridgeSpec) return;
+    const b = Object.assign(bridgeSpec(h.bridgeSpec), { gate: gi });
+    const L = Math.hypot(h.normal.x, h.normal.z) || 1;
+    b.ux = h.normal.x / L; b.uz = h.normal.z / L;           // across the bridge: the flying direction, level
+    b.vx = -b.uz; b.vz = b.ux;                              // along it: right of the flying direction
+    const off = bridgeSpanOffset(h.bridgeSpec);             // the hoop's section is on the path, so the middle is beside it
+    b.ox = h.pos.x - b.vx * off; b.oz = h.pos.z - b.vz * off;
     b.y0 = TER.WATER; b.a = b.open / 2; b.under = b.y0 + b.top; b.deckTop = b.under + b.deck;
     const at = (v, u) => heightAt(b.ox + b.vx * v + b.ux * u, b.oz + b.vz * v + b.uz * u);
     b.ground = (v) => Math.min(at(v, -b.road / 2), at(v, 0), at(v, b.road / 2));
-    // each end: the first place outside the opening where the bank is up to the deck (then a little into it)
-    const end = (s) => { for (let d = b.a; d < 600; d += 2) if (b.ground(s * d) >= b.deckTop - 0.5) return d + 4; return 600; };
+    // each end: the first place outside the spans that must exist where the bank is up to the deck (then a little into it)
+    const need = !b.span ? b.a : b.type === 'arch' ? 3 * b.a + b.archPier + 5 : b.a + b.pier + b.step * 1.4 + 2;
+    const end = (s) => { const n = s === b.span ? need : b.a; for (let d = n; d < 600; d += 2) if (b.ground(s * d) >= b.deckTop - 0.5) return d + 4; return 600; };
     b.L0 = end(-1); b.L1 = end(1);
     b.solids = [];
     const solid = (v0, v1, y0, y1, uh, holes) => b.solids.push({ v0, v1, y0, y1, uh, holes });
     const footAt = (v0, v1) => Math.min(b.ground(v0), b.ground(v1), b.ground((v0 + v1) / 2)) - 3;
     b.piers = [];
-    const pier = (c, w) => {                                // skipped where the bank is already up to the deck
-      if (b.ground(c) >= b.under - 1.5) return;
+    const pier = (c, w, force) => {                         // skipped where the bank is already up to the deck
+      if (!force && b.ground(c) >= b.under - 1.5) return;
       const p = { v0: c - w / 2, v1: c + w / 2, y0: footAt(c - w / 2, c + w / 2) };
       b.piers.push(p); solid(p.v0, p.v1, p.y0, b.under, b.road / 2 - 0.6);
     };
-    const approach = (from, w) => {                         // approach piers every `step` out to each end
-      for (const s of [-1, 1]) for (let c = from + b.step; c < (s < 0 ? b.L0 : b.L1) - b.step * 0.4; c += b.step) pier(s * c, w);
-    };
-    if (type === 'arch') {
-      // one wall, road wide, with the main arch and a flood arch each side where the banks leave room
+    if (b.type === 'arch') {
+      // one wall, road wide: the main arch, then either equal side arches (span) or a small flood arch each side
       b.holes = [{ c: 0, a: b.a, b: b.top }];
       const a2 = Math.min(13, b.top * 0.55);
       for (const s of [-1, 1]) {
-        const c = s * (b.a + 6 + a2), L = s < 0 ? b.L0 : b.L1;
+        const L = s < 0 ? b.L0 : b.L1;
+        if (b.span) {                                       // row of equal arches: the one each side always, more while the floodplain lasts
+          for (let k = 1; ; k++) {
+            const c = s * k * (b.open + b.archPier);
+            if (k > 1 && (Math.abs(c) + b.a + 5 > L || b.ground(c) > b.y0 + b.top * 0.6)) break;
+            b.holes.push({ c, a: b.a, b: b.top });
+          }
+          continue;
+        }
+        const c = s * (b.a + 6 + a2);
         if (Math.abs(c) + a2 + 5 < L && b.ground(c) < b.y0 + a2 * 0.6) b.holes.push({ c, a: a2, b: a2 * 1.15 });
       }
       b.base = Math.min(b.y0 - 4, footAt(-b.L0, b.L1));
       solid(-b.L0, b.L1, b.base, b.deckTop + 1.1, b.road / 2, b.holes);
-    } else if (type === 'suspension') {
+    } else if (b.type === 'suspension') {
       b.towers = [-1, 1].map((s) => {
         const c = s * (b.a + 1.6), t = { v0: c - 1.6, v1: c + 1.6, y0: footAt(c - 1.6, c + 1.6), y1: b.deckTop + b.towerH };
         solid(t.v0, t.v1, t.y0, t.y1, b.road / 2 + 1.8);
@@ -65,9 +88,12 @@ function buildBridges() {
       solid(-b.L0, b.L1, b.under, b.deckTop + 1.1, b.road / 2);
     } else {
       solid(-b.L0, b.L1, b.under, b.deckTop + 1.1, b.road / 2);
-      pier(-(b.a + b.pier / 2), b.pier); pier(b.a + b.pier / 2, b.pier);
-      approach(b.a + b.pier / 2, b.pier);
-      if (type === 'truss') solid(-(b.a + b.pier), b.a + b.pier, b.deckTop, b.deckTop + b.truss, b.road / 2 + 0.4);
+      const c1 = b.a + b.pier / 2;                          // main piers, then approach piers every `step` to each end
+      for (const s of [-1, 1]) {
+        pier(s * c1, b.pier, true);
+        for (let c = c1 + b.step; c < (s < 0 ? b.L0 : b.L1) - b.step * 0.4; c += b.step) pier(s * c, b.pier, s === b.span && c === c1 + b.step);
+      }
+      if (b.type === 'truss') solid(-(b.a + b.pier), b.a + b.pier, b.deckTop, b.deckTop + b.truss, b.road / 2 + 0.4);
     }
     const reach = Math.max(b.L0, b.L1) + b.road + 12;
     b.R2 = reach * reach;
@@ -76,13 +102,6 @@ function buildBridges() {
   });
 }
 
-// underside of the opening at lateral offset v (absolute height)
-const bridgeTopAt = (b, v) => (b.type === 'arch' ? b.y0 + b.top * Math.sqrt(Math.max(0, 1 - (v / b.a) ** 2)) : b.under);
-// gate crossing at world offset (dx, dz) from the gate point, height y: inside the opening?
-function bridgeOpening(b, dx, y, dz) {
-  const v = dx * b.vx + dz * b.vz;
-  return Math.abs(v) < b.a - 1 && y > b.y0 + 0.3 && y < bridgeTopAt(b, v) - 0.6;
-}
 function bridgeHit(p) {
   const m = 0.9;                                            // plane's reach around its centre
   for (const b of BRIDGES) {
@@ -106,7 +125,7 @@ function bridgeNear(x, z, pad) {                          // keeps trees off the
 }
 
 /* ---------- look ---------- */
-function createBridgeKit(routeHex) {
+function createBridgeKit() {
   const shared = (m) => { m.userData.shared = true; return m; };
   const MAT = {
     concrete: shared(new THREE.MeshLambertMaterial({ color: '#cfcac0' })),
@@ -118,13 +137,7 @@ function createBridgeKit(routeHex) {
     tower: shared(new THREE.MeshLambertMaterial({ color: '#e9e6df' })),
     cable: shared(new THREE.MeshLambertMaterial({ color: '#3a3f46' })),
   };
-  const HI = {
-    next: shared(new THREE.MeshBasicMaterial({ color: routeHex })),
-    soon: shared(new THREE.MeshBasicMaterial({ color: '#ffffff' })),
-    panel: shared(new THREE.MeshBasicMaterial({ color: routeHex, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide })),
-  };
   const Y = new THREE.Vector3(0, 1, 0), ZA = new THREE.Vector3(0, 0, 1);
-  let gates = [];   // per gate: { group, frame, panel, state, fade } or null
 
   // Bridge-local frame: x = along the span (v), y = up, z = against the flying direction; parts are collected per
   // material and merged, so a bridge is a handful of draw calls however many members it has.
@@ -265,70 +278,16 @@ function createBridgeKit(routeHex) {
     for (const x of [-b.L0 + 2, b.L1 - 2]) c.box(x - 2, x + 2, b.deckTop - 2, b.deckTop + 1, zc + 0.8, MAT.concrete);   // anchor blocks
   }
 
-  // the opening, as the next gate: a faint panel across it and a route-coloured frame on the side you come from
-  function buildHighlight(group, b) {
-    const t = 0.7, pts = [], line = [];
-    if (b.type === 'arch') for (let k = 0; k <= 32; k++) {
-      const c = Math.cos(Math.PI - Math.PI * k / 32), sn = Math.sin(Math.PI - Math.PI * k / 32);
-      pts.push([b.a * c, b.y0 + b.top * sn]); line.push([(b.a - t / 2) * c, b.y0 + (b.top - t / 2) * sn]);
-    } else {
-      pts.push([-b.a, b.y0], [-b.a, b.under], [b.a, b.under], [b.a, b.y0]);
-      const x = b.a - t / 2, y = b.under - t / 2;
-      line.push([-x, b.y0], [-x, y], [x, y], [x, b.y0]);
-    }
-    const panel = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)))), HI.panel);
-    panel.visible = false; group.add(panel);
-    const frame = new THREE.Group(), z = b.road / 2 + 0.25;
-    for (let i = 0; i + 1 < line.length; i++) {
-      const a = new THREE.Vector3(line[i][0], line[i][1], z), e = new THREE.Vector3(line[i + 1][0], line[i + 1][1], z);
-      const d = new THREE.Vector3().subVectors(e, a), len = d.length();
-      const m = new THREE.Mesh(new THREE.BoxGeometry(t, t, len + t), HI.next);
-      m.position.addVectors(a, e).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(ZA, d.divideScalar(len));
-      frame.add(m);
-    }
-    frame.visible = false; group.add(frame);
-    return { panel, frame };
-  }
-
   function build(group) {
-    gates = HOOPS.map((h) => {
-      const b = h.bridge;
-      if (!b) return null;
+    for (const b of BRIDGES) {
       const g = new THREE.Group();
       g.position.set(b.ox, 0, b.oz);
       g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(b.vx, 0, b.vz), Y, new THREE.Vector3(-b.ux, 0, -b.uz)));
       const c = collector();
       ({ beam: buildBeam, truss: buildTruss, arch: buildArch, suspension: buildSuspension })[b.type](c, b);
       c.merge(g);
-      const hi = buildHighlight(g, b);
       group.add(g);
-      return Object.assign({ group: g, state: null, fade: 0, mat: null }, hi);
-    });
+    }
   }
-  // next: index of the next gate; t: clock for the pulse
-  function update(next, t, dt) {
-    gates.forEach((gate, i) => {
-      if (!gate) return;
-      const rel = i - next, state = rel === 0 ? 'next' : rel === 1 ? 'soon' : rel < 0 ? 'done' : 'off';
-      if (state !== gate.state) {
-        if (state === 'done' && gate.state === 'next') {       // just flown: the frame flashes out
-          gate.mat = HI.next.clone(); gate.mat.transparent = true; gate.mat.depthWrite = false; gate.fade = 1;
-          gate.frame.children.forEach((m) => { m.material = gate.mat; });
-        } else if (gate.mat) { gate.mat.dispose(); gate.mat = null; gate.fade = 0; }
-        gate.state = state;
-        if (state === 'next' || state === 'soon') gate.frame.children.forEach((m) => { m.material = state === 'next' ? HI.next : HI.soon; });
-      }
-      gate.panel.visible = state === 'next';
-      if (state === 'done' && gate.mat) {
-        gate.fade = Math.max(0, gate.fade - dt * 2.4);
-        gate.mat.opacity = gate.fade;
-        gate.frame.visible = gate.fade > 0;
-      } else gate.frame.visible = state === 'next' || state === 'soon';
-    });
-    HI.panel.opacity = 0.12 + Math.sin(t * 6) * 0.05;
-  }
-  function reset() {
-    gates.forEach((g) => { if (!g) return; if (g.mat) g.mat.dispose(); g.mat = null; g.fade = 0; g.state = null; });
-  }
-  return { build, update, reset };
+  return { build };
 }
