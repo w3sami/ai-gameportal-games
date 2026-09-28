@@ -150,15 +150,18 @@ if (typeof LIFT_PLUGINS !== 'undefined') LIFT_PLUGINS.push(ridgeLift);
    low down, bending up as they near the cliff, climbing its face and spilling over the top. Pale streaks run along
    them wherever the air rises (the level run-in stays unseen), so they show where the lift starts and how strong it is.
    ========================================================================= */
-const WIND_LINE = { every: 26, speed: 16, dash: 22, gap: 38, width: 0.7, near: 250, far: 1100, flow: 5 };
+const WIND_LINE = { every: 26, speed: 16, dash: 22, gap: 38, width: 0.7, near: 250, far: 1100, flow: 5, clear: 14 };
 // one streamline from `d` m out and `y` m up at curve point i of ridge R: [[x, y, z], ...] every 4 m
 function traceWind(R, i, d, y) {
   const nx = R.sgn * R.UZ[i], nz = -R.sgn * R.UX[i];          // land-side normal at the start; the line keeps it
   let x = R.X[i] - nx * (d - R.WB[i]), z = R.Z[i] - nz * (d - R.WB[i]);
   const pts = [], step = 4;
   for (let k = 0; k < 120; k++) {
-    const g = groundAt(x, z) + 3 + 0.04 * Math.max(0, y - groundAt(x, z));
-    if (y < g) y = g;                                        // along the face: pushed up it
+    // it keeps WIND_LINE.clear m off the rock ahead, so near the face it curves up early and climbs in the air in front of
+    // it rather than being drawn onto it
+    let g = 0;
+    for (let a = 0; a <= WIND_LINE.clear; a += WIND_LINE.clear / 4) g = Math.max(g, groundAt(x + nx * a, z + nz * a) + 3);
+    if (y < g) y = lerp(y, g, 0.6);                          // eased, so the bend is a curve, not a kink
     pts.push([x, y, z]);
     const q = ridgeNear(R, x, z);
     if (q.s > R.o.back * 1.4) break;                         // well back over the top
