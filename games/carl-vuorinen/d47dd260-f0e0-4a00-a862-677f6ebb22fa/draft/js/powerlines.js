@@ -1,7 +1,7 @@
 'use strict';
 /* =========================================================================
    POWER LINES — lattice towers carrying three conductors and an earth wire, as a js/shore.js plugin.
-   Course file: powerlines: [{ pts, h, arm, sag, balls, clear }]
+   Course file: powerlines: [{ pts, h, arm, sag, balls, clear, clearSpans }]
      pts    the towers in order along the line, [[x, z], ...]. Each stands on the ground there, or on a concrete footing
             where it's in the water
      h      height of a tower's top (the earth wire) above its foot, or above the water where it stands in it (m, default 36)
@@ -10,7 +10,10 @@
      sag    how far every span's wires hang at mid-span below the straight line between its towers, as a share of the
             span (default 0.035: 10.5 m on a 300 m span)
      balls  orange and white marker balls on the earth wire over spans that cross water (default true)
-     clear  half-width of the tree-free corridor cut along it on land (m, default arm + 10)
+     clear  how far either side of it the tree-free corridor reaches on land (m, default arm + 10); or [left, right]
+            for a lopsided one (left and right as you look along pts), e.g. to join an open strip beside the line
+     clearSpans  [[first, last, left, right], ...] a different corridor for spans first..last (span i runs from tower i
+            to tower i + 1)
    Everything is a crash ('powerline'): each tower, and each span's conductors (one band across all three) and its
    earth wire, filed as short boxes that follow the sag. The gap between the earth wire and the conductors is open.
    On land a corridor under each span is kept clear of trees, as a real line's would be.
@@ -63,7 +66,7 @@ function buildPowerlines() {
       for (const s of [-1, 0, 1])                                                                       // insulators
         shoreBox('powerline', t.x - t.fz * s * o.arm, t.z + t.fx * s * o.arm, t.fx, t.fz, 0.4, 0.4, t.top - PL_DROP, t.top - 6);
     }
-    for (const s of L.S) {
+    L.S.forEach((s, si) => {
       const n = Math.max(2, Math.ceil(s.L / PL_SEG));
       for (let k = 0; k < n; k++) {
         const u0 = k / n, u1 = (k + 1) / n, um = (u0 + u1) / 2;
@@ -74,13 +77,16 @@ function buildPowerlines() {
         shoreBox('powerline', x, z, s.ux, s.uz, hu, o.arm + PL_PAD, cm - PL_PAD, Math.max(c0, c1) + PL_PAD);
         shoreBox('powerline', x, z, s.ux, s.uz, hu, PL_PAD, em - PL_PAD, Math.max(e0, e1) + PL_PAD);
       }
-      // corridor: no trees within `clear` m of the line (trees keep 6 m off any box), filed in pieces along the span
-      const cw = Math.max(1, (o.clear != null ? o.clear : o.arm + 10) - 6);
+      // corridor: no trees from `left` m on one side of the line to `right` m on the other (trees keep 6 m off any box,
+      // so the boxes are 6 m narrower), filed in pieces along the span
+      const sp = (o.clearSpans || []).find((c) => si >= c[0] && si <= c[1]);
+      const cl = sp ? [sp[2], sp[3]] : o.clear == null ? o.arm + 10 : o.clear, [left, right] = Array.isArray(cl) ? cl : [cl, cl];
+      const cw = Math.max(1, (left + right) / 2 - 6), off = (right - left) / 2, rx = -s.uz, rz = s.ux;   // (rx, rz): to the right
       for (let k = 0; k < n; k += 2) {
-        const um = (k + 1) / n, x = lerp(s.a.x, s.b.x, um), z = lerp(s.a.z, s.b.z, um);
+        const um = (k + 1) / n, x = lerp(s.a.x, s.b.x, um) + rx * off, z = lerp(s.a.z, s.b.z, um) + rz * off;
         shoreBox('field', x, z, s.ux, s.uz, s.L / n + 1, cw, PL_TREE_NONE, PL_TREE_NONE);
       }
-    }
+    });
   }
 }
 
