@@ -22,3 +22,5 @@ body:not(.vehicle-racer) .hud-g { display: none; }
 .hud-g.is-high { color: var(--route); font-weight: 700; }
 .hud-time.is-pen { color: var(--route); }
 body.course-pylons .ring { width: 9px; height: 13px; border: 0; border-radius: 0; background: var(--route); clip-path: polygon(34% 0, 66% 0, 100% 100%, 0 100%); }
+/* control texts that name up/down follow the Invert pitch option (js/controls.js toggles body.pitch-inv) */
+body.pitch-inv .inv-off, body:not(.pitch-inv) .inv-on { display: none; }

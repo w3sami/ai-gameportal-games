@@ -1,5 +1,5 @@
 {
-  "_doc": "Sailplane tuning (Lakeside theme), loaded over config/flight.json for courses whose vehicle is \"sailplane\"; a key left out keeps the flight.json value, and the rest default in js/glide.js and js/sailplane.js. FLIGHT_MODEL \"sail\": no engine; it glides, zooms up on its speed, and climbs in thermals (course.thermals). The lift/drag shape is set by LEVEL_SPEED (slowest speed that holds level flight), TRIM_SPEED (speed of its best glide) and GLIDE_RATIO; TUCK_* is the Dive shape (Boost: flaps up), a higher trim speed and a better glide when fast, whose stick centre asks for TUCK_PATH rad of dive. Stick up climbs as far as the speed allows (level at TRIM_SPEED, CLIMB_MAX at ZOOM_SPEED x TRIM_SPEED, nose down below it), down dives to DIVE_MAX (TUCK_DIVE_MAX in Dive). GLIDE_TURN scales the turn rate over a true coordinated turn, GLIDE_ROLL_RATE is the roll rate (rad/s), TOUCH_BANK/MAX_BANK the steepest bank for touch/mouse. THERMAL_CORE is the share of a thermal's radius that rises at full strength and THERMAL_FADE how far below its top the lift fades out (m); THERMAL_INFLOW is how fast the air flows in toward a thermal's core at its edge (m/s), which centres a circle flown off-centre. CRUISE is the start speed, RESPAWN_SPEED the speed back at the last hoop after a crash; BOOST only scales the speed effects.",
+  "_doc": "Sailplane tuning (Lakeside theme), loaded over config/flight.json for courses whose vehicle is \"sailplane\"; a key left out keeps the flight.json value, and the rest default in js/glide.js and js/sailplane.js. FLIGHT_MODEL \"sail\": no engine; it glides, zooms up on its speed, and climbs in thermals (course.thermals). The lift/drag shape is set by LEVEL_SPEED (slowest speed that holds level flight), TRIM_SPEED (speed of its best glide) and GLIDE_RATIO; TUCK_* is the Dive shape (Boost: flaps up), a higher trim speed and a better glide when fast, whose stick centre asks for TUCK_PATH rad of dive. Stick up climbs at up to CLIMB_MAX rad, paid for with speed (GAMMA_RATE: how fast it pulls up); run out and it stalls below STALL_SPEED (warning from STALL_WARN, flying again STALL_RECOVER m/s faster; the other stall keys default in js/sailplane.js). Mouse aim only climbs on speed to spare, so it doesn't stall. Down dives to DIVE_MAX (TUCK_DIVE_MAX in Dive). TRIM_K makes stick centre settle back to the trim speed. GLIDE_TURN scales the turn rate over a true coordinated turn, GLIDE_ROLL_RATE is the roll rate (rad/s), TOUCH_BANK/MAX_BANK the steepest bank for touch/mouse. THERMAL_CORE is the share of a thermal's radius that rises at full strength and THERMAL_FADE how far below its top the lift fades out (m); THERMAL_INFLOW is how fast the air flows in toward a thermal's core at its edge (m/s), which centres a circle flown off-centre. CRUISE is the start speed, RESPAWN_SPEED the speed back at the last hoop after a crash; BOOST only scales the speed effects.",
   "FLIGHT_MODEL": "sail",
   "CRUISE": 32,
   "RESPAWN_SPEED": 34,
@@ -16,10 +16,9 @@
   "TUCK_OUT": 2,
   "DIVE_MAX": 0.6,
   "TUCK_DIVE_MAX": 0.8,
-  "CLIMB_MAX": 0.45,
-  "ZOOM_SPEED": 1.45,
+  "CLIMB_MAX": 0.55,
   "GAMMA_P": 2.0,
-  "GAMMA_RATE": 0.5,
+  "GAMMA_RATE": 0.65,
   "GAMMA_RATE_DOWN": 0.5,
   "VMAX": 75,
   "ALPHA_VIS": 0.12,
@@ -44,5 +43,9 @@
   "CAM_ROLL": 0.35,
   "CAM_UP_K": 3,
   "AP_LEAD": 1.6,
-  "THERMAL_INFLOW": 14
+  "THERMAL_INFLOW": 14,
+  "STALL_SPEED": 19,
+  "STALL_WARN": 23.5,
+  "STALL_RECOVER": 5,
+  "TRIM_K": 0.6
 }

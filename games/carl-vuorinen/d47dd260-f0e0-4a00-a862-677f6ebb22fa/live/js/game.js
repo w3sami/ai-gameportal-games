@@ -425,7 +425,8 @@ function makeWingsuitModel() {                            // flyer belly-down, h
              tail.scale.x = 1 - 0.55 * T;
            } };
 }
-const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel(), wingsuit: makeWingsuitModel() };
+const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel(), wingsuit: makeWingsuitModel(),
+  sailplane: makeSailplaneModel(scene, modelKit) };   // js/sailplane.js
 let planeModel = models.prop;
 function setVehicleModel() {
   for (const k in models) models[k].group.visible = false;
@@ -536,6 +537,14 @@ const Sound = {
       this.rumbleF.frequency.setTargetAtTime(110 + (P.tuck || 0) * 90 + v, t, 0.2);
       return;
     }
+    if (sailing()) {                                        // sailplane: quiet airflow, and the variometer while racing
+      this.eng.gain.setTargetAtTime(0, t, 0.2);
+      this.rumble.gain.setTargetAtTime(level * (0.03 + smoothstep(TUNE.CRUISE, TUNE.BOOST * 1.2, v) * 0.3), t, 0.15);
+      this.rumbleF.frequency.setTargetAtTime(140 + v * 1.5, t, 0.2);
+      if (!this.vario) this.vario = createVario(this.ctx, this.master);
+      this.vario.update(P.vario || 0, level >= 1 && planeModel.group.visible ? 1 : 0);
+      return;
+    }
     if (jet) {                                              // turbine whine over low-passed noise; afterburner opens the roar up
       const w = 780 + rel * 240 + (P.boosting ? 140 : 0);
       this.osc[0].frequency.setTargetAtTime(w, t, 0.25); this.osc[1].frequency.setTargetAtTime(w * 1.51, t, 0.25);
@@ -615,7 +624,7 @@ const Sound = {
 
 /* ---------- game state ---------- */
 const P = makePlane();
-const G = { state: 'attract', next: 0, started: false, time: 0, pen: 0, invuln: 0, crashTimer: 0, lap: 'attract', pauseReason: null, clock: 0 };
+const G = { state: 'attract', next: 0, started: false, time: 0, pen: 0, invuln: 0, crashTimer: 0, lap: 'attract', pauseReason: null, clock: 0, hints: new Set() };
 const aim = { yaw: 0, pitch: 0 };
 const aimDir = new V3(0, 0, -1);
 const START_POS = new V3(), START_DIR = new V3();         // set per course by applyCourse()
@@ -626,7 +635,7 @@ function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = cla
 function resetRun() {
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
   P.boost = 1; P.boostLock = false; P.boosting = false;
-  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0;
+  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.hints = new Set();
   setAimFrom(START_DIR); input.neutral = true;
   hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
   resetPylons();
@@ -640,7 +649,7 @@ function respawn() {
   const pos = h ? h.pos.clone().addScaledVector(h.normal, 4) : START_POS;
   // wingsuit: back at the hoop with the speed you had there, or RESPAWN_SPEED if more, since the next stretch may need it
   // (capped at the course's rules.respawnMax, where tight turns right after a hoop can't be made any faster)
-  let v = gliding() && h ? Math.max(TUNE.RESPAWN_SPEED || TUNE.CRUISE, G.hoopSpeed || 0) : TUNE.CRUISE;
+  let v = gliding() && h ? Math.max(TUNE.RESPAWN_SPEED || TUNE.CRUISE, G.hoopSpeed || 0) : sailing() && h ? TUNE.RESPAWN_SPEED || TUNE.CRUISE : TUNE.CRUISE;
   if (h && RULES.respawnMax) v = Math.min(v, RULES.respawnMax);
   placePlane(P, pos, h ? h.normal : START_DIR, v);
   setAimFrom(P.vdir); input.neutral = true;
@@ -695,7 +704,10 @@ function onCrash(kind) {
   if (G.state !== 'playing') return;
   Sound.crash();
   flash();
-  const what = { tree: 'Clipped a tree', bridge: 'Hit the bridge', pier: 'Hit the pier', boat: 'Hit a boat' }[kind] || 'Crashed';
+  // modules with crashes of their own name them in CRASH_TEXT (js/powerlines.js, js/turbines.js)
+  const what = (typeof CRASH_TEXT !== 'undefined' && CRASH_TEXT[kind]) || { tree: 'Clipped a tree', bridge: 'Hit the bridge', pier: 'Hit the pier',
+    boat: 'Hit a boat', rock: 'Hit the rocks', crane: 'Hit a crane', cargo: 'Hit the containers', dock: 'Hit the quay', cave: 'Hit the cave roof',
+    boulder: 'Hit a boulder', beach: 'Crashed on the beach' }[kind] || 'Crashed';
   showToast(G.next > 0 ? `${what}. Back to ${gateNoun()} ${G.next}.` : `${what}. Back to the start.`);
 }
 
@@ -1034,7 +1046,7 @@ function updateVisuals(dt) {
 }
 
 /* ---------- HUD & UI ---------- */
-const hud = { time: $('hud-time'), hoops: $('hud-hoops'), speed: $('hud-speed'), g: $('hud-g'), boost: $('hud-boost'), arrow: $('arrow'), arrowIcon: $('arrow-icon'), arrowDist: $('arrow-dist'),
+const hud = { time: $('hud-time'), hoops: $('hud-hoops'), speed: $('hud-speed'), g: $('hud-g'), vario: $('hud-vario'), boost: $('hud-boost'), arrow: $('arrow'), arrowIcon: $('arrow-icon'), arrowDist: $('arrow-dist'),
   reticle: $('reticle'), nose: $('nose'), boostBtn: $('boost-btn'), last: {} };
 const fmtTime = (s) => { const cs = Math.floor(s * 100 + 1e-6), m = Math.floor(cs / 6000), r = cs % 6000; return `${m}:${String(Math.floor(r / 100)).padStart(2, '0')}.${String(r % 100).padStart(2, '0')}`; };
 function setText(el, key, val) { if (hud.last[key] !== val) { hud.last[key] = val; el.textContent = val; } }
@@ -1051,7 +1063,11 @@ function updateHUD() {
   setText(hud.time, 'time', fmtTime(G.time));
   setText(hud.hoops, 'hoops', `${G.next}/${HOOPS.length}`);
   setText(hud.speed, 'speed', `${Math.round(P.speed * 3.6)} km/h`);
-  if (hud.g && gliding()) {                                 // wingsuit: height above the ground instead of g
+  if (hud.vario && sailing()) {                             // sailplane: climb rate (total energy), green when rising
+    const vr = Math.round((P.vario || 0) * 10) / 10;
+    setText(hud.vario, 'vario', `${vr > 0 ? '+' : vr < 0 ? '\u2212' : ''}${Math.abs(vr).toFixed(1)} m/s`); hud.vario.classList.toggle('is-up', vr >= TUNE.VARIO_ON);
+  }
+  if (hud.g && (gliding() || sailing())) {                  // wingsuit, sailplane: height above the ground instead of g
     const agl = Math.max(0, P.pos.y - groundAt(P.pos.x, P.pos.z));
     setText(hud.g, 'g', `${agl < 100 ? Math.round(agl) : Math.round(agl / 10) * 10} m`); hud.g.classList.toggle('is-low', agl < 25);
   } else if (hud.g) { const gl = Math.max(0, P.gload); setText(hud.g, 'g', `${gl.toFixed(1)} g`); hud.g.classList.toggle('is-high', gl >= 9); }
@@ -1125,12 +1141,13 @@ function renderBest() {
   if (lead) lead.textContent = COURSE.lead || 'Fly through every hoop in order. The clock starts at the first one.';
   const pen = gateNoun() === 'gate' ? `Penalties: pylon hit +${RULES.pylonHit} s, banked air gate +${RULES.notLevel} s, missed gate +${RULES.missed} s. ` : '';
   if (refill) refill.textContent = gliding() ? `There\u2019s no flying back up: a missed hoop adds ${RULES.missed} s, and a crash puts you back at the last one.`
+    : sailing() ? sailTip()
     : `${pen}Boost refills over time and with every ${gateNoun()}.`;
   menu.render();
 }
 
 /* ---------- start menu: themes, then levels (js/menu.js) ---------- */
-const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit' };
+const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit', sailplane: 'Sailplane' };
 // Loads run one at a time; picking again while one loads just retargets it, and the last pick wins.
 let switching = null, wantCourse = null;
 function switchCourse(entry) {
@@ -1178,7 +1195,7 @@ function applyCourse() {                                    // scene, plane, sta
   setVehicleModel();
   for (const v in models) body.classList.toggle('vehicle-' + v, TUNE.VEHICLE === v);
   body.classList.toggle('course-pylons', gateNoun() === 'gate');
-  const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : 'Boost';
+  const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : sailing() ? 'Dive' : 'Boost';
   smoke.trail.clear();
   renderBest();
 }
@@ -1296,7 +1313,7 @@ function update(dt) {
       const steps = Math.ceil(dt / (1 / 120)), h = dt / steps;
       for (let s = 0; s < steps; s++) {
         prevPos.copy(P.pos);
-        (gliding() ? stepGlide : stepFlight)(P, ctl, h);
+        (sailing() ? stepSail : gliding() ? stepGlide : stepFlight)(P, ctl, h);
         if (G.state === 'playing' && G.started) G.time += h;
         const cross = G.next < HOOPS.length ? gateCross(prevPos, P.pos, G.next) : null;
         if (cross) {
@@ -1310,6 +1327,14 @@ function update(dt) {
       }
     }
   }
+  if (G.state === 'playing' && sailing() && !G.liftHint && (P.lift || 0) > 3 && getBest() == null && G.crashTimer <= 0) {
+    G.liftHint = true;                                      // first thermal of a run, until the course is finished once
+    showToast('Rising air! Bank hard and circle in it to climb.', 3200);
+  }
+  // other rising air (js/ridge.js, js/cloudstreet.js) registers its own hint in LIFT_HINTS: { id, min, at(P), text },
+  // shown the first time a run meets it, likewise
+  if (G.state === 'playing' && sailing() && typeof LIFT_HINTS !== 'undefined' && getBest() == null && G.crashTimer <= 0)
+    for (const hn of LIFT_HINTS) if (!G.hints.has(hn.id) && hn.at(P) > hn.min) { G.hints.add(hn.id); showToast(hn.text, 3200); break; }
   boostEdges();
   updateCamera(dt, false);
   updateVisuals(dt);
