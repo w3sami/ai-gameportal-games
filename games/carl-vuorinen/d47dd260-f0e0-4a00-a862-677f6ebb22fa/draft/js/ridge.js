@@ -116,6 +116,9 @@ function buildRidges() {
   }
 }
 SHORE_PLUGINS.push({ build: buildRidges, createKit: () => ({ build() {} }) });
+var LIFT_HINTS = LIFT_HINTS || [];                           // js/game.js: the first ridge lift of a run gets a hint
+LIFT_HINTS.push({ id: 'ridge', min: 2.5, at: (P) => ridgeLift(P.pos.x, P.pos.y, P.pos.z),
+  text: 'Ridge lift! Stay close to the cliff and it holds you up.' });
 
 /* ---------- the lift ---------- */
 function ridgeLift(x, y, z) {
