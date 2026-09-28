@@ -4,11 +4,14 @@
    Like the wingsuit (js/glide.js, whose lift/drag shapes and TUNE keys it reuses) it's a point mass with lift and drag
    and no engine, but it flies a real sailplane's energy trade: pulling up zooms it higher while the speed lasts, and
    in a thermal the air itself rises under it. The stick asks for a bank and a path angle through the air: centre is the
-   best glide, down dives to DIVE_MAX, up climbs as far as the speed allows (level at TRIM_SPEED, CLIMB_MAX by
-   ZOOM_SPEED x TRIM_SPEED; slower than trim it noses down to get the speed back, so it can't be stalled).
+   best glide, down dives to DIVE_MAX, up climbs at up to CLIMB_MAX, and the climb costs speed. Run out of it and it
+   stalls: below STALL_SPEED the nose drops and a wing goes, the stick can't hold it up, and it flies again once it's
+   STALL_RECOVER m/s faster (a stall costs 20-40 m). Under STALL_WARN it warns first (P.stallWarn 0..1: buffet, a tone).
    Boost ("Dive") is the fast shape (TUCK_* keys): flaps up, a higher trim speed, a better glide when flown fast and
    a worse one slow, so it's for the glides between thermals, not for circling.
    Mouse aim (and the autopilot) aims over the ground: in rising air the path through the air is flattened to match.
+   Aim climbs only while there's speed to spare (none at STALL_WARN, all by STALL_WARN + AIM_MARGIN), so pointing at a
+   high hoop zooms up to it without stalling; the stick and keys have no such limit.
    Course file: thermals: [{ x, z, r, w, top }]  columns of rising air standing on the ground at (x, z): radius r m,
      rising w m/s across the middle THERMAL_CORE share of it and fading to nothing at its edge, and fading out over the
      THERMAL_FADE m below `top` (height above the water, m): circle as long as you like, it won't take you higher.
@@ -19,13 +22,19 @@
    Sim part (no DOM): thermalLift(x, y, z), thermalAt(x, z), stepSail(P, ctl, dt); P.vario is the total-energy climb
    rate (m/s: the air's rise minus the glider's own sink, so zooming doesn't count), P.lift the air's rise.
    The fields are a js/shore.js plugin (tree-free boxes far underground, never hit; the kit draws the meadows).
-   Game part: makeSailplaneModel(scene, modelKit), createVario(ctx, out), and the thermal scenery (SCENERY_PLUGINS).
+   Game part: makeSailplaneModel(scene, modelKit) (its update() also shakes the airframe near the stall and sets the
+   body's is-stall-warn / is-stall classes for the HUD), createVario(ctx, out) (vario and stall warner), and the thermal
+   scenery (SCENERY_PLUGINS).
    ========================================================================= */
 const SAIL_DEFAULTS = {
-  CLIMB_MAX: 0.45,               // steepest climb the stick asks for (rad), once the speed is ZOOM_SPEED x TRIM_SPEED
-  ZOOM_SPEED: 1.45,
-  SLOW_PUSH: 0.12,               // at LEVEL_SPEED the highest path is this far below the best glide (rad): noses down
+  CLIMB_MAX: 0.55,               // steepest climb the stick asks for (rad)
   SAIL_CL_MAX: 1.0,              // lift limit (1 = level flight at LEVEL_SPEED)
+  STALL_SPEED: 19, STALL_WARN: 23.5, STALL_RECOVER: 5,   // m/s
+  STALL_CL: 0.35,                // lift limit while stalled
+  STALL_DIVE: 0.7, STALL_PITCH: 1.3,   // stalled: the nose drops toward this dive (rad), this fast (rad/s)
+  STALL_ROLL: 0.55,              // ... and a wing drops this far (rad)
+  AIM_MARGIN: 7,                 // m/s over STALL_WARN before mouse aim climbs freely
+  TRIM_K: 0.6, TRIM_PUSH: 0.2, TRIM_LIFT: 0.06,   // speed stability: centre stick noses down when slow, up when fast
   THERMAL_CORE: 0.65, THERMAL_FADE: 50, THERMAL_INFLOW: 14,
   VARIO_TAU: 0.7,                // variometer lag (s)
   VARIO_ON: 0.5,                 // the vario beeps above this climb (m/s)
@@ -116,46 +125,54 @@ function createFieldKit() {
 SHORE_PLUGINS.push({ build: buildFields, createKit: createFieldKit });
 
 /* ---------- flight model ---------- */
-// highest path angle the speed allows: SLOW_PUSH under the best glide at LEVEL_SPEED, level at TRIM_SPEED, CLIMB_MAX
-// at ZOOM_SPEED x TRIM_SPEED (straight lines between)
-function sailUpLimit(v, trim) {
-  const vl = TUNE.LEVEL_SPEED, vt = TUNE.TRIM_SPEED, vz = TUNE.TRIM_SPEED * TUNE.ZOOM_SPEED;
-  if (v <= vl) return trim - TUNE.SLOW_PUSH;
-  if (v <= vt) return lerp(trim - TUNE.SLOW_PUSH, 0, (v - vl) / (vt - vl));
-  return lerp(0, TUNE.CLIMB_MAX, Math.min(1, (v - vt) / (vz - vt)));
+// stick centre: the best-glide path, nosed down when slower than the trim speed and up a little when faster, so letting
+// go after a zoom or a dive settles back to the trim speed (TRIM_K rad per 100 % off it, at most TRIM_PUSH / TRIM_LIFT)
+function sailTrim(ae, tuck, v) {
+  const vt = lerp(TUNE.TRIM_SPEED, TUNE.TUCK_TRIM_SPEED, tuck);
+  return ae.gam + clamp(TUNE.TRIM_K * (v - vt) / vt, -TUNE.TRIM_PUSH, TUNE.TRIM_LIFT);
 }
-// stick climb (-1..1) to a path angle: centre = trim, down = the dive limit, up = the share of the climb there's speed for
-function sailPath(c, trim, dive, up) {
+// stick climb (-1..1) to a path angle through the air: centre = trim, down = the dive limit, up = CLIMB_MAX
+function sailPath(c, trim, dive) {
   c = clamp(c, -1, 1);
-  return Math.min(c >= 0 ? lerp(trim, Math.max(trim, up), c) : lerp(trim, -dive, -c), up);
+  return c >= 0 ? lerp(trim, TUNE.CLIMB_MAX, c) : lerp(trim, -dive, -c);
 }
+// state for the game side (instruments, sound): the last step's stall and warning
+const SAIL_FX = { stall: false, warn: 0 };
 function initSail(P) {
-  P.glide = { gam: clamp(pitchOf(P.vdir), -1.4, TUNE.CLIMB_MAX), psi: yawOf(P.vdir), phi: 0, cl: 0.5, tuck: 0, psiDot: 0 };
-  P.vario = 0; P.lift = 0;
+  P.glide = { gam: clamp(pitchOf(P.vdir), -1.4, TUNE.CLIMB_MAX), psi: yawOf(P.vdir), phi: 0, cl: 0.5, tuck: 0, psiDot: 0, stall: false, drop: 1, drops: 0 };
+  P.vario = 0; P.lift = 0; P.stall = false; P.stallWarn = 0;
 }
 const _sq = new THREE.Quaternion(), _sm = new THREE.Matrix4(), _sz = new THREE.Vector3(), _sx = new THREE.Vector3(1, 0, 0), _sZ = new THREE.Vector3(0, 0, 1);
-// ctl as for stepFlight: att {bank, climb} (touch, letting go), aim (mouse, autopilot), or manual p/r (keys, pad)
+// ctl as for stepFlight: att {bank, climb} (touch, controller, letting go), aim (mouse, autopilot), or manual p/r (keys)
 function stepSail(P, ctl, dt) {
   if (!P.glide) initSail(P);
   const S = P.glide, G = TUNE.G;
   S.tuck += clamp((ctl.boost ? 1 : 0) - S.tuck, -TUNE.TUCK_OUT * dt, TUNE.TUCK_IN * dt);
   P.tuck = S.tuck; P.boosting = !!ctl.boost; P.boost = 1; P.boostLock = false;   // no meter: height is the cost
   const ae = glideAero(S.tuck), v = P.speed, dive = lerp(TUNE.DIVE_MAX, TUNE.TUCK_DIVE_MAX, S.tuck);
-  const w = thermalLift(P.pos.x, P.pos.y, P.pos.z), up = sailUpLimit(v, ae.gam);
+  const w = thermalLift(P.pos.x, P.pos.y, P.pos.z), trim = sailTrim(ae, S.tuck, v);
+
+  // stall: the wing lets go below STALL_SPEED and flies again STALL_RECOVER m/s faster
+  if (!S.stall && v < TUNE.STALL_SPEED) {
+    S.stall = true;
+    S.drop = Math.abs(S.phi) > 0.05 ? Math.sign(S.phi) : (S.drops++ % 2 ? 1 : -1);   // the low wing goes, else alternate
+  } else if (S.stall && v > TUNE.STALL_SPEED + TUNE.STALL_RECOVER) S.stall = false;
 
   let bankT, gamT;
-  if (ctl.att) { bankT = ctl.att.bank; gamT = sailPath(ctl.att.climb, ae.gam, dive, up); }
+  if (ctl.att) { bankT = ctl.att.bank; gamT = sailPath(ctl.att.climb, trim, dive); }
   else if (ctl.aim) {                                        // aim: bank toward its heading, fly its angle over the ground
     const he = wrapAngle(yawOf(ctl.aim) - S.psi) - TUNE.ASSIST_LEAD * S.psiDot;   // + = aim to the left
     bankT = clamp(-he * TUNE.BANK_GAIN, -TUNE.MAX_BANK, TUNE.MAX_BANK);
+    const up = lerp(trim, TUNE.CLIMB_MAX, smoothstep(TUNE.STALL_WARN + 1.5, TUNE.STALL_WARN + TUNE.AIM_MARGIN, v));   // climb on spare speed only
     gamT = clamp(Math.asin(clamp(ctl.aim.y - w / Math.max(v, 1), -1, 1)), -dive, up);
-  } else { bankT = clamp(ctl.r, -1, 1) * TUNE.TOUCH_BANK; gamT = sailPath(ctl.p, ae.gam, dive, up); }
+  } else { bankT = clamp(ctl.r, -1, 1) * TUNE.TOUCH_BANK; gamT = sailPath(ctl.p, trim, dive); }
+  if (S.stall) { gamT = -TUNE.STALL_DIVE; bankT = bankT * 0.3 + S.drop * TUNE.STALL_ROLL; }   // stalled: nose and a wing drop
 
-  S.phi += clamp((bankT - S.phi) * TUNE.GLIDE_ROLL_P, -TUNE.GLIDE_ROLL_RATE, TUNE.GLIDE_ROLL_RATE) * dt;
+  S.phi += clamp((bankT - S.phi) * TUNE.GLIDE_ROLL_P, -TUNE.GLIDE_ROLL_RATE, TUNE.GLIDE_ROLL_RATE) * (S.stall ? 1.4 : 1) * dt;
   const q = G * ae.a * v * v, cphi = Math.cos(S.phi);
-  const gdotCmd = clamp((gamT - S.gam) * TUNE.GAMMA_P, -TUNE.GAMMA_RATE_DOWN, TUNE.GAMMA_RATE);
+  const gdotCmd = clamp((gamT - S.gam) * TUNE.GAMMA_P, -(S.stall ? TUNE.STALL_PITCH : TUNE.GAMMA_RATE_DOWN), TUNE.GAMMA_RATE);
   const need = (v * gdotCmd + G * Math.cos(S.gam)) / Math.max(cphi, 0.2);
-  S.cl += (clamp(need / q, TUNE.CL_MIN, TUNE.SAIL_CL_MAX) - S.cl) * damp(TUNE.CL_K, dt);
+  S.cl += (clamp(need / q, TUNE.CL_MIN, S.stall ? TUNE.STALL_CL : TUNE.SAIL_CL_MAX) - S.cl) * damp(TUNE.CL_K, dt);
   const L = q * S.cl, D = G * ae.a * v * v * (ae.cd0 + ae.k * S.cl * S.cl) + G * Math.pow(v / TUNE.VMAX, 12);
   let gdot = (L * cphi - G * Math.cos(S.gam)) / v;
   if (gdotCmd < 0 && gdot > gdotCmd) gdot = gdotCmd;         // nosing over (see GAMMA_RATE_DOWN in js/glide.js)
@@ -173,6 +190,9 @@ function stepSail(P, ctl, dt) {
   P.q.multiply(_sq.setFromAxisAngle(_sZ, -S.phi)).multiply(_sq.setFromAxisAngle(_sx, TUNE.ALPHA_VIS * clamp(S.cl, 0, 1.3)));
   P.bank = S.phi; P.turn = S.psiDot; P.rp = P.ry = P.rr = 0;
   P.gload = lerp(P.gload, Math.abs(L) / G, damp(6, dt));
+  P.stall = S.stall;
+  P.stallWarn = S.stall ? 1 : clamp((TUNE.STALL_WARN - P.speed) / (TUNE.STALL_WARN - TUNE.STALL_SPEED), 0, 1);
+  SAIL_FX.stall = P.stall; SAIL_FX.warn = P.stallWarn;
 }
 
 /* =========================================================================
@@ -211,11 +231,26 @@ function makeSailplaneModel(scene, modelKit) {
     flex.push(outer);
   }
   scene.add(g);
+  const shake = new THREE.Quaternion(), e = new THREE.Euler(), cls = document.body.classList;
+  let t = 0, warnOn = false, stallOn = false;
   return { group: g, tips: [new V3(-7.1, 0.9, -0.7), new V3(7.1, 0.9, -0.7)], shadow: 1.25,
-           update(dt, P) { const k = 0.05 + 0.035 * clamp((P.gload || 1) - 1, -0.5, 2); flex[0].rotation.z = -k; flex[1].rotation.z = k; } };
+           update(dt, P) {
+             t += dt;
+             const b = P.stallWarn || 0, k = 0.05 + 0.035 * clamp((P.gload || 1) - 1, -0.5, 2) + b * 0.03 * Math.sin(t * 31);
+             flex[0].rotation.z = -k; flex[1].rotation.z = k;
+             if (b > 0) {                                   // buffet: the airframe shakes as the wing nears the stall
+               const a = (P.stall ? 0.035 : 0.018 * b) * (reducedMotionPref() ? 0.3 : 1);
+               g.quaternion.multiply(shake.setFromEuler(e.set(Math.sin(t * 23) * a, 0, Math.sin(t * 29 + 1) * a * 1.4)));
+             }
+             // HUD: speed red while warning, a STALL badge while stalled (css/sailplane.css)
+             if ((b > 0) !== warnOn) cls.toggle('is-stall-warn', warnOn = b > 0);
+             if (!!P.stall !== stallOn) cls.toggle('is-stall', stallOn = !!P.stall);
+           } };
 }
+const reducedMotionPref = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-// variometer: short soft beeps while climbing, higher and quicker the faster the climb; quiet otherwise
+// variometer: short soft beeps while climbing, higher and quicker the faster the climb; quiet otherwise. Near the stall
+// the stall warner takes over: low quick beeps that speed up, and a fast low warble while stalled.
 function createVario(ctx, out) {
   const osc = ctx.createOscillator(), lp = ctx.createBiquadFilter(), gain = ctx.createGain();
   osc.type = 'triangle'; osc.frequency.value = 600;
@@ -225,10 +260,16 @@ function createVario(ctx, out) {
   let next = 0;
   return {
     update(climb, level) {
-      const t = ctx.currentTime;
-      if (!(level > 0) || climb < TUNE.VARIO_ON) { next = 0; return; }   // a beep already scheduled just plays out
-      const c = clamp(climb, 0, 9), f = 560 + c * 62, period = lerp(0.62, 0.2, c / 9), on = period * 0.42;
-      const vol = 0.045 * level * (0.8 + 0.2 * c / 9);
+      const t = ctx.currentTime, warn = SAIL_FX.warn;
+      if (!(level > 0) || (climb < TUNE.VARIO_ON && !(warn > 0))) { next = 0; return; }   // a beep already scheduled just plays out
+      let f, period, on, vol;
+      if (warn > 0) {                                       // stall warner
+        f = SAIL_FX.stall ? 300 : 380; period = SAIL_FX.stall ? 0.09 : lerp(0.3, 0.13, warn); on = period * 0.55;
+        vol = 0.05 * level * (SAIL_FX.stall ? 1.2 : 0.7 + 0.3 * warn);
+      } else {
+        const c = clamp(climb, 0, 9);
+        f = 560 + c * 62; period = lerp(0.62, 0.2, c / 9); on = period * 0.42; vol = 0.045 * level * (0.8 + 0.2 * c / 9);
+      }
       osc.frequency.setTargetAtTime(f, t, 0.04);
       if (next < t) next = t + 0.02;
       while (next < t + 0.1) {                              // schedule the beeps starting in the next 0.1 s
