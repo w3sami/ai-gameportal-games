@@ -624,7 +624,7 @@ const Sound = {
 
 /* ---------- game state ---------- */
 const P = makePlane();
-const G = { state: 'attract', next: 0, started: false, time: 0, pen: 0, invuln: 0, crashTimer: 0, lap: 'attract', pauseReason: null, clock: 0 };
+const G = { state: 'attract', next: 0, started: false, time: 0, pen: 0, invuln: 0, crashTimer: 0, lap: 'attract', pauseReason: null, clock: 0, hints: new Set() };
 const aim = { yaw: 0, pitch: 0 };
 const aimDir = new V3(0, 0, -1);
 const START_POS = new V3(), START_DIR = new V3();         // set per course by applyCourse()
@@ -635,7 +635,7 @@ function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = cla
 function resetRun() {
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
   P.boost = 1; P.boostLock = false; P.boosting = false;
-  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.ridgeHint = false;
+  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.hints = new Set();
   setAimFrom(START_DIR); input.neutral = true;
   hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
   resetPylons();
@@ -704,7 +704,10 @@ function onCrash(kind) {
   if (G.state !== 'playing') return;
   Sound.crash();
   flash();
-  const what = { tree: 'Clipped a tree', bridge: 'Hit the bridge', pier: 'Hit the pier', boat: 'Hit a boat' }[kind] || 'Crashed';
+  // modules with crashes of their own name them in CRASH_TEXT (js/powerlines.js, js/turbines.js)
+  const what = (typeof CRASH_TEXT !== 'undefined' && CRASH_TEXT[kind]) || { tree: 'Clipped a tree', bridge: 'Hit the bridge', pier: 'Hit the pier',
+    boat: 'Hit a boat', rock: 'Hit the rocks', crane: 'Hit a crane', cargo: 'Hit the containers', dock: 'Hit the quay', cave: 'Hit the cave roof',
+    boulder: 'Hit a boulder', beach: 'Crashed on the beach' }[kind] || 'Crashed';
   showToast(G.next > 0 ? `${what}. Back to ${gateNoun()} ${G.next}.` : `${what}. Back to the start.`);
 }
 
@@ -1328,10 +1331,10 @@ function update(dt) {
     G.liftHint = true;                                      // first thermal of a run, until the course is finished once
     showToast('Rising air! Bank hard and circle in it to climb.', 3200);
   }
-  if (G.state === 'playing' && sailing() && !G.ridgeHint && (P.ridge || 0) > 2.5 && getBest() == null && G.crashTimer <= 0) {
-    G.ridgeHint = true;                                     // first ridge lift of a run (js/ridge.js), likewise
-    showToast('Ridge lift! Stay close to the cliff and it holds you up.', 3200);
-  }
+  // other rising air (js/ridge.js, js/cloudstreet.js) registers its own hint in LIFT_HINTS: { id, min, at(P), text },
+  // shown the first time a run meets it, likewise
+  if (G.state === 'playing' && sailing() && typeof LIFT_HINTS !== 'undefined' && getBest() == null && G.crashTimer <= 0)
+    for (const hn of LIFT_HINTS) if (!G.hints.has(hn.id) && hn.at(P) > hn.min) { G.hints.add(hn.id); showToast(hn.text, 3200); break; }
   boostEdges();
   updateCamera(dt, false);
   updateVisuals(dt);
