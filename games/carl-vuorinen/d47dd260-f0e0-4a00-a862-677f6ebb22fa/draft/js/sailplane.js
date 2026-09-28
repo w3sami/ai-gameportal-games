@@ -20,7 +20,8 @@
    circling low over it is safe. Only over land: water doesn't make thermals. The scenery marks each one with a
    shimmer, specks rising in a spiral, a few birds circling near the top, and a cumulus cloud just above it.
    Sim part (no DOM): thermalLift(x, y, z), thermalAt(x, z), stepSail(P, ctl, dt); P.vario is the total-energy climb
-   rate (m/s: the air's rise minus the glider's own sink, so zooming doesn't count), P.lift the air's rise.
+   rate (m/s: the air's rise minus the glider's own sink, so zooming doesn't count), P.lift the thermals' rise and
+   P.ridge the rest (other modules' rising air, LIFT_PLUGINS: js/ridge.js adds ridge lift along cliffs).
    The fields are a js/shore.js plugin (tree-free boxes far underground, never hit; the kit draws the meadows).
    Game part: makeSailplaneModel(scene, modelKit) (its update() also shakes the airframe near the stall and sets the
    body's is-stall-warn / is-stall classes for the HUD), createVario(ctx, out) (vario and stall warner), and the thermal
@@ -69,6 +70,8 @@ function thermalLift(x, y, z) {
   }
   return w;
 }
+// other modules add rising air of their own: fn(x, y, z) -> m/s (js/ridge.js: ridge lift in front of cliffs)
+const LIFT_PLUGINS = [];
 function thermalAt(x, z) {                                  // index of the thermal whose column (x, z) is in, or -1
   const T = thermalList();
   for (let i = 0; i < T.length; i++) if ((x - T[i].x) ** 2 + (z - T[i].z) ** 2 < T[i].r * T[i].r) return i;
@@ -150,7 +153,9 @@ function stepSail(P, ctl, dt) {
   S.tuck += clamp((ctl.boost ? 1 : 0) - S.tuck, -TUNE.TUCK_OUT * dt, TUNE.TUCK_IN * dt);
   P.tuck = S.tuck; P.boosting = !!ctl.boost; P.boost = 1; P.boostLock = false;   // no meter: height is the cost
   const ae = glideAero(S.tuck), v = P.speed, dive = lerp(TUNE.DIVE_MAX, TUNE.TUCK_DIVE_MAX, S.tuck);
-  const w = thermalLift(P.pos.x, P.pos.y, P.pos.z), trim = sailTrim(ae, S.tuck, v);
+  const wt = thermalLift(P.pos.x, P.pos.y, P.pos.z), trim = sailTrim(ae, S.tuck, v);
+  let w = wt;
+  for (let i = 0; i < LIFT_PLUGINS.length; i++) w += LIFT_PLUGINS[i](P.pos.x, P.pos.y, P.pos.z);
 
   // stall: the wing lets go below STALL_SPEED and flies again STALL_RECOVER m/s faster
   if (!S.stall && v < TUNE.STALL_SPEED) {
@@ -184,7 +189,7 @@ function stepSail(P, ctl, dt) {
   dirFromYawPitch(S.psi, S.gam, P.vdir);
   P.pos.addScaledVector(P.vdir, P.speed * dt);
   P.pos.x += AIR.ux * dt; P.pos.y += w * dt; P.pos.z += AIR.uz * dt;   // the air carries it up (and in)
-  P.lift = w;
+  P.lift = wt; P.ridge = w - wt;                          // thermal lift only in P.lift: js/game.js's "circle" hint reads it
   P.vario = lerp(P.vario, w - v * D / G, damp(1 / TUNE.VARIO_TAU, dt));   // total energy: air's rise minus own sink
   P.q.setFromRotationMatrix(_sm.lookAt(_sz.set(0, 0, 0), P.vdir, WORLD_UP));
   P.q.multiply(_sq.setFromAxisAngle(_sZ, -S.phi)).multiply(_sq.setFromAxisAngle(_sx, TUNE.ALPHA_VIS * clamp(S.cl, 0, 1.3)));
