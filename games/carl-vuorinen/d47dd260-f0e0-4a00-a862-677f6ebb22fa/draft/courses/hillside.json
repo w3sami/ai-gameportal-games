@@ -1,7 +1,7 @@
 {
   "_format": "See the course section at the top of js/sim.js; thermals: see js/sailplane.js; ridges (the cliffs and their lift): see js/ridge.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, hoop?]; 0 = waypoint. Along the cliffs the hoops and the waypoints between them are set a fixed distance out from the cliff's top edge, so the line runs through the strong lift.",
   "id": "hillside",
-  "name": "Hillside Run",
+  "name": "Cliffside Run",
   "lead": "Race along the lakeside cliffs. The breeze off the lake rises up their faces: stay close and it holds you up, fast, with no circling. Climb in the thermal first.",
   "seeds": {"a": 21, "b": 47, "c": 9, "trees": 83},
   "terrain": {"size": 4000, "cx": 0, "cz": 0, "n": 360, "water": 0, "edge": 18, "carveR": 400, "micro": 1.5},
