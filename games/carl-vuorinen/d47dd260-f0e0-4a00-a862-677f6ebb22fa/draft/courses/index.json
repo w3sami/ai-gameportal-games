@@ -20,9 +20,6 @@
       { "id": "glacier", "name": "Glacier Run", "file": "courses/glacier.json" },
       { "id": "forest", "name": "Forest Run", "file": "courses/forest.json" },
       { "id": "waterfall", "name": "Waterfall Run", "file": "courses/waterfall.json" }
-    ] },
-    { "id": "lakeside", "name": "Lakeside", "vehicle": "sailplane", "levels": [
-      { "id": "lakeside", "name": "Lakeside Run", "file": "courses/lakeside.json" }
     ] }
   ]
 }
