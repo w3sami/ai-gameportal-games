@@ -19,9 +19,10 @@
    Each stands on a sunny field (radius `field` m, default 0.8 r): a pale meadow on the ground, kept clear of trees so
    circling low over it is safe. Only over land: water doesn't make thermals. The scenery marks each one with a
    shimmer, specks rising in a spiral, a few birds circling near the top, and a cumulus cloud just above it.
-   Sim part (no DOM): thermalLift(x, y, z), thermalAt(x, z), stepSail(P, ctl, dt); P.vario is the total-energy climb
-   rate (m/s: the air's rise minus the glider's own sink, so zooming doesn't count), P.lift the thermals' rise and
-   P.ridge the rest (other modules' rising air, LIFT_PLUGINS: js/ridge.js adds ridge lift along cliffs).
+   Sim part (no DOM): thermalLift(x, y, z), thermalAt(x, z), stepSail(P, ctl, dt), sailTip() (the start screen's line on
+   rising air, to suit the course); P.vario is the total-energy climb rate (m/s: the air's rise minus the glider's own
+   sink, so zooming doesn't count), P.lift the thermals' rise and P.ridge the rest (other modules' rising air,
+   LIFT_PLUGINS: js/ridge.js adds ridge lift along cliffs).
    The fields are a js/shore.js plugin (tree-free boxes far underground, never hit; the kit draws the meadows).
    Game part: makeSailplaneModel(scene, modelKit) (its update() also shakes the airframe near the stall and sets the
    body's is-stall-warn / is-stall classes for the HUD), createVario(ctx, out) (vario and stall warner), and the thermal
@@ -76,6 +77,15 @@ function thermalAt(x, z) {                                  // index of the ther
   const T = thermalList();
   for (let i = 0; i < T.length; i++) if ((x - T[i].x) ** 2 + (z - T[i].z) ** 2 < T[i].r * T[i].r) return i;
   return -1;
+}
+
+// the start screen's line on rising air, for what this course has: thermals, ridge lift (js/ridge.js), or both
+function sailTip() {
+  const th = !!(COURSE.thermals && COURSE.thermals.length), rg = !!(COURSE.ridges && COURSE.ridges.length);
+  const crash = 'A crash puts you back at the last hoop.';
+  if (rg) return 'Where the white streaks climb a cliff the air rises, strongest right by the face: fly close along it. '
+    + (th ? 'Birds circling under a cloud mark a thermal: circle in it to climb. ' : '') + crash;
+  return `Rising air lifts you under the clouds where the birds circle: bank hard and circle in it to climb. There\u2019s none over water. ${crash}`;
 }
 
 /* ---------- the fields under the thermals (a js/shore.js plugin) ---------- */
