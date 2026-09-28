@@ -1,0 +1,7 @@
+/* Sailplane (Lakeside): its own control texts, and height plus climb rate in the HUD instead of g and the boost bar. */
+body:not(.vehicle-sailplane) .for-sailplane, body.vehicle-sailplane .not-wingsuit { display: none; }
+body.vehicle-sailplane .hud-g { display: inline; }
+body.vehicle-sailplane .boost-bar { display: none; }
+.hud-vario { display: none; font-variant-numeric: tabular-nums; }
+body.vehicle-sailplane .hud-vario { display: inline; }
+.hud-vario.is-up { color: #1f9d55; font-weight: 700; }
