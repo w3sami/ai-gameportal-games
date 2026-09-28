@@ -431,10 +431,10 @@
     "id": "d47dd260-f0e0-4a00-a862-677f6ebb22fa",
     "slug": "skyrace",
     "title": "Skyrace",
-    "description": "Race the clock through hoops and pylons on four courses, each with its own aircraft: stunt plane, fighter jet, pylon racer and wingsuit. Plays with touch, mouse, keyboard or gamepad.",
+    "description": "Race the clock through hoops and pylons in a range of aircraft. Plays with touch, mouse, keyboard or gamepad.",
     "descriptions": {
-      "fi": "Race the clock through hoops and pylons on four courses, each with its own aircraft: stunt plane, fighter jet, pylon racer and wingsuit. Plays with touch, mouse, keyboard or gamepad.",
-      "en": "Race the clock through hoops and pylons on four courses, each with its own aircraft: stunt plane, fighter jet, pylon racer and wingsuit. Plays with touch, mouse, keyboard or gamepad."
+      "fi": "Race the clock through hoops and pylons in a range of aircraft. Plays with touch, mouse, keyboard or gamepad.",
+      "en": "Race the clock through hoops and pylons in a range of aircraft. Plays with touch, mouse, keyboard or gamepad."
     },
     "author": "Carl Vuorinen",
     "tags": [
@@ -452,9 +452,9 @@
     "ownerId": "00467d4f-580d-4f75-882e-24ae9b02a0a4",
     "ownerFolder": "carl-vuorinen",
     "entryFile": "index.html",
-    "revision": 2,
+    "revision": 3,
     "sizeBytes": 356359,
     "createdAt": "2026-09-26T08:03:53.083Z",
-    "updatedAt": "2026-09-27T21:55:10.464Z"
+    "updatedAt": "2026-09-28T04:42:31.588Z"
   }
 ]

@@ -1,0 +1,84 @@
+{
+  "_format": "See the course section at the top of js/sim.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?, bridge?]; gate \"B\" = hoop with a bridge over it; its 8th value sets the bridge (see js/bridges.js). The plateau is relief.base high and the river cuts the canyon into it; wallSteepness above ~1 makes the slots.",
+  "id": "canyon",
+  "name": "Canyon Run",
+  "lead": "Down the canyon through 18 hoops: five bridges, two narrow slots, and a climb to the hoop under the viaduct.",
+  "seeds": {
+    "a": 53,
+    "b": 9,
+    "c": 27,
+    "trees": 31
+  },
+  "terrain": {
+    "size": 5000,
+    "cx": 0,
+    "cz": -100,
+    "n": 380,
+    "water": 0,
+    "edge": 110,
+    "carveR": 480
+  },
+  "relief": {
+    "base": 75,
+    "amp": 150,
+    "pow": 1.3,
+    "freq": 0.0016,
+    "ridgeAmp": 30,
+    "ridgeFreq": 0.004
+  },
+  "palette": {
+    "dry": [20, 90],
+    "forestTop": [120, 200],
+    "high": [240, 320]
+  },
+  "lake": [
+    {
+      "x": 0,
+      "z": 2030,
+      "r": 470,
+      "depth": 160
+    },
+    {
+      "x": 0,
+      "z": -2300,
+      "r": 480,
+      "depth": 160
+    }
+  ],
+  "river": {
+    "w": 10,
+    "depth": 4,
+    "bank": 2.5
+  },
+  "hills": [],
+  "trees": {
+    "near": 2200,
+    "scattered": 4000
+  },
+  "autopilot": {
+    "clear": 6,
+    "ahead": 0.8
+  },
+  "points": [
+    [0,45,1950,40,160,0.03],
+    [20,24,1690,20,110,0.05,1],
+    [-80,16,1470,12,60,0.12,1],
+    [-50,11,1250,7,26,0.5,"B",{"type":"arch","top":24}],
+    [100,12,1050,8,24,0.6,1],
+    [110,12,810,8,22,0.7,1],
+    [-10,10.5,610,6.5,22,0.7,"B",{"type":"beam","top":21,"open":40}],
+    [-95,10,400,6,20,1.3,1],
+    [-25,10,180,6,19,1.3,1],
+    [-95,10,-40,6,19,1.3,1],
+    [-20,24,-260,20,50,0.2,1],
+    [150,56,-480,52,110,0.05,"B",{"type":"beam","top":67}],
+    [360,40,-700,36,90,0.06,1],
+    [380,14,-940,10,30,0.5,1],
+    [260,14,-1150,10,60,0.2,"B",{"type":"truss","top":24,"span":1}],
+    [70,12,-1320,8,22,0.9,1],
+    [110,10,-1540,6,17,1.5,1],
+    [40,10.5,-1760,6.5,17,1.5,"B",{"type":"suspension","top":21,"open":40}],
+    [-40,18,-1980,14,60,0.1,1],
+    [0,30,-2220,26,160,0.03]
+  ]
+}
