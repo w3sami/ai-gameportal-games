@@ -153,17 +153,18 @@ if (typeof LIFT_PLUGINS !== 'undefined') LIFT_PLUGINS.push(ridgeLift);
    low down, bending up as they near the cliff, climbing its face and spilling over the top. Pale streaks run along
    them wherever the air rises (the level run-in stays unseen), so they show where the lift starts and how strong it is.
    ========================================================================= */
-const WIND_LINE = { every: 26, speed: 16, dash: 22, gap: 38, width: 0.7, near: 250, far: 1100, flow: 5, clear: 14 };
-// one streamline from `d` m out and `y` m up at curve point i of ridge R: [[x, y, z], ...] every 4 m
-function traceWind(R, i, d, y) {
+const WIND_LINE = { every: 26, speed: 16, dash: 22, gap: 38, width: 0.7, near: 250, far: 1100, flow: 5, clear: [7, 20] };
+// one streamline from `d` m out and `y` m up at curve point i of ridge R, keeping `clear` m off the rock: [[x, y, z], ...]
+// every 4 m
+function traceWind(R, i, d, y, clear) {
   const nx = R.sgn * R.UZ[i], nz = -R.sgn * R.UX[i];          // land-side normal at the start; the line keeps it
   let x = R.X[i] - nx * (d - R.WB[i]), z = R.Z[i] - nz * (d - R.WB[i]);
   const pts = [], step = 4;
   for (let k = 0; k < 120; k++) {
-    // it keeps WIND_LINE.clear m off the rock ahead, so near the face it curves up early and climbs in the air in front of
-    // it rather than being drawn onto it
+    // it keeps `clear` m off the rock ahead, so near the face it curves up early and climbs in the air in front of it
+    // rather than being drawn onto it
     let g = 0;
-    for (let a = 0; a <= WIND_LINE.clear; a += WIND_LINE.clear / 4) g = Math.max(g, groundAt(x + nx * a, z + nz * a) + 3);
+    for (let a = 0; a <= clear; a += clear / 4) g = Math.max(g, groundAt(x + nx * a, z + nz * a) + 3);
     if (y < g) y = lerp(y, g, 0.6);                          // eased, so the bend is a curve, not a kink
     pts.push([x, y, z]);
     const q = ridgeNear(R, x, z);
@@ -186,7 +187,7 @@ if (typeof SCENERY_PLUGINS !== 'undefined') SCENERY_PLUGINS.push((group) => {
       if (H < 25) continue;
       // mostly low starts, so the lines meet the face and climb it; a few higher ones cross over the top
       const y = TER.WATER + H * (rand() < 0.8 ? 0.06 + rand() * 0.45 : 0.5 + rand() * 0.5), d = 70 + rand() * 90;
-      const pts = traceWind(R, i, d, y);
+      const pts = traceWind(R, i, d, y, WIND_LINE.clear[0] + rand() * (WIND_LINE.clear[1] - WIND_LINE.clear[0]));   // some hug it, some stand off
       if (pts.length < 8) continue;
       const base = pos.length / 3;
       let u = rand() * 100;                                  // streaks start at a random place along each line
