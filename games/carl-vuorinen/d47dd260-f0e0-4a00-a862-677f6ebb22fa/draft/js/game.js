@@ -425,8 +425,7 @@ function makeWingsuitModel() {                            // flyer belly-down, h
              tail.scale.x = 1 - 0.55 * T;
            } };
 }
-const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel(), wingsuit: makeWingsuitModel(),
-  sailplane: makeSailplaneModel(scene, modelKit) };   // js/sailplane.js
+const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel(), wingsuit: makeWingsuitModel() };
 let planeModel = models.prop;
 function setVehicleModel() {
   for (const k in models) models[k].group.visible = false;
@@ -531,14 +530,6 @@ const Sound = {
     this.windF.frequency.setTargetAtTime(260 + rel * 484, t, 0.1);
     this.hiss.gain.setTargetAtTime(level * smoothstep(1.09, 1.82, rel) * 0.07, t, 0.15);
     if (this.jet !== jet) { this.jet = jet; this.osc[0].type = jet ? 'triangle' : 'sawtooth'; this.osc[1].type = jet ? 'sine' : 'square'; }
-    if (sailing()) {                                        // sailplane: quiet airflow, and the variometer while racing
-      this.eng.gain.setTargetAtTime(0, t, 0.2);
-      this.rumble.gain.setTargetAtTime(level * (0.03 + smoothstep(TUNE.CRUISE, TUNE.BOOST * 1.2, v) * 0.3), t, 0.15);
-      this.rumbleF.frequency.setTargetAtTime(140 + v * 1.5, t, 0.2);
-      if (!this.vario) this.vario = createVario(this.ctx, this.master);
-      this.vario.update(P.vario || 0, level >= 1 && planeModel.group.visible ? 1 : 0);
-      return;
-    }
     if (TUNE.VEHICLE === 'wingsuit') {                      // no engine: wind, and fabric buffeting that builds with speed
       this.eng.gain.setTargetAtTime(0, t, 0.2);
       this.rumble.gain.setTargetAtTime(level * (0.05 + smoothstep(TUNE.CRUISE, TUNE.BOOST * 1.2, v) * 0.5), t, 0.15);
@@ -635,7 +626,7 @@ function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = cla
 function resetRun() {
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
   P.boost = 1; P.boostLock = false; P.boosting = false;
-  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false;
+  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0;
   setAimFrom(START_DIR); input.neutral = true;
   hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
   resetPylons();
@@ -649,7 +640,7 @@ function respawn() {
   const pos = h ? h.pos.clone().addScaledVector(h.normal, 4) : START_POS;
   // wingsuit: back at the hoop with the speed you had there, or RESPAWN_SPEED if more, since the next stretch may need it
   // (capped at the course's rules.respawnMax, where tight turns right after a hoop can't be made any faster)
-  let v = gliding() && h ? Math.max(TUNE.RESPAWN_SPEED || TUNE.CRUISE, G.hoopSpeed || 0) : sailing() && h ? TUNE.RESPAWN_SPEED || TUNE.CRUISE : TUNE.CRUISE;
+  let v = gliding() && h ? Math.max(TUNE.RESPAWN_SPEED || TUNE.CRUISE, G.hoopSpeed || 0) : TUNE.CRUISE;
   if (h && RULES.respawnMax) v = Math.min(v, RULES.respawnMax);
   placePlane(P, pos, h ? h.normal : START_DIR, v);
   setAimFrom(P.vdir); input.neutral = true;
@@ -718,7 +709,7 @@ const input = {
   manual: false,
   neutral: true,        // no active input: ease wings level and flatten the climb, keep the heading
   climb: { od: 0, odSign: 0 },   // ramp state for holding the stick at the end of its vertical throw
-  padStart: false,
+  pad: { x: 0, y: 0, boost: false },   // controller (js/pad.js): shaped like the touch stick, up = +y
 };
 const FLIGHT_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'Space']);
 // Touch stick commands a bank angle and a climb angle. Big throw + expo curve = fine control near centre.
@@ -732,6 +723,7 @@ function setDevice(d) {
   if (input.device === d) return;
   input.device = d;
   body.classList.toggle('is-touch', d === 'touch');
+  body.classList.toggle('is-pad', d === 'pad');
 }
 function stickEnd() {
   if (!input.stick.active) return;
@@ -842,26 +834,12 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => input.keys.delete(e.code));
 window.addEventListener('blur', () => { input.keys.clear(); stickEnd(); boostEnd(); });
 
-function readPad() {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  for (const gp of pads) if (gp && gp.connected && gp.axes.length >= 2) return gp;
-  return null;
-}
-const padAxis = (v) => (Math.abs(v) < 0.15 ? 0 : Math.sign(v) * (Math.abs(v) - 0.15) / 0.85);
-const pressed = (gp, i) => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.4));
-
 function resolveControl(dt) {
   const k = input.keys, inv = settings.invertPitch ? -1 : 1;
   let p = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
   let r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
   let y = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
-  let boost = k.has('ShiftLeft') || k.has('ShiftRight') || k.has('Space') || input.boost.active;
-  const gp = readPad();
-  if (gp) {
-    r += padAxis(gp.axes[0]); p += -padAxis(gp.axes[1]);
-    y += (pressed(gp, 5) ? 1 : 0) - (pressed(gp, 4) ? 1 : 0);
-    boost = boost || pressed(gp, 0) || pressed(gp, 7);
-  }
+  const boost = k.has('ShiftLeft') || k.has('ShiftRight') || k.has('Space') || input.boost.active || input.pad.boost;
   const ctl = { att: null, aim: null, p: 0, r: 0, y: 0, boost };
   if (p || r || y) {                                        // manual flying: raw rates, loops allowed
     ctl.p = clamp(p, -1, 1) * inv; ctl.r = clamp(r, -1, 1); ctl.y = clamp(y, -1, 1);
@@ -870,19 +848,22 @@ function resolveControl(dt) {
     return ctl;
   }
   input.manual = false;
-  if (input.stick.active && TUNE.TOUCH_MODE === 'rate') {  // jet touch: roll and pitch rates, no angle limits
-    ctl.r = input.stick.x; ctl.p = input.stick.y * inv;
+  // the controller's stick flies exactly like the touch stick (js/pad.js shapes it the same way); a thumb on the screen wins
+  const st = input.stick.active ? input.stick : (input.pad.x || input.pad.y) ? input.pad : null;
+  if (!st) input.climb.od = 0;                              // the pad has no release event: reset the climb ramp here
+  if (st && TUNE.TOUCH_MODE === 'rate') {                   // jet: roll and pitch rates, no angle limits
+    ctl.r = st.x; ctl.p = st.y * inv;
     input.neutral = true;
     syncAim();
     return ctl;
   }
-  if (input.stick.active) {                                 // touch: horizontal = bank angle, vertical = climb angle
-    ctl.att = { bank: input.stick.x * TUNE.TOUCH_BANK, climb: touchClimb(input.climb, input.stick.y * inv, dt) };
+  if (st) {                                                 // horizontal = bank angle, vertical = climb angle
+    ctl.att = { bank: st.x * TUNE.TOUCH_BANK, climb: touchClimb(input.climb, st.y * inv, dt) };
     input.neutral = true;
     syncAim();
     return ctl;
   }
-  if (input.neutral && TUNE.TOUCH_MODE === 'rate' && input.device === 'touch') { syncAim(); return ctl; }   // let go: hold attitude
+  if (input.neutral && TUNE.TOUCH_MODE === 'rate' && (input.device === 'touch' || input.device === 'pad')) { syncAim(); return ctl; }   // let go: hold attitude
   if (input.neutral) {                                      // nothing held: roll level, flatten out, keep heading
     ctl.att = { bank: 0, climb: 0 };
     syncAim();
@@ -1053,7 +1034,7 @@ function updateVisuals(dt) {
 }
 
 /* ---------- HUD & UI ---------- */
-const hud = { time: $('hud-time'), hoops: $('hud-hoops'), speed: $('hud-speed'), g: $('hud-g'), vario: $('hud-vario'), boost: $('hud-boost'), arrow: $('arrow'), arrowIcon: $('arrow-icon'), arrowDist: $('arrow-dist'),
+const hud = { time: $('hud-time'), hoops: $('hud-hoops'), speed: $('hud-speed'), g: $('hud-g'), boost: $('hud-boost'), arrow: $('arrow'), arrowIcon: $('arrow-icon'), arrowDist: $('arrow-dist'),
   reticle: $('reticle'), nose: $('nose'), boostBtn: $('boost-btn'), last: {} };
 const fmtTime = (s) => { const cs = Math.floor(s * 100 + 1e-6), m = Math.floor(cs / 6000), r = cs % 6000; return `${m}:${String(Math.floor(r / 100)).padStart(2, '0')}.${String(r % 100).padStart(2, '0')}`; };
 function setText(el, key, val) { if (hud.last[key] !== val) { hud.last[key] = val; el.textContent = val; } }
@@ -1070,11 +1051,7 @@ function updateHUD() {
   setText(hud.time, 'time', fmtTime(G.time));
   setText(hud.hoops, 'hoops', `${G.next}/${HOOPS.length}`);
   setText(hud.speed, 'speed', `${Math.round(P.speed * 3.6)} km/h`);
-  if (hud.vario && sailing()) {                             // sailplane: climb rate (total energy), green when rising
-    const vr = Math.round((P.vario || 0) * 10) / 10;
-    setText(hud.vario, 'vario', `${vr > 0 ? '+' : vr < 0 ? '\u2212' : ''}${Math.abs(vr).toFixed(1)} m/s`); hud.vario.classList.toggle('is-up', vr >= TUNE.VARIO_ON);
-  }
-  if (hud.g && (gliding() || sailing())) {                  // wingsuit, sailplane: height above the ground instead of g
+  if (hud.g && gliding()) {                                 // wingsuit: height above the ground instead of g
     const agl = Math.max(0, P.pos.y - groundAt(P.pos.x, P.pos.z));
     setText(hud.g, 'g', `${agl < 100 ? Math.round(agl) : Math.round(agl / 10) * 10} m`); hud.g.classList.toggle('is-low', agl < 25);
   } else if (hud.g) { const gl = Math.max(0, P.gload); setText(hud.g, 'g', `${gl.toFixed(1)} g`); hud.g.classList.toggle('is-high', gl >= 9); }
@@ -1148,13 +1125,12 @@ function renderBest() {
   if (lead) lead.textContent = COURSE.lead || 'Fly through every hoop in order. The clock starts at the first one.';
   const pen = gateNoun() === 'gate' ? `Penalties: pylon hit +${RULES.pylonHit} s, banked air gate +${RULES.notLevel} s, missed gate +${RULES.missed} s. ` : '';
   if (refill) refill.textContent = gliding() ? `There\u2019s no flying back up: a missed hoop adds ${RULES.missed} s, and a crash puts you back at the last one.`
-    : sailing() ? 'Rising air lifts you under the clouds where the birds circle: bank hard and circle in it to climb. There\u2019s none over water. A crash puts you back at the last hoop.'
     : `${pen}Boost refills over time and with every ${gateNoun()}.`;
   menu.render();
 }
 
 /* ---------- start menu: themes, then levels (js/menu.js) ---------- */
-const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit', sailplane: 'Sailplane' };
+const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit' };
 // Loads run one at a time; picking again while one loads just retargets it, and the last pick wins.
 let switching = null, wantCourse = null;
 function switchCourse(entry) {
@@ -1202,7 +1178,7 @@ function applyCourse() {                                    // scene, plane, sta
   setVehicleModel();
   for (const v in models) body.classList.toggle('vehicle-' + v, TUNE.VEHICLE === v);
   body.classList.toggle('course-pylons', gateNoun() === 'gate');
-  const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : sailing() ? 'Dive' : 'Boost';
+  const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : 'Boost';
   smoke.trail.clear();
   renderBest();
 }
@@ -1215,14 +1191,14 @@ function startRun() {
   resetRun();
   hud.last = {};
   setState('playing');
-  if (!isTouchUI() && !input.mouse.locked) tryLock({ onFail: cursorSteer });
+  if (input.device === 'mouse' && !input.mouse.locked) tryLock({ onFail: cursorSteer });
   showToast(`The clock starts at the first ${gateNoun()}.`, 2600);
 }
 function restart() {
   if (G.state === 'attract') return;
   const wasPaused = G.state === 'paused';
   resetRun(); hud.last = {};
-  if (wasPaused) resumeFromUser(); else { setState('playing'); if (!isTouchUI() && !input.mouse.locked && !input.mouse.lockFailed) tryLock({ onFail: cursorSteer }); }
+  if (wasPaused) resumeFromUser(); else { setState('playing'); if (input.device === 'mouse' && !input.mouse.locked && !input.mouse.lockFailed) tryLock({ onFail: cursorSteer }); }
 }
 function pause(reason) {
   if (G.state !== 'playing') return;
@@ -1305,15 +1281,10 @@ function boostEdges() {
 }
 
 const prevPos = new V3();
+const frameHooks = [];
 function update(dt) {
   G.clock += dt;
-  const gp = readPad();
-  if (gp) {
-    const st = pressed(gp, 9);
-    if (st && !input.padStart) { if (G.state === 'playing') pause('button'); else if (G.state === 'paused') resume(); else if (G.state !== 'paused') startRun(); }
-    input.padStart = st;
-    if (G.state === 'playing' && (Math.abs(gp.axes[0]) > 0.3 || Math.abs(gp.axes[1]) > 0.3)) setDevice('mouse');
-  }
+  for (const fn of frameHooks) fn(dt);                      // polled input (js/pad.js) lands before this frame's physics
   if (G.state !== 'paused') {
     if (G.crashTimer > 0) {
       G.crashTimer -= dt;
@@ -1325,7 +1296,7 @@ function update(dt) {
       const steps = Math.ceil(dt / (1 / 120)), h = dt / steps;
       for (let s = 0; s < steps; s++) {
         prevPos.copy(P.pos);
-        (sailing() ? stepSail : gliding() ? stepGlide : stepFlight)(P, ctl, h);
+        (gliding() ? stepGlide : stepFlight)(P, ctl, h);
         if (G.state === 'playing' && G.started) G.time += h;
         const cross = G.next < HOOPS.length ? gateCross(prevPos, P.pos, G.next) : null;
         if (cross) {
@@ -1338,10 +1309,6 @@ function update(dt) {
         else { const c = crashed(P); if (c) { onCrash(c); break; } }
       }
     }
-  }
-  if (G.state === 'playing' && sailing() && !G.liftHint && (P.lift || 0) > 3 && getBest() == null && G.crashTimer <= 0) {
-    G.liftHint = true;                                      // first thermal of a run, until the course is finished once
-    showToast('Rising air! Bank hard and circle in it to climb.', 3200);
   }
   boostEdges();
   updateCamera(dt, false);
@@ -1362,5 +1329,13 @@ function frame(now) {
 resetRun();
 setState('attract');
 requestAnimationFrame((t) => { last = t; frame(t); });
+// for add-on modules (js/pad.js): read the state, feed input, and use the same actions the keys do
+window.Skyrace = {
+  input, setDevice, restart,
+  onFrame: (fn) => { frameHooks.push(fn); },
+  get state() { return G.state; },
+  get crashing() { return G.crashTimer > 0; },
+  get hoop() { return G.next; },
+};
 window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, menu, lightStats, resolution, teleport(i) { G.next = i; respawn(); } };
 }
