@@ -1,5 +1,5 @@
 {
-  "_format": "See the course section at the top of js/sim.js; thermals: see js/sailplane.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, hoop?]; 0 = waypoint. The waypoints circling each thermal are generated (a tangent entry, one turn climbing at about the rate a glider manages, level at the top), so the demo flight circles like a player would. Hoops after a thermal are set so one full circle gets you there and flying straight through doesn't.",
+  "_format": "See the course section at the top of js/sim.js; thermals: see js/sailplane.js; cabins (one by each pier): js/cabins.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, hoop?]; 0 = waypoint. The waypoints circling each thermal are generated (a tangent entry, one turn climbing at about the rate a glider manages, level at the top), so the demo flight circles like a player would. Hoops after a thermal are set so one full circle gets you there and flying straight through doesn't.",
   "id": "lakeside",
   "name": "Lakeside Run",
   "lead": "Glide along the lakeshore and across the water. Where birds circle under a cloud the air rises: bank hard and circle once to climb for the next hoop.",
@@ -14,6 +14,7 @@
   "trees": {"near": 1800, "scattered": 11000, "maxAlt": 200, "minAlt": 2.5, "mask": 0.42, "size": [11, 20], "colors": ["#2c5230", "#4f7a3e"]},
   "rocks": {"near": 40, "scattered": 260, "size": [1.5, 4.5]},
   "shore": {"piers": [{"x": 560, "z": 1390, "len": 26, "w": 2.4, "lamps": 0, "dir": [0, -1]}, {"x": -560, "z": -340, "len": 22, "w": 2.2, "lamps": 0, "dir": [1, 0]}, {"x": 80, "z": 780, "len": 20, "w": 2.2, "lamps": 0, "dir": [0, -1]}], "boats": {"moored": 2, "anchored": 60, "sailing": 0.3, "depth": [2, 30], "clear": 45}},
+  "cabins": true,
   "autopilot": {"lead": 1.6},
   "thermals": [
     {"x": -780, "z": 100, "r": 130, "w": 13, "top": 225},
