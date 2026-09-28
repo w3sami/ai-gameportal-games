@@ -635,7 +635,7 @@ function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = cla
 function resetRun() {
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
   P.boost = 1; P.boostLock = false; P.boosting = false;
-  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false;
+  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.ridgeHint = false;
   setAimFrom(START_DIR); input.neutral = true;
   hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
   resetPylons();
@@ -1138,7 +1138,7 @@ function renderBest() {
   if (lead) lead.textContent = COURSE.lead || 'Fly through every hoop in order. The clock starts at the first one.';
   const pen = gateNoun() === 'gate' ? `Penalties: pylon hit +${RULES.pylonHit} s, banked air gate +${RULES.notLevel} s, missed gate +${RULES.missed} s. ` : '';
   if (refill) refill.textContent = gliding() ? `There\u2019s no flying back up: a missed hoop adds ${RULES.missed} s, and a crash puts you back at the last one.`
-    : sailing() ? 'Rising air lifts you under the clouds where the birds circle: bank hard and circle in it to climb. There\u2019s none over water. A crash puts you back at the last hoop.'
+    : sailing() ? sailTip()
     : `${pen}Boost refills over time and with every ${gateNoun()}.`;
   menu.render();
 }
@@ -1327,6 +1327,10 @@ function update(dt) {
   if (G.state === 'playing' && sailing() && !G.liftHint && (P.lift || 0) > 3 && getBest() == null && G.crashTimer <= 0) {
     G.liftHint = true;                                      // first thermal of a run, until the course is finished once
     showToast('Rising air! Bank hard and circle in it to climb.', 3200);
+  }
+  if (G.state === 'playing' && sailing() && !G.ridgeHint && (P.ridge || 0) > 2.5 && getBest() == null && G.crashTimer <= 0) {
+    G.ridgeHint = true;                                     // first ridge lift of a run (js/ridge.js), likewise
+    showToast('Ridge lift! Stay close to the cliff and it holds you up.', 3200);
   }
   boostEdges();
   updateCamera(dt, false);
