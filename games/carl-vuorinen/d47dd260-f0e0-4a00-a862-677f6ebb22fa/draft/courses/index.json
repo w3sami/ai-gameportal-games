@@ -22,7 +22,8 @@
       { "id": "waterfall", "name": "Waterfall Run", "file": "courses/waterfall.json" }
     ] },
     { "id": "lakeside", "name": "Lakeside", "vehicle": "sailplane", "levels": [
-      { "id": "lakeside", "name": "Lakeside Run", "file": "courses/lakeside.json" }
+      { "id": "lakeside", "name": "Lakeside Run", "file": "courses/lakeside.json" },
+      { "id": "hillside", "name": "Hillside Run", "file": "courses/hillside.json" }
     ] }
   ]
 }
