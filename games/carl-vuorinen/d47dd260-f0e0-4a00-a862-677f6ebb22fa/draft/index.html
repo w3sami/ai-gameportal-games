@@ -13,8 +13,8 @@
 <link rel="stylesheet" href="css/fullscreen.css">
 <link rel="stylesheet" href="css/courses.css">
 <link rel="stylesheet" href="css/wingsuit.css">
-<link rel="stylesheet" href="css/sailplane.css">
 <link rel="stylesheet" href="css/menu.css">
+<link rel="stylesheet" href="css/pad.css">
 </head>
 <body class="state-attract">
 <canvas id="scene" tabindex="-1" aria-label="Flight view"></canvas>
@@ -25,7 +25,6 @@
     <div class="hud-row">
       <span class="hud-hoops"><i class="ring"></i><span id="hud-hoops">0</span></span>
       <span id="hud-g" class="hud-g"></span>
-      <span id="hud-vario" class="hud-vario"></span>
       <span id="hud-speed">0 km/h</span>
     </div>
     <div class="boost-bar"><div class="boost-fill" id="hud-boost"></div></div>
@@ -68,12 +67,12 @@
       <button class="btn fs-btn" type="button" title="Full screen (F)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><g class="fs-off"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></g><g class="fs-on"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></g></svg><span class="fs-off">Full screen</span><span class="fs-on">Exit full screen</span></button>
       <span class="best" id="start-best"></span>
     </div>
-    <p class="controls for-mouse for-wingsuit">Aim with the mouse and the suit glides that way; aim above the horizon to level out, if you have the speed. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to tuck in and dive. <kbd>W</kbd> <kbd>S</kbd> flatten and steepen the glide, <kbd>A</kbd> <kbd>D</kbd> bank, and <kbd>Esc</kbd> pauses.</p>
-    <p class="controls for-mouse for-sailplane">Aim with the mouse and the glider follows. It has no engine: aim up to climb while you have the speed, and circle in rising air to gain height. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to dive with the flaps up, faster between thermals but no good for circling. <kbd>W</kbd> <kbd>S</kbd> climb and dive, <kbd>A</kbd> <kbd>D</kbd> bank, and <kbd>Esc</kbd> pauses.</p>
-    <p class="controls for-mouse not-wingsuit">Move the mouse to aim and the plane follows. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to boost. <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fly by hand with <kbd>Q</kbd> <kbd>E</kbd> as rudder, and <kbd>Esc</kbd> pauses.<span class="for-jet"> The jet is fast: aim well ahead.</span> A gamepad works too.</p>
+    <p class="controls for-mouse for-wingsuit">Aim with the mouse and the suit glides that way; aim above the horizon to level out, if you have the speed. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to tuck in and dive. <kbd>W</kbd> <kbd>S</kbd> flatten and steepen the glide, <kbd>A</kbd> <kbd>D</kbd> bank, and <kbd>Esc</kbd> pauses. A controller works too: press any button on it.</p>
+    <p class="controls for-mouse not-wingsuit">Move the mouse to aim and the plane follows. Hold <kbd>Shift</kbd> or <kbd>Space</kbd> to boost. <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fly by hand with <kbd>Q</kbd> <kbd>E</kbd> as rudder, and <kbd>Esc</kbd> pauses.<span class="for-jet"> The jet is fast: aim well ahead.</span> A controller works too: press any button on it.</p>
     <p class="controls for-touch for-wingsuit">Left thumb steers: up flattens the glide, down steepens it. Hold the right thumb to tuck your arms and legs in: you drop faster and pick up speed. Let go of the stick and you settle into your best glide.</p>
-    <p class="controls for-touch for-sailplane">Left thumb steers: hold it to one side to bank and circle, up to climb while you have the speed, down to dive. Let go and it settles into its best glide. Hold the right thumb to dive with the flaps up, faster between thermals but no good for circling.</p>
     <p class="controls for-touch not-wingsuit">Left thumb steers, right thumb boosts. <span class="for-prop">Let go and the plane levels out.</span><span class="for-jet">The stick rolls and pitches the jet: roll into a bank and pull to turn. Let go and it holds its attitude, so it keeps turning while banked.</span></p>
+    <p class="controls for-pad for-wingsuit">Left stick steers: up flattens the glide, down steepens it. Hold <kbd>A</kbd> or <kbd>RT</kbd> to tuck in and dive. Let go of the stick and you settle into your best glide. <kbd>Start</kbd> pauses, <kbd>Back</kbd> or <kbd>Y</kbd> restarts.</p>
+    <p class="controls for-pad not-wingsuit">Left stick steers, <kbd>A</kbd> or <kbd>RT</kbd> boosts. <span class="for-prop">Let go and the plane levels out.</span><span class="for-jet">The stick rolls and pitches the jet: roll into a bank and pull to turn. Let go and it holds its attitude.</span> <kbd>Start</kbd> pauses, <kbd>Back</kbd> or <kbd>Y</kbd> restarts.</p>
     <p class="controls" id="start-refill">Boost refills over time and with every hoop.</p>
   </div>
   <div class="settings settings-row" id="start-opts" hidden>
@@ -105,6 +104,7 @@
     <label class="range for-mouse">Mouse sensitivity <input type="range" id="opt-sens" min="0.4" max="2" step="0.05"></label>
   </div>
   <p class="controls for-mouse pause-hint"><kbd>R</kbd> restarts the course at any time.</p>
+  <p class="controls for-pad pause-hint"><kbd>Back</kbd> or <kbd>Y</kbd> restarts the course at any time, <kbd>B</kbd> resumes.</p>
 </section>
 
 <section class="panel overlay" id="finish" aria-labelledby="finish-title">
@@ -137,12 +137,12 @@
 <script src="js/port.js"></script>
 <script src="js/creek.js"></script>
 <script src="js/glide.js"></script>
-<script src="js/sailplane.js"></script>
 <script src="js/clouddeck.js"></script>
 <script src="js/game.js"></script>
 <script src="js/menu.js"></script>
 <script src="js/fullscreen.js"></script>
 <script src="js/options.js"></script>
 <script src="js/boot.js"></script>
+<script type="module" src="js/pad.js"></script>
 </body>
 </html>
