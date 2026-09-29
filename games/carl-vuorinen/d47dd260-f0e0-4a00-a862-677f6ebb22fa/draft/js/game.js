@@ -644,6 +644,8 @@ function resetRun() {
   resetPylons();
   for (const k of gateKits) k.reset();
   trails.forEach((t) => t.clear()); smoke.trail.clear();
+  for (const v in models) if (models[v].puffs) models[v].puffs.clear();
+  P.smoking = false;
   planeModel.group.visible = true;
   updateCamera(0, true);
 }
@@ -660,6 +662,7 @@ function respawn() {
   G.invuln = 1.2;
   planeModel.group.visible = true;
   trails.forEach((t) => t.clear()); smoke.trail.clear();
+  if (planeModel.puffs) planeModel.puffs.cut();
   updateCamera(0, true);
 }
 
@@ -866,7 +869,7 @@ function resolveControl(dt) {
   let r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
   let y = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
   const boost = k.has('ShiftLeft') || k.has('ShiftRight') || k.has('Space') || input.boost.active || input.pad.boost;
-  const ctl = { att: null, aim: null, p: 0, r: 0, y: 0, boost };
+  const ctl = { att: null, aim: null, p: 0, r: 0, y: 0, boost: boost && !TUNE.SMOKE, smoke: boost && !!TUNE.SMOKE };   // biplane: no boost, it smokes
   if (!input.neutral) { P.rollHold = P.stickBase = null; P.rollOn = 0; }   // aiming or flying by hand: where to settle once let go is
   if (p || r || y) {                                        // chosen afresh then (js/aerobatic.js)
     ctl.p = clamp(p, -1, 1) * inv; ctl.r = clamp(r, -1, 1); ctl.y = clamp(y, -1, 1);   // manual flying: raw rates, loops allowed
@@ -1059,6 +1062,7 @@ function updateVisuals(dt) {
     }
     smoke.trail.update(t, 3, camera.position);
   }
+  if (planeModel.puffs) planeModel.puffs.update(G.state === 'paused' ? 0 : dt, P, planeModel.group.visible && P.smoking);   // js/smoke.js
 
   sky.position.copy(camera.position);
   sunDisc.position.copy(camera.position).addScaledVector(SUN_DIR, sunDist);
@@ -1096,6 +1100,7 @@ function updateHUD() {
   const b = Math.round(P.boost * 100) / 100;
   if (hud.last.boost !== b) { hud.last.boost = b; hud.boost.style.transform = `scaleX(${b})`; hud.boostBtn.style.setProperty('--level', b); }
   body.classList.toggle('is-boosting', P.boosting);
+  body.classList.toggle('is-smoking', !!P.smoking);
   body.classList.toggle('boost-empty', P.boostLock);
 
   // pointer to the next hoop: at the screen edge when it's out of view, above it when it's in view but over FAR_HOOP away
@@ -1165,6 +1170,7 @@ function renderBest() {
   const pen = gateNoun() === 'gate' ? `Penalties: pylon hit +${RULES.pylonHit} s, banked air gate +${RULES.notLevel} s, missed gate +${RULES.missed} s. ` : '';
   if (refill) refill.textContent = gliding() ? `There\u2019s no flying back up: a missed hoop adds ${RULES.missed} s, and a crash puts you back at the last one.`
     : sailing() ? sailTip()
+    : TUNE.SMOKE ? `${pen}No boost here: the button trails smoke, so draw your loops in the sky.`
     : `${pen}Boost refills over time and with every ${gateNoun()}.`;
   menu.render();
 }
@@ -1218,7 +1224,7 @@ function applyCourse() {                                    // scene, plane, sta
   setVehicleModel();
   for (const v in models) body.classList.toggle('vehicle-' + v, TUNE.VEHICLE === v);
   body.classList.toggle('course-pylons', gateNoun() === 'gate');
-  const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : sailing() ? 'Dive' : 'Boost';
+  const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : sailing() ? 'Dive' : TUNE.SMOKE ? 'Smoke' : 'Boost';
   smoke.trail.clear();
   renderBest();
 }
@@ -1333,6 +1339,7 @@ function update(dt) {
       if (G.crashTimer <= 0) { if (G.state !== 'playing' && gliding()) resetRun(); else respawn(); }
     } else {
       const ctl = G.state === 'playing' ? resolveControl(dt) : autoControl();
+      P.smoking = !!ctl.smoke;
       const steps = Math.ceil(dt / (1 / 120)), h = dt / steps;
       for (let s = 0; s < steps; s++) {
         prevPos.copy(P.pos);
