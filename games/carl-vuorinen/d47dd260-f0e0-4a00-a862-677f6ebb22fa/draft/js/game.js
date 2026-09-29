@@ -273,6 +273,7 @@ const gateQ = [];         // per gate: orientation (+Z along the line)
 const pylons = createPylonKit(ROUTE_HEX);   // pylon gates' meshes and highlighting (js/pylons.js)
 const bridges = createBridgeKit();          // bridges over some hoops (js/bridges.js)
 const overhangs = createOverhangKit();      // rock ledges, arches, boulders (js/overhangs.js)
+const gateKits = GATE_KITS.map((f) => f({ hoopMat }));   // gate kinds from other modules (js/aerobatic.js, js/farm.js)
 const shore = createShoreKit();              // piers, boats, beach umbrellas and huts (js/shore.js)
 const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
@@ -291,6 +292,7 @@ function buildHoops(group) {
   });
   pylons.build(group);
   bridges.build(group);
+  for (const k of gateKits) k.build(group);
   gateDisc.scale.setScalar((TUNE.HOOP_R - 0.6) / 7.4);
 }
 function resetPylons() { pylons.reset(); }
@@ -426,7 +428,7 @@ function makeWingsuitModel() {                            // flyer belly-down, h
            } };
 }
 const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel(), wingsuit: makeWingsuitModel(),
-  sailplane: makeSailplaneModel(scene, modelKit) };   // js/sailplane.js
+  sailplane: makeSailplaneModel(scene, modelKit), biplane: makeBiplaneModel(scene, modelKit) };   // js/sailplane.js, js/biplane.js
 let planeModel = models.prop;
 function setVehicleModel() {
   for (const k in models) models[k].group.visible = false;
@@ -555,10 +557,11 @@ const Sound = {
       return;
     }
     this.rumble.gain.setTargetAtTime(0, t, 0.2);
-    const racer = TUNE.VEHICLE === 'racer', f = ((P.boosting ? 78 : 58) + v * 0.35) * (racer ? 1.15 : 1);   // racer: angrier six-cylinder
+    const racer = TUNE.VEHICLE === 'racer', bi = TUNE.VEHICLE === 'biplane';   // racer: angrier six-cylinder; biplane: deep radial
+    const f = ((P.boosting ? 78 : 58) + v * 0.35) * (racer ? 1.15 : bi ? 0.8 : 1);
     this.osc[0].frequency.setTargetAtTime(f, t, 0.25); this.osc[1].frequency.setTargetAtTime(f * 2.01, t, 0.25);
     this.eng.gain.setTargetAtTime(level * (P.boosting ? 0.06 : 0.035), t, 0.2);
-    this.engF.frequency.setTargetAtTime((P.boosting ? 950 : 420) * (racer ? 1.3 : 1), t, 0.3);
+    this.engF.frequency.setTargetAtTime((P.boosting ? 950 : 420) * (racer ? 1.3 : bi ? 0.85 : 1), t, 0.3);
   },
   tone(freq, when, dur, vol, type = 'sine') {
     const c = this.ctx, o = c.createOscillator(), g = c.createGain();
@@ -639,6 +642,7 @@ function resetRun() {
   setAimFrom(START_DIR); input.neutral = true;
   hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
   resetPylons();
+  for (const k of gateKits) k.reset();
   trails.forEach((t) => t.clear()); smoke.trail.clear();
   planeModel.group.visible = true;
   updateCamera(0, true);
@@ -664,6 +668,7 @@ function onHoop(missed = false) {
   const i = G.next, h = HOOPS[i];
   G.next++; G.hoopSpeed = P.speed;
   if (!missed) P.boost = Math.min(1, P.boost + TUNE.BOOST_HOOP);
+  for (const k of gateKits) k.pass(i);
   const m = hoopMeshes[i];
   if (m) {
     if (m.userData.flash) m.userData.flash.dispose();
@@ -676,6 +681,8 @@ function onHoop(missed = false) {
   else {
     Sound.hoop(i);
     if (h.kind === 'G' && Math.abs(P.bank) > RULES.levelTol * Math.PI / 180) penalty(RULES.notLevel, 'Not level through the gate');
+    const rule = GATE_TYPES[h.kind] && GATE_TYPES[h.kind].rule, pen = rule && rule(P, h);   // js/aerobatic.js: attitude gates
+    if (pen) penalty(pen.sec, pen.text);
   }
   bump($('hud-hoops'));
   if (G.next >= HOOPS.length) finishRun();
@@ -853,9 +860,10 @@ function resolveControl(dt) {
   let y = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
   const boost = k.has('ShiftLeft') || k.has('ShiftRight') || k.has('Space') || input.boost.active || input.pad.boost;
   const ctl = { att: null, aim: null, p: 0, r: 0, y: 0, boost };
-  if (p || r || y) {                                        // manual flying: raw rates, loops allowed
-    ctl.p = clamp(p, -1, 1) * inv; ctl.r = clamp(r, -1, 1); ctl.y = clamp(y, -1, 1);
-    input.manual = true; input.neutral = true;
+  if (!input.neutral) { P.rollHold = P.stickBase = null; P.rollOn = 0; }   // aiming or flying by hand: where to settle once let go is
+  if (p || r || y) {                                        // chosen afresh then (js/aerobatic.js)
+    ctl.p = clamp(p, -1, 1) * inv; ctl.r = clamp(r, -1, 1); ctl.y = clamp(y, -1, 1);   // manual flying: raw rates, loops allowed
+    input.manual = true; input.neutral = true; P.rollHold = P.stickBase = null; P.rollOn = 0;
     syncAim();
     return ctl;
   }
@@ -870,14 +878,17 @@ function resolveControl(dt) {
     return ctl;
   }
   if (st) {                                                 // horizontal = bank angle, vertical = climb angle
-    ctl.att = { bank: st.x * TUNE.TOUCH_BANK, climb: touchClimb(input.climb, st.y * inv, dt) };
+    if (TUNE.ROLL_DETENT) {                                  // the biplane (js/aerobatic.js): bank as here, but the stick's
+      const a = aeroStick(P, st.x, st.y * inv, dt);         // up/down is the elevator, and the end of the throw rolls on
+      ctl.p = a.p; ctl.r = a.r;
+    } else ctl.att = { bank: st.x * TUNE.TOUCH_BANK, climb: touchClimb(input.climb, st.y * inv, dt) };
     input.neutral = true;
     syncAim();
     return ctl;
   }
   if (input.neutral && TUNE.TOUCH_MODE === 'rate' && (input.device === 'touch' || input.device === 'pad')) { syncAim(); return ctl; }   // let go: hold attitude
   if (input.neutral) {                                      // nothing held: roll level, flatten out, keep heading
-    ctl.att = { bank: 0, climb: 0 };
+    ctl.att = { bank: TUNE.ROLL_DETENT ? aeroHold(P) : 0, climb: 0 };   // (the biplane: or hold knife edge / inverted)
     syncAim();
     return ctl;
   }
@@ -898,7 +909,9 @@ const _aimTmp = new V3();
 
 function autoControl() {                                    // attract mode and victory lap
   if (G.next >= HOOPS.length) { dirFromYawPitch(yawOf(P.vdir), 0.08, aimDir); return { aim: aimDir, p: 0, r: 0, y: 0, boost: false }; }
-  return { aim: autopilotAim(P, G.next, aimDir), p: 0, r: 0, y: 0, boost: false };
+  const ctl = { aim: autopilotAim(P, G.next, aimDir), p: 0, r: 0, y: 0, boost: false }, roll = aeroRollTo(P, G.next);   // js/aerobatic.js
+  if (roll != null) ctl.rollTo = roll;
+  return ctl;
 }
 
 /* ---------- camera ---------- */
@@ -978,8 +991,10 @@ function updateVisuals(dt) {
   }
   pylons.update(G.next, t);
   pylons.animate(dt);
+  for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast });
   if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
-    gateDisc.visible = true;
+    const gt = GATE_TYPES[HOOPS[G.next].kind], dr = gt && gt.disc ? gt.disc(HOOPS[G.next]) : TUNE.HOOP_R - 0.6;   // js/aerobatic.js
+    gateDisc.visible = dr > 0; gateDisc.scale.setScalar(dr / 7.4);
     gateDisc.position.copy(HOOPS[G.next].pos); gateDisc.quaternion.copy(gateQ[G.next]);
     gateDisc.material.opacity = (0.09 + Math.sin(t * 6) * 0.04) * (hoopMeshes[G.next] ? 1 : 0.55);
   } else gateDisc.visible = false;
@@ -1079,7 +1094,8 @@ function updateHUD() {
   // pointer to the next hoop: at the screen edge when it's out of view, above it when it's in view but over FAR_HOOP away
   let showArrow = false;
   if (G.next < HOOPS.length && G.crashTimer <= 0) {
-    const h = HOOPS[G.next].pos;
+    const h = HOOPS[G.next].pos, gt = GATE_TYPES[HOOPS[G.next].kind];   // other gate kinds may mark from nearer, over their top
+    const far = (gt && gt.far) || FAR_HOOP, top = gt && gt.top ? gt.top(HOOPS[G.next]) : TUNE.HOOP_R;
     _v.copy(h).project(camera);
     camera.getWorldDirection(_camFwd);
     const behind = _rel.copy(h).sub(camera.position).dot(_camFwd) < 0;
@@ -1088,10 +1104,10 @@ function updateHUD() {
     if (behind) { x = -x; y = -y; if (Math.abs(x) + Math.abs(y) < 1e-3) y = -1; }
     const offscreen = behind || Math.abs(x) > 0.9 || Math.abs(y) > 0.85;
     hud.arrow.classList.toggle('is-above', !offscreen);
-    if (!offscreen && dist > FAR_HOOP) {                    // far but on screen: arrow just above the hoop, pointing down at it
+    if (!offscreen && dist > far) {                         // far but on screen: arrow just above the hoop, pointing down at it
       showArrow = true;
       const sx = (x + 1) * 0.5 * view.w, sy = (1 - y) * 0.5 * view.h;
-      const rpx = TUNE.HOOP_R / dist * (view.h / 2) / Math.tan(camera.fov * Math.PI / 360);   // hoop radius on screen
+      const rpx = top / dist * (view.h / 2) / Math.tan(camera.fov * Math.PI / 360);   // hoop radius (or its top) on screen
       hud.arrow.style.transform = `translate(${sx}px, ${Math.max(64, sy - rpx - 26)}px)`;
       hud.arrowIcon.style.transform = 'rotate(90deg)';
       setText(hud.arrowDist, 'dist', `${Math.round(dist / 10) * 10} m`);
@@ -1147,7 +1163,7 @@ function renderBest() {
 }
 
 /* ---------- start menu: themes, then levels (js/menu.js) ---------- */
-const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit', sailplane: 'Sailplane' };
+const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit', sailplane: 'Sailplane', biplane: 'Biplane' };
 // Loads run one at a time; picking again while one loads just retargets it, and the last pick wins.
 let switching = null, wantCourse = null;
 function switchCourse(entry) {
