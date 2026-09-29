@@ -223,7 +223,7 @@ function buildWorld(course) {
     if (g === 0) continue;                                   // waypoint: shapes the line and the carving, no gate
     const hp = { pos: new THREE.Vector3(COURSE_DEF[i][0], COURSE_DEF[i][1], COURSE_DEF[i][2]),
                  normal: curve.getTangent(i / (COURSE_DEF.length - 1)).normalize(),
-                 kind: typeof g === 'string' && g !== 'B' ? g : 'hoop', pylons: [], opts: COURSE_DEF[i][7] || {} };
+                 kind: typeof g === 'string' && g !== 'B' ? g : 'hoop', pylons: [], opts: COURSE_DEF[i][7] || {}, point: i };
     if (g === 'B') hp.bridgeSpec = COURSE_DEF[i][7] || {};    // a hoop with a bridge over it (js/bridges.js)
     HOOPS.push(hp);
   }
@@ -241,10 +241,10 @@ function buildWorld(course) {
     if (off) { curve.getTangent(u, tg); const L = Math.hypot(tg.x, tg.z) || 1; sp.rx -= tg.z / L * off; sp.rz += tg.x / L * off; sp.off = off; }
     SAMPLES.push(sp);
   }
-  for (const h of HOOPS) {                                   // nearest sample to each hoop, for the autopilot
-    let bd = Infinity;
-    SAMPLES.forEach((sp, k) => { const d = h.pos.distanceToSquared(p.set(sp.x, sp.y, sp.z)); if (d < bd) { bd = d; h.sample = k; } });
-  }
+  // each hoop's sample (for the autopilot): where its own point is along the line, from the curve's arc lengths (the
+  // nearest sample could be another pass's, on a line that comes back through a hoop, like a loop's or a Cuban eight's)
+  const lens = curve.getLengths(curve.arcLengthDivisions);
+  for (const h of HOOPS) h.sample = Math.round(lens[Math.round(h.point / nseg * curve.arcLengthDivisions)] / COURSE_LEN * NS);
 
   // terrain heights: hills, carved into a valley along the path, falling away at the edges
   const t = course.terrain;
