@@ -5,15 +5,19 @@
      "K"  knife-edge slot: a tall, narrow capsule, too narrow for level wings. Forgiving: it counts anywhere within a
           hoop's circle round it (as if it were a hoop), and the wings only have to be on edge enough to fit its width
           and height, wherever you cross (rules.knife s if not, default 2). Options { w, h, flank, hold }: the
-          slot's inner width and height (m, default SLOT_W and 2 HOOP_R), flank: "silo" puts a silo either side, "pole"
+          slot's inner width and height (m, default SLOT_W and 2 HOOP_R), r: how far from its middle it still counts (m,
+          default a hoop's circle; more where the line can't be flown exactly, like a Cuban eight's half roll), flank: "silo" puts a silo either side, "pole"
           a pole on one side (js/farm.js); hold: a slalom flown on one wingtip, so the autopilot stays on it from the slot
-          before (otherwise it rolls to the inside of the bend, to pull round it).
+          before (otherwise it rolls to the inside of the bend, to pull round it); tip: 1 or -1, the wingtip (right, left)
+          the autopilot puts down for it, for a roll flown one way through several gates.
      "I"  inverted hoop: a hoop flown upside down, within INV_TOL of it (rules.inverted s if not, default 2), INV_SCALE
           times a hoop's size (option { r } for its own radius), so mind its height above the ground. Dashed white and
           blue, magenta and blue once it's the next gate, the dashes then turning slowly.
      "O"  big hoop: a plain hoop the inverted hoop's size (option { r }), for gates where the line can't be flown exactly,
           like round a loop, where a moment's difference in the pull moves the whole loop.
    K and I carry a sign above them: the plane seen head-on, turned the way to fly through (on edge, upside down).
+   Another module's gate kind flown upside down (its GATE_TYPES entry has inverted: true, and a rule of its own, like the
+   ribbon in js/fair.js) gets the upside-down sign (at its top()) and callout, and the autopilot rolls over for it.
    Any gate's options may carry say: its own announcement instead (for a slalom or a loop, called out once at its first
    gate), or "" for none; a plain hoop with say is announced the same way.
    A run of gates with the same option set (a name: "loop", "slalom") is flown as one: crash inside it, or go more than
@@ -49,7 +53,7 @@ function _gateUV(h, p) {
 }
 const _aeR = new THREE.Vector3(), _aeTip = new THREE.Vector3();
 GATE_TYPES.K = {
-  shape(h, u, v) { return u * u + v * v < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2; },
+  shape(h, u, v) { return u * u + v * v < ((h.opts && h.opts.r) || TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2; },
   disc: () => 0,                                             // a round disc would spill out of the slot
   top: (h) => slotSize(h).h / 2,
   rule(P, h) {
@@ -80,11 +84,15 @@ GATE_TYPES.I = {
 // The stick's left/right: the bank up to TOUCH_BANK, as the stunt plane; holding the end of the throw (past OD_THRESH,
 // as for extra climb) rolls on at ROLL_ON rad/s instead, round to knife edge, inverted and back, without turning on
 // the way. It counts from the attitude the plane was holding when the stick was taken, so from knife edge the stick
-// centred stays on edge. Returns the bank to roll to (aeroStick).
+// centred stays on edge; after rolling on, it counts from the nearest of those to where the roll got to, so easing off a
+// half roll doesn't roll back. Returns the bank to roll to (aeroStick).
 function aeroBank(P, x, dt) {
   if (P.stickBase == null) { P.stickBase = P.rollHold || 0; P.rollOn = 0; }
   P.rollHold = null;
-  if (Math.abs(x) <= TUNE.OD_THRESH) { P.rollOn = 0; return wrapAngle(P.stickBase + x * TUNE.TOUCH_BANK); }
+  if (Math.abs(x) <= TUNE.OD_THRESH) {
+    if (P.rollOn) P.stickBase = nearDetent(P.bank);          // a roll on just eased off: count from where it got to
+    P.rollOn = 0; return wrapAngle(P.stickBase + x * TUNE.TOUCH_BANK);
+  }
   // at the end of the throw: keep rolling that way (the target leads the plane by what makes attitude() roll at
   // ROLL_ON), all the way round for as long as it's held. P.rollOn also stops bank-to-turn meanwhile (js/sim.js)
   P.rollOn = Math.sign(x);
@@ -98,9 +106,7 @@ const PULL_FREE = 0.35, X_CENTRE = 0.15;
 function aeroStick(P, x, y, dt) {
   const bankT = aeroBank(P, x, dt);
   if (!P.rollOn && Math.abs(x) < X_CENTRE && Math.abs(y) > PULL_FREE) {
-    let near = 0;
-    for (const d of DETENTS) if (Math.abs(wrapAngle(d - P.bank)) < Math.abs(wrapAngle(near - P.bank))) near = d;
-    P.stickBase = near;
+    P.stickBase = nearDetent(P.bank);
     return { p: y, r: 0 };
   }
   return { p: y, r: clamp(wrapAngle(bankT - P.bank) * TUNE.ATT_ROLL_P, -1, 1) };
@@ -109,6 +115,11 @@ function aeroStick(P, x, y, dt) {
 // out. Chosen once, when let go (P.rollHold: cleared while the stick or keys are used, and by placePlane), so levelling
 // out from past knife edge doesn't catch on it on the way. Returns the bank to fly.
 const DETENTS = [Math.PI / 2, -Math.PI / 2, Math.PI];
+function nearDetent(bank) {                                  // the nearest of level, knife edge either way and inverted
+  let near = 0;
+  for (const d of DETENTS) if (Math.abs(wrapAngle(d - bank)) < Math.abs(wrapAngle(near - bank))) near = d;
+  return near;
+}
 function aeroHold(P) {
   P.stickBase = null; P.rollOn = 0;
   if (P.rollHold == null) {
@@ -121,14 +132,22 @@ function aeroHold(P) {
 // of the bend there (or on a straight, whichever side is nearer)
 function aeroRollTo(P, next) {
   const h = HOOPS[next];
+  const pv = HOOPS[next - 1];                                // just out of a half roll's slot (a Cuban eight): on round to upright
+  if (h && h.opts && h.opts.loop && pv && pv.kind === 'K' && !(pv.opts && pv.opts.loop)) return 0;
   if (h && h.opts && h.opts.loop) return Math.abs(P.bank) > Math.PI / 2 ? Math.PI : 0;   // round a loop: wings square to it, pulling
                                                            // through (upside down over the top by itself), never rolling to right it
-  if (!h || (h.kind !== 'K' && h.kind !== 'I')) return null;
+  const inv = !!h && h.kind !== 'I' && !!GATE_TYPES[h.kind] && !!GATE_TYPES[h.kind].inverted;   // another module's, flown upside down
+  if (!h || (h.kind !== 'K' && h.kind !== 'I' && !inv)) return null;
   const prev = HOOPS[next - 1];                              // option hold (a slalom on one wingtip): stay on it between slots
   if (h.kind === 'K' && h.opts.hold && prev && prev.kind === 'K' && Math.abs(Math.abs(P.bank) - Math.PI / 2) < 0.6) return P.bank < 0 ? -Math.PI / 2 : Math.PI / 2;
   const along = (P.pos.x - h.pos.x) * h.normal.x + (P.pos.y - h.pos.y) * h.normal.y + (P.pos.z - h.pos.z) * h.normal.z;
+  // coming off a loop to a slot (a Cuban eight's half roll on the down line): wings kept square to the loop until the
+  // pull is over, then a shorter lead
+  const offLoop = h.kind === 'K' && prev && prev.opts && prev.opts.loop;
+  if (offLoop && along < -P.speed * 0.75) return Math.abs(P.bank) > Math.PI / 2 ? Math.PI : 0;
   if (along < -P.speed * 1.15 || along > 2) return null;
-  if (h.kind === 'I') return Math.PI;
+  if (h.kind === 'I' || inv) return Math.PI;
+  if (h.opts.tip) return Math.sign(h.opts.tip) * Math.PI / 2;   // a roll one way through several gates
   const turn = lineTurn(h);                                  // on a bend: the wingtip on its inside, to pull round it
   return turn ? turn * Math.PI / 2 : (P.bank < 0 ? -Math.PI / 2 : Math.PI / 2);
 }
@@ -248,7 +267,8 @@ function createAeroGateKit(ctx) {
     idleGeos = [];
     const ringGeo = new Map();                               // per radius
     HOOPS.forEach((h, i) => {
-      if (h.kind !== 'K' && h.kind !== 'I' && h.kind !== 'O') {   // other gates with an announcement of their own: no meshes here
+      const gt = GATE_TYPES[h.kind], inv = h.kind !== 'I' && !!gt && !!gt.inverted;
+      if (h.kind !== 'K' && h.kind !== 'I' && h.kind !== 'O' && !inv) {   // other gates with an announcement of their own: no meshes here
         if (h.opts && typeof h.opts.say === 'string') items.push({ i, h, meshes: [], fade: 0, flash: null });
         return;
       }
@@ -260,7 +280,9 @@ function createAeroGateKit(ctx) {
         m.quaternion.copy(q); if (rz) m.rotateZ(rz);
         group.add(m); meshes.push(m); return m;
       };
-      if (h.kind === 'K') {
+      if (inv) {                                             // another module draws the gate: just the sign, upside down
+        add(SIGN, 0, (gt.top ? gt.top(h) : TUNE.HOOP_R) + 1.8 + 1.7 * SIGN_K, Math.PI).userData.sign = true;
+      } else if (h.kind === 'K') {
         const s = slotSize(h);
         add(new THREE.TubeGeometry(new Capsule(s.w + tube * 2, s.h + tube * 2), 72, tube, 8, true), 0, 0, 0);
         add(SIGN, 0, s.h / 2 + tube + 1.2 + 3.1 * SIGN_K, Math.PI / 2).userData.sign = true;   // on its side
@@ -289,7 +311,7 @@ function createAeroGateKit(ctx) {
     if (typeof it.h.opts.say === 'string') return it.h.opts.say;
     if (it.h.kind === 'O') return '';
     const prev = HOOPS[it.i - 1];
-    if (it.h.kind === 'I') return 'Inverted next: roll upside down.';
+    if (it.h.kind !== 'K') return 'Inverted next: roll upside down.';
     return prev && prev.kind === 'K' ? 'Knife edge again: stay on the wingtip.' : 'Knife edge next: roll onto a wingtip.';
   };
   // s: { next, t, dt, P, playing, crashing, fresh (no best time yet), toast(text, ms), rewind(i, text) }
