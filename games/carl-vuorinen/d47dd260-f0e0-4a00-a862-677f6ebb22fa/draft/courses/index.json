@@ -26,7 +26,7 @@
       { "id": "hillside", "name": "Cliffside Run", "file": "courses/hillside.json" },
       { "id": "island", "name": "Island Run", "file": "courses/island.json" }
     ] },
-    { "id": "farm", "name": "Farm", "vehicle": "biplane", "levels": [
+    { "id": "farm", "name": "Farmlands", "vehicle": "biplane", "levels": [
       { "id": "barnyard", "name": "Barnyard Run", "file": "courses/barnyard.json" }
     ] }
   ]
