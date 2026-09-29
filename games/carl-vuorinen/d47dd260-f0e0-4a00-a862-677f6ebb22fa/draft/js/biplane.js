@@ -2,8 +2,9 @@
 /* =========================================================================
    BIPLANE — the aerobatic biplane's model (Farm theme; tuning in config/biplane.json, gates in js/aerobatic.js).
    A Pitts-style single-seater: short round-cowled fuselage, staggered upper and lower wings on N-struts, spatted gear,
-   and airshow smoke from the tail. Nose along -Z; the upper wing's tips (±3.6 m) are TUNE.WING_HALF.
-   makeBiplaneModel(scene, modelKit) -> { group, tips, smoke, update(dt, P) } (js/game.js's `models`).
+   and airshow smoke from under the fuselage while the button is held (js/smoke.js). Nose along -Z; the upper wing's tips (±3.6 m)
+   are TUNE.WING_HALF.
+   makeBiplaneModel(scene, modelKit) -> { group, tips, puffs, update(dt, P) } (js/game.js's `models`).
    ========================================================================= */
 function makeBiplaneModel(scene, modelKit) {
   const V3 = THREE.Vector3, g = new THREE.Group(), add = modelKit(g);
@@ -48,6 +49,6 @@ function makeBiplaneModel(scene, modelKit) {
   const disc = new THREE.Mesh(new THREE.CircleGeometry(1.18, 24), new THREE.MeshBasicMaterial({ color: '#262d34', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
   disc.position.set(0, 0, -3.02); g.add(disc);
   scene.add(g);
-  return { group: g, tips: [new V3(-3.6, 1.05, -0.4), new V3(3.6, 1.05, -0.4)], smoke: new V3(0, 0.3, 3.3),
+  return { group: g, tips: [new V3(-3.6, 1.05, -0.4), new V3(3.6, 1.05, -0.4)], puffs: makeSmoke(scene, new V3(0, -0.8, 0.9)),
            update(dt, P) { prop.rotation.z += dt * (P.boosting ? 58 : 40); } };
 }
