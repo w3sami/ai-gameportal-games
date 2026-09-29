@@ -62,6 +62,11 @@ const TUNE = {
   BOOST_DRAIN: 0.2, BOOST_REGEN: 0.085, BOOST_HOOP: 0.18,
   HOOP_R: 8, HOOP_TOL: 1.4, PLANE_R: 1.3,
   WING_HALF: 4.7,         // half span (m): pylon hits are tested along the wing, so a steep bank passes closer
+  KNIFE_BAND: 0,          // aerobatic planes (rad, 0 = off): no bank-to-turn within this of knife edge, fading back in over
+                          // twice as far, since wings on edge have no lift to turn with (the rudder holds the nose up)
+  ROLL_FADE: 0,           // aerobatic planes (rad, 0 = off): past this bank, no bank-to-turn while rolling (over 30 % of
+                          // MAX_ROLL, fading in from 5 %), so rolling on to knife edge or inverted doesn't swing the heading;
+                          // nor at any bank while P.rollOn (js/aerobatic.js: the stick held at the end of its throw)
   // vehicle: which model, sound and touch scheme. TOUCH_MODE 'attitude' = stick sets bank/climb, letting go levels;
   // 'rate' = stick sets roll/pitch rate, letting go holds the attitude (loops and rolls, no angle limits)
   VEHICLE: 'prop', TOUCH_MODE: 'attitude',
@@ -120,8 +125,10 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
               first = run-in, last = run-out, every point between is a gate, in flying order. The 7th value says
               which kind: left out or 1 = hoop; 0 = waypoint that only shapes the line (e.g. to turn between gates);
               "L" / "R" = single pylon on your left / right as you pass; "G" = air gate, a pylon either side, flown
-              wings level; "B" = hoop with a bridge over it (8th value: { type, top, span, ... }, see js/bridges.js).
-              Every kind is scored the same way: a circle of radius HOOP_R centred on the point,
+              wings level; "B" = hoop with a bridge over it (8th value: { type, top, span, ... }, see js/bridges.js);
+              other modules add kinds of their own (GATE_TYPES): "K" knife-edge slot and "I" inverted hoop
+              (js/aerobatic.js), "barn" (js/farm.js), each with its 8th value as options.
+              Every kind is scored the same way, unless its GATE_TYPES entry has a shape: a circle of radius HOOP_R centred on the point,
               facing along the line. Pylons stand beside that circle, from the ground or water to PYLON above its
               top, so the circle is invisible and the pylon shows where it is. The terrain is carved into a valley
               along the path: floor `clearance` m below it, flat for `floorHalfWidth` m either side, walls rising
@@ -146,6 +153,19 @@ const TUNE_DEFAULTS = Object.assign({}, TUNE);
    }
    buildWorld(course) (re)builds everything in this section from it. */
 let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SAMPLES = [], PYLONS = [];
+// gate kinds from other modules (js/aerobatic.js), keyed by the 7th value's string: { shape(h, u, v) -> true when the
+// crossing point (u m right, v m up from the centre, in the gate's plane) is inside the gate, rule(P, h) -> null or
+// { sec, text }: a penalty for how it was flown, along(h) -> m further along the line its crossing is scored (the
+// barn: out its far door) }. A kind with no shape is scored on the circle like a hoop.
+// Optional, for js/game.js: disc(h) radius of the faint target disc on it when next (0 = none; default the hoop's),
+// far: the distance past which the HUD marks it with an arrow over it (default 1000 m), top(h): how far above its
+// centre that arrow sits (default HOOP_R).
+const GATE_TYPES = {};
+// crash tests from other modules: fn(P) -> the kind of whatever the plane hit (for CRASH_TEXT), or null
+const CRASH_PLUGINS = [];
+// their meshes (js/game.js): factories fn({ hoopMat }) -> { build(group), update({ next, t, dt, P, playing, crashing, fresh, toast }),
+// pass(i), reset() }
+const GATE_KITS = [];
 const PYLON_DEF = { r0: 2.4, r1: 0.8, above: 4, gap: 1.2 };
 const RULES_DEF = { pylonHit: 3, notLevel: 2, missed: 5, missR: 70, levelTol: 15, hoopMiss: false };
 let PYLON = PYLON_DEF, RULES = RULES_DEF;
@@ -199,7 +219,7 @@ function buildWorld(course) {
     if (g === 0) continue;                                   // waypoint: shapes the line and the carving, no gate
     const hp = { pos: new THREE.Vector3(COURSE_DEF[i][0], COURSE_DEF[i][1], COURSE_DEF[i][2]),
                  normal: curve.getTangent(i / (COURSE_DEF.length - 1)).normalize(),
-                 kind: typeof g === 'string' && g !== 'B' ? g : 'hoop', pylons: [] };
+                 kind: typeof g === 'string' && g !== 'B' ? g : 'hoop', pylons: [], opts: COURSE_DEF[i][7] || {} };
     if (g === 'B') hp.bridgeSpec = COURSE_DEF[i][7] || {};    // a hoop with a bridge over it (js/bridges.js)
     HOOPS.push(hp);
   }
@@ -433,7 +453,7 @@ function placePlane(P, pos, dir, speed) {
   P.pos.copy(pos); P.vdir.copy(dir).normalize();
   // Matrix4.lookAt points local -Z at the target: nose along dir, wings level
   P.q.setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(), P.vdir, WORLD_UP));
-  P.speed = speed; P.rp = P.ry = P.rr = 0; P.bank = 0; P.turn = 0; P.gload = 1; P.apAround = false;
+  P.speed = speed; P.rp = P.ry = P.rr = 0; P.bank = 0; P.turn = 0; P.gload = 1; P.apAround = false; P.rollHold = P.stickBase = null; P.rollOn = 0;
   P.glide = null; P.tuck = 0;                               // glide model (js/glide.js) restarts from vdir
 }
 
@@ -452,11 +472,15 @@ function computeBank(P, f) {
 const _R = new THREE.Vector3(), _U = new THREE.Vector3(), _B = new THREE.Vector3();
 // tan-shaped like a real coordinated turn (gentle at small bank, strong past ~45°), capped so knife-edge
 // doesn't explode, fading to zero when inverted
-const turnCurve = (bank) => Math.sin(bank) / Math.max(Math.cos(bank), TUNE.TURN_COS_MIN);
+const turnCurve = (bank) => Math.sin(bank) / Math.max(Math.cos(bank), TUNE.TURN_COS_MIN)
+  * (TUNE.KNIFE_BAND ? smoothstep(TUNE.KNIFE_BAND, 3 * TUNE.KNIFE_BAND, Math.abs(Math.abs(bank) - Math.PI / 2)) : 1);
+// bank-to-turn: the heading rate a bank gives (rad/s, + for a right bank, which turns the nose right)
+const bankTurn = (P, bank, horiz, auth) => TUNE.TURN_ASSIST * turnCurve(bank) * horiz * auth
+  * (TUNE.ROLL_FADE && (P.rollOn || Math.abs(bank) > TUNE.ROLL_FADE) ? 1 - smoothstep(0.05, 0.3, Math.abs(P.rr) / TUNE.MAX_ROLL) : 1);
 // current heading rate of the nose (+ = turning left), from the smoothed body rates plus bank-to-turn
 function headingRate(P, bank, horiz, auth) {
   _R.set(1, 0, 0).applyQuaternion(P.q); _U.set(0, 1, 0).applyQuaternion(P.q); _B.set(0, 0, 1).applyQuaternion(P.q);
-  return _R.y * P.rp - _U.y * P.ry - _B.y * P.rr - TUNE.TURN_ASSIST * turnCurve(bank) * horiz * auth;
+  return _R.y * P.rp - _U.y * P.ry - _B.y * P.rr - bankTurn(P, bank, horiz, auth);
 }
 // heading-hold steering: bank toward the aim's heading (with lead so it rolls out before arriving),
 // and pull/yaw toward it in the plane's own frame
@@ -499,13 +523,15 @@ function touchClimb(st, y, dt) {
   return y * TUNE.TOUCH_CLIMB + st.odSign * st.od * st.od * TUNE.TOUCH_CLIMB_EXTRA;
 }
 
-// ctl: { att: {bank, climb}|null, aim: Vector3|null, p, r, y (manual, -1..1), boost: bool }
+// ctl: { att: {bank, climb}|null, aim: Vector3|null, p, r, y (manual, -1..1), boost: bool, rollTo: rad|undefined }
+// rollTo: roll to and hold this bank whatever else steers (the autopilot through js/aerobatic.js's attitude gates)
 function stepFlight(P, ctl, dt) {
   const f = forwardOf(P, _f);
   const { bank, horiz } = computeBank(P, f);
   P.bank = bank;
   const auth = clamp(P.speed / TUNE.CRUISE, 0.3, 1.15);
-  const c = ctl.att ? attitude(P, f, bank, ctl.att.bank, ctl.att.climb) : ctl.aim ? assist(P, f, bank, horiz, ctl.aim, auth) : ctl;
+  let c = ctl.att ? attitude(P, f, bank, ctl.att.bank, ctl.att.climb) : ctl.aim ? assist(P, f, bank, horiz, ctl.aim, auth) : ctl;
+  if (ctl.rollTo != null) c = { p: c.p, y: c.y, r: clamp(wrapAngle(ctl.rollTo - bank) * TUNE.ROLL_P * 1.6, -1, 1) };
   const k = damp(TUNE.RATE_K, dt);
   P.rp += (c.p * TUNE.MAX_PITCH * auth - P.rp) * k;
   P.rr += (c.r * TUNE.MAX_ROLL * auth - P.rr) * k;
@@ -515,7 +541,7 @@ function stepFlight(P, ctl, dt) {
   const wl = _w.length();
   if (wl > 1e-7) { _dq.setFromAxisAngle(_w.multiplyScalar(1 / wl), wl * dt); P.q.multiply(_dq); }
 
-  const turn = -TUNE.TURN_ASSIST * turnCurve(bank) * horiz * auth;  // bank-to-turn
+  const turn = -bankTurn(P, bank, horiz, auth);                // bank-to-turn
   P.turn = turn;
   if (turn !== 0) { _dq.setFromAxisAngle(WORLD_UP, turn * dt); P.q.premultiply(_dq); }
 
@@ -580,7 +606,9 @@ function autopilotAim(P, hoopIdx, out) {
   }
   // autopilot.through: keep looking along the line past the hoop (weaving courses, where stopping at each hoop and then
   // turning for the next bend overshoots)
-  const thru = COURSE.autopilot && COURSE.autopilot.through, kEnd = thru ? SAMPLES.length - 1 : k1;
+  const thru = COURSE.autopilot && COURSE.autopilot.through, gt = GATE_TYPES[h.kind];
+  const ext = gt && gt.along ? Math.ceil(gt.along(h) / (COURSE_LEN / (SAMPLES.length - 1))) + 2 : 0;   // scored further on
+  const kEnd = thru ? SAMPLES.length - 1 : Math.min(SAMPLES.length - 1, k1 + ext);
   let best = k0, bd = Infinity;
   for (let k = k0; k <= Math.min(kEnd, k1 + (thru ? 20 : 0)); k++) {
     const s = SAMPLES[k], dx = s.x - P.pos.x, dy = s.y - P.pos.y, dz = s.z - P.pos.z, d = dx * dx + dy * dy + dz * dz;
@@ -604,13 +632,20 @@ function avoidGround(P, out, v) {                          // don't aim into the
 
 // segment a->b crossing gate i's plane in the course direction: 'pass' inside its circle; for pylon gates, 'miss'
 // when outside it (wrong side of the pylon, too wide, too high) but within RULES.missR of the centre; else null
+const _gp = new THREE.Vector3();
 function gateCross(a, b, i) {
-  const h = HOOPS[i];
-  const d0 = _ax.copy(a).sub(h.pos).dot(h.normal), d1 = _l.copy(b).sub(h.pos).dot(h.normal);
+  const h = HOOPS[i], gt = GATE_TYPES[h.kind];
+  const c = gt && gt.along ? _gp.copy(h.pos).addScaledVector(h.normal, gt.along(h)) : h.pos;   // scored further along
+  const d0 = _ax.copy(a).sub(c).dot(h.normal), d1 = _l.copy(b).sub(c).dot(h.normal);
   if (!(d0 < 0 && d1 >= 0)) return null;
   const t = d0 / (d0 - d1);
-  const hx = a.x + (b.x - a.x) * t - h.pos.x, hy = a.y + (b.y - a.y) * t - h.pos.y, hz = a.z + (b.z - a.z) * t - h.pos.z;
+  const hx = a.x + (b.x - a.x) * t - c.x, hy = a.y + (b.y - a.y) * t - c.y, hz = a.z + (b.z - a.z) * t - c.z;
   const r2 = hx * hx + hy * hy + hz * hz;
+  if (gt && gt.shape) {
+    const rl = Math.hypot(h.normal.x, h.normal.z) || 1, ux = -h.normal.z / rl, uz = h.normal.x / rl;   // level, to the right
+    const u = hx * ux + hz * uz, v = hy * rl - (hx * h.normal.x + hz * h.normal.z) * h.normal.y / rl;
+    return gt.shape(h, u, v) ? 'pass' : null;
+  }
   if (r2 < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2) return 'pass';
   return (h.kind !== 'hoop' || RULES.hoopMiss) && r2 < RULES.missR * RULES.missR ? 'miss' : null;
 }
@@ -654,5 +689,6 @@ function crashed(P) {
   if (BRIDGES.length && bridgeHit(P.pos)) return 'bridge';
   if (OVERHANGS.length && overhangHit(P.pos)) return 'rock';
   if (SHORE.boxes.length) { const k = shoreHit(P.pos); if (k) return k; }
+  for (let i = 0; i < CRASH_PLUGINS.length; i++) { const k = CRASH_PLUGINS[i](P); if (k) return k; }
   return null;
 }
