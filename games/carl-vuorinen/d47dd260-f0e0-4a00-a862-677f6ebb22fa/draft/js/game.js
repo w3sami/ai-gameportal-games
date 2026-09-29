@@ -654,6 +654,7 @@ const cam = { dir: new V3(0, 0, -1), up: new V3(0, 1, 0), dist: 12.5, fov: 60, s
 function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = clamp(pitchOf(dir), -maxPitch, maxPitch); dirFromYawPitch(aim.yaw, aim.pitch, aimDir); }
 
 function resetRun() {
+  G.finishCam = null;                                       // (also calls off a finish's pending panel and lap)
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
   P.boost = 1; P.boostLock = false; P.boosting = false; P.smokeLeft = 1; P.smokeLock = false;
   G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.bonus = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.hints = new Set();
@@ -983,6 +984,13 @@ function updateCamera(dt, snap) {
   _look.copy(P.pos).addScaledVector(cam.dir, 16 * cs).addScaledVector(cam.up, 1.2 * cs);
   camera.up.copy(cam.up);
   camera.lookAt(_look);
+  if (G.finishCam) {                                        // finished: the camera stays put, turning to watch the plane go
+    const f = G.finishCam;
+    f.look.lerp(P.pos, snap ? 1 : damp(6, dt));
+    camera.position.copy(f.pos);
+    camera.up.copy(WORLD_UP);
+    camera.lookAt(f.look);
+  }
 
   const sp = clamp((P.speed - TUNE.CRUISE) / (TUNE.BOOST - TUNE.CRUISE), -0.4, 1.3);
   if (!reducedMotion) {
@@ -994,7 +1002,7 @@ function updateCamera(dt, snap) {
   const fovWant = clamp(Math.max(60 + sp * (reducedMotion ? 3 : 11), minV), 40, 100);
   cam.fov = snap ? fovWant : lerp(cam.fov, fovWant, damp(3, dt));
   // with a panel open, frame the plane beside it (right in landscape, above it in portrait)
-  const panel = G.state !== 'playing', portrait = view.h > view.w;
+  const panel = !body.classList.contains('state-playing'), portrait = view.h > view.w;   // (not before a finish's results show)
   const tx = panel && !portrait ? 0.21 : 0, ty = panel && portrait ? 0.2 : 0;
   cam.vx = snap ? tx : lerp(cam.vx, tx, damp(3, dt)); cam.vy = snap ? ty : lerp(cam.vy, ty, damp(3, dt));
   if (snap) cam.punchT = 1e9; else cam.punchT += dt;
@@ -1319,13 +1327,22 @@ function finishRun() {
   renderBest();
   const fin = menu.onFinish(prev == null);
   if (fin.note) $('finish-best').textContent += ' ' + fin.note;
-  setState('finished');
-  if (document.pointerLockElement === canvas) document.exitPointerLock();
+  // the clock stops here, but the results wait FINISH_HOLD s: the camera stays where it was and watches the plane fly on
+  // through the finish (the HUD shows the final time meanwhile)
+  G.state = 'finished';
+  const fc = G.finishCam = { pos: camera.position.clone(), look: _look.clone() };
+  const still = () => G.state === 'finished' && G.finishCam === fc;   // not restarted or left meanwhile
+  setTimeout(() => {
+    if (!still()) return;
+    setState('finished');
+    if (document.pointerLockElement === canvas) document.exitPointerLock();
+    focusEl(fin.focus);
+  }, FINISH_HOLD * 1000);
   // victory lap behind the results: fly on down the run-out, then fly the course again from the start (heading back
   // to the first gate from here would cut straight across the hills)
-  setTimeout(() => { if (G.state === 'finished') resetRun(); }, gliding() ? 4000 : 2500);
-  focusEl(fin.focus);
+  setTimeout(() => { if (still()) resetRun(); }, FINISH_HOLD * 1000 + (gliding() ? 4000 : 2500));
 }
+const FINISH_HOLD = 1;                                      // s from crossing the finish to the results
 function toMenu() {
   if (document.pointerLockElement === canvas) document.exitPointerLock();
   resetRun(); setState('attract'); menu.show('levels');
