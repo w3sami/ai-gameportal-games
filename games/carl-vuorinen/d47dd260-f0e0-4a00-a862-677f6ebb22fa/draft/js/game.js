@@ -273,7 +273,7 @@ const gateQ = [];         // per gate: orientation (+Z along the line)
 const pylons = createPylonKit(ROUTE_HEX);   // pylon gates' meshes and highlighting (js/pylons.js)
 const bridges = createBridgeKit();          // bridges over some hoops (js/bridges.js)
 const overhangs = createOverhangKit();      // rock ledges, arches, boulders (js/overhangs.js)
-const gateKits = GATE_KITS.map((f) => f({ hoopMat }));   // gate kinds from other modules (js/aerobatic.js, js/farm.js)
+const gateKits = GATE_KITS.map((f) => f({ hoopMat }));   // gate kinds from other modules (js/aerobatic.js, js/farm.js, js/windmills.js)
 const shore = createShoreKit();              // piers, boats, beach umbrellas and huts (js/shore.js)
 const gateDisc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40),
   new THREE.MeshBasicMaterial({ color: ROUTE_HEX, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
@@ -687,6 +687,13 @@ function onHoop(missed = false) {
   bump($('hud-hoops'));
   if (G.next >= HOOPS.length) finishRun();
 }
+// a loop or slalom broken off (js/aerobatic.js): its gates again from the first, so a crash's respawn puts you on the
+// straight before it
+function rewindTo(i, text) {
+  if (i >= G.next) return;
+  G.next = i;
+  if (G.state === 'playing' && text) showToast(text, 2600);
+}
 let penTimer = 0;
 function penalty(sec, what) {
   if (!sec) return;
@@ -991,7 +998,7 @@ function updateVisuals(dt) {
   }
   pylons.update(G.next, t);
   pylons.animate(dt);
-  for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast });
+  for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast, rewind: rewindTo });
   if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
     const gt = GATE_TYPES[HOOPS[G.next].kind], dr = gt && gt.disc ? gt.disc(HOOPS[G.next]) : TUNE.HOOP_R - 0.6;   // js/aerobatic.js
     gateDisc.visible = dr > 0; gateDisc.scale.setScalar(dr / 7.4);
