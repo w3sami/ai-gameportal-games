@@ -9,7 +9,11 @@
              of field edges with a hedgerow (default 0.5); trees: hedge trees per 100 m of hedge (default 1.6). No hedge
              tree stands within the line's floor + 18 m, and a hedge leaves a gap where the line crosses it lower than
              6 m over its top.
-     house   [x, z, fx, fz]: the farmhouse at (x, z), its front facing (fx, fz); sheds: [[x, z, fx, fz], ...] likewise
+     house   [x, z, fx, fz]: the farmhouse at (x, z), its front facing (fx, fz), or a list of them; sheds: [[x, z, fx, fz], ...]
+             likewise
+     barns   [[x, z, fx, fz], ...]: barns just to look at, doors shut, their doors' ends facing ±(fx, fz)
+     silos   [[x, z, h], ...]: silos just to look at, h m tall (default 24)
+             Round these barns and silos the ground is a farmyard: no crop field is laid over it.
    Gates (GATE_TYPES, js/sim.js):
      "barn"  a barn built round the gate, both big doors open along the line: the gate is the doorway, so the point's
              height is the middle of the door (door bottom = floor). It counts on the way out of the far door.
@@ -22,7 +26,8 @@
    (CRASH_PLUGINS). Fields keep the game's own trees out; hedge trees are round-crowned, drawn and crashed here.
    Sim part (no DOM): buildFarm() (a SHORE plugin), FARM (fields, hedges, trees, barns, silos, poles for the tests).
    Game part: the meshes (the plugin's kit, in CHUNK m squares so the camera culls them and no buffer gets huge) and
-   the barn doorway's highlight (GATE_KITS).
+   the barn doorway's highlight (GATE_KITS). Hedges within HEDGE_NEAR of the line are drawn bush by bush; further out
+   each straight stretch is one plain block (a fifth of the triangles; what they crash against is the same).
    ========================================================================= */
 const BARN = { w: 15, h: 11, len: 28, wide: 24 };
 const SILO = { r: 4.4, gap: 1.6, above: 9 };               // radius, gap to the slot, height over its top (m)
@@ -30,6 +35,9 @@ const POLE = { r: 0.4, gap: 1.4, above: 6 };                // likewise, for a s
 const FARM = { fields: [], hedges: [], trees: [], barns: [], silos: [], poles: [], houses: [], bales: [], tipBoxes: [] };
 const FARM_TREE_NONE = -1e6;
 const CHUNK = 300;                                           // scenery mesh chunks (m)
+const HEDGE_NEAR = 120;                                      // hedges further than this from the line are drawn as plain blocks (m)
+let HEDGE_ROW = 0;                                           // hedgerows so far (each piece knows its row, to draw a row's far
+                                                             // stretches as a few long blocks)
 const CROPS = [
   { id: 'wheat', c: ['#d8bf62', '#cfb458'], w: 3 }, { id: 'stubble', c: ['#e2d198', '#d6c386'], w: 2, bales: true },
   { id: 'pasture', c: ['#86ad58', '#7ea452'], w: 3 }, { id: 'young', c: ['#a3c35e', '#93b650'], w: 2 },
@@ -53,6 +61,7 @@ function farmBox(kind, x, z, ux, uz, hu, hv, y0, y1, tips) {
 }
 function buildFarm() {
   for (const k in FARM) FARM[k].length = 0;
+  HEDGE_ROW = 0;
   if (!COURSE) return;
   HOOPS.forEach((h) => {
     const o = h.opts || {};
@@ -63,7 +72,9 @@ function buildFarm() {
   });
   const F = COURSE.farm;
   if (!F) return;
-  if (F.house) placeHouse(F.house, 'house');
+  for (const b of F.barns || []) placeBarn(b);
+  for (const s of F.silos || []) placeSilo(s);
+  for (const h of F.house && Array.isArray(F.house[0]) ? F.house : F.house ? [F.house] : []) placeHouse(h, 'house');
   for (const s of F.sheds || []) placeHouse(s, 'shed');
   if (F.fields) farmFields(F.fields);
   const hr = mulberry32(911);
@@ -125,6 +136,27 @@ function buildPole(h) {
   farmBox('pole', x, z, f.fx, f.fz, POLE.r, POLE.r, foot, top + 1, true);
   shoreBox('yard', x, z, f.fx, f.fz, 24, 16, FARM_TREE_NONE - 1, FARM_TREE_NONE);
 }
+// the lowest ground under a footprint hu along (ux, uz) by hv across, centred on (x, z)
+function footLow(x, z, ux, uz, hu, hv) {
+  let lo = Infinity;
+  for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) lo = Math.min(lo, heightAt(x + ux * a * hu - uz * b * hv, z + uz * a * hu + ux * b * hv));
+  return lo;
+}
+// a barn to look at (farm.barns): the barn gate's barn with its doors shut, on its own ground
+function placeBarn(p) {
+  const L = Math.hypot(p[2], p[3]) || 1, fx = p[2] / L, fz = p[3] / L, b = BARN;
+  const floor = footLow(p[0], p[1], fx, fz, b.len / 2, b.wide / 2), eave = floor + b.h + 3, ridge = eave + b.wide * 0.32;
+  FARM.barns.push({ x: p[0], z: p[1], fx, fz, floor, eave, ridge, closed: true, ...b });
+  farmBox('barn', p[0], p[1], fx, fz, b.len / 2 + 0.7, b.wide / 2 + 0.7, floor - 2, eave + 0.5, true);            // walls, eaves
+  farmBox('barn', p[0], p[1], fx, fz, b.len / 2 + 0.7, b.wide * 0.3, eave, ridge + 0.5, true);                    // roof
+  shoreBox('farmyard', p[0], p[1], fx, fz, b.len / 2 + 22, b.wide / 2 + 18, FARM_TREE_NONE - 1, FARM_TREE_NONE);
+}
+function placeSilo(p) {
+  const r = SILO.r, foot = footLow(p[0], p[1], 1, 0, r, r) - 0.5, top = foot + 0.5 + (p[2] || 24);
+  FARM.silos.push({ x: p[0], z: p[1], r, foot, top });
+  farmBox('silo', p[0], p[1], 1, 0, r * 0.92, r * 0.92, foot, top + r * 0.6, true);
+  shoreBox('farmyard', p[0], p[1], 1, 0, r + 12, r + 12, FARM_TREE_NONE - 1, FARM_TREE_NONE);
+}
 function placeHouse(p, type) {
   const L = Math.hypot(p[2], p[3]) || 1, fx = p[2] / L, fz = p[3] / L;
   const w = type === 'house' ? 11 : 8, d = type === 'house' ? 8 : 6, wall = type === 'house' ? 6 : 3.6, roof = type === 'house' ? 4 : 2.6;
@@ -154,6 +186,8 @@ function farmFields(o) {
     const g = heightAt(cx, cz);
     if (g < TER.WATER + 0.8) continue;
     const fld = { i, j, a0, a1, b0, b1, crop: crop(), rot: rand() < 0.5 ? 0 : 1, seed: Math.floor(rand() * 1e6) };
+    if (fieldOnYard(toW, a0, a1, b0, b1)) fld.yard = true;    // a farmyard is grass: not drawn, no bales (still a field
+                                                              // here, so the hedges and every other field stay as they were)
     FARM.fields.push(fld); cell.set(i + ',' + j, fld);
     shoreBox('clear', cx, cz, ca, sa, (a1 - a0) / 2, (b1 - b0) / 2, FARM_TREE_NONE - 1, FARM_TREE_NONE);
   }
@@ -175,7 +209,7 @@ function farmFields(o) {
   }
   // round bales on the stubble
   for (const fld of FARM.fields) {
-    if (!fld.crop.bales) continue;
+    if (!fld.crop.bales || fld.yard) continue;
     const r2 = mulberry32(fld.seed), n = 3 + Math.floor(r2() * 9);
     for (let k = 0; k < n; k++) {
       const a = lerp(fld.a0 + 8, fld.a1 - 8, r2()), b = lerp(fld.b0 + 8, fld.b1 - 8, r2()), [x, z] = toW(a, b);
@@ -188,17 +222,27 @@ function farmFields(o) {
   }
   FARM.frame = { ca, sa, toW };
 }
+// does a field (a0..a1 by b0..b1 on the grid) cover part of a farmyard (farm.barns, silos)? Tested at points across it.
+// A farmyard also keeps hedges and hedge trees out (as a building's yard does)
+function fieldOnYard(toW, a0, a1, b0, b1) {
+  for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) {
+    const [x, z] = toW(lerp(a0, a1, i / 4), lerp(b0, b1, j / 4));
+    if (shoreNearKind(x, z, 0, 'farmyard')) return true;
+  }
+  return false;
+}
 // a hedgerow from (x0, z0) to (x1, z1), in pieces about 12 m long that follow the ground, and its trees. A random one
 // (byHand false) leaves out the pieces in a building's yard and where it crosses the line lower than it could be
 // flown over, and keeps its trees back from the line; one placed by hand (farm.hedges) is meant to be flown over
 function addHedge(x0, z0, x1, z1, rand, byHand) {
   const L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
   const hh = 2.4 + rand() * 1.4, hw = 1.1 + rand() * 0.4, n = Math.max(1, Math.round(L / 12)), seed = Math.floor(rand() * 1e6);
+  const row = HEDGE_ROW++;
   for (let k = 0; k < n; k++) {
     const sm = (k + 0.5) * L / n, x = x0 + ux * sm, z = z0 + uz * sm, g = heightAt(x, z);
-    if (g < TER.WATER + 0.6 || shoreNearKind(x, z, 2, 'yard')) continue;
+    if (g < TER.WATER + 0.6 || shoreNearKind(x, z, 2, 'yard') || shoreNearKind(x, z, 6, 'farmyard')) continue;
     if (!byHand) { const ld = lineDistAt(x, z); if (ld.s && ld.d < ld.s.width + 14 && ld.s.y - g < hh + 6) continue; }
-    FARM.hedges.push({ x, z, ux, uz, len: L / n, h: hh, w: hw, seed: seed + k });
+    FARM.hedges.push({ x, z, ux, uz, len: L / n, h: hh, w: hw, seed: seed + k, row, k, byHand });
     shoreBox('hedge', x, z, ux, uz, L / n / 2, hw, g - 1, g + hh);
   }
   const nt = byHand ? 2 : Math.floor(L / 100 * TREES_PER_100 + rand());
@@ -213,7 +257,7 @@ let TREES_PER_100 = 1.6;
 function addFarmTree(x, z, h, rand) {
   if (shoreNearKind(x, z, 4, 'yard')) return;
   const g = heightAt(x, z), r = h * (0.3 + rand() * 0.1), trunk = h * 0.32;
-  if (g < TER.WATER + 0.6) return;
+  if (g < TER.WATER + 0.6 || shoreNearKind(x, z, r + 4, 'farmyard')) return;   // after the draw, so trees further on stay put
   FARM.trees.push({ x, z, y: g, h, r, trunk });
   shoreBox('tree', x, z, 1, 0, r * 0.8, r * 0.8, g + trunk, g + h);
   shoreBox('tree', x, z, 1, 0, 0.5, 0.5, g - 1, g + trunk);
@@ -289,6 +333,46 @@ function createFarmKit() {
       Mx.part(ICO, HEDGE[Math.floor(r() * 3)], 0, hg.h * 0.5 * s, 0, hg.w * 1.15, hg.h * 0.58 * s, 4.1, r() * 0.4);
     }
   }
+  // a hedge far from the line: one block for a straight stretch of it (pieces run..., consecutive in one row), from the
+  // ground at its start to the ground at its end, tapering to its top and sunk a little so it never floats
+  const HB = (() => {                                        // unit block: 1 wide at the foot, 0.72 at the top, 1 high, 1 long,
+    const a = 0.5, b = 0.36, P = [];                         // centred along z, base at y = 0; no underside
+    const q = (out, ...c) => {                               // a quad, wound to face `out`
+      const n = new THREE.Vector3().subVectors(new THREE.Vector3(...c[1]), new THREE.Vector3(...c[0]))
+        .cross(new THREE.Vector3().subVectors(new THREE.Vector3(...c[2]), new THREE.Vector3(...c[0])));
+      if (n.dot(new THREE.Vector3(...out)) < 0) c.reverse();
+      P.push(...c[0], ...c[1], ...c[2], ...c[0], ...c[2], ...c[3]);
+    };
+    for (const z of [-0.5, 0.5]) q([0, 0, z], [-a, 0, z], [a, 0, z], [b, 1, z], [-b, 1, z]);   // ends
+    for (const x of [-1, 1]) q([x, 0.2, 0], [x * a, 0, -0.5], [x * a, 0, 0.5], [x * b, 1, 0.5], [x * b, 1, -0.5]);   // sides
+    q([0, 1, 0], [-b, 1, -0.5], [b, 1, -0.5], [b, 1, 0.5], [-b, 1, 0.5]);   // top
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    return g.attributes.position;
+  })();
+  function hedgeBlock(run) {
+    const h0 = run[0], h1 = run[run.length - 1];
+    const x0 = h0.x - h0.ux * h0.len / 2, z0 = h0.z - h0.uz * h0.len / 2, x1 = h1.x + h1.ux * h1.len / 2, z1 = h1.z + h1.uz * h1.len / 2;
+    const g0 = heightAt(x0, z0), g1 = heightAt(x1, z1), L = Math.hypot(x1 - x0, z1 - z0);
+    Mx.frame((x0 + x1) / 2, (g0 + g1) / 2, (z0 + z1) / 2, h0.ux, h0.uz);
+    const r = mulberry32(h0.seed);
+    Mx.part(HB, HEDGE[Math.floor(r() * 3)], 0, -0.5, 0, h0.w * 2.2, h0.h * 1.02 + 0.5, L, 0, Math.atan2(g1 - g0, L));
+  }
+  // a row's far pieces as blocks: straight runs of consecutive pieces, each split where the ground under it strays more
+  // than 0.6 m from a straight line between its ends, and at most 120 m long (so the chunks still cull)
+  function hedgeRuns(pieces, put) {
+    const ground = (h) => heightAt(h.x, h.z), fits = (run) => {
+      const a = run[0], b = run[run.length - 1], ga = ground(a), gb = ground(b);
+      return run.every((h, i) => Math.abs(ground(h) - lerp(ga, gb, run.length > 1 ? i / (run.length - 1) : 0)) < 0.6);
+    };
+    let run = [];
+    const flush = () => { if (run.length) { const m = run[run.length >> 1]; put(hedgeBlock, run, m.x, m.z); } run = []; };
+    for (const h of pieces) {
+      const prev = run[run.length - 1];
+      if (prev && (h.k !== prev.k + 1 || (run.length + 1) * h.len > 120 || !fits([...run, h]))) flush();
+      run.push(h);
+    }
+    flush();
+  }
   function tree(t) {                                          // round crown on a trunk
     const r = mulberry32(Math.floor(t.x * 13 + t.z * 7));
     Mx.frame(t.x, t.y, t.z, 1, 0);
@@ -333,10 +417,28 @@ function createFarmKit() {
       for (const y of [0, (dh - 0.5) / 2, dh - 0.5]) Mx.part(BOX, TRIM, 0, y, 0, 0.32, 0.3, lf.lw - 0.2);
       for (const z of [-1, 1]) Mx.part(BOX, TRIM, 0, 0, z * (lf.lw / 2 - 0.25), 0.32, dh - 0.2, 0.3);
     }
-    // inside: hay stacked along the walls, clear of the doorway's line
-    for (const s of [-1, 1]) for (let z = -L / 2 + 3; z < L / 2 - 3; z += 2.6) {
+    if (b.closed) closedDoors(b, L, dw, dh, t);
+    // inside: hay stacked along the walls, clear of the doorway's line (none to see behind shut doors)
+    if (!b.closed) for (const s of [-1, 1]) for (let z = -L / 2 + 3; z < L / 2 - 3; z += 2.6) {
       Mx.part(BOX, HAY, s * (W / 2 - 1.6), 0, z, 2.2, 1.2 + ((z * 3) & 1) * 1.1, 2.3);
     }
+  }
+  // shut barn doors: two leaves in each doorway, each red with a white frame and a white X. Drawn in a frame turned to
+  // face across the barn (local x along it), since the mesher only tilts parts about local x
+  function closedDoors(b, L, dw, dh, t) {
+    Mx.frame(b.x, b.floor, b.z, -b.fz, b.fx);
+    const lw = dw / 2, bar = 0.35, ang = Math.atan2(dh - 2 * bar, lw - 2 * bar), diag = Math.hypot(dh - 2 * bar, lw - 2 * bar);
+    for (const a of [-1, 1]) {
+      const x = a * (L / 2 - t / 2), xo = a * (L / 2 + 0.08);
+      for (const s of [-1, 1]) {
+        const zc = s * lw / 2;
+        Mx.part(BOX, RED, x, 0, zc, t * 0.9, dh, lw - 0.08);
+        for (const e of [-1, 1]) Mx.part(BOX, TRIM, xo, 0, zc + e * (lw / 2 - bar / 2 - 0.04), 0.14, dh, bar);
+        for (const y of [0, dh - bar]) Mx.part(BOX, TRIM, xo, y, zc, 0.14, bar, lw - 0.08);
+        for (const e of [-1, 1]) Mx.part(CBOX, TRIM, xo, dh / 2, zc, 0.12, bar, diag, 0, e * ang);
+      }
+    }
+    Mx.frame(b.x, b.floor, b.z, b.fx, b.fz);
   }
   function silo(s) {
     Mx.frame(s.x, s.foot, s.z, 1, 0);
@@ -379,8 +481,15 @@ function createFarmKit() {
         if (!chunks.has(k)) chunks.set(k, { fields: [], items: [] });
         if (kind === 'field') chunks.get(k).fields.push(o); else chunks.get(k).items.push([kind, o]);
       };
-      for (const f of FARM.fields) { const [x, z] = FARM.frame.toW((f.a0 + f.a1) / 2, (f.b0 + f.b1) / 2); put('field', f, x, z); }
-      for (const o of FARM.hedges) put(hedge, o, o.x, o.z);
+      for (const f of FARM.fields) { if (f.yard) continue; const [x, z] = FARM.frame.toW((f.a0 + f.a1) / 2, (f.b0 + f.b1) / 2); put('field', f, x, z); }
+      // hedges: bushes near the line (and those placed by hand, to be flown over), plain blocks further out
+      const far = new Map();
+      for (const o of FARM.hedges) {
+        if (o.byHand || lineDistAt(o.x, o.z).d < HEDGE_NEAR) { put(hedge, o, o.x, o.z); continue; }
+        if (!far.has(o.row)) far.set(o.row, []);
+        far.get(o.row).push(o);
+      }
+      for (const pieces of far.values()) hedgeRuns(pieces, put);
       for (const o of FARM.trees) put(tree, o, o.x, o.z);
       for (const o of FARM.bales) put(bale, o, o.x, o.z);
       for (const o of FARM.barns) put(barn, o, o.x, o.z);
