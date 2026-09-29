@@ -1,0 +1,23 @@
+{
+  "_doc": "Aerobatic biplane tuning (Farm theme), loaded over config/flight.json for courses whose vehicle is \"biplane\"; a key left out keeps the flight.json value. It flies like the stunt plane (same camera and handling, the stick banks up to TOUCH_BANK) with what aerobatics need added (js/aerobatic.js): the stick's up/down is the elevator (a pitch rate toward the plane's top, so on edge it turns, upside down it dives and a full pull loops), holding the stick at the end of its throw rolls on past TOUCH_BANK at ROLL_ON rad/s, and letting go within ROLL_DETENT of knife edge or inverted holds it there (anywhere else levels out as usual; with the mouse, roll with A/D and it holds until the mouse moves). KNIFE_BAND: no bank-to-turn near knife edge, so it flies straight on a wingtip; ROLL_FADE: past this bank, none while rolling either, so rolling on doesn't swing the heading. INV_TOL: how far from upside down an inverted hoop still counts (rad); INV_SCALE: its size in hoops. WING_HALF is the model's half span, for pylon hits and the knife-edge slot's test.",
+  "CRUISE": 50,
+  "BOOST": 72,
+  "MIN_SPEED": 14,
+  "STALL": 24,
+  "THROTTLE_K": 0.6,
+  "KNIFE_BAND": 0.12,
+  "ROLL_FADE": 1.1,
+  "ROLL_DETENT": 0.52,
+  "ROLL_ON": 2.4,
+  "INV_TOL": 0.6,
+  "INV_SCALE": 2,
+  "BOOST_DRAIN": 0.2,
+  "BOOST_REGEN": 0.085,
+  "BOOST_HOOP": 0.2,
+  "HOOP_R": 8,
+  "HOOP_TOL": 1.2,
+  "PLANE_R": 1.1,
+  "WING_HALF": 3.6,
+  "AP_LEAD": 0.9,
+  "AP_CLEAR": 6
+}
