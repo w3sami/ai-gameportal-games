@@ -3,12 +3,14 @@
    AIRSHOW — smoke through the aerobatics takes time off (the biplane, TUNE.SMOKE; js/smoke.js draws it).
    - A figure (a set of gates flown as one, aeroGroups() in js/aerobatic.js: a loop, a slalom): smoke on from its first
      gate to its last, without a break, takes SMOKE_FIGURE s off.
-   - A knife-edge slot or inverted hoop on its own: smoke on for the last LEAD s before it takes SMOKE_GATE s off.
+   - A knife-edge slot or inverted hoop on its own (or another module's gate flown upside down, GATE_TYPES inverted, like
+     js/fair.js's ribbon): smoke on for the last LEAD s before it takes SMOKE_GATE s off.
    Only for a gate flown clean: one with a penalty (not on edge, not upside down) earns nothing, and a figure with one
    in it earns nothing. A break shorter than GRACE (a thumb slipping) doesn't count as smoke off.
    - The smoke meter: holding smoke drains it (SMOKE_DRAIN per s, so full lasts 1 / SMOKE_DRAIN s), letting go refills
-     it (SMOKE_REGEN per s), and every hoop tops it up (SMOKE_HOOP); run it dry and it stays off until it's back to
-     UNLOCK. It shows where the boost meter does (the bar in the HUD, the ring round the button).
+     it (SMOKE_REGEN per s), every hoop tops it up (SMOKE_HOOP), and an inverted hoop flown upside down (or another
+     gate flown so, like the ribbon) fills it right up, so a long figure (a Cuban eight) can be smoked all through; run
+     it dry and it stays off until it's back to UNLOCK. It shows where the boost meter does (the bar in the HUD, the ring round the button).
    Until a course has been finished once, a figure or gate flown without smoke gets a tip saying what it's worth (once a
    run for a figure, once for a gate), and smoke started too late before a gate says so; one missed with the meter run
    dry says that instead (once a run, finished or not).
@@ -35,7 +37,8 @@ function smokeMeter(P, want, dt) {
 }
 
 const airshowFigure = (i) => { for (const g of aeroGroups()) if (i >= g.first && i <= g.last) return g; return null; };
-const airshowSingle = (i) => !!HOOPS[i] && (HOOPS[i].kind === 'K' || HOOPS[i].kind === 'I') && !airshowFigure(i);
+const airshowInverted = (h) => h.kind === 'I' || !!(GATE_TYPES[h.kind] && GATE_TYPES[h.kind].inverted);
+const airshowSingle = (i) => !!HOOPS[i] && (HOOPS[i].kind === 'K' || airshowInverted(HOOPS[i])) && !airshowFigure(i);
 function airshowUntil(P, h) {                               // s until the plane crosses gate h, along its line
   const along = (h.pos.x - P.pos.x) * h.normal.x + (h.pos.y - P.pos.y) * h.normal.y + (h.pos.z - P.pos.z) * h.normal.z;
   return along / Math.max(P.speed, 1);
@@ -55,7 +58,8 @@ function createAirshowKit() {
   let fig = null;                                           // the figure being flown: { g, ok, tried, empty }
   let onFor = 0, offFor = 0, P = null, st = null, tipped = new Set(), early = false;
   const clean = (i) => { const h = HOOPS[i], r = GATE_TYPES[h.kind] && GATE_TYPES[h.kind].rule; return !(r && r(P, h)); };
-  const tip = (kind, text) => { if (st && st.playing && (st.fresh || kind === 'empty') && !tipped.has(kind)) { tipped.add(kind); st.toast(text, 3000); } };   // once a run each
+  let last = false;                                         // passing the finishing gate: no tips, the run's over
+  const tip = (kind, text) => { if (!last && st && st.playing && (st.fresh || kind === 'empty') && !tipped.has(kind)) { tipped.add(kind); st.toast(text, 3000); } };   // once a run each
   const EMPTY = 'Out of smoke: let go between manoeuvres so it refills.';
   const give = (sec, text) => { if (st && st.playing && st.bonus) st.bonus(sec, text); };
   return {
@@ -75,6 +79,11 @@ function createAirshowKit() {
     pass(i) {
       if (!TUNE.SMOKE || !P) return;
       const g = airshowFigure(i), ok = clean(i), on = P.smoking;
+      last = i === HOOPS.length - 1;
+      if (ok && airshowInverted(HOOPS[i])) {                  // upside down through it: the smoke filled right up
+        if (P.smokeLeft < 0.9) tip('refill', 'Upside down through a hoop fills the smoke right up.');   // when it made a difference
+        P.smokeLeft = 1; P.smokeLock = false;
+      }
       if (g) {
         if (i === g.first) fig = { g, ok: on && ok, tried: on, empty: !on && P.smokeLock };
         else if (fig && fig.g === g && !ok) fig.ok = false;
@@ -88,9 +97,9 @@ function createAirshowKit() {
       }
       if (!airshowSingle(i) || !ok) return;                // a penalty earns nothing
       if (on && onFor >= AIRSHOW.LEAD - 0.05) give(TUNE.SMOKE_GATE, HOOPS[i].kind === 'K' ? 'Smoke knife edge' : 'Smoke inverted');
-      else if (on && !early && st.playing && st.fresh) { early = true; st.toast('Smoke on a little sooner before the gate for the bonus.', 2600); }
+      else if (on && !early && !last && st.playing && st.fresh) { early = true; st.toast('Smoke on a little sooner before the gate for the bonus.', 2600); }
       else if (!on && P.smokeLock) tip('empty', EMPTY);
-      else if (!on) tip('gate', `Smoke on through a ${HOOPS[i].kind === 'K' ? 'knife-edge slot' : 'hoop upside down'} takes ${TUNE.SMOKE_GATE} s off.`);
+      else if (!on) tip('gate', `Smoke on through a ${{ K: 'knife-edge slot', I: 'hoop upside down' }[HOOPS[i].kind] || 'gate upside down'} takes ${TUNE.SMOKE_GATE} s off.`);
     },
   };
 }
