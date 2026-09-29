@@ -1,0 +1,3 @@
+/* Biplane (Farm): its own control texts, and the g meter in the HUD. */
+body:not(.vehicle-biplane) .for-biplane, body.vehicle-biplane .for-prop { display: none; }
+body.vehicle-biplane .hud-g { display: inline; }
