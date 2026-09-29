@@ -4,11 +4,13 @@
    a barn to fly through, silos, a farmhouse and hay bales.
    Course file: farm: { hedges, fields, house, sheds }
      hedges  [[x0, z0, x1, z1], ...]: hedgerows placed by hand, to be flown low over (a tree at each end, unless near the line)
-     fields  { angle, reach, size: [min, max], hedges, trees, seed }: rectangular fields on a grid turned `angle`
+     fields  { angle, reach, size: [min, max], hedges, trees, seed, stable }: rectangular fields on a grid turned `angle`
              degrees, `size` m on a side, wherever they're within `reach` m of the line (default 650). hedges: the share
              of field edges with a hedgerow (default 0.5); trees: hedge trees per 100 m of hedge (default 1.6). No hedge
              tree stands within the line's floor + 18 m, and a hedge leaves a gap where the line crosses it lower than
-             6 m over its top.
+             6 m over its top. stable: each field and each field edge draws from its own random stream, so moving the line
+             (which adds or drops fields at the edge of `reach`) changes only those fields, not every crop and hedge after
+             them in the draw order.
      house   [x, z, fx, fz]: the farmhouse at (x, z), its front facing (fx, fz), or a list of them; sheds: [[x, z, fx, fz], ...]
              likewise
      barns   [[x, z, fx, fz], ...]: barns just to look at, doors shut, their doors' ends facing ±(fx, fz)
@@ -177,7 +179,9 @@ function farmFields(o) {
   const toW = (a, b) => [TER.CX + a * ca - b * sa, TER.CZ + a * sa + b * ca];
   const inside = (x, z) => Math.abs(x - TER.CX) < TER.SIZE * 0.44 && Math.abs(z - TER.CZ) < TER.SIZE * 0.44;
   const cell = new Map();                                     // "i,j" -> field
-  const crop = () => { let t = rand() * CROPS.reduce((s, c) => s + c.w, 0); for (const c of CROPS) { t -= c.w; if (t <= 0) return c; } return CROPS[0]; };
+  const crop = (rnd) => { let t = rnd() * CROPS.reduce((s, c) => s + c.w, 0); for (const c of CROPS) { t -= c.w; if (t <= 0) return c; } return CROPS[0]; };
+  // stable: a stream of its own for each field (i, j) and each edge (i, j, which side), from the seed and the grid cell
+  const own = (i, j, k) => mulberry32(((o.seed || 1) * 977 + 5) ^ Math.imul(i + 1000, 73856093) ^ Math.imul(j + 1000, 19349663) ^ Math.imul(k + 1, 83492791));
   for (let j = 0; j < B.length - 1; j++) for (let i = 0; i < A.length - 1; i++) {
     const a0 = A[i], a1 = A[i + 1], b0 = B[j], b1 = B[j + 1], [cx, cz] = toW((a0 + a1) / 2, (b0 + b1) / 2);
     if (!inside(cx, cz)) continue;
@@ -185,14 +189,17 @@ function farmFields(o) {
     if (!cd.s || cd.d - rr > reach) continue;
     const g = heightAt(cx, cz);
     if (g < TER.WATER + 0.8) continue;
-    const fld = { i, j, a0, a1, b0, b1, crop: crop(), rot: rand() < 0.5 ? 0 : 1, seed: Math.floor(rand() * 1e6) };
+    const fr = o.stable ? own(i, j, 0) : rand;
+    const fld = { i, j, a0, a1, b0, b1, crop: crop(fr), rot: fr() < 0.5 ? 0 : 1, seed: Math.floor(fr() * 1e6) };
     if (fieldOnYard(toW, a0, a1, b0, b1)) fld.yard = true;    // a farmyard is grass: not drawn, no bales (still a field
                                                               // here, so the hedges and every other field stay as they were)
     FARM.fields.push(fld); cell.set(i + ',' + j, fld);
     shoreBox('clear', cx, cz, ca, sa, (a1 - a0) / 2, (b1 - b0) / 2, FARM_TREE_NONE - 1, FARM_TREE_NONE);
   }
   // hedgerows along shared and outer edges; hedge trees, kept back from the line
-  const edge = (p, q) => {
+  const rnd0 = rand;
+  const edge = (p, q, i, j, side) => {
+    const rand = o.stable ? own(i, j, side) : rnd0;          // (the shared stream, unless stable)
     if (rand() > hedgeP) return;
     const [x0, z0] = toW(p[0], p[1]), [x1, z1] = toW(q[0], q[1]);
     const L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
@@ -202,10 +209,10 @@ function farmFields(o) {
   };
   for (const fld of FARM.fields) {
     const { i, j, a0, a1, b0, b1 } = fld;
-    edge([a1, b0], [a1, b1]);                             // right edge (shared with i + 1 if it exists)
-    edge([a0, b1], [a1, b1]);                             // top edge
-    if (!cell.has((i - 1) + ',' + j)) edge([a0, b0], [a0, b1]);
-    if (!cell.has(i + ',' + (j - 1))) edge([a0, b0], [a1, b0]);
+    edge([a1, b0], [a1, b1], i, j, 1);                    // right edge (shared with i + 1 if it exists)
+    edge([a0, b1], [a1, b1], i, j, 2);                    // top edge
+    if (!cell.has((i - 1) + ',' + j)) edge([a0, b0], [a0, b1], i, j, 3);
+    if (!cell.has(i + ',' + (j - 1))) edge([a0, b0], [a1, b0], i, j, 4);
   }
   // round bales on the stubble
   for (const fld of FARM.fields) {
