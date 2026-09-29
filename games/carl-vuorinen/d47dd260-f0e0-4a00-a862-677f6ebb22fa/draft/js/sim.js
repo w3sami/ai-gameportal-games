@@ -159,13 +159,17 @@ let COURSE = null, COURSE_DEF = [], curve = null, COURSE_LEN = 0, HOOPS = [], SA
 // barn: out its far door) }. A kind with no shape is scored on the circle like a hoop.
 // Optional, for js/game.js: disc(h) radius of the faint target disc on it when next (0 = none; default the hoop's),
 // far: the distance past which the HUD marks it with an arrow over it (default 1000 m), top(h): how far above its
-// centre that arrow sits (default HOOP_R).
+// centre that arrow sits (default HOOP_R). For the autopilot: aim(h, P, out) sets out to the direction to steer for it
+// and returns true, or false to follow the line as usual (a gate that moves: js/windmills.js).
 const GATE_TYPES = {};
 // crash tests from other modules: fn(P) -> the kind of whatever the plane hit (for CRASH_TEXT), or null
 const CRASH_PLUGINS = [];
-// their meshes (js/game.js): factories fn({ hoopMat }) -> { build(group), update({ next, t, dt, P, playing, crashing, fresh, toast }),
-// pass(i), reset() }
+// their meshes (js/game.js): factories fn({ hoopMat }) -> { build(group), update({ next, t, dt, P, playing, crashing, fresh, toast,
+// rewind(i, text): send the run back to gate i (js/aerobatic.js: a loop broken off) }), pass(i), reset() }
 const GATE_KITS = [];
+// flight modifiers from other modules (js/aerobatic.js: a knife edge held too long sinks): fn(P, dt), after the flight
+// model's step and before the plane moves
+const FLIGHT_PLUGINS = [];
 const PYLON_DEF = { r0: 2.4, r1: 0.8, above: 4, gap: 1.2 };
 const RULES_DEF = { pylonHit: 3, notLevel: 2, missed: 5, missR: 70, levelTol: 15, hoopMiss: false };
 let PYLON = PYLON_DEF, RULES = RULES_DEF;
@@ -578,6 +582,7 @@ function stepFlight(P, ctl, dt) {
     P.speed = _vel.length(); P.vdir.copy(_vel).divideScalar(P.speed);
   }
   P.gload = lerp(P.gload, 1 + pull * P.speed / TUNE.G, damp(6, dt));
+  for (let i = 0; i < FLIGHT_PLUGINS.length; i++) FLIGHT_PLUGINS[i](P, dt);
   P.pos.addScaledVector(P.vdir, P.speed * dt);
 }
 
@@ -594,6 +599,8 @@ function pitchOf(d) { return Math.asin(clamp(d.y, -1, 1)); }
 // hoop, but never past that hoop
 function autopilotAim(P, hoopIdx, out) {
   const i = Math.min(hoopIdx, HOOPS.length - 1), v = TUNE.CRUISE, h = HOOPS[i];
+  const ga = GATE_TYPES[h.kind];                            // gates that move (js/windmills.js) say where to aim themselves
+  if (ga && ga.aim && ga.aim(h, P, out)) return avoidGround(P, out, v);
   const k0 = i > 0 ? HOOPS[i - 1].sample : 0, k1 = h.sample;
   // missed approach: once the hoop is about to go by off-centre, fly out along the line behind it and come round again
   const along = _ax.copy(P.pos).sub(h.pos).dot(h.normal), lat = Math.sqrt(Math.max(0, P.pos.distanceToSquared(h.pos) - along * along));
