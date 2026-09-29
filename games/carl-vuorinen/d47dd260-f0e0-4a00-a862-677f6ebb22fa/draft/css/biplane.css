@@ -1,3 +1,6 @@
-/* Biplane (Farm): its own control texts, and the g meter in the HUD. */
-body:not(.vehicle-biplane) .for-biplane, body.vehicle-biplane .for-prop { display: none; }
+/* Biplane (Farm): its own control texts, the g meter in the HUD, and no boost: the button trails smoke (js/smoke.js), lit
+   while held. */
+body:not(.vehicle-biplane) .for-biplane, body.vehicle-biplane .for-prop, body.vehicle-biplane .not-biplane { display: none; }
 body.vehicle-biplane .hud-g { display: inline; }
+body.vehicle-biplane .boost-bar { display: none; }
+body.is-smoking .boost-btn span { background: var(--plane); }
