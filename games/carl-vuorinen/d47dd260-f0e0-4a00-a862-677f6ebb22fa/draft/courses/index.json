@@ -27,7 +27,8 @@
       { "id": "island", "name": "Island Run", "file": "courses/island.json" }
     ] },
     { "id": "farm", "name": "Farmlands", "vehicle": "biplane", "levels": [
-      { "id": "barnyard", "name": "Barnyard Run", "file": "courses/barnyard.json" }
+      { "id": "barnyard", "name": "Barnyard Run", "file": "courses/barnyard.json" },
+      { "id": "windmill", "name": "Windmill Run", "file": "courses/windmill.json" }
     ] }
   ]
 }
