@@ -25,15 +25,17 @@ function makeBiplaneModel(scene, modelKit) {
   const wing = (span, y, z, dihedral) => {
     for (const s of [-1, 1]) {
       add(new THREE.BoxGeometry(span / 2, 0.14, 1.25), red, s * span / 4, y, z, s * dihedral);
-      add(new THREE.BoxGeometry(0.45, 0.15, 1.27), white, s * (span / 2 - 0.55), y + s * Math.sin(dihedral) * (span / 4 - 0.55), z, s * dihedral);
+      const d = span / 4 - 0.55;   // stripe centre's distance out along the panel from the panel's centre
+      add(new THREE.BoxGeometry(0.45, 0.15, 1.27), white, s * (span / 4 + d * Math.cos(dihedral)), y + d * Math.sin(dihedral), z, s * dihedral);
     }
   };
   wing(7.2, 1.05, -0.95, 0);
   wing(6.4, -0.48, -0.55, 0.05);
   for (const s of [-1, 1]) {
     // N-struts between the wings, cabane struts from the fuselage to the upper wing
-    add(new THREE.BoxGeometry(0.08, 1.55, 0.1), metal, s * 2.55, 0.3, -1.25, 0).rotation.x = 0.2;
-    add(new THREE.BoxGeometry(0.08, 1.55, 0.1), metal, s * 2.55, 0.3, -0.4, 0).rotation.x = 0.2;
+    // (each runs from the lower wing's spar up to the upper wing's, leaning forward with the stagger)
+    add(new THREE.BoxGeometry(0.08, 1.5, 0.1), metal, s * 2.55, 0.31, -1.06, 0).rotation.x = -0.29;
+    add(new THREE.BoxGeometry(0.08, 1.5, 0.1), metal, s * 2.55, 0.31, -0.5, 0).rotation.x = -0.29;
     add(new THREE.BoxGeometry(0.07, 0.75, 0.08), metal, s * 0.45, 0.7, -1.2, -s * 0.35);
     // landing gear: legs and spats
     add(new THREE.BoxGeometry(0.1, 1.0, 0.18), metal, s * 0.75, -0.95, -1.3, s * 0.45);
