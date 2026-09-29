@@ -563,26 +563,39 @@ const Sound = {
     this.eng.gain.setTargetAtTime(level * (P.boosting ? 0.06 : 0.035), t, 0.2);
     this.engF.frequency.setTargetAtTime((P.boosting ? 950 : 420) * (racer ? 1.3 : bi ? 0.85 : 1), t, 0.3);
   },
-  tone(freq, when, dur, vol, type = 'sine') {
+  tone(freq, when, dur, vol, type = 'sine', out = this.master) {
     const c = this.ctx, o = c.createOscillator(), g = c.createGain();
     o.type = type; o.frequency.value = freq;
     g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(vol, when + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-    o.connect(g).connect(this.master); o.start(when); o.stop(when + dur + 0.05);
+    o.connect(g).connect(out); o.start(when); o.stop(when + dur + 0.05);
   },
-  hoop(i) {
+  // struck bell: the note plus a quicker-dying octave and twelfth, so it rings bright and then settles
+  bell(f, when, dur, vol) {
+    const out = this.chimes();
+    this.tone(f, when, dur, vol, 'sine', out); this.tone(f * 2, when, dur * 0.35, vol * 0.3, 'sine', out); this.tone(f * 3, when, dur * 0.18, vol * 0.12, 'sine', out);
+  },
+  // bonus chimes get a short, dark echo so they sparkle over the engine instead of clicking off
+  chimes() {
+    if (this.chimeBus) return this.chimeBus;
+    const c = this.ctx, bus = c.createGain(), d = c.createDelay(0.5), fb = c.createGain(), lp = c.createBiquadFilter(), wet = c.createGain();
+    d.delayTime.value = 0.12; fb.gain.value = 0.3; lp.type = 'lowpass'; lp.frequency.value = 2800; wet.gain.value = 0.3;
+    bus.connect(this.master); bus.connect(d); d.connect(lp); lp.connect(fb).connect(d); lp.connect(wet).connect(this.master);
+    return this.chimeBus = bus;
+  },
+  hoop() {                                                  // gate passed: the same plain two-note chime every time, C6 up to G6
     if (!this.ctx || this.ctx.state !== 'running') return;
-    const steps = [0, 2, 4, 7, 9], n = steps[i % 5] + 12 * Math.floor(i / 5), f = 440 * Math.pow(2, n / 12), t = this.ctx.currentTime;
-    this.tone(f, t, 0.45, 0.16); this.tone(f * 2, t, 0.25, 0.05, 'triangle');
+    const t = this.ctx.currentTime;
+    this.tone(1046.5, t, 0.3, 0.1); this.tone(1567.98, t + 0.09, 0.45, 0.1);
   },
   thump() {                                                 // pylon hit: dull whump of an air-filled pylon
     if (!this.ctx || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime;
     this.pop(t, 0.5); this.tone(82, t, 0.35, 0.3); this.tone(61, t + 0.03, 0.4, 0.2, 'triangle');
   },
-  bonus() {                                                 // time bonus: two rising chimes
+  bonus() {                                                 // time bonus: a quick sparkle up the chord, well past the hoop's G6
     if (!this.ctx || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime;
-    this.tone(1046.5, t, 0.3, 0.08); this.tone(1568, t + 0.09, 0.4, 0.08);
+    [1046.5, 1318.51, 1567.98, 2093, 2637.02].forEach((f, i) => this.bell(f, t + i * 0.045, i === 4 ? 0.9 : 0.35, i === 4 ? 0.09 : 0.06));
   },
   penalty() {                                               // penalty or missed gate: two falling buzzes
     if (!this.ctx || this.ctx.state !== 'running') return;
@@ -688,9 +701,10 @@ function onHoop(missed = false) {
   if (i === 0) G.started = true;
   if (missed) penalty(RULES.missed, `Missed ${gateNoun()} ${i + 1}`);
   else {
-    Sound.hoop(i);
-    if (h.kind === 'G' && Math.abs(P.bank) > RULES.levelTol * Math.PI / 180) penalty(RULES.notLevel, 'Not level through the gate');
+    const notLevel = h.kind === 'G' && Math.abs(P.bank) > RULES.levelTol * Math.PI / 180;
     const rule = GATE_TYPES[h.kind] && GATE_TYPES[h.kind].rule, pen = rule && rule(P, h);   // js/aerobatic.js: attitude gates
+    if (!notLevel && !pen) Sound.hoop();                    // a penalised gate gets only the penalty sound, not bling then buzz
+    if (notLevel) penalty(RULES.notLevel, 'Not level through the gate');
     if (pen) penalty(pen.sec, pen.text);
   }
   bump($('hud-hoops'));
