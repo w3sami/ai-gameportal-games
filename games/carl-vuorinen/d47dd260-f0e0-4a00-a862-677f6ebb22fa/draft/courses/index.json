@@ -28,7 +28,8 @@
     ] },
     { "id": "farm", "name": "Farmlands", "vehicle": "biplane", "levels": [
       { "id": "barnyard", "name": "Barnyard Run", "file": "courses/barnyard.json" },
-      { "id": "windmill", "name": "Windmill Run", "file": "courses/windmill.json" }
+      { "id": "windmill", "name": "Windmill Run", "file": "courses/windmill.json" },
+      { "id": "fairground", "name": "Fairgrounds Run", "file": "courses/fairground.json" }
     ] }
   ]
 }
