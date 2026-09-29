@@ -15,16 +15,19 @@
              height is the middle of the door (door bottom = floor). It counts on the way out of the far door.
              Options { w, h, len, wide }: door width and height, the barn's length (door to door) and width (m,
              defaults BARN).
-   A K gate (js/aerobatic.js) with flank "silo" gets a big silo either side of it.
-   Everything is a crash (CRASH_TEXT: barn, silo, house, hedge, tree, bale); the buildings also by a wingtip
+   A K gate (js/aerobatic.js) with flank "silo" gets a big silo either side of it; with flank "pole", a slim striped
+   pole on one side (option side: -1 left, 1 right as you pass, default 1), to weave round on a wingtip. A hoop with
+   option silo stands on a tall silo, its dome just under the ring, to pull up over and dive down from.
+   Everything is a crash (CRASH_TEXT: barn, silo, pole, house, hedge, tree, bale); the buildings also by a wingtip
    (CRASH_PLUGINS). Fields keep the game's own trees out; hedge trees are round-crowned, drawn and crashed here.
-   Sim part (no DOM): buildFarm() (a SHORE plugin), FARM (fields, hedges, trees, barns, silos for the tests).
+   Sim part (no DOM): buildFarm() (a SHORE plugin), FARM (fields, hedges, trees, barns, silos, poles for the tests).
    Game part: the meshes (the plugin's kit, in CHUNK m squares so the camera culls them and no buffer gets huge) and
    the barn doorway's highlight (GATE_KITS).
    ========================================================================= */
 const BARN = { w: 15, h: 11, len: 28, wide: 24 };
 const SILO = { r: 4.4, gap: 1.6, above: 9 };               // radius, gap to the slot, height over its top (m)
-const FARM = { fields: [], hedges: [], trees: [], barns: [], silos: [], houses: [], bales: [], tipBoxes: [] };
+const POLE = { r: 0.4, gap: 1.4, above: 6 };                // likewise, for a slalom pole
+const FARM = { fields: [], hedges: [], trees: [], barns: [], silos: [], poles: [], houses: [], bales: [], tipBoxes: [] };
 const FARM_TREE_NONE = -1e6;
 const CHUNK = 300;                                           // scenery mesh chunks (m)
 const CROPS = [
@@ -51,7 +54,13 @@ function farmBox(kind, x, z, ux, uz, hu, hv, y0, y1, tips) {
 function buildFarm() {
   for (const k in FARM) FARM[k].length = 0;
   if (!COURSE) return;
-  HOOPS.forEach((h) => { if (h.kind === 'barn') buildBarn(h); if (h.kind === 'K' && h.opts && h.opts.flank === 'silo') buildSilos(h); });
+  HOOPS.forEach((h) => {
+    const o = h.opts || {};
+    if (h.kind === 'barn') buildBarn(h);
+    if (h.kind === 'K' && o.flank === 'silo') buildSilos(h);
+    if (h.kind === 'K' && o.flank === 'pole') buildPole(h);
+    if (h.kind === 'hoop' && o.silo) buildSiloUnder(h);
+  });
   const F = COURSE.farm;
   if (!F) return;
   if (F.house) placeHouse(F.house, 'house');
@@ -100,6 +109,21 @@ function buildSilos(h) {
     farmBox('silo', x, z, f.fx, f.fz, SILO.r * 0.92, SILO.r * 0.92, foot, top + SILO.r * 0.6, true);
   }
   shoreBox('yard', h.pos.x, h.pos.z, f.fx, f.fz, 30, d + 20, FARM_TREE_NONE - 1, FARM_TREE_NONE);
+}
+const SILO_UNDER = { r: 5.5, gap: 2.5 };                    // a silo under a hoop: radius, dome top to the ring (m)
+function buildSiloUnder(h) {
+  const r = SILO_UNDER.r, f = gateFrame(h), foot = groundAt(h.pos.x, h.pos.z) - 0.5;
+  const top = h.pos.y - TUNE.HOOP_R - SILO_UNDER.gap - r * 0.6;   // the wall's top; the dome rises r * 0.6 over it
+  FARM.silos.push({ x: h.pos.x, z: h.pos.z, r, foot, top });
+  farmBox('silo', h.pos.x, h.pos.z, f.fx, f.fz, r * 0.92, r * 0.92, foot, top + r * 0.6, true);
+  shoreBox('yard', h.pos.x, h.pos.z, f.fx, f.fz, 30, 24, FARM_TREE_NONE - 1, FARM_TREE_NONE);
+}
+function buildPole(h) {
+  const s = slotSize(h), f = gateFrame(h), side = h.opts.side || 1, d = s.w / 2 + 0.55 + POLE.gap + POLE.r;
+  const x = h.pos.x + f.rx * side * d, z = h.pos.z + f.rz * side * d, foot = groundAt(x, z) - 0.5, top = h.pos.y + s.h / 2 + POLE.above;
+  FARM.poles.push({ x, z, r: POLE.r, foot, top });
+  farmBox('pole', x, z, f.fx, f.fz, POLE.r, POLE.r, foot, top + 1, true);
+  shoreBox('yard', x, z, f.fx, f.fz, 24, 16, FARM_TREE_NONE - 1, FARM_TREE_NONE);
 }
 function placeHouse(p, type) {
   const L = Math.hypot(p[2], p[3]) || 1, fx = p[2] / L, fz = p[3] / L;
@@ -216,7 +240,7 @@ function farmTipHit(P) {
 }
 CRASH_PLUGINS.push(farmTipHit);
 var CRASH_TEXT = CRASH_TEXT || {};
-Object.assign(CRASH_TEXT, { barn: 'Hit the barn', silo: 'Hit a silo', house: 'Hit the farmhouse', shed: 'Hit a shed', hedge: 'Clipped a hedge', bale: 'Hit a hay bale' });
+Object.assign(CRASH_TEXT, { barn: 'Hit the barn', silo: 'Hit a silo', pole: 'Hit a pole', house: 'Hit the farmhouse', shed: 'Hit a shed', hedge: 'Clipped a hedge', bale: 'Hit a hay bale' });
 
 /* ---------- game part ---------- */
 function createFarmKit() {
@@ -227,7 +251,7 @@ function createFarmKit() {
   const C = (h) => new THREE.Color(h);
   const RED = C('#9c2b22'), TRIM = C('#f1ede3'), ROOF = C('#4a4d52'), FLOOR = C('#8a7a62'), HAY = C('#d9c070'), DARK = C('#2a2522');
   const CONC = C('#c9c6bd'), STEEL = C('#aeb4b8'), HEDGE = [C('#4d6b32'), C('#56753a'), C('#45622c')], LEAF = [C('#4f7433'), C('#5c8140'), C('#476a2f')];
-  const TRUNK = C('#5b4631'), YELLOW = C('#e3c476'), GLASS = C('#2f3d47');
+  const TRUNK = C('#5b4631'), YELLOW = C('#e3c476'), GLASS = C('#2f3d47'), POLE_RED = C('#d8312a'), PENNANT = C('#ff8a1e');
   const col = new THREE.Color();
 
   function fields(group, list) {
@@ -322,6 +346,13 @@ function createFarmKit() {
     Mx.part(CONE, STEEL, 0, H, 0, s.r + 0.2, s.r * 0.6, s.r + 0.2);
     Mx.part(BOX, DARK, 0, 0, -s.r, 0.5, H, 0.3);                // ladder chute
   }
+  function pole(o) {                                         // red and white bands, an orange pennant at the top
+    Mx.frame(o.x, o.foot, o.z, 1, 0);
+    const H = o.top - o.foot, band = 2.4;
+    for (let y = 0, k = 0; y < H; y += band, k++) Mx.part(CYL, k % 2 ? TRIM : POLE_RED, 0, y, 0, o.r, Math.min(band, H - y), o.r);
+    Mx.part(CONE, TRIM, 0, H, 0, o.r * 1.3, 0.9, o.r * 1.3);
+    Mx.part(BOX, PENNANT, 1.1, H - 2.1, 0, 2.0, 1.2, 0.08);
+  }
   function house(o) {
     Mx.frame(o.x, o.y, o.z, o.fx, o.fz);
     const { w, d, wall, roof } = o, body = o.type === 'house' ? YELLOW : RED;
@@ -354,6 +385,7 @@ function createFarmKit() {
       for (const o of FARM.bales) put(bale, o, o.x, o.z);
       for (const o of FARM.barns) put(barn, o, o.x, o.z);
       for (const o of FARM.silos) put(silo, o, o.x, o.z);
+      for (const o of FARM.poles) put(pole, o, o.x, o.z);
       for (const o of FARM.houses) put(house, o, o.x, o.z);
       for (const ch of chunks.values()) {
         fields(group, ch.fields);
