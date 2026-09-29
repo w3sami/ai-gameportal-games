@@ -4,23 +4,35 @@
    Gates (course points' 7th value, GATE_TYPES in js/sim.js; 8th value = options):
      "K"  knife-edge slot: a tall, narrow capsule, too narrow for level wings. Forgiving: it counts anywhere within a
           hoop's circle round it (as if it were a hoop), and the wings only have to be on edge enough to fit its width
-          and height, wherever you cross (rules.knife s if not, default 2). Options { w, h, flank }: the
-          slot's inner width and height (m, default SLOT_W and 2 HOOP_R), flank: "silo" puts a silo either side
-          (js/farm.js).
+          and height, wherever you cross (rules.knife s if not, default 2). Options { w, h, flank, hold }: the
+          slot's inner width and height (m, default SLOT_W and 2 HOOP_R), flank: "silo" puts a silo either side, "pole"
+          a pole on one side (js/farm.js); hold: a slalom flown on one wingtip, so the autopilot stays on it from the slot
+          before (otherwise it rolls to the inside of the bend, to pull round it).
      "I"  inverted hoop: a hoop flown upside down, within INV_TOL of it (rules.inverted s if not, default 2), INV_SCALE
-          times a hoop's size (option { r } for its own radius), so mind its height above the ground. Dashed magenta
-          and blue all round, the dashes turning slowly while it's the next gate.
-   Both carry a sign above them: the plane seen head-on, turned the way to fly through (on edge, upside down).
+          times a hoop's size (option { r } for its own radius), so mind its height above the ground. Dashed white and
+          blue, magenta and blue once it's the next gate, the dashes then turning slowly.
+     "O"  big hoop: a plain hoop the inverted hoop's size (option { r }), for gates where the line can't be flown exactly,
+          like round a loop, where a moment's difference in the pull moves the whole loop.
+   K and I carry a sign above them: the plane seen head-on, turned the way to fly through (on edge, upside down).
+   Any gate's options may carry say: its own announcement instead (for a slalom or a loop, called out once at its first
+   gate), or "" for none; a plain hoop with say is announced the same way.
+   A run of gates with the same option set (a name: "loop", "slalom") is flown as one: crash inside it, or go more than
+   a few seconds past its next gate without it, and it starts over from its first gate (aeroRewind), so a crash puts you
+   back on the straight before it. Gates with option loop are round a loop: the autopilot keeps its wings square to it
+   and pulls round, never rolling.
+   Knife edge held (KNIFE_SAG, rad/s, 0 = off): past KNIFE_GRACE s on a wingtip the nose starts to drop, easing in over a
+   second to KNIFE_SAG, so a knife edge can't be held for long (a FLIGHT_PLUGINS entry, js/sim.js).
    Flying (touch and controller): as the stunt plane, the stick's left/right banks up to TOUCH_BANK, and holding it at
    the end of its throw rolls on past that (ROLL_ON rad/s); up/down is the elevator, a pitch rate toward the plane's
    top (aeroStick: on edge it turns, upside down it dives, a full pull loops). Letting go within ROLL_DETENT of knife edge
    or inverted holds it there; anywhere else levels out as usual. Taking the stick again carries on from what it held.
-   Sim part (no DOM): GATE_TYPES.K / .I, aeroStick(P, x, y, dt) (the stick held), aeroHold(P) (let go),
+   Sim part (no DOM): GATE_TYPES.K / .I / .O, aeroStick(P, x, y, dt) (the stick held), aeroHold(P) (let go),
    aeroRollTo(P, next) (the autopilot's roll for the gate ahead), slotSize(h).
    Game part: createAeroGateKit({ hoopMat }) -> { build(group), update(s), pass(i), reset() } (GATE_KITS, js/sim.js):
-   the slots, the hoops for "I", the signs, the pass flash, and a toast announcing each of these gates ahead of it.
+   the slots, the hoops for "I" and "O", the signs, the pass flash, a toast announcing each of these gates ahead of it,
+   and sets broken off sent back to their start.
    ========================================================================= */
-const AERO_DEFAULTS = { ROLL_DETENT: 0, ROLL_ON: 2.4, INV_TOL: 0.6, SLOT_W: 5.2, INV_SCALE: 2 };
+const AERO_DEFAULTS = { ROLL_DETENT: 0, ROLL_ON: 2.4, INV_TOL: 0.6, SLOT_W: 5.2, INV_SCALE: 2, KNIFE_SAG: 0, KNIFE_GRACE: 3.5 };
 Object.assign(TUNE, AERO_DEFAULTS);
 Object.assign(TUNE_DEFAULTS, AERO_DEFAULTS);
 const TIP_GRACE = 0.25;                                      // how far a wingtip may poke past the slot's inside (m)
@@ -50,6 +62,11 @@ GATE_TYPES.K = {
     if (du > hw || du * du + ey * ey > hw * hw) return { sec: RULES.knife == null ? 2 : RULES.knife, text: 'Wings not on edge' };
     return null;
   },
+};
+GATE_TYPES.O = {
+  shape(h, u, v) { return u * u + v * v < (invR(h) + TUNE.HOOP_TOL) ** 2; },
+  disc: (h) => invR(h) - 0.6 * TUNE.INV_SCALE,
+  top: invR,
 };
 GATE_TYPES.I = {
   shape(h, u, v) { return u * u + v * v < (invR(h) + TUNE.HOOP_TOL) ** 2; },
@@ -100,20 +117,78 @@ function aeroHold(P) {
   }
   return P.rollHold;
 }
-// autopilot (attract mode, victory lap, tests): roll for the attitude gate ahead from ~1 s out; on edge to whichever
-// side is nearer
+// autopilot (attract mode, victory lap, tests): roll for the attitude gate ahead from ~1 s out; on edge to the inside
+// of the bend there (or on a straight, whichever side is nearer)
 function aeroRollTo(P, next) {
   const h = HOOPS[next];
+  if (h && h.opts && h.opts.loop) return Math.abs(P.bank) > Math.PI / 2 ? Math.PI : 0;   // round a loop: wings square to it, pulling
+                                                           // through (upside down over the top by itself), never rolling to right it
   if (!h || (h.kind !== 'K' && h.kind !== 'I')) return null;
+  const prev = HOOPS[next - 1];                              // option hold (a slalom on one wingtip): stay on it between slots
+  if (h.kind === 'K' && h.opts.hold && prev && prev.kind === 'K' && Math.abs(Math.abs(P.bank) - Math.PI / 2) < 0.6) return P.bank < 0 ? -Math.PI / 2 : Math.PI / 2;
   const along = (P.pos.x - h.pos.x) * h.normal.x + (P.pos.y - h.pos.y) * h.normal.y + (P.pos.z - h.pos.z) * h.normal.z;
   if (along < -P.speed * 1.15 || along > 2) return null;
-  return h.kind === 'I' ? Math.PI : (P.bank < 0 ? -Math.PI / 2 : Math.PI / 2);
+  if (h.kind === 'I') return Math.PI;
+  const turn = lineTurn(h);                                  // on a bend: the wingtip on its inside, to pull round it
+  return turn ? turn * Math.PI / 2 : (P.bank < 0 ? -Math.PI / 2 : Math.PI / 2);
+}
+// which way the line bends through gate h: 1 right, -1 left, 0 near enough straight
+function lineTurn(h) {
+  const a = SAMPLES[Math.max(0, h.sample - 6)], b = SAMPLES[h.sample], c = SAMPLES[Math.min(SAMPLES.length - 1, h.sample + 6)];
+  const d = wrapAngle(Math.atan2(c.x - b.x, -(c.z - b.z)) - Math.atan2(b.x - a.x, -(b.z - a.z)));   // clockwise from above: right
+  return Math.abs(d) < 0.03 ? 0 : Math.sign(d);
+}
+
+// knife edge held too long: after KNIFE_GRACE s within KNIFE_NEAR of it (P.knifeT), the nose and the flight path turn
+// down about the level right axis, easing in over a second. Anything off the wingtip starts the count again.
+const KNIFE_NEAR = 0.45;
+const _kfF = new THREE.Vector3(), _kfA = new THREE.Vector3(), _kfQ = new THREE.Quaternion();
+function knifeSag(P, dt) {
+  if (!TUNE.KNIFE_SAG) return;
+  forwardOf(P, _kfF);
+  const horiz = Math.hypot(_kfF.x, _kfF.z);
+  if (horiz < 0.4 || Math.abs(Math.abs(P.bank) - Math.PI / 2) > KNIFE_NEAR) { P.knifeT = 0; return; }
+  P.knifeT = (P.knifeT || 0) + dt;
+  const w = TUNE.KNIFE_SAG * smoothstep(TUNE.KNIFE_GRACE, TUNE.KNIFE_GRACE + 1, P.knifeT);
+  if (w <= 0) return;
+  _kfQ.setFromAxisAngle(_kfA.set(-_kfF.z / horiz, 0, _kfF.x / horiz), -w * dt);   // nose down
+  P.q.premultiply(_kfQ).normalize();
+  P.vdir.applyQuaternion(_kfQ);
+}
+FLIGHT_PLUGINS.push(knifeSag);
+
+// sets flown as one: runs of consecutive gates with the same option set, each { first, last, name, win: [per gate, the
+// s allowed after the gate before it] } (from how far apart they are along the line, at loop speeds)
+let _grFor = null, _gr = [];
+function aeroGroups() {
+  if (_grFor === HOOPS) return _gr;
+  _grFor = HOOPS; _gr = [];
+  const step = COURSE_LEN / (SAMPLES.length - 1);
+  for (let i = 0; i < HOOPS.length; i++) {
+    const name = HOOPS[i].opts && HOOPS[i].opts.set;
+    if (!name) continue;
+    let j = i; while (j + 1 < HOOPS.length && HOOPS[j + 1].opts && HOOPS[j + 1].opts.set === name) j++;
+    const win = [];
+    for (let k = i + 1; k <= j; k++) win[k] = (HOOPS[k].sample - HOOPS[k - 1].sample) * step / 32 * 1.5 + 1;
+    _gr.push({ first: i, last: j, name, win });
+    i = j;
+  }
+  return _gr;
+}
+// with the next gate `next`, `since` s after the last one was passed (and crashing or not): the set broken off (go back
+// to its first gate), or null
+function aeroRewind(next, since, crashing) {
+  for (const g of aeroGroups()) {
+    if (next <= g.first || next > g.last) continue;          // not inside this set
+    if (crashing || since > g.win[next]) return g;
+  }
+  return null;
 }
 
 /* ---------- game part: the gates' meshes ---------- */
 function createAeroGateKit(ctx) {
   const M = ctx.hoopMat;                                     // the hoops' own materials: next, soon, later
-  let items = [];                                            // per attitude gate: { i, meshes: [mesh], fade, flash }
+  let items = [], idleGeos = [];                             // per attitude gate: { i, meshes: [mesh], fade, flash }
   const tube = 0.55;
   // capsule outline in the xy plane: straight sides, round ends
   class Capsule extends THREE.Curve {
@@ -147,9 +222,10 @@ function createAeroGateKit(ctx) {
     return out;
   }
   const SIGN = signGeometry();
-  // inverted hoop: magenta and blue dashes all round (flat colour per triangle, so the dash ends stay crisp)
-  const DASHES = 20, DASH = [M.next.color.clone(), new THREE.Color('#4a90f0')];   // the route's magenta, light blue
-  function dashedRing(R) {
+  // inverted hoop: dashes all round (flat colour per triangle, so the dash ends stay crisp), magenta and light blue while
+  // it's the next gate, white and light blue before that so it isn't taken for the next one
+  const BLUE = new THREE.Color('#4a90f0'), DASHES = 20, DASH = [M.next.color.clone(), BLUE], DASH_IDLE = [M.soon.color.clone(), BLUE];
+  function dashedRing(R, DASH) {
     const g = new THREE.TorusGeometry(R, 0.75 * TUNE.HOOP_R / 8 * 1.4, 8, DASHES * 6).toNonIndexed(), p = g.attributes.position;
     const col = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i += 3) {
@@ -168,9 +244,14 @@ function createAeroGateKit(ctx) {
   DM.soon = DM.next;
   function build(group) {
     items = [];
+    for (const g of idleGeos) g.dispose();                   // the course before's rings (a mesh holds only one of each pair)
+    idleGeos = [];
     const ringGeo = new Map();                               // per radius
     HOOPS.forEach((h, i) => {
-      if (h.kind !== 'K' && h.kind !== 'I') return;
+      if (h.kind !== 'K' && h.kind !== 'I' && h.kind !== 'O') {   // other gates with an announcement of their own: no meshes here
+        if (h.opts && typeof h.opts.say === 'string') items.push({ i, h, meshes: [], fade: 0, flash: null });
+        return;
+      }
       const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(), h.normal.clone().negate(), WORLD_UP));
       const meshes = [];
       const add = (geo, x, y, rz) => {
@@ -183,10 +264,15 @@ function createAeroGateKit(ctx) {
         const s = slotSize(h);
         add(new THREE.TubeGeometry(new Capsule(s.w + tube * 2, s.h + tube * 2), 72, tube, 8, true), 0, 0, 0);
         add(SIGN, 0, s.h / 2 + tube + 1.2 + 3.1 * SIGN_K, Math.PI / 2).userData.sign = true;   // on its side
+      } else if (h.kind === 'O') {
+        const R = invR(h);
+        if (!ringGeo.has('O' + R)) ringGeo.set('O' + R, new THREE.TorusGeometry(R, 0.75 * TUNE.HOOP_R / 8 * 1.4, 8, 64));
+        add(ringGeo.get('O' + R), 0, 0, 0);
       } else {
         const R = invR(h);
-        if (!ringGeo.has(R)) ringGeo.set(R, dashedRing(R));
-        add(ringGeo.get(R), 0, 0, 0).userData.dashed = true;
+        if (!ringGeo.has(R)) { const g = { next: dashedRing(R, DASH), idle: dashedRing(R, DASH_IDLE) }; idleGeos.push(g.next, g.idle); ringGeo.set(R, g); }
+        const ring = add(ringGeo.get(R).idle, 0, 0, 0);
+        ring.userData.dashed = ringGeo.get(R);
         add(SIGN, 0, R + 1.8 + 1.7 * SIGN_K, Math.PI).userData.sign = true;               // upside down
       }
       for (const m of meshes) if (m.userData.sign) { m.material = M.later; m.renderOrder = 1; }
@@ -198,16 +284,36 @@ function createAeroGateKit(ctx) {
   // announcements: each attitude gate is called out ANNOUNCE s before it's reached, but no sooner than QUIET s after the
   // previous gate or a crash (so a penalty or crash message has been read first)
   const ANNOUNCE = 6, QUIET = 1.9, announced = new Set();
-  let lastNext = -1, quietFrom = 0;
+  let lastNext = -1, quietFrom = 0, passedAt = 0, sagHint = false;
   const callout = (it) => {
+    if (typeof it.h.opts.say === 'string') return it.h.opts.say;
+    if (it.h.kind === 'O') return '';
     const prev = HOOPS[it.i - 1];
     if (it.h.kind === 'I') return 'Inverted next: roll upside down.';
     return prev && prev.kind === 'K' ? 'Knife edge again: stay on the wingtip.' : 'Knife edge next: roll onto a wingtip.';
   };
-  // s: { next, t, dt, P, playing, crashing, fresh (no best time yet), toast(text, ms) }
+  // s: { next, t, dt, P, playing, crashing, fresh (no best time yet), toast(text, ms), rewind(i, text) }
   function update(s) {
+    if (s.next > lastNext) passedAt = s.t;
     if (s.next !== lastNext || s.crashing) { lastNext = s.next; quietFrom = s.t; }
+    // a set broken off (crashed in, or its next gate not made in time): back to its start (s.rewind: js/game.js)
+    const set = s.rewind ? aeroRewind(s.next, s.t - passedAt, s.crashing) : null;
+    if (set) {
+      const back = set.first, Name = set.name.charAt(0).toUpperCase() + set.name.slice(1);
+      s.rewind(back, s.crashing ? `Back to the straight before the ${set.name}.` : `${Name} broken off: fly it all again from the start.`);
+      lastNext = s.next = back; quietFrom = s.t;
+      for (let i = back; i < HOOPS.length; i++) announced.delete(i);
+    }
+    // the first knife edge that sinks, until the course is finished once
+    if (!sagHint && s.playing && s.fresh && !s.crashing && TUNE.KNIFE_SAG && (s.P.knifeT || 0) > TUNE.KNIFE_GRACE + 0.3) {
+      sagHint = true;
+      s.toast('A knife edge can\u2019t be held for long: the nose drops.', 2800);
+    }
     for (const it of items) {
+      if (!it.meshes.length) {                               // announcement only
+        if (it.i === s.next) announce(it, s);
+        continue;
+      }
       if (it.i < s.next) {
         if (it.fade > 0) {
           it.fade = Math.max(0, it.fade - s.dt * 2.4);
@@ -218,28 +324,35 @@ function createAeroGateKit(ctx) {
         continue;
       }
       const rel = it.i - s.next, st = rel === 0 ? 'next' : rel === 1 ? 'soon' : 'later';
-      for (const m of it.meshes) { m.visible = true; m.material = m.userData.sign ? sided(M[st]) : m.userData.dashed ? DM[st] : M[st]; }
+      for (const m of it.meshes) {
+        m.visible = true; m.material = m.userData.sign ? sided(M[st]) : m.userData.dashed ? DM[st] : M[st];
+        if (m.userData.dashed) m.geometry = st === 'next' ? m.userData.dashed.next : m.userData.dashed.idle;
+      }
       const ring = it.meshes[0];
       ring.scale.setScalar(rel === 0 ? 1 + Math.sin(s.t * 6) * 0.035 : 1);
       // the next inverted hoop's dashes turn slowly round it, rolling the way you roll into it
       if (ring.userData.dashed) { ring.quaternion.copy(it.q); if (rel === 0) ring.rotateZ(s.t * 1.2); }
-      if (rel === 0 && s.playing && !s.crashing && !announced.has(it.i) && s.t - quietFrom > QUIET
-          && s.P.pos.distanceTo(it.h.pos) < Math.max(s.P.speed, 1) * ANNOUNCE) {
-        announced.add(it.i);
-        s.toast(callout(it), 2600);
-      }
+      if (rel === 0) announce(it, s);
+    }
+  }
+  function announce(it, s) {
+    if (s.playing && !s.crashing && !announced.has(it.i) && s.t - quietFrom > QUIET
+        && s.P.pos.distanceTo(it.h.pos) < Math.max(s.P.speed, 1) * ANNOUNCE) {
+      announced.add(it.i);
+      const text = callout(it);
+      if (text) s.toast(text, text.length > 44 ? 3400 : 2600);
     }
   }
   function pass(i) {
     const it = items.find((x) => x.i === i);
-    if (!it) return;
+    if (!it || !it.meshes.length) return;
     if (it.flash) { it.flash.dispose(); it.signFlash.dispose(); }
     const fl = (m) => { const c = m.clone(); c.transparent = true; c.depthWrite = false; return c; };
     it.flash = fl(it.meshes[0].userData.dashed ? DM.next : M.next);
     it.signFlash = fl(sided(M.next));
     it.fade = 1;
   }
-  function reset() { announced.clear(); lastNext = -1; for (const it of items) { it.fade = 0; it.meshes[0].scale.setScalar(1); } }
+  function reset() { announced.clear(); lastNext = -1; passedAt = 0; sagHint = false; for (const it of items) { it.fade = 0; if (it.meshes.length) it.meshes[0].scale.setScalar(1); } }
   return { build, update, pass, reset };
 }
 GATE_KITS.push(createAeroGateKit);
