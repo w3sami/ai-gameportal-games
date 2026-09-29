@@ -579,6 +579,11 @@ const Sound = {
     const t = this.ctx.currentTime;
     this.pop(t, 0.5); this.tone(82, t, 0.35, 0.3); this.tone(61, t + 0.03, 0.4, 0.2, 'triangle');
   },
+  bonus() {                                                 // time bonus: two rising chimes
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const t = this.ctx.currentTime;
+    this.tone(1046.5, t, 0.3, 0.08); this.tone(1568, t + 0.09, 0.4, 0.08);
+  },
   penalty() {                                               // penalty or missed gate: two falling buzzes
     if (!this.ctx || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime;
@@ -637,8 +642,8 @@ function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = cla
 
 function resetRun() {
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
-  P.boost = 1; P.boostLock = false; P.boosting = false;
-  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.hints = new Set();
+  P.boost = 1; P.boostLock = false; P.boosting = false; P.smokeLeft = 1; P.smokeLock = false;
+  G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.bonus = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.hints = new Set();
   setAimFrom(START_DIR); input.neutral = true;
   hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
   resetPylons();
@@ -671,6 +676,7 @@ function onHoop(missed = false) {
   const i = G.next, h = HOOPS[i];
   G.next++; G.hoopSpeed = P.speed;
   if (!missed) P.boost = Math.min(1, P.boost + TUNE.BOOST_HOOP);
+  if (!missed && TUNE.SMOKE) P.smokeLeft = Math.min(1, P.smokeLeft + TUNE.SMOKE_HOOP);   // the smoke meter (js/airshow.js)
   for (const k of gateKits) k.pass(i);
   const m = hoopMeshes[i];
   if (m) {
@@ -703,8 +709,17 @@ function penalty(sec, what) {
   G.time += sec; G.pen += sec;
   Sound.penalty();
   showToast(`${what}: +${sec} s`, 1800);
-  hud.time.classList.add('is-pen'); bump(hud.time);
+  hud.time.classList.remove('is-bonus'); hud.time.classList.add('is-pen'); bump(hud.time);
   clearTimeout(penTimer); penTimer = setTimeout(() => hud.time.classList.remove('is-pen'), 1100);
+}
+function timeBonus(sec, what) {                            // time off (js/airshow.js: smoke through the aerobatics)
+  if (!sec || G.state !== 'playing') return;
+  const off = Math.min(sec, G.time);
+  G.time -= off; G.bonus += off;
+  Sound.bonus();
+  showToast(`${what}: \u2212${sec} s`, 1800);
+  hud.time.classList.remove('is-pen'); hud.time.classList.add('is-bonus'); bump(hud.time);
+  clearTimeout(penTimer); penTimer = setTimeout(() => hud.time.classList.remove('is-bonus'), 1100);
 }
 function onPylonHit(k) {
   pylons.hit(k, P.pos);
@@ -920,6 +935,7 @@ const _aimTmp = new V3();
 function autoControl() {                                    // attract mode and victory lap
   if (G.next >= HOOPS.length) { dirFromYawPitch(yawOf(P.vdir), 0.08, aimDir); return { aim: aimDir, p: 0, r: 0, y: 0, boost: false }; }
   const ctl = { aim: autopilotAim(P, G.next, aimDir), p: 0, r: 0, y: 0, boost: false }, roll = aeroRollTo(P, G.next);   // js/aerobatic.js
+  if (TUNE.SMOKE) ctl.smoke = airshowAuto(P, G.next);      // shows the smoke bonus being flown (js/airshow.js)
   if (roll != null) ctl.rollTo = roll;
   return ctl;
 }
@@ -1001,7 +1017,7 @@ function updateVisuals(dt) {
   }
   pylons.update(G.next, t);
   pylons.animate(dt);
-  for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast, rewind: rewindTo });
+  for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast, rewind: rewindTo, bonus: timeBonus });
   if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
     const gt = GATE_TYPES[HOOPS[G.next].kind], dr = gt && gt.disc ? gt.disc(HOOPS[G.next]) : TUNE.HOOP_R - 0.6;   // js/aerobatic.js
     gateDisc.visible = dr > 0; gateDisc.scale.setScalar(dr / 7.4);
@@ -1097,11 +1113,11 @@ function updateHUD() {
     const agl = Math.max(0, P.pos.y - groundAt(P.pos.x, P.pos.z));
     setText(hud.g, 'g', `${agl < 100 ? Math.round(agl) : Math.round(agl / 10) * 10} m`); hud.g.classList.toggle('is-low', agl < 25);
   } else if (hud.g) { const gl = Math.max(0, P.gload); setText(hud.g, 'g', `${gl.toFixed(1)} g`); hud.g.classList.toggle('is-high', gl >= 9); }
-  const b = Math.round(P.boost * 100) / 100;
+  const b = Math.round((TUNE.SMOKE ? P.smokeLeft : P.boost) * 100) / 100;   // the smoke meter, for the biplane
   if (hud.last.boost !== b) { hud.last.boost = b; hud.boost.style.transform = `scaleX(${b})`; hud.boostBtn.style.setProperty('--level', b); }
   body.classList.toggle('is-boosting', P.boosting);
   body.classList.toggle('is-smoking', !!P.smoking);
-  body.classList.toggle('boost-empty', P.boostLock);
+  body.classList.toggle('boost-empty', TUNE.SMOKE ? !!P.smokeLock : P.boostLock);
 
   // pointer to the next hoop: at the screen edge when it's out of view, above it when it's in view but over FAR_HOOP away
   let showArrow = false;
@@ -1170,7 +1186,7 @@ function renderBest() {
   const pen = gateNoun() === 'gate' ? `Penalties: pylon hit +${RULES.pylonHit} s, banked air gate +${RULES.notLevel} s, missed gate +${RULES.missed} s. ` : '';
   if (refill) refill.textContent = gliding() ? `There\u2019s no flying back up: a missed hoop adds ${RULES.missed} s, and a crash puts you back at the last one.`
     : sailing() ? sailTip()
-    : TUNE.SMOKE ? `${pen}No boost here: the button trails smoke, so draw your loops in the sky.`
+    : TUNE.SMOKE ? `${pen}Keep smoke on during aerobatic manoeuvres for a time bonus.`
     : `${pen}Boost refills over time and with every ${gateNoun()}.`;
   menu.render();
 }
@@ -1285,6 +1301,7 @@ function finishRun() {
   $('finish-best').textContent = prev == null ? 'First time on this course, saved as your best.'
     : best ? `New best, ${(prev - t).toFixed(2)} s faster.` : `Best ${fmtTime(prev)}, ${(t - prev).toFixed(2)} s off.`;
   if (G.pen > 0) $('finish-best').textContent += ` Includes ${G.pen} s of penalties.`;
+  if (G.bonus > 0) $('finish-best').textContent += ` Smoke bonus \u2212${Math.round(G.bonus * 100) / 100} s.`;
   renderBest();
   const fin = menu.onFinish(prev == null);
   if (fin.note) $('finish-best').textContent += ' ' + fin.note;
@@ -1339,7 +1356,7 @@ function update(dt) {
       if (G.crashTimer <= 0) { if (G.state !== 'playing' && gliding()) resetRun(); else respawn(); }
     } else {
       const ctl = G.state === 'playing' ? resolveControl(dt) : autoControl();
-      P.smoking = !!ctl.smoke;
+      P.smoking = TUNE.SMOKE ? smokeMeter(P, !!ctl.smoke, dt) : false;   // js/airshow.js
       const steps = Math.ceil(dt / (1 / 120)), h = dt / steps;
       for (let s = 0; s < steps; s++) {
         prevPos.copy(P.pos);
