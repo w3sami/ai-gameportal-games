@@ -462,7 +462,10 @@
     "slug": "hanaa-low-poly",
     "title": "Hanaa Low Poly",
     "description": "A low-poly motorcycle ride through changing roads. Weave through traffic, build speed chains, and chase high scores.",
-    "descriptions": {},
+    "descriptions": {
+      "fi": "A low-poly motorcycle ride through changing roads. Weave through traffic, build speed chains, and chase high scores.",
+      "en": "A low-poly motorcycle ride through changing roads. Weave through traffic, build speed chains, and chase high scores."
+    },
     "author": "Tuukka Tihekari",
     "tags": [
       "motorcycle",
@@ -472,13 +475,13 @@
       "browser",
       "leaderboard"
     ],
-    "status": "draft",
+    "status": "published",
     "ownerId": "979da133-1091-4121-b62b-aca03734f5bf",
     "ownerFolder": "tuukka-tihekari",
     "entryFile": "index.html",
-    "revision": 0,
+    "revision": 1,
     "sizeBytes": 1463901,
     "createdAt": "2026-09-30T14:23:37.257Z",
-    "updatedAt": "2026-09-30T14:24:46.678Z"
+    "updatedAt": "2026-09-30T14:24:56.533Z"
   }
 ]
