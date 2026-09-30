@@ -1,0 +1,48 @@
+/* Compact overlays keep the road visible in the portal's narrow viewport. */
+@media (min-width: 761px) and (any-pointer: fine) {
+  .challenge-live,
+  .challenge-live[data-kind="slalom"],
+  .challenge-live[data-kind="speed-trap"] {
+    width: min(260px, calc(100vw - 32px));
+    padding: 8px 11px;
+    background: #10201f45;
+    backdrop-filter: none;
+    box-shadow: none;
+    border-color: #d9e7dc40;
+    border-left-width: 2px;
+  }
+
+  .challenge-live-head,
+  .challenge-live-footer { gap: 6px; }
+  .challenge-live-head > span:first-child { font-size: 7px; letter-spacing: 1px; }
+  .challenge-live-head > span:last-child { font-size: 7px; letter-spacing: 0; }
+  .challenge-live-value-row { gap: 8px; margin: 3px 0; }
+  .challenge-live-value-row strong,
+  .challenge-live[data-kind="slalom"] .challenge-live-value-row strong {
+    font-size: 29px;
+    letter-spacing: -1px;
+    text-shadow: 0 1px 4px #0009;
+  }
+  .challenge-live-value-row span { font-size: 7px; letter-spacing: .5px; }
+  .challenge-live-progress { height: 3px; }
+  .challenge-live-footer { margin-top: 5px; font-size: 7px; letter-spacing: 0; }
+  .challenge-live-footer strong { font-size: 7px; letter-spacing: .5px; }
+
+  .challenge-feedback,
+  .challenge-feedback.is-impact,
+  .challenge-feedback.is-miss {
+    width: min(245px, calc(100vw - 32px));
+    padding: 7px 10px;
+    gap: 3px;
+    background: #112b2b40;
+    backdrop-filter: none;
+    box-shadow: none;
+    border-color: #d9e7dc40;
+    text-shadow: 0 1px 4px #0009;
+  }
+  .challenge-feedback strong { font-size: 13px; }
+  .challenge-feedback-kicker { font-size: 6px; letter-spacing: 1px; }
+  .challenge-feedback-detail { font-size: 7px; }
+  .challenge-feedback-points { font-size: 17px; text-shadow: 0 1px 4px #0009; }
+}
+
