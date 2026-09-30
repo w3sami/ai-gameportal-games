@@ -427,11 +427,29 @@ function makeWingsuitModel() {                            // flyer belly-down, h
              tail.scale.x = 1 - 0.55 * T;
            } };
 }
-const models = { prop: makePropModel(), jet: makeJetModel(), racer: makeRacerModel(), wingsuit: makeWingsuitModel(),
-  sailplane: makeSailplaneModel(scene, modelKit), biplane: makeBiplaneModel(scene, modelKit) };   // js/sailplane.js, js/biplane.js
+const MODEL_MAKERS = { prop: makePropModel, jet: makeJetModel, racer: makeRacerModel, wingsuit: makeWingsuitModel,
+  sailplane: () => makeSailplaneModel(scene, modelKit), biplane: () => makeBiplaneModel(scene, modelKit) };   // js/sailplane.js, js/biplane.js
+const models = {};
+for (const v in MODEL_MAKERS) models[v] = MODEL_MAKERS[v]();
 let planeModel = models.prop;
+// the ghost (js/ghost.js): a see-through second one of the aircraft, made the first time it's needed. It trails no
+// smoke or vapour: those are drawn for planeModel only
+const ghostModels = {};
+function ghostModel() {
+  const v = MODEL_MAKERS[TUNE.VEHICLE] ? TUNE.VEHICLE : 'prop';
+  if (!ghostModels[v]) {
+    const m = ghostModels[v] = MODEL_MAKERS[v]();
+    m.group.traverse((o) => {
+      if (!o.material) return;
+      o.material = o.material.clone(); o.material.transparent = true; o.material.opacity *= 0.5; o.renderOrder = 1;
+    });
+    m.group.visible = false;
+  }
+  return ghostModels[v];
+}
 function setVehicleModel() {
   for (const k in models) models[k].group.visible = false;
+  for (const k in ghostModels) ghostModels[k].group.visible = false;
   planeModel = models[TUNE.VEHICLE] || models.prop;
   planeModel.group.visible = true;
 }
@@ -656,6 +674,8 @@ function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = cla
 function resetRun() {
   G.finishCam = null;                                       // (also calls off a finish's pending panel and lap)
   G.rec = null; G.replay = null;                            // js/replay.js: startRun and restart begin a new recording
+  if (G.ghost) G.ghost.model.group.visible = false;
+  G.ghost = null;
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
   P.boost = 1; P.boostLock = false; P.boosting = false; P.smokeLeft = 1; P.smokeLock = false;
   G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.bonus = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.hints = new Set();
@@ -888,12 +908,15 @@ document.addEventListener('pointerlockerror', () => { if (!lockPromises) lockFai
 const cursorSteer = () => { input.mouse.lockFailed = true; body.classList.add('is-cursor-steer'); };
 
 window.addEventListener('keydown', (e) => {
+  if (G.state === 'replay' && (e.code === 'Escape' || e.code === 'Backspace')) {   // (and not on to the menu's own Esc)
+    e.preventDefault(); e.stopImmediatePropagation(); toMenu(); return;
+  }
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') && G.state !== 'playing') return;
   if (e.code === 'Escape' || e.code === 'KeyP') {
     if (G.state === 'playing') pause('key'); else if (G.state === 'paused' && e.code === 'KeyP') resumeFromUser();
     return;
   }
-  if (e.code === 'KeyR' && G.state !== 'attract') { e.preventDefault(); restart(); return; }
+  if (e.code === 'KeyR' && G.state !== 'attract' && G.state !== 'replay') { e.preventDefault(); restart(); return; }
   if (FLIGHT_KEYS.has(e.code)) {
     e.preventDefault();
     if (G.state === 'playing') { input.keys.add(e.code); if (!e.code.startsWith('Shift') && e.code !== 'Space') setDevice('mouse'); }
@@ -1018,7 +1041,7 @@ function updateCamera(dt, snap) {
     : clamp(Math.max(60 + sp * (reducedMotion ? 3 : 11), minV), 40, 100);
   cam.fov = snap || G.replay ? fovWant : lerp(cam.fov, fovWant, damp(3, dt));
   // with a panel open, frame the plane beside it (right in landscape, above it in portrait)
-  const panel = !body.classList.contains('state-playing'), portrait = view.h > view.w;   // (not before a finish's results show)
+  const panel = !body.classList.contains('state-playing') && !body.classList.contains('state-replay'), portrait = view.h > view.w;   // (not before a finish's results show)
   const tx = panel && !portrait ? 0.21 : 0, ty = panel && portrait ? 0.2 : 0;
   cam.vx = snap ? tx : lerp(cam.vx, tx, damp(3, dt)); cam.vy = snap ? ty : lerp(cam.vy, ty, damp(3, dt));
   if (snap) cam.punchT = 1e9; else cam.punchT += dt;
@@ -1118,6 +1141,12 @@ function updateVisuals(dt) {
   }
   if (planeModel.puffs) planeModel.puffs.update(G.state === 'paused' ? 0 : dt, P, planeModel.group.visible && P.smoking);   // js/smoke.js
 
+  if (G.ghost) {                                            // the ghost: its run as far in as this one is
+    const gh = G.ghost, S = Replay.at(gh.track, gh.t, gh.S), m = gh.model;
+    m.group.visible = S.visible && gh.t <= gh.track.duration;
+    if (m.group.visible) { m.group.position.copy(S.pos); m.group.quaternion.copy(S.q); m.update(G.state === 'paused' ? 0 : dt, S); }
+  }
+
   sky.position.copy(camera.position);
   sunDisc.position.copy(camera.position).addScaledVector(SUN_DIR, sunDist);
   sunDisc.lookAt(camera.position);
@@ -1210,7 +1239,7 @@ function showFatal(msg) { $('fatal-msg').textContent = msg; body.classList.add('
 
 function setState(s) {
   G.state = s;
-  body.classList.remove('state-attract', 'state-playing', 'state-paused', 'state-finished');
+  body.classList.remove('state-attract', 'state-playing', 'state-paused', 'state-finished', 'state-replay');
   body.classList.add('state-' + s);
 }
 function focusEl(id) { const el = $(id); if (el) setTimeout(() => el.focus({ preventScroll: true }), 30); }
@@ -1218,6 +1247,9 @@ function blurActive() { if (document.activeElement && document.activeElement.blu
 function renderBest() {
   const b = getBest();
   $('start-best').textContent = b != null ? `Best ${fmtTime(b)}` : '';
+  const gi = ghostInfo();                                   // a kept run: race it or watch it (js/ghost.js)
+  $('ghost-btns').hidden = !gi;
+  if (gi) { $('btn-ghost').title = `Race your ${fmtTime(gi.time)} run`; ghostTrack(); }   // (unpacked now, ready for the click)
   $('start-course').textContent = `${COURSE.name}, ${HOOPS.length} ${gateNoun()}s`;
   const lead = $('start-lead'), refill = $('start-refill');
   if (lead) lead.textContent = COURSE.lead || 'Fly through every hoop in order. The clock starts at the first one.';
@@ -1278,6 +1310,7 @@ function applyCourse() {                                    // scene, plane, sta
   setVehicleModel();
   for (const v in models) body.classList.toggle('vehicle-' + v, TUNE.VEHICLE === v);
   body.classList.toggle('course-pylons', gateNoun() === 'gate');
+  G.ghostWanted = false;
   const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : sailing() ? 'Dive' : TUNE.SMOKE ? 'Smoke' : 'Boost';
   smoke.trail.clear();
   renderBest();
@@ -1290,15 +1323,15 @@ function startRun() {
   blurActive();
   resetRun();
   hud.last = {};
-  G.rec = Replay.recorder();
+  G.rec = Replay.recorder(); startGhost();
   setState('playing');
   if (input.device === 'mouse' && !input.mouse.locked) tryLock({ onFail: cursorSteer });
   showToast(`The clock starts at the first ${gateNoun()}.`, 2600);
 }
 function restart() {
-  if (G.state === 'attract') return;
+  if (G.state === 'attract' || G.state === 'replay') return;
   const wasPaused = G.state === 'paused';
-  resetRun(); hud.last = {}; G.rec = Replay.recorder();
+  resetRun(); hud.last = {}; G.rec = Replay.recorder(); startGhost();
   if (wasPaused) resumeFromUser(); else { setState('playing'); if (input.device === 'mouse' && !input.mouse.locked && !input.mouse.lockFailed) tryLock({ onFail: cursorSteer }); }
 }
 function pause(reason) {
@@ -1335,6 +1368,12 @@ function resumeFromUser() {
 function finishRun() {
   const t = G.time, prev = getBest(), best = prev == null || t < prev;
   if (best) { settings.best[COURSE.id] = t; saveSettings(); }
+  const gi = ghostInfo();
+  if (G.rec && (!gi || t < gi.time)) {                      // the fastest run is kept as the ghost (js/ghost.js)
+    const id = COURSE.id, k = courseKey(), tr = G.rec.finish();
+    Object.assign(ghostRun, { id, key: k, track: tr });
+    Ghost.save(id, k, t, tr).then(() => { if (COURSE.id === id) renderBest(); });
+  }
   Sound.finish();
   $('finish-time').textContent = fmtTime(t);
   $('finish-best').textContent = prev == null ? 'First time on this course, saved as your best.'
@@ -1366,7 +1405,12 @@ const FINISH_HOLD = 1;                                      // s from crossing t
 function startReplay() {
   const tr = G.rec && G.rec.finish();
   G.rec = null;
+  if (G.ghost) G.ghost.model.group.visible = false;
+  G.ghost = null;
   if (!tr || tr.duration < 3) return false;
+  return playTrack(tr);
+}
+function playTrack(tr) {
   const probe = makePlane(); probe.speed = 0;             // a whole plane: crash plugins may read its attitude (js/farm.js)
   const solid = (p) => { probe.pos.copy(p); const c = crashed(probe); return !!c && c !== 'ground'; };
   planeModel.group.visible = true;                          // (a finish mid-crash would measure it empty)
@@ -1392,12 +1436,50 @@ function stepReplay(dt) {
   G.next = S.next;
   r.level = 0.35 * clamp(60 / Math.max(1, r.player.cam.pos.distanceTo(P.pos)), 0.15, 1);   // engine fades with distance
 }
+
+/* ---------- ghost (js/ghost.js): the fastest run kept, to race against or watch from the menu ---------- */
+const courseKey = () => Ghost.key(COURSE, TUNE.VEHICLE);
+const ghostRun = { id: null, key: null, track: null };      // the kept run of the course loaded, once unpacked
+const ghostInfo = () => Ghost.info(COURSE.id, courseKey());
+function ghostReady() { return ghostRun.track && ghostRun.id === COURSE.id && ghostRun.key === courseKey() ? ghostRun.track : null; }
+async function ghostTrack() {
+  if (ghostReady()) return ghostRun.track;
+  const id = COURSE.id, k = courseKey(), tr = await Ghost.load(id, k);
+  if (tr && COURSE.id === id) Object.assign(ghostRun, { id, key: k, track: tr });
+  return tr;
+}
+function startGhost() {                                     // with Race ghost (and Fly again or a restart after it)
+  const tr = G.ghostWanted ? ghostReady() : null;
+  G.ghost = tr ? { track: tr, S: Replay.state(), t: 0, model: ghostModel() } : null;
+}
+async function raceGhost() {
+  if (G.state !== 'attract' || switching) return;
+  if (!ghostReady() && !(await ghostTrack())) return;       // (unpacked when the menu showed it, so normally at once:
+  if (G.state !== 'attract') return;                        // the click still counts for the mouse lock and sound)
+  G.ghostWanted = true;
+  startRun();
+}
+async function watchReplay() {                              // the kept run from trackside, until Back to menu or Esc
+  if (G.state !== 'attract' || switching) return;
+  const tr = ghostReady() || await ghostTrack(), gi = ghostInfo();
+  if (!tr || G.state !== 'attract') return;
+  Sound.init(); blurActive();
+  resetRun();
+  $('watch-time').textContent = gi ? fmtTime(gi.time) : '';
+  setState('replay');
+  playTrack(tr);
+  focusEl('btn-watch-exit');
+}
+
 function toMenu() {
   if (document.pointerLockElement === canvas) document.exitPointerLock();
   resetRun(); setState('attract'); menu.show('levels');
 }
 
-$('btn-start').addEventListener('click', startRun);
+$('btn-start').addEventListener('click', () => { G.ghostWanted = false; startRun(); });
+$('btn-ghost').addEventListener('click', raceGhost);
+$('btn-watch').addEventListener('click', watchReplay);
+$('btn-watch-exit').addEventListener('click', toMenu);
 $('btn-resume').addEventListener('click', resumeFromUser);
 // pause screen's Restart and Menu: js/menu.js, which asks first once the clock is running (R restarts at once)
 $('btn-again').addEventListener('click', startRun);
@@ -1456,6 +1538,7 @@ function update(dt) {
     }
   }
   if (G.rec && G.state !== 'paused') G.rec.sample(dt, P, G.next, planeModel.group.visible);   // js/replay.js
+  if (G.ghost && G.rec) G.ghost.t = G.rec.elapsed;         // on the clock of the recording it came from
   if (G.state === 'playing' && sailing() && !G.liftHint && (P.lift || 0) > 3 && getBest() == null && G.crashTimer <= 0) {
     G.liftHint = true;                                      // first thermal of a run, until the course is finished once
     showToast('Rising air! Bank hard and circle in it to climb.', 3200);
@@ -1491,5 +1574,5 @@ window.Skyrace = {
   get crashing() { return G.crashTimer > 0; },
   get hoop() { return G.next; },
 };
-window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, get replay() { return G.replay; }, menu, lightStats, resolution, teleport(i) { G.next = i; respawn(); } };
+window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, get replay() { return G.replay; }, get ghost() { return G.ghost; }, menu, lightStats, resolution, teleport(i) { G.next = i; respawn(); } };
 }
