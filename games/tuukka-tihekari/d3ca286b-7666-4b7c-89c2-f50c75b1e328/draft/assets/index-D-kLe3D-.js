@@ -1,5 +1,5 @@
 try {
-  const response=await fetch(new URL('./runtime.gz.bin',import.meta.url));
+  const response=await fetch(new URL('./runtime.js',import.meta.url));
   if(!response.ok) throw new Error('Runtime download failed: '+response.status);
   const stream=response.body.pipeThrough(new DecompressionStream('gzip'));
   const source=await new Response(stream).text();
