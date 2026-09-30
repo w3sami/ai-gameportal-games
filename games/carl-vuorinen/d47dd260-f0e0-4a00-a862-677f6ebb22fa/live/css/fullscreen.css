@@ -1,0 +1,6 @@
+/* Full screen buttons: js/fullscreen.js unhides them only where full screen is allowed. */
+.fs-btn { display: inline-flex; align-items: center; gap: 0.5em; }
+.fs-btn[hidden] { display: none; }
+.fs-btn svg { width: 1.15em; height: 1.15em; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.fs-btn .fs-on, body.is-fullscreen .fs-btn .fs-off { display: none; }
+body.is-fullscreen .fs-btn .fs-on { display: inline; }

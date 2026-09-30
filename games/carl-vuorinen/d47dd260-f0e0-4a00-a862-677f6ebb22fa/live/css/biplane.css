@@ -1,0 +1,6 @@
+/* Biplane (Farm): its own control texts, the g meter in the HUD, and no boost: the button trails smoke (js/smoke.js), lit
+   while held, and the boost bar is its smoke meter (js/airshow.js); the time flashes green for a smoke bonus. */
+body:not(.vehicle-biplane) .for-biplane, body.vehicle-biplane .for-prop, body.vehicle-biplane .not-biplane { display: none; }
+body.vehicle-biplane .hud-g { display: inline; }
+body.is-smoking .boost-btn span { background: var(--plane); }
+.hud-time.is-bonus { color: #1f9d55; }
