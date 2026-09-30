@@ -11,9 +11,11 @@
    screen, and as puffs spread out the trail thins to fewer, further apart (each puff has a level, like a mip chain:
    every 2nd puff is level 1, every 4th level 2..., and a level shrinks away once the spread wants puffs further apart
    than it gives). A puff shrunk to nothing is a point: no pixels.
-   makeSmoke(scene, anchor) -> { update(dt, P, on), cut(), clear(), mesh }
+   makeSmoke(scene, anchor) -> { update(dt, P, on), cut(), dissipate(), clear(), mesh }
      anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame);
-     cut(): the plane was moved (respawn), so don't join the trail up to the new spot; clear(): remove all smoke.
+     cut(): the plane was moved (respawn), so don't join the trail up to the new spot; dissipate(): a crash, so all the
+     smoke laid so far crumbles away by the time the plane is back (no flying on through your own trail); clear():
+     remove all smoke.
    ========================================================================= */
 function makeSmoke(scene, anchor) {
   const MAX = 896;                 // puffs alive at once: LIFE * a fast dive / SPACING (past that the oldest go first)
@@ -31,6 +33,8 @@ function makeSmoke(scene, anchor) {
   const LEVELS = 4;                // top level (every 16th puff), never thinned
   const WIND = [0.9, 0.25, 0.5];   // m/s of drift (and a slow rise)
   const JUMP = 40;                 // m in one frame: a teleport, not flight
+  const GONE = [0.35, 0.55];       // s, s: dissipate(): each puff starts shrinking within the first (at random, so the
+                                   // trail crumbles), gone the second after; all gone by the respawn (G.crashTimer 0.9 s)
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');   // as the clouds
 
   const ball = new THREE.IcosahedronGeometry(1, 0);         // 20 facets, non-indexed
@@ -48,6 +52,7 @@ function makeSmoke(scene, anchor) {
     uFresh: { value: new THREE.Vector2(FRESH[0], FRESH[1]) },
     uThin: { value: new THREE.Vector3(THIN / SPACING, LEVELS, SHRINK) },
     uWind: { value: new THREE.Vector3(WIND[0], WIND[1], WIND[2]) },
+    uGone: { value: new THREE.Vector4(-1e7, -1e7, GONE[0], GONE[1]) },   // the last dissipate() time, the one before it
     uTop: { value: TOP }, uBelly: { value: BELLY },
   };
   const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true });
@@ -61,7 +66,7 @@ function makeSmoke(scene, anchor) {
       uniform float uTime, uLife;
       uniform vec4 uR;
       uniform vec2 uR1, uNear, uFresh;
-      uniform vec4 uBig;
+      uniform vec4 uBig, uGone;
       uniform vec3 uThin, uWind, uTop, uBelly;
       varying vec3 vSmoke;
       vec3 smokeTurn(vec3 p, float a, float b) {
@@ -86,6 +91,9 @@ function makeSmoke(scene, anchor) {
       float big = mix(min(1.0, uBig.z / onScreen), 1.0 - smoothstep(uBig.x, uBig.y, onScreen), smoothstep(uFresh.x, uFresh.y, age));
       float k = step(0.0, age) * step(age, uLife) * keep * big
               * (1.0 - smoothstep(uThin.z, 1.0, life));                                  // shrinks away at the end
+      // laid before a crash (dissipate()): shrinks away within a second; before the crash before that: long gone
+      float g0 = uGone.z * fract(seed * 17.3);
+      k *= aInfo.x <= uGone.y ? 0.0 : aInfo.x <= uGone.x ? 1.0 - smoothstep(g0, g0 + uGone.w, uTime - uGone.x) : 1.0;
       k *= smoothstep(uNear.x, uNear.y, depth - r * k);                                  // and right at the camera
       vec3 dir = smokeTurn(position, seed * 6.2832 + age * (fract(seed * 11.0) - 0.5) * 0.6, fract(seed * 13.7) * 3.1416);
       vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
@@ -109,7 +117,12 @@ function makeSmoke(scene, anchor) {
   scene.add(mesh);
 
   const at = new THREE.Vector3(), last = new THREE.Vector3(), d = new THREE.Vector3(), pt = new THREE.Vector3();
-  let T = 0, head = 0, joined = false, carry = 0, lastBirth = -1e6, lo = -1, n = 0, full = false, count = 0;
+  // T only ever runs on (clear() doesn't wind it back), so a birth left over from before can never come due again.
+  // dirty: the whole buffers are owed to the GPU until the mesh is next drawn (at first, and after clear(), which hides
+  // it). r159 uploads only the update ranges when there are any, so a range added before that draw would stand in for
+  // the whole upload and leave the last run's puffs on the GPU, to hatch again as T reached their births
+  let T = 0, head = 0, joined = false, carry = 0, lastBirth = -1e6, lo = -1, n = 0, dirty = true, count = 0;
+  mesh.onAfterRender = () => { dirty = false; };
 
   function emit(p, birth) {
     const i = head; head = (head + 1) % MAX;
@@ -121,9 +134,10 @@ function makeSmoke(scene, anchor) {
     n++; lastBirth = birth;
   }
   function flush() {                                        // upload just the slots written this frame (two runs if it wrapped)
-    if (full) {                                             // after clear(): everything
-      posA.clearUpdateRanges(); infA.clearUpdateRanges(); posA.needsUpdate = infA.needsUpdate = true;
-      full = false; lo = -1; n = 0; return;
+    if (dirty) {                                            // everything, until drawn
+      posA.clearUpdateRanges(); infA.clearUpdateRanges();
+      if (n) posA.needsUpdate = infA.needsUpdate = true;
+      lo = -1; n = 0; return;
     }
     if (!n) return;
     const runs = n >= MAX ? [[0, MAX]] : lo + n <= MAX ? [[lo, n]] : [[lo, MAX - lo], [0, lo + n - MAX]];
@@ -158,9 +172,12 @@ function makeSmoke(scene, anchor) {
     mesh,
     update,
     cut() { joined = false; },
+    dissipate() { const g = U.uGone.value; g.y = g.x; g.x = T; },
     clear() {
-      infA.array.fill(-1e6); full = true;                   // uploaded whole by the next update()
-      T = 0; head = 0; joined = false; lastBirth = -1e6; mesh.visible = false;
+      infA.array.fill(-1e6);                                // uploaded whole the next time the mesh is drawn
+      posA.clearUpdateRanges(); infA.clearUpdateRanges(); posA.needsUpdate = infA.needsUpdate = true;
+      dirty = true; lo = -1; n = 0;
+      head = 0; joined = false; lastBirth = -1e6; mesh.visible = false;
     },
   };
 }
