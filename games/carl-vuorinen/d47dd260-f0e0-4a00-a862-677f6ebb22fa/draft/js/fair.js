@@ -150,9 +150,10 @@ function createFairKit() {
   function slice(n) {
     if (slices.has(n)) return slices.get(n);
     const a = TAU / n, c = Math.cos(a), s = Math.sin(a), geo = (P) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); return g.attributes.position; };
-    // three.js y-rotation takes +x toward -z, so angle a sits at (cos a, -sin a)
-    const wedge = geo([1, 0, 0, 0, 1, 0, c, 0, -s]);
-    const panel = geo([1, 0, 0, 1, 1, 0, c, 1, -s, 1, 0, 0, c, 1, -s, c, 0, -s]);
+    // three.js y-rotation takes +x toward -z, so angle a sits at (cos a, -sin a); wound anticlockwise seen from outside,
+    // so their fronts face out
+    const wedge = geo([1, 0, 0, c, 0, -s, 0, 1, 0]);
+    const panel = geo([1, 0, 0, c, 1, -s, 1, 1, 0, 1, 0, 0, c, 0, -s, c, 1, -s]);
     slices.set(n, { wedge, panel, a });
     return slices.get(n);
   }
