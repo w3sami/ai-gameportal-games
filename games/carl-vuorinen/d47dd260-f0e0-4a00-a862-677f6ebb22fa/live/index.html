@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="css/menu.css">
 <link rel="stylesheet" href="css/pad.css">
 <link rel="stylesheet" href="css/biplane.css">
+<link rel="stylesheet" href="css/ghost.css">
 </head>
 <body class="state-attract">
 <canvas id="scene" tabindex="-1" aria-label="Flight view"></canvas>
@@ -69,6 +70,7 @@
       <button class="btn primary" id="btn-start" type="button">Start flight</button>
       <button class="btn fs-btn" type="button" title="Full screen (F)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><g class="fs-off"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></g><g class="fs-on"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></g></svg><span class="fs-off">Full screen</span><span class="fs-on">Exit full screen</span></button>
       <span class="best" id="start-best"></span>
+      <span class="ghost-btns" id="ghost-btns" hidden><button class="btn small" id="btn-ghost" type="button">Race ghost</button><button class="btn small" id="btn-watch" type="button">Watch replay</button></span>
     </div>
     <p class="controls for-mouse for-wingsuit">Aim with the mouse and the suit glides that way; aim above the horizon to level out, if you have the speed. Hold the left mouse button, <kbd>Shift</kbd> or <kbd>Space</kbd> to tuck in and dive. <span class="inv-off"><kbd>W</kbd> <kbd>S</kbd></span><span class="inv-on"><kbd>S</kbd> <kbd>W</kbd></span> flatten and steepen the glide, <kbd>A</kbd> <kbd>D</kbd> bank, and <kbd>Esc</kbd> pauses. A controller works too: press any button on it.</p>
     <p class="controls for-mouse for-sailplane">Aim with the mouse and the glider follows. It has no engine: aim up to climb while you have the speed, and circle in rising air to gain height. Hold the left mouse button, <kbd>Shift</kbd> or <kbd>Space</kbd> to dive with the flaps up, faster between thermals but no good for circling. <span class="inv-off"><kbd>W</kbd> <kbd>S</kbd></span><span class="inv-on"><kbd>S</kbd> <kbd>W</kbd></span> climb and dive, <kbd>A</kbd> <kbd>D</kbd> bank, and <kbd>Esc</kbd> pauses. A controller works too: press any button on it.</p>
@@ -125,6 +127,8 @@
   </div>
 </section>
 
+<div class="watch-bar chip" id="watch"><span class="watch-label">Replay <b id="watch-time"></b></span><button class="btn small" id="btn-watch-exit" type="button">Back to menu</button></div>
+
 <div class="fatal" id="fatal"><p id="fatal-msg"></p></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
@@ -160,6 +164,7 @@
 <script src="js/airshow.js"></script>
 <script src="js/biplane.js"></script>
 <script src="js/replay.js"></script>
+<script src="js/ghost.js"></script>
 <script src="js/game.js"></script>
 <script src="js/menu.js"></script>
 <script src="js/fullscreen.js"></script>
