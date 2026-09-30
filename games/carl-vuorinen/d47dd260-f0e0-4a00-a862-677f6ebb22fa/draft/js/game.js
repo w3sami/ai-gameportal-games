@@ -655,21 +655,27 @@ function setAimFrom(dir, maxPitch = 0.7) { aim.yaw = yawOf(dir); aim.pitch = cla
 
 function resetRun() {
   G.finishCam = null;                                       // (also calls off a finish's pending panel and lap)
+  G.rec = null; G.replay = null;                            // js/replay.js: startRun and restart begin a new recording
   placePlane(P, START_POS, START_DIR, TUNE.CRUISE);
   P.boost = 1; P.boostLock = false; P.boosting = false; P.smokeLeft = 1; P.smokeLock = false;
   G.next = 0; G.started = false; G.time = 0; G.pen = 0; G.bonus = 0; G.invuln = 0.4; G.crashTimer = 0; G.liftHint = false; G.hints = new Set();
   setAimFrom(START_DIR); input.neutral = true;
-  hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
-  resetPylons();
-  for (const k of gateKits) k.reset();
-  trails.forEach((t) => t.clear()); smoke.trail.clear();
-  for (const v in models) if (models[v].puffs) models[v].puffs.clear();
+  resetGates();
   P.smoking = false;
   planeModel.group.visible = true;
   updateCamera(0, true);
 }
 
+function resetGates() {                                   // gates, pylons and trails as at the start of a run (also a replay's loop)
+  hoopMeshes.forEach((m) => { if (!m) return; m.visible = true; m.userData.fade = 0; if (m.userData.flash) { m.userData.flash.dispose(); m.userData.flash = null; } });
+  resetPylons();
+  for (const k of gateKits) k.reset();
+  trails.forEach((t) => t.clear()); smoke.trail.clear();
+  for (const v in models) if (models[v].puffs) models[v].puffs.clear();
+}
+
 function respawn() {
+  if (G.rec) G.rec.cut();                                   // the replay jumps here rather than sweeping across
   const h = G.next > 0 ? HOOPS[G.next - 1] : null;
   const pos = h ? h.pos.clone().addScaledVector(h.normal, 4) : START_POS;
   // wingsuit: back at the hoop with the speed you had there, or RESPAWN_SPEED if more, since the next stretch may need it
@@ -691,13 +697,7 @@ function onHoop(missed = false) {
   G.next++; G.hoopSpeed = P.speed;
   if (!missed) P.boost = Math.min(1, P.boost + TUNE.BOOST_HOOP);
   if (!missed && TUNE.SMOKE) P.smokeLeft = Math.min(1, P.smokeLeft + TUNE.SMOKE_HOOP);   // the smoke meter (js/airshow.js)
-  for (const k of gateKits) k.pass(i);
-  const m = hoopMeshes[i];
-  if (m) {
-    if (m.userData.flash) m.userData.flash.dispose();
-    m.userData.flash = hoopMat.next.clone(); m.userData.flash.transparent = true; m.userData.flash.depthWrite = false;
-    m.material = m.userData.flash; m.userData.fade = 1;
-  }
+  flashGate(i);
   if (G.state !== 'playing') return;
   if (i === 0) G.started = true;
   if (missed) penalty(RULES.missed, `Missed ${gateNoun()} ${i + 1}`);
@@ -710,6 +710,15 @@ function onHoop(missed = false) {
   }
   bump($('hud-hoops'));
   if (G.next >= HOOPS.length) finishRun();
+}
+function flashGate(i) {                                    // passed: the gate flashes and fades (a replay repeats this)
+  for (const k of gateKits) k.pass(i);
+  const m = hoopMeshes[i];
+  if (m) {
+    if (m.userData.flash) m.userData.flash.dispose();
+    m.userData.flash = hoopMat.next.clone(); m.userData.flash.transparent = true; m.userData.flash.depthWrite = false;
+    m.material = m.userData.flash; m.userData.fade = 1;
+  }
 }
 // a loop or slalom broken off (js/aerobatic.js): its gates again from the first, so a crash's respawn puts you on the
 // straight before it
@@ -991,16 +1000,23 @@ function updateCamera(dt, snap) {
     camera.up.copy(WORLD_UP);
     camera.lookAt(f.look);
   }
+  if (G.replay) {                                           // replay: trackside tripods (js/replay.js)
+    const rc = G.replay.player.cam;
+    camera.position.copy(rc.pos);
+    camera.up.copy(WORLD_UP);
+    camera.lookAt(rc.look);
+  }
 
   const sp = clamp((P.speed - TUNE.CRUISE) / (TUNE.BOOST - TUNE.CRUISE), -0.4, 1.3);
-  if (!reducedMotion) {
+  if (!reducedMotion && !G.replay) {
     const s = cam.shake * 0.03 + Math.max(0, sp) * 0.0022;
     if (s > 0) { const t = G.clock; camera.rotateZ(Math.sin(t * 37) * s); camera.rotateX(Math.sin(t * 29 + 1.3) * s * 0.7); }
   }
   cam.shake = Math.max(0, cam.shake - dt * 2.2);
   const minV = 2 * Math.atan(Math.tan((66 * Math.PI / 180) / 2) / camera.aspect) * 180 / Math.PI;   // portrait: keep ~66° across
-  const fovWant = clamp(Math.max(60 + sp * (reducedMotion ? 3 : 11), minV), 40, 100);
-  cam.fov = snap ? fovWant : lerp(cam.fov, fovWant, damp(3, dt));
+  const fovWant = G.replay ? G.replay.player.cam.fov * Math.max(1, minV / 60)   // (the replay eases its own zoom)
+    : clamp(Math.max(60 + sp * (reducedMotion ? 3 : 11), minV), 40, 100);
+  cam.fov = snap || G.replay ? fovWant : lerp(cam.fov, fovWant, damp(3, dt));
   // with a panel open, frame the plane beside it (right in landscape, above it in portrait)
   const panel = !body.classList.contains('state-playing'), portrait = view.h > view.w;   // (not before a finish's results show)
   const tx = panel && !portrait ? 0.21 : 0, ty = panel && portrait ? 0.2 : 0;
@@ -1039,7 +1055,7 @@ function updateVisuals(dt) {
   }
   pylons.update(G.next, t);
   pylons.animate(dt);
-  for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast, rewind: rewindTo, bonus: timeBonus });
+  for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast, rewind: G.replay ? () => {} : rewindTo, bonus: timeBonus });
   if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
     const gt = GATE_TYPES[HOOPS[G.next].kind], dr = gt && gt.disc ? gt.disc(HOOPS[G.next]) : TUNE.HOOP_R - 0.6;   // js/aerobatic.js
     gateDisc.visible = dr > 0; gateDisc.scale.setScalar(dr / 7.4);
@@ -1064,7 +1080,7 @@ function updateVisuals(dt) {
   }
 
   // streaks
-  const inten = smoothstep(TUNE.CRUISE * 0.98, TUNE.BOOST * 0.97, P.speed) * (planeModel.group.visible ? 1 : 0);
+  const inten = smoothstep(TUNE.CRUISE * 0.98, TUNE.BOOST * 0.97, P.speed) * (planeModel.group.visible && !G.replay ? 1 : 0);   // (a trackside camera sees none)
   streakMat.opacity = 0.45 * inten;
   streaks.visible = inten > 0.02;
   if (streaks.visible) {
@@ -1274,6 +1290,7 @@ function startRun() {
   blurActive();
   resetRun();
   hud.last = {};
+  G.rec = Replay.recorder();
   setState('playing');
   if (input.device === 'mouse' && !input.mouse.locked) tryLock({ onFail: cursorSteer });
   showToast(`The clock starts at the first ${gateNoun()}.`, 2600);
@@ -1281,7 +1298,7 @@ function startRun() {
 function restart() {
   if (G.state === 'attract') return;
   const wasPaused = G.state === 'paused';
-  resetRun(); hud.last = {};
+  resetRun(); hud.last = {}; G.rec = Replay.recorder();
   if (wasPaused) resumeFromUser(); else { setState('playing'); if (input.device === 'mouse' && !input.mouse.locked && !input.mouse.lockFailed) tryLock({ onFail: cursorSteer }); }
 }
 function pause(reason) {
@@ -1337,12 +1354,44 @@ function finishRun() {
     setState('finished');
     if (document.pointerLockElement === canvas) document.exitPointerLock();
     focusEl(fin.focus);
+    startReplay();                                          // behind the results: the run again, on a loop
   }, FINISH_HOLD * 1000);
-  // victory lap behind the results: fly on down the run-out, then fly the course again from the start (heading back
-  // to the first gate from here would cut straight across the hills)
+  // no replay (a run too short to show): a victory lap behind the results instead: fly on down the run-out, then fly
+  // the course again from the start (heading back to the first gate from here would cut straight across the hills)
   setTimeout(() => { if (still()) resetRun(); }, FINISH_HOLD * 1000 + (gliding() ? 4000 : 2500));
 }
 const FINISH_HOLD = 1;                                      // s from crossing the finish to the results
+// replay (js/replay.js): the recording runs from the start through the finish hold, then plays on a loop from
+// trackside cameras until the player flies again or leaves; the plane is posed from it, nothing is simulated
+function startReplay() {
+  const tr = G.rec && G.rec.finish();
+  G.rec = null;
+  if (!tr || tr.duration < 3) return false;
+  const probe = makePlane(); probe.speed = 0;             // a whole plane: crash plugins may read its attitude (js/farm.js)
+  const solid = (p) => { probe.pos.copy(p); const c = crashed(probe); return !!c && c !== 'ground'; };
+  planeModel.group.visible = true;                          // (a finish mid-crash would measure it empty)
+  const dims = new THREE.Box3().setFromObject(planeModel.group).getSize(new V3());
+  const size = clamp(Math.max(dims.x, dims.y, dims.z), 1.5, 30) || 9;   // the model's span or length, whichever is more
+  // (the frame is kept at least a gate tall: zoomed in on a small wingsuit, a gate would fill the screen)
+  G.replay = { size, player: Replay.player(tr, { ground: groundAt, solid, size,
+    avoid: HOOPS.map((h) => h.pos), avoidR: TUNE.HOOP_R * 3, minFrame: TUNE.HOOP_R * 2 }), level: 0.35 };
+  G.finishCam = null; G.crashTimer = 0;                     // (also calls off the victory lap)
+  stepReplay(0);
+  return true;
+}
+function stepReplay(dt) {
+  const r = G.replay, ev = r.player.step(dt), S = r.player.S;
+  if (ev.loop) { resetGates(); G.next = 0; }
+  else if (ev.cut) { trails.forEach((t) => t.clear()); smoke.trail.clear(); if (planeModel.puffs) planeModel.puffs.cut(); }
+  P.pos.copy(S.pos); P.q.copy(S.q); P.vdir.copy(S.vdir);
+  P.speed = S.speed; P.gload = S.gload; P.tuck = S.tuck; P.boosting = S.boosting; P.smoking = S.smoking;
+  P.stallWarn = 0; P.stall = false;
+  planeModel.group.visible = S.visible;
+  if (S.next > G.next) for (let i = G.next; i < S.next; i++) flashGate(i);
+  else if (S.next < G.next) { for (const k of gateKits) k.reset(); for (let i = 0; i < S.next; i++) flashGate(i); }   // a loop broken off
+  G.next = S.next;
+  r.level = 0.35 * clamp(60 / Math.max(1, r.player.cam.pos.distanceTo(P.pos)), 0.15, 1);   // engine fades with distance
+}
 function toMenu() {
   if (document.pointerLockElement === canvas) document.exitPointerLock();
   resetRun(); setState('attract'); menu.show('levels');
@@ -1379,7 +1428,8 @@ const frameHooks = [];
 function update(dt) {
   G.clock += dt;
   for (const fn of frameHooks) fn(dt);                      // polled input (js/pad.js) lands before this frame's physics
-  if (G.state !== 'paused') {
+  if (G.replay) stepReplay(dt);
+  else if (G.state !== 'paused') {
     if (G.crashTimer > 0) {
       G.crashTimer -= dt;
       if (G.state === 'playing' && G.started) G.time += dt;          // crashing costs time
@@ -1405,6 +1455,7 @@ function update(dt) {
       }
     }
   }
+  if (G.rec && G.state !== 'paused') G.rec.sample(dt, P, G.next, planeModel.group.visible);   // js/replay.js
   if (G.state === 'playing' && sailing() && !G.liftHint && (P.lift || 0) > 3 && getBest() == null && G.crashTimer <= 0) {
     G.liftHint = true;                                      // first thermal of a run, until the course is finished once
     showToast('Rising air! Bank hard and circle in it to climb.', 3200);
@@ -1417,7 +1468,7 @@ function update(dt) {
   updateCamera(dt, false);
   updateVisuals(dt);
   updateHUD();
-  Sound.update(P, G.state === 'playing' ? 1 : G.state === 'paused' ? 0 : 0.35);
+  Sound.update(P, G.state === 'playing' ? 1 : G.state === 'paused' ? 0 : G.replay ? G.replay.level : 0.35);
 }
 let last = performance.now(), errShown = false;
 function frame(now) {
@@ -1440,5 +1491,5 @@ window.Skyrace = {
   get crashing() { return G.crashTimer > 0; },
   get hoop() { return G.next; },
 };
-window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, menu, lightStats, resolution, teleport(i) { G.next = i; respawn(); } };
+window.__ml = { G, P, get HOOPS() { return HOOPS; }, get PYLONS() { return PYLONS; }, input, settings, finishRun, switchCourse, get replay() { return G.replay; }, menu, lightStats, resolution, teleport(i) { G.next = i; respawn(); } };
 }
