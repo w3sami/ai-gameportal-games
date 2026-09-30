@@ -13,7 +13,8 @@
    Gates (GATE_TYPES, js/sim.js):
      "ribbon"  a ribbon between two poles, cut flying upside down (the inverted hoop's rule, js/aerobatic.js; the sign
                over it too). The point is the ribbon's middle, so its clearance is the ribbon's height. It counts
-               passing between the poles within RIBBON.band m of the ribbon. Options { w }: the gap between the poles (m).
+               passing between the poles from RIBBON.band m under the ribbon up to the poles' tops (more room over it: a near
+               miss is nearly always a little high, and the tops show where it ends). Options { w }: the gap between the poles (m).
    A hoop with option bales: a stack of hay bales under it (rows high, default 3), to skim over.
    Everything is a crash (CRASH_TEXT), also by a wingtip (CRASH_PLUGINS); the balloons' envelopes are ellipsoids.
    This plugin builds before js/farm.js's, so the fields and hedges keep off the fairground.
@@ -21,7 +22,7 @@
    Game part: the meshes (createFairKit, in FAIR_CHUNK m squares) and the ribbon (GATE_KITS): lit when it's next, cut in
    two when flown through, the halves dropping to hang from the poles.
    ========================================================================= */
-const RIBBON = { w: 26, band: 3.5, poleR: 0.45, above: 5 };     // gap between poles, counting band either side, pole radius, pole over the ribbon
+const RIBBON = { w: 26, band: 3.5, poleR: 0.45, above: 5 };     // gap between poles, counting band under it, pole radius, pole over the ribbon
 const FAIR_BALE = { l: 2.4, w: 1.2, h: 0.9 };                  // a big square bale (m)
 const FAIR_CHUNK = 300;
 const FAIR = { tents: [], stalls: [], stacks: [], balloons: [], ribbons: [], tipBoxes: [] };
@@ -29,7 +30,7 @@ const BALLOON = { r: 9, h: 25, basket: 1.3, throat: 4 };       // envelope radiu
 
 const ribbonW = (h) => (h.opts && h.opts.w) || RIBBON.w;
 GATE_TYPES.ribbon = {
-  shape(h, u, v) { return Math.abs(u) < ribbonW(h) / 2 - 0.8 && Math.abs(v) < RIBBON.band; },
+  shape(h, u, v) { return Math.abs(u) < ribbonW(h) / 2 - 0.8 && v > -RIBBON.band && v < RIBBON.above; },   // up to the poles' tops
   rule: (P, h) => GATE_TYPES.I.rule(P, h),                   // upside down, as an inverted hoop
   disc: () => 0,                                             // the ribbon is the target
   top: () => RIBBON.above + 1,
