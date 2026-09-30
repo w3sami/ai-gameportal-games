@@ -4,13 +4,15 @@
    a barn to fly through, silos, a farmhouse and hay bales.
    Course file: farm: { hedges, fields, house, sheds }
      hedges  [[x0, z0, x1, z1], ...]: hedgerows placed by hand, to be flown low over (a tree at each end, unless near the line)
-     fields  { angle, reach, size: [min, max], hedges, trees, seed, stable }: rectangular fields on a grid turned `angle`
-             degrees, `size` m on a side, wherever they're within `reach` m of the line (default 650). hedges: the share
-             of field edges with a hedgerow (default 0.5); trees: hedge trees per 100 m of hedge (default 1.6). No hedge
-             tree stands within the line's floor + 18 m, and a hedge leaves a gap where the line crosses it lower than
-             6 m over its top. stable: each field and each field edge draws from its own random stream, so moving the line
-             (which adds or drops fields at the edge of `reach`) changes only those fields, not every crop and hedge after
-             them in the draw order.
+     fields  { angle, reach, size: [min, max], hedges, trees, seed, stable, grassAbove }: rectangular fields on a grid
+             turned `angle` degrees, `size` m on a side, wherever they're within `reach` m of the line (default 650).
+             hedges: the share of field edges with a hedgerow (default 0.5); trees: hedge trees per 100 m of hedge
+             (default 1.6). No hedge tree stands within the line's floor + 18 m, and a hedge leaves a gap where the line
+             crosses it lower than 6 m over its top. stable: each field and each field edge draws from its own random
+             stream, so moving the line (which adds or drops fields at the edge of `reach`) changes only those fields,
+             not every crop and hedge after them in the draw order. grassAbove: fields whose middle stands higher than
+             this (m) are grassland (hilltops): no crop, bales or hedges of their own (with stable, so leaving out their
+             hedges moves no other field's).
      house   [x, z, fx, fz]: the farmhouse at (x, z), its front facing (fx, fz), or a list of them; sheds: [[x, z, fx, fz], ...]
              likewise
      barns   [[x, z, fx, fz], ...]: barns just to look at, doors shut, their doors' ends facing ±(fx, fz)
@@ -22,8 +24,9 @@
              Options { w, h, len, wide }: door width and height, the barn's length (door to door) and width (m,
              defaults BARN).
    A K gate (js/aerobatic.js) with flank "silo" gets a big silo either side of it; with flank "pole", a slim striped
-   pole on one side (option side: -1 left, 1 right as you pass, default 1), to weave round on a wingtip. A hoop with
-   option silo stands on a tall silo, its dome just under the ring, to pull up over and dive down from.
+   pole on one side (option side: -1 left, 1 right as you pass, default 1), to weave round on a wingtip. A hoop (or an
+   inverted hoop, "I") with option silo stands on a tall silo, its dome just under the ring, to pull up over and dive
+   down from.
    Everything is a crash (CRASH_TEXT: barn, silo, pole, house, hedge, tree, bale); the buildings also by a wingtip
    (CRASH_PLUGINS). Fields keep the game's own trees out; hedge trees are round-crowned, drawn and crashed here.
    Sim part (no DOM): buildFarm() (a SHORE plugin), FARM (fields, hedges, trees, barns, silos, poles for the tests).
@@ -70,7 +73,7 @@ function buildFarm() {
     if (h.kind === 'barn') buildBarn(h);
     if (h.kind === 'K' && o.flank === 'silo') buildSilos(h);
     if (h.kind === 'K' && o.flank === 'pole') buildPole(h);
-    if (h.kind === 'hoop' && o.silo) buildSiloUnder(h);
+    if ((h.kind === 'hoop' || h.kind === 'I') && o.silo) buildSiloUnder(h);
   });
   const F = COURSE.farm;
   if (!F) return;
@@ -126,7 +129,8 @@ function buildSilos(h) {
 const SILO_UNDER = { r: 5.5, gap: 2.5 };                    // a silo under a hoop: radius, dome top to the ring (m)
 function buildSiloUnder(h) {
   const r = SILO_UNDER.r, f = gateFrame(h), foot = groundAt(h.pos.x, h.pos.z) - 0.5;
-  const top = h.pos.y - TUNE.HOOP_R - SILO_UNDER.gap - r * 0.6;   // the wall's top; the dome rises r * 0.6 over it
+  const R = h.kind === 'I' ? invR(h) : TUNE.HOOP_R;          // an inverted hoop is bigger (js/aerobatic.js)
+  const top = h.pos.y - R - SILO_UNDER.gap - r * 0.6;         // the wall's top; the dome rises r * 0.6 over it
   FARM.silos.push({ x: h.pos.x, z: h.pos.z, r, foot, top });
   farmBox('silo', h.pos.x, h.pos.z, f.fx, f.fz, r * 0.92, r * 0.92, foot, top + r * 0.6, true);
   shoreBox('yard', h.pos.x, h.pos.z, f.fx, f.fz, 30, 24, FARM_TREE_NONE - 1, FARM_TREE_NONE);
@@ -193,6 +197,7 @@ function farmFields(o) {
     const fld = { i, j, a0, a1, b0, b1, crop: crop(fr), rot: fr() < 0.5 ? 0 : 1, seed: Math.floor(fr() * 1e6) };
     if (fieldOnYard(toW, a0, a1, b0, b1)) fld.yard = true;    // a farmyard is grass: not drawn, no bales (still a field
                                                               // here, so the hedges and every other field stay as they were)
+    if (o.grassAbove != null && g > o.grassAbove) fld.yard = fld.grass = true;   // a hilltop is grassland, likewise
     FARM.fields.push(fld); cell.set(i + ',' + j, fld);
     shoreBox('clear', cx, cz, ca, sa, (a1 - a0) / 2, (b1 - b0) / 2, FARM_TREE_NONE - 1, FARM_TREE_NONE);
   }
@@ -209,6 +214,7 @@ function farmFields(o) {
   };
   for (const fld of FARM.fields) {
     const { i, j, a0, a1, b0, b1 } = fld;
+    if (fld.grass) continue;                              // grassland: no hedges of its own (a neighbour's may still border it)
     edge([a1, b0], [a1, b1], i, j, 1);                    // right edge (shared with i + 1 if it exists)
     edge([a0, b1], [a1, b1], i, j, 2);                    // top edge
     if (!cell.has((i - 1) + ',' + j)) edge([a0, b0], [a0, b1], i, j, 3);
