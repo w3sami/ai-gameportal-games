@@ -1,10 +1,11 @@
 'use strict';
 /* =========================================================================
    REPLAY — records a run and plays it back from trackside cameras.
-   Replay.recorder() -> { cut(), sample(dt, P, next, visible), finish() -> track | null }
+   Replay.recorder() -> { elapsed, cut(), sample(dt, P, next, visible), finish() -> track | null }
      sample() once a frame while the run is on (and through the finish hold); cut() when the plane is put back after
      a crash, so playback jumps there instead of sweeping through the hills. finish() resamples to an even RATE grid,
      the same shape a stored ghost will have, so what plays here is what a saved run will look like.
+   Replay.at(track, t, S) -> S posed at time t (S from Replay.state()), for a ghost flown alongside a run
    Replay.player(track, opt) -> { S, cam, time, step(dt) -> { loop, cut } }
      opt: { ground(x, z), solid(p) (obstacles other than the ground), size (m, rough aircraft length),
           avoid (points, the gates), avoidR (m: no camera closer to them than that), minFrame (m: the view is never framed tighter than this) }
@@ -25,6 +26,7 @@ const Replay = (() => {
     const t = [], f = [], flags = [], next = [];
     let clock = 0, cut = false;
     return {
+      get elapsed() { return t.length ? clock - t[0] : 0; },   // the track time of the latest sample
       cut() { cut = true; },
       sample(dt, P, n, visible) {
         clock += dt;
@@ -271,5 +273,5 @@ const Replay = (() => {
     };
   }
 
-  return { RATE, recorder, player, at };
+  return { RATE, recorder, player, at, state: makeState };
 })();
