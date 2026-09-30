@@ -1,0 +1,6 @@
+/* Controller (js/pad.js): its own control texts, and a focus ring that shows whatever the browser thinks of
+   :focus-visible (a pad press isn't a key press, so after a mouse click the browser would hide the ring).
+   Only hiding rules for the texts, so the vehicle rules (courses.css, wingsuit.css) still pick among them. */
+body:not(.is-pad) .for-pad { display: none; }
+body.is-pad .for-mouse, body.is-pad .for-touch { display: none; }
+body.is-pad .overlay :focus { outline: 3px solid var(--focus); outline-offset: 2px; }

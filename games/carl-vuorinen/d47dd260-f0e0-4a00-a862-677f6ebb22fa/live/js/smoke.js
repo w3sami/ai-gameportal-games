@@ -1,0 +1,166 @@
+'use strict';
+/* =========================================================================
+   SMOKE — airshow smoke that hangs in the air, puffs out and shrinks away (the biplane's, js/biplane.js).
+   Low-poly like the clouds (js/clouds.js): solid faceted balls, white on top and pale blue-grey underneath, lit with
+   the same wrap-round sunlight. One draw call: an instanced ball per puff, in a ring buffer. Puffs are laid every
+   SPACING m along the path (not per frame, so the trail has no gaps at speed or on a slow frame), and all ageing
+   (growth, drift, tumble, shrinking away) happens in the vertex shader from the birth time, so a new puff is the only
+   thing uploaded.
+   Solid, it has no blending or overdraw to pay for; what the shader does instead is keep the view clear: puffs shrink
+   to nothing near the camera (the chase camera flies up the fresh trail) and when one would fill too much of the
+   screen, and as puffs spread out the trail thins to fewer, further apart (each puff has a level, like a mip chain:
+   every 2nd puff is level 1, every 4th level 2..., and a level shrinks away once the spread wants puffs further apart
+   than it gives). A puff shrunk to nothing is a point: no pixels.
+   makeSmoke(scene, anchor) -> { update(dt, P, on), cut(), clear(), mesh }
+     anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame);
+     cut(): the plane was moved (respawn), so don't join the trail up to the new spot; clear(): remove all smoke.
+   ========================================================================= */
+function makeSmoke(scene, anchor) {
+  const MAX = 896;                 // puffs alive at once: LIFE * a fast dive / SPACING (past that the oldest go first)
+  const SPACING = 1.2;             // m between puffs
+  const LIFE = 14;                 // s until a puff is gone
+  const R0 = 0.35;                 // m: puff radius as it leaves the plane
+  const PUFF = [1.5, 0.12];        // m, s: it balloons to this at once (time constant), so the chase view sees it
+  const R1 = 3, GROW = 2.5;        // m, s: then spreads to this, slowly
+  const SHRINK = 0.55;             // share of LIFE after which it shrinks away
+  const NEAR = [1, 3];             // m from the camera to the puff's surface: gone at the first, full size by the second
+  const BIG = [0.12, 0.24];        // puff radius as a share of half the screen height: an old puff starts shrinking, gone
+  const CLAMP = 0.14;              // a fresh one is only held down to this, so the chase view keeps its tail
+  const FRESH = [0.4, 1];          // s: fresh up to the first, old from the second
+  const THIN = 0.6;                // spread out, puffs keep about this many radii apart
+  const LEVELS = 4;                // top level (every 16th puff), never thinned
+  const WIND = [0.9, 0.25, 0.5];   // m/s of drift (and a slow rise)
+  const JUMP = 40;                 // m in one frame: a teleport, not flight
+  const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');   // as the clouds
+
+  const ball = new THREE.IcosahedronGeometry(1, 0);         // 20 facets, non-indexed
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', ball.attributes.position); geo.setAttribute('normal', ball.attributes.normal);
+  const posA = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  const infA = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3).fill(-1e6), 3).setUsage(THREE.DynamicDrawUsage);   // birth, seed, level
+  geo.setAttribute('aPos', posA); geo.setAttribute('aInfo', infA);
+  geo.instanceCount = MAX;
+
+  const U = {
+    uTime: { value: 0 }, uLife: { value: LIFE },
+    uR: { value: new THREE.Vector4(R0, PUFF[0], PUFF[1], 0) }, uR1: { value: new THREE.Vector2(R1, GROW) },
+    uNear: { value: new THREE.Vector2(NEAR[0], NEAR[1]) }, uBig: { value: new THREE.Vector4(BIG[0], BIG[1], CLAMP, 0) },
+    uFresh: { value: new THREE.Vector2(FRESH[0], FRESH[1]) },
+    uThin: { value: new THREE.Vector3(THIN / SPACING, LEVELS, SHRINK) },
+    uWind: { value: new THREE.Vector3(WIND[0], WIND[1], WIND[2]) },
+    uTop: { value: TOP }, uBelly: { value: BELLY },
+  };
+  const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true });
+  mat.userData.noSun = true;                                // not shaded by the terrain (js/sunlight.js), like the clouds
+  mat.onBeforeCompile = (sh) => {
+    Atmosphere.inject(sh);
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = `
+      attribute vec3 aPos;
+      attribute vec3 aInfo;
+      uniform float uTime, uLife;
+      uniform vec4 uR;
+      uniform vec2 uR1, uNear, uFresh;
+      uniform vec4 uBig;
+      uniform vec3 uThin, uWind, uTop, uBelly;
+      varying vec3 vSmoke;
+      vec3 smokeTurn(vec3 p, float a, float b) {
+        float ca = cos(a), sa = sin(a), cb = cos(b), sb = sin(b);
+        p = vec3(ca * p.x + sa * p.z, p.y, - sa * p.x + ca * p.z);
+        return vec3(p.x, cb * p.y - sb * p.z, sb * p.y + cb * p.z);
+      }
+    ` + sh.vertexShader.replace('#include <begin_vertex>', `
+      float age = uTime - aInfo.x, seed = aInfo.y, life = age / uLife;
+      float r = (uR.x + (uR.y - uR.x) * (1.0 - exp(- age / uR.z)) + (uR1.x - uR.y) * (1.0 - exp(- age / uR1.y)))
+              * (0.8 + 0.4 * fract(seed * 7.13));
+      // thinning: this spread wants puffs 'need' spacings apart; level L goes as need runs from 2^L to 2^(L+1)
+      float need = r * uThin.x, lv = exp2(aInfo.z);
+      float keep = aInfo.z >= uThin.y ? 1.0 : 1.0 - smoothstep(lv, 2.0 * lv, need);
+      // drift with the wind, and wander apart a little: each puff its own way
+      vec3 wander = vec3(fract(seed * 3.7) - 0.5, fract(seed * 5.3) - 0.5, fract(seed * 9.1) - 0.5) * 2.4 * (1.0 - exp(- age / uR1.y));
+      vec3 smokeC = aPos + uWind * age + wander;
+      float depth = - (viewMatrix * vec4(smokeC, 1.0)).z;
+      // filling the screen: an old puff shrinks away (flying through a trail stays clear), a fresh one is only held to
+      // CLAMP of it, so the trail from the plane runs on to the edge of the chase view
+      float onScreen = r * projectionMatrix[1][1] / max(depth, 0.01);
+      float big = mix(min(1.0, uBig.z / onScreen), 1.0 - smoothstep(uBig.x, uBig.y, onScreen), smoothstep(uFresh.x, uFresh.y, age));
+      float k = step(0.0, age) * step(age, uLife) * keep * big
+              * (1.0 - smoothstep(uThin.z, 1.0, life));                                  // shrinks away at the end
+      k *= smoothstep(uNear.x, uNear.y, depth - r * k);                                  // and right at the camera
+      vec3 dir = smokeTurn(position, seed * 6.2832 + age * (fract(seed * 11.0) - 0.5) * 0.6, fract(seed * 13.7) * 3.1416);
+      vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
+      vec3 transformed = smokeC + dir * r * (k < 0.03 ? 0.0 : k);                       // gone: a point, no pixels
+    `);
+    sh.fragmentShader = 'varying vec3 vSmoke;\n' + sh.fragmentShader
+      .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb *= vSmoke;')
+      // the clouds' light: the sun wraps round the sides, and the bellies take their light from the sky
+      .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+	#if NUM_DIR_LIGHTS > 0
+		float cloudWrap = clamp( ( dot( normal, directionalLights[ 0 ].direction ) + 0.9 ) / 1.9, 0.0, 1.0 );
+		reflectedLight.directDiffuse = diffuseColor.rgb * RECIPROCAL_PI * directionalLights[ 0 ].color * cloudWrap;
+	#endif
+	#if NUM_HEMI_LIGHTS > 0
+		reflectedLight.indirectDiffuse = diffuseColor.rgb * RECIPROCAL_PI * mix( hemisphereLights[ 0 ].skyColor, getHemisphereLightIrradiance( hemisphereLights[ 0 ], normal ), 0.35 ) * 1.25;
+	#endif`);
+  };
+  mat.customProgramCacheKey = () => 'smoke-puff';
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false; mesh.visible = false; mesh.userData.smoke = U;   // (the uniforms, for tests)
+  scene.add(mesh);
+
+  const at = new THREE.Vector3(), last = new THREE.Vector3(), d = new THREE.Vector3(), pt = new THREE.Vector3();
+  let T = 0, head = 0, joined = false, carry = 0, lastBirth = -1e6, lo = -1, n = 0, full = false, count = 0;
+
+  function emit(p, birth) {
+    const i = head; head = (head + 1) % MAX;
+    posA.array[i * 3] = p.x; posA.array[i * 3 + 1] = p.y; posA.array[i * 3 + 2] = p.z;
+    count++;
+    let lvl = 0; while (lvl < LEVELS && !((count >> lvl) & 1)) lvl++;   // trailing zero bits: every 2nd is 1, every 4th 2...
+    infA.array[i * 3] = birth; infA.array[i * 3 + 1] = Math.random(); infA.array[i * 3 + 2] = lvl;
+    if (lo < 0) lo = i;
+    n++; lastBirth = birth;
+  }
+  function flush() {                                        // upload just the slots written this frame (two runs if it wrapped)
+    if (full) {                                             // after clear(): everything
+      posA.clearUpdateRanges(); infA.clearUpdateRanges(); posA.needsUpdate = infA.needsUpdate = true;
+      full = false; lo = -1; n = 0; return;
+    }
+    if (!n) return;
+    const runs = n >= MAX ? [[0, MAX]] : lo + n <= MAX ? [[lo, n]] : [[lo, MAX - lo], [0, lo + n - MAX]];
+    for (const [s, c] of runs) { posA.addUpdateRange(s * 3, c * 3); infA.addUpdateRange(s * 3, c * 3); }
+    posA.needsUpdate = infA.needsUpdate = true;
+    lo = -1; n = 0;
+  }
+
+  function update(dt, P, on) {
+    T += dt;
+    U.uTime.value = T;
+    if (on && dt > 0) {
+      at.copy(anchor).applyQuaternion(P.q).add(P.pos);
+      d.subVectors(at, last);
+      const L = d.length();
+      if (!joined || L > JUMP) { emit(at, T); carry = 0; }  // start of a trail
+      else {
+        let s = SPACING - carry;                            // along this frame's path to the next puff
+        while (s <= L) {                                    // born when the plane passed there, not all at once
+          const f = s / L;
+          emit(pt.copy(last).addScaledVector(d, f), T - dt * (1 - f));
+          s += SPACING;
+        }
+        carry = L - (s - SPACING);
+      }
+      last.copy(at); joined = true;
+    } else if (dt > 0) joined = false;                      // let go: the next press starts a new trail
+    flush();
+    mesh.visible = T - lastBirth < LIFE;
+  }
+  return {
+    mesh,
+    update,
+    cut() { joined = false; },
+    clear() {
+      infA.array.fill(-1e6); full = true;                   // uploaded whole by the next update()
+      T = 0; head = 0; joined = false; lastBirth = -1e6; mesh.visible = false;
+    },
+  };
+}
