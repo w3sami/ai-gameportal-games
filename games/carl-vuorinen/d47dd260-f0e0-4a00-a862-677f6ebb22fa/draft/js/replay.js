@@ -9,9 +9,10 @@
      opt: { ground(x, z), solid(p) (obstacles other than the ground), size (m, rough aircraft length),
           avoid (points, the gates), avoidR (m: no camera closer to them than that), minFrame (m: the view is never framed tighter than this) }
      S: the plane at the current time { pos, q, vdir, speed, gload, tuck, visible, boosting, smoking, next }
-     cam: { pos, look, fov (deg, vertical) } from a tripod beside the course: each shot is picked a little ahead of the
-     plane, off to one side, where the ground and obstacles leave it in sight; the camera pans to follow and cuts to a
-     new spot once the plane has gone past and away, or out of sight. The track loops.
+     cam: { pos, look, fov (deg, vertical), kind } from a tripod beside the course: each shot is picked a little ahead of
+     the plane, off to one side, where the ground and obstacles leave it in sight; the camera pans to follow and cuts to
+     a new spot once the plane has gone past and away, or out of sight. kind: 'near', or 'wide' (a whole manoeuvre held
+     in frame) or 'loose' (the occasional shot from further off). The track loops.
    ========================================================================= */
 const Replay = (() => {
   const RATE = 20;                                          // Hz; Catmull-Rom between samples keeps pans smooth
@@ -96,11 +97,16 @@ const Replay = (() => {
   const MIN_SHOT = 1.6, MAX_SHOT = 14, BLOCKED_CUT = 0.35;  // s
   const PLAN_MS = 3;                                        // ms a frame for picking the next shot
   const FAR_MAX = 260;                                      // m: past this the haze swallows even a zoomed-in plane
+  // wide shots: for a manoeuvre coming up (upside down, pulling up steeply or round most of a circle) the camera stands
+  // well back and holds all of it in frame, the way a loop or an Immelmann reads best; otherwise about one shot in
+  // WIDE_EVERY is set further off than usual (LOOSE times), framed looser and held longer
+  const WIDE_EVERY = 5, WIDE_LOOK = 11, WIDE_MAX = 330, WIDE_FOV = 40, LOOSE = 2.2;   // -, s looked ahead, m, deg, -
   function director(tr, opt) {
     const size = opt.size || 9, frameH = Math.max(size * 5, opt.minFrame || 0);   // about five aircraft lengths tall
-    const cam = { pos: new V3(), look: new V3(), fov: 50 };
+    const cam = { pos: new V3(), look: new V3(), fov: 50, kind: 'near' };
     const S = makeState(), _c = new V3(), _d = new V3(), _s = new V3(), _r = new V3();
-    let shot = null, side = 1, lastDist = 0, blocked = 0;
+    let shot = null, side = 1, lastDist = 0, blocked = 0, sinceWide = 0;
+    const _u = new V3(), _lo = new V3(), _hi = new V3(), _h = new V3(), pts = [], acts = [], rates = [];
 
     function clear(from, to) {                             // line of sight, stopping short of the plane itself
       _r.subVectors(to, from);
@@ -135,18 +141,75 @@ const Replay = (() => {
       }
       return all ? seen / all : 0;
     }
+    // the stretch a wide shot should hold, from t: { t1, c (centre), h (its run across the screen), w, v (its size
+    // across and up) }, or null. A manoeuvre ahead wins; one that starts more than 4 s off is left for a later cut.
+    function wideSpan(t, end) {
+      const t1 = Math.min(t + WIDE_LOOK, end);
+      if (t1 - t < 3) return null;
+      let first = -1, last = -1, turn = 0, prevYaw = null;
+      pts.length = 0; acts.length = 0; rates.length = 0;
+      for (let u = t; u <= t1; u += 0.25) {
+        at(tr, u, S);
+        pts.push(S.pos.clone());
+        const upY = _u.set(0, 1, 0).applyQuaternion(S.q).y, yaw = Math.atan2(S.vdir.x, S.vdir.z);
+        let dy = 0;
+        if (prevYaw != null) { dy = yaw - prevYaw; dy -= Math.round(dy / (2 * Math.PI)) * 2 * Math.PI; turn += Math.abs(dy); }
+        prevYaw = yaw;
+        acts.push(upY < -0.2 || Math.abs(S.vdir.y) > 0.75); rates.push(Math.abs(dy) / 0.25);
+      }
+      const circling = turn > 4;                              // most of a circle in the window: a thermal, a turn round a pylon
+      for (let i = 0; i < pts.length; i++) if (acts[i] || (circling && rates[i] > 0.45)) { if (first < 0) first = i; last = i; }
+      if (first < 0 || first * 0.25 > 4) return null;
+      const a = 0, b = Math.min(pts.length - 1, last + 5);    // the manoeuvre and a second or so after it
+      if (b < 12) return null;
+      _lo.set(Infinity, Infinity, Infinity); _hi.set(-Infinity, -Infinity, -Infinity);
+      for (let i = a; i <= b; i++) { _lo.min(pts[i]); _hi.max(pts[i]); }
+      const c = _lo.clone().add(_hi).multiplyScalar(0.5);
+      _h.subVectors(pts[b], pts[a]).setY(0);                  // across the screen: the way it goes, or for a loop that comes
+      if (_h.lengthSq() < 400) { at(tr, t + a * 0.25, S); _h.set(S.vdir.x, 0, S.vdir.z); }   // back on itself, the way in
+      if (_h.lengthSq() < 1e-6) _h.set(1, 0, 0);
+      _h.normalize();
+      let w = 0, v = 0;
+      for (let i = a; i <= b; i++) { _u.subVectors(pts[i], c); w = Math.max(w, Math.abs(_u.dot(_h))); v = Math.max(v, Math.abs(_u.y)); }
+      return { t1: t + b * 0.25, c, h: _h.clone(), w: w * 2 + frameH, v: v * 2 + frameH };
+    }
+    function* planWide(t, span) {
+      // far enough back that the stretch fits WIDE_FOV tall (across: a little more room, the panel covers part of it)
+      const need = Math.max(span.v, span.w / 1.3), D0 = clamp(need * 0.6 / Math.tan(WIDE_FOV * Math.PI / 360), frameH * 2.5, WIDE_MAX);
+      let best = null;
+      for (const sd of [-side, side]) for (const D of [D0, Math.min(D0 * 1.25, WIDE_MAX)]) for (const hk of [-0.1, 0.15, 0.4]) {
+        _c.set(span.c.x - span.h.z * sd * D, 0, span.c.z + span.h.x * sd * D);
+        _c.y = Math.max(span.c.y + hk * span.v, opt.ground(_c.x, _c.z) + 2.5);
+        if (opt.solid && opt.solid(_c)) continue;
+        if (nearAvoid(_c)) continue;
+        const pos = _c.clone(), sc = (yield* score(pos, t, span.t1)) - (sd === side ? 0.04 : 0);
+        if (!best || sc > best.sc) best = { sc, pos, side: sd };
+        if (sc >= 0.95) break;
+      }
+      if (!best || best.sc < 0.85) return null;
+      const dist = best.pos.distanceTo(span.c);
+      best.wide = { t1: span.t1, c: span.c, fov: clamp(2 * Math.atan(need * 0.6 / dist) * 180 / Math.PI, 14, 62) };
+      return best;
+    }
     // a generator, one candidate a step, so a cut's search can spread over a few frames
     function* planGen(t) {
       const end = segEnd(t);
+      const span = wideSpan(t, end);
+      if (span) { const w = yield* planWide(t, span); if (w) return w; }
+      if (sinceWide >= WIDE_EVERY - 1) { const w = yield* planNear(t, end, LOOSE); if (w.sc >= 0.85) return w; }
+      return yield* planNear(t, end, 1);
+    }
+    // the usual shot: a little ahead of the plane and off to one side; m > 1 sets it further off and frames it looser
+    function* planNear(t, end, m) {
       let best = null;
       const k = clamp(70 / Math.max(1, at(tr, t, S).speed), 0.8, 1);   // fast (the jet): set up nearer, or it starts far off
       search: for (const lead of LEADS) {
-        const ta = Math.min(t + lead * k, end), t1 = Math.min(ta + 3.5 * k, end);
+        const ta = Math.min(t + lead * k * Math.sqrt(m), end), t1 = Math.min(ta + 3.5 * k * Math.sqrt(m), end);
         at(tr, ta, S);
         _d.set(S.vdir.x, 0, S.vdir.z);
         if (_d.lengthSq() < 1e-4) _d.set(0, 0, -1).applyQuaternion(S.q).setY(0);
         _d.normalize();
-        const L0 = clamp(S.speed * 0.6, frameH * 0.5, frameH * 1.5), py = S.pos.y, px = S.pos.x, pz = S.pos.z;
+        const L0 = clamp(S.speed * 0.6, frameH * 0.5, frameH * 1.5) * m, py = S.pos.y, px = S.pos.x, pz = S.pos.z;
         for (const sd of [-side, side]) for (const L of [L0, L0 * 1.7]) for (const h of HEIGHTS) {
           _c.set(px - _d.z * sd * L + _d.x * L * 0.35, 0, pz + _d.x * sd * L + _d.z * L * 0.35);
           const g = opt.ground(_c.x, _c.z);
@@ -156,23 +219,27 @@ const Replay = (() => {
           // looking steeply down on the plane (a camera up a slope beside it) reads badly: prefer level or below
           const up = Math.max(0, _c.y - py) / L;
           const pos = _c.clone(), sc = (yield* score(pos, t, t1)) - (sd === side ? 0.04 : 0) - Math.max(0, up - 0.3) * 0.5;
-          if (!best || sc > best.sc) best = { sc, pos, side: sd };
+          if (!best || sc > best.sc) best = { sc, pos, side: sd, m };
           if (sc >= 0.94) break search;
         }
         if (best && best.sc >= 0.9) break;
       }
       at(tr, t, S);
+      if (m > 1) return best || { sc: -1 };
       if (!best || best.sc < 0.25) {                        // nowhere good: hang back above and behind the plane
         _d.copy(S.vdir).setY(0).normalize();
-        best = { pos: S.pos.clone().addScaledVector(_d, -size * 5), side };
+        best = { pos: S.pos.clone().addScaledVector(_d, -size * 5), side, m: 1 };
         best.pos.y = Math.max(S.pos.y + size * 1.5, opt.ground(best.pos.x, best.pos.z) + 3);
       }
       return best;
     }
     function apply(best, t, S) {
       side = best.side;
+      sinceWide = best.wide || best.m > 1 ? 0 : sinceWide + 1;
+      const m = best.m || 1;
       // gone past and this far away: time for the next camera (well within what the zoom can still frame)
-      shot = { pos: best.pos, t0: t, far: Math.min(FAR_MAX, clamp(best.pos.distanceTo(S.pos) * 0.9, frameH * 3, frameH * 6)) };
+      shot = { pos: best.pos, t0: t, wide: best.wide || null, m,
+               far: Math.min(m > 1 ? WIDE_MAX : FAR_MAX, clamp(best.pos.distanceTo(S.pos) * 0.9, frameH * 3 * m, frameH * 6 * m)) };
       blocked = 0; lastDist = best.pos.distanceTo(S.pos);
       return true;
     }
@@ -187,11 +254,11 @@ const Replay = (() => {
       return apply(r.value, t, S);
     }
     function aimAt(S, out) { return out.copy(S.pos).addScaledVector(S.vdir, S.speed * 0.08); }
-    const fovFor = (d) => clamp(2 * Math.atan(frameH / 2 / Math.max(d, 1)) * 180 / Math.PI, 8, 62);
+    const fovFor = (d, m = 1) => clamp(2 * Math.atan(frameH * m / 2 / Math.max(d, 1)) * 180 / Math.PI, 8, 62);
 
     return {
       cam,
-      reset() { shot = null; side = 1; pending = null; },
+      reset() { shot = null; side = 1; pending = null; sinceWide = 0; },
       // S: the plane at time t (already sampled); fresh: the track looped or jumped, so start a new shot
       update(t, dt, S, fresh) {
         let cut = false;
@@ -200,17 +267,21 @@ const Replay = (() => {
         else {
           const d = shot.pos.distanceTo(S.pos), age = t - shot.t0;
           if (S.visible) blocked = clear(shot.pos, S.pos) ? 0 : blocked + dt;
-          const away = d > shot.far && d > lastDist;
-          if (S.visible && age > MIN_SHOT && (away || blocked > BLOCKED_CUT || age > MAX_SHOT)) { pending = planGen(t); cut = stepPlan(t, S); }
+          const away = shot.wide ? t > shot.wide.t1 : d > shot.far && d > lastDist;   // a wide shot holds its whole stretch
+          const lost = blocked > (shot.wide ? BLOCKED_CUT * 2 : BLOCKED_CUT);
+          if (S.visible && age > MIN_SHOT && (away || lost || age > (shot.wide ? WIDE_LOOK + 1 : shot.m > 1 ? MAX_SHOT * 1.3 : MAX_SHOT))) { pending = planGen(t); cut = stepPlan(t, S); }
           else lastDist = d;
         }
-        const d = shot.pos.distanceTo(S.pos);
+        const d = shot.pos.distanceTo(S.pos), w = shot.wide;
         cam.pos.copy(shot.pos);
-        if (cut) { aimAt(S, cam.look); cam.fov = fovFor(d); }
+        aimAt(S, _s);
+        if (w) _s.lerp(w.c, 0.65);                          // wide: mostly on the stretch, drifting a little with the plane
+        const fov = w ? w.fov : fovFor(d, shot.m);
+        cam.kind = w ? 'wide' : shot.m > 1 ? 'loose' : 'near';
+        if (cut) { cam.look.copy(_s); cam.fov = fov; }
         else {
-          aimAt(S, _s);
-          cam.look.lerp(_s, 1 - Math.exp(-14 * dt));
-          cam.fov += (fovFor(d) - cam.fov) * (1 - Math.exp(-4 * dt));
+          cam.look.lerp(_s, 1 - Math.exp(-(w ? 4 : 14) * dt));
+          cam.fov += (fov - cam.fov) * (1 - Math.exp(-4 * dt));
         }
         return cut;
       },
