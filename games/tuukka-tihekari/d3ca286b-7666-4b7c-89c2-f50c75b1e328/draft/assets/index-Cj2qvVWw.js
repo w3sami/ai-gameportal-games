@@ -12,4 +12,3 @@ try {
   message.style='position:fixed;inset:20%;z-index:99999;background:#181d25;color:white;padding:2rem';
   document.body.append(message);
 }
-
