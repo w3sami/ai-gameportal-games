@@ -46,23 +46,3 @@
   .challenge-feedback-points { font-size: 17px; text-shadow: 0 1px 4px #0009; }
 }
 
-.challenge-flash::before {
-  width: min(145px, 24vw);
-  height: min(240px, 36vh);
-  opacity: .22;
-}
-.challenge-flash::after { opacity: .1; }
-.challenge-flash.is-near-miss::before {
-  width: min(120px, 17vw);
-  height: min(270px, 34vh);
-  opacity: .16;
-}
-.challenge-flash.is-near-miss::after { opacity: .12; }
-
-@media (max-width: 760px), (any-pointer: coarse) {
-  .challenge-flash::before {
-    width: min(75px, 18vw);
-    height: min(150px, 25vh);
-    opacity: .18;
-  }
-}
