@@ -1,0 +1,69 @@
+{
+  "_format": "See the course section at the top of js/sim.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?, bridge?]; gate \"B\" = hoop with a bridge over it; its 8th value sets the bridge (see js/bridges.js). river carves the channel along the path; the water is at terrain.water.",
+  "id": "river",
+  "name": "River Run",
+  "lead": "Follow the river down the valley and through 17 hoops. Seven of them are under bridges, and not always under the middle span.",
+  "seeds": {
+    "a": 41,
+    "b": 5,
+    "c": 17,
+    "trees": 23
+  },
+  "terrain": {
+    "size": 5000,
+    "cx": 0,
+    "cz": 0,
+    "n": 340,
+    "water": 0,
+    "edge": 30,
+    "carveR": 480
+  },
+  "lake": [
+    {
+      "x": 0,
+      "z": 1980,
+      "r": 470,
+      "depth": 170
+    },
+    {
+      "x": -80,
+      "z": -2030,
+      "r": 480,
+      "depth": 170
+    }
+  ],
+  "river": {
+    "w": 20,
+    "depth": 4,
+    "bank": 0.35
+  },
+  "hills": [],
+  "trees": {
+    "near": 3200,
+    "scattered": 5000
+  },
+  "autopilot": {
+    "clear": 6
+  },
+  "points": [
+    [0,45,1800,40,160,0.03],
+    [20,22,1540,17,110,0.05,1],
+    [-40,11,1320,6,35,0.25,"B",{"type":"beam","top":22}],
+    [-185,14,1110,9,85,0.07,1],
+    [-160,12,870,7,70,0.09,1],
+    [0,11,690,6,38,0.25,"B",{"type":"arch","top":24}],
+    [185,30,510,25,90,0.07,1],
+    [215,10.5,270,5.5,40,0.2,"B",{"type":"truss","top":21}],
+    [80,13,65,8,80,0.07,1],
+    [-150,13,-60,8,80,0.07,1],
+    [-315,10.5,-235,5.5,46,0.22,"B",{"type":"suspension","top":21}],
+    [-330,14,-480,9,75,0.07,1],
+    [-185,11,-690,6,34,0.25,"B",{"type":"beam","top":22,"open":44}],
+    [35,26,-830,21,90,0.07,1],
+    [230,16,-1000,13,70,0.14,"B",{"type":"arch","top":28,"span":-1}],
+    [300,14,-1240,9,80,0.07,1],
+    [200,16,-1470,11,110,0.1,"B",{"type":"beam","top":30,"open":50,"step":32,"span":-1}],
+    [20,16,-1650,11,110,0.05,1],
+    [-60,30,-1860,25,170,0.03]
+  ]
+}
