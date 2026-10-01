@@ -24,7 +24,7 @@
    sink, so zooming doesn't count), P.lift the thermals' rise and P.ridge the rest (other modules' rising air,
    LIFT_PLUGINS: js/ridge.js adds ridge lift along cliffs).
    The fields are a js/shore.js plugin (tree-free boxes far underground, never hit; the kit draws the meadows).
-   Game part: makeSailplaneModel(scene, modelKit) (its update() also shakes the airframe near the stall and sets the
+   Game part: the model is js/glider.js (its update() also shakes the airframe near the stall and sets the
    body's is-stall-warn / is-stall classes for the HUD), createVario(ctx, out) (vario and stall warner), and the thermal
    scenery (SCENERY_PLUGINS).
    ========================================================================= */
@@ -214,54 +214,7 @@ function stepSail(P, ctl, dt) {
    Game part (needs a scene / an audio context; not used by the tests)
    ========================================================================= */
 
-// white glider: long thin wings with orange tips and a little flex under load, slim boom, T-tail
-function makeSailplaneModel(scene, modelKit) {
-  const V3 = THREE.Vector3, g = new THREE.Group(), add = modelKit(g);
-  const white = new THREE.MeshLambertMaterial({ color: '#f5f5f1' }), orange = new THREE.MeshLambertMaterial({ color: '#ff5a1f' });
-  const glass = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' }), dark = new THREE.MeshLambertMaterial({ color: '#2a333c' });
-  // flat plate drawn in plan view ([x, z] outline), `t` thick, centred on y = 0
-  const plate = (pts, t) => new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))), { depth: t, bevelEnabled: false })
-    .rotateX(Math.PI / 2).translate(0, t / 2, 0);
-  add(new THREE.SphereGeometry(0.5, 12, 8).scale(1, 1.05, 3.4), white, 0, 0, -1.3);            // pod
-  add(new THREE.CylinderGeometry(0.34, 0.1, 5.4, 8).rotateX(-Math.PI / 2), white, 0, 0.08, 2.7);   // tail boom: thick at the pod
-  add(new THREE.SphereGeometry(0.4, 12, 8).scale(1, 0.72, 2.6), glass, 0, 0.33, -2.1);           // canopy
-  // fin: side profile [aft, up] with a swept leading edge, 0.1 thick; the T-tail sits on its top
-  const fin = (pts) => new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))), { depth: 0.1, bevelEnabled: false })
-    .rotateY(-Math.PI / 2).translate(0.05, 0, 0);
-  add(fin([[0, 0], [1.15, 0], [1.2, 1.1], [0.72, 1.1]]), white, 0, 0.12, 4.4);
-  add(fin([[0.72, 1.1], [1.2, 1.1], [1.22, 1.52], [0.95, 1.52]]), orange, 0, 0.12, 4.4);
-  add(new THREE.BoxGeometry(2.8, 0.07, 0.5), white, 0, 1.66, 5.5);                               // T-tail
-  add(new THREE.SphereGeometry(0.16, 8, 6).scale(1, 1, 1.3), dark, 0, -0.5, -0.9);              // wheel
-  const flex = [];
-  for (const s of [-1, 1]) {
-    // wing: inner panel with a little dihedral, outer panel hinged at 3.6 m that flexes up with the load
-    const inner = new THREE.Group(); inner.position.set(0, 0.28, -0.6); inner.rotation.z = s * 0.04; g.add(inner);
-    const ik = modelKit(inner);
-    ik(plate([[0.3 * s, -0.55], [3.7 * s, -0.5], [3.7 * s, 0.28], [0.3 * s, 0.45]], 0.12), white, 0, 0, 0);
-    const outer = new THREE.Group(); outer.position.set(3.65 * s, 0, 0); inner.add(outer);
-    const ok = modelKit(outer);
-    ok(plate([[0, -0.5], [2.6 * s, -0.43], [2.6 * s, 0.13], [0, 0.28]], 0.1), white, 0, 0, 0);
-    ok(plate([[2.6 * s, -0.43], [3.55 * s, -0.36], [3.55 * s, 0.02], [2.6 * s, 0.13]], 0.08), orange, 0, 0, 0);
-    ok(new THREE.BoxGeometry(0.05, 0.45, 0.32), orange, 3.57 * s, 0.2, -0.15, -s * 0.2);          // winglet
-    flex.push(outer);
-  }
-  scene.add(g);
-  const shake = new THREE.Quaternion(), e = new THREE.Euler(), cls = document.body.classList;
-  let t = 0, warnOn = false, stallOn = false;
-  return { group: g, tips: [new V3(-7.1, 0.9, -0.7), new V3(7.1, 0.9, -0.7)], shadow: 1.25,
-           update(dt, P) {
-             t += dt;
-             const b = P.stallWarn || 0, k = 0.05 + 0.035 * clamp((P.gload || 1) - 1, -0.5, 2) + b * 0.03 * Math.sin(t * 31);
-             flex[0].rotation.z = -k; flex[1].rotation.z = k;
-             if (b > 0) {                                   // buffet: the airframe shakes as the wing nears the stall
-               const a = (P.stall ? 0.035 : 0.018 * b) * (reducedMotionPref() ? 0.3 : 1);
-               g.quaternion.multiply(shake.setFromEuler(e.set(Math.sin(t * 23) * a, 0, Math.sin(t * 29 + 1) * a * 1.4)));
-             }
-             // HUD: speed red while warning, a STALL badge while stalled (css/sailplane.css)
-             if ((b > 0) !== warnOn) cls.toggle('is-stall-warn', warnOn = b > 0);
-             if (!!P.stall !== stallOn) cls.toggle('is-stall', stallOn = !!P.stall);
-           } };
-}
+// the airframe's stall buffet (js/glider.js) is toned down for reduced motion
 const reducedMotionPref = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 // variometer: short soft beeps while climbing, higher and quicker the faster the climb; quiet otherwise. Near the stall
