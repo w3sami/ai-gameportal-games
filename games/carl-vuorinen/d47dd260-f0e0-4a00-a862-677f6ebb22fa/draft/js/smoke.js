@@ -28,7 +28,7 @@ function makeSmoke(scene, anchor) {
   const R0 = 0.35;                 // m: puff radius as it leaves the plane
   const PUFF = [1.5, 0.12];        // m, s: it balloons to this at once (time constant), so the chase view sees it
   const R1 = 3, GROW = 2.5;        // m, s: then spreads to this, slowly
-  const DENSE = 0.7;               // a puff's opacity as it leaves the plane: thin smoke, not solid balls (overlapping
+  const DENSE = 0.6;               // a puff's opacity as it leaves the plane: thin smoke, not solid balls (overlapping
                                    // puffs build up, so where the trail is thick it fills in)
   const FADE = 0;                  // share of LIFE after which it fades out: from the start, eased (barely thinner
                                    // behind the plane, half gone by 7 s, past which it's rarely anywhere in view)
