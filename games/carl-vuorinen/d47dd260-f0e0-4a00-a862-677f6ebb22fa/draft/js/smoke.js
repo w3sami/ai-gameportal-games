@@ -1,17 +1,18 @@
 'use strict';
 /* =========================================================================
-   SMOKE — airshow smoke that hangs in the air, puffs out and shrinks away (the biplane's, js/biplane.js).
+   SMOKE — airshow smoke that hangs in the air, puffs out and fades away (the biplane's, js/biplane.js).
    Low-poly like the clouds (js/clouds.js): solid faceted balls, white on top and pale blue-grey underneath, lit with
    the same wrap-round sunlight. One draw call: an instanced ball per puff, in a ring buffer. Puffs are laid every
    SPACING m along the path (not per frame, so the trail has no gaps at speed or on a slow frame), and all ageing
-   (growth, drift, tumble, shrinking away) happens in the vertex shader from the birth time, so a new puff is the only
+   (growth, drift, tumble, fading away) happens in the vertex shader from the birth time, so a new puff is the only
    thing uploaded.
    Solid, it has no blending or overdraw to pay for; what the shader does instead is keep the view clear: puffs shrink
    to nothing near the camera (the chase camera flies up the fresh trail) and when one would fill too much of the
    screen, and as puffs spread out the trail thins to fewer, further apart (each puff has a level, like a mip chain:
    every 2nd puff is level 1, every 4th level 2..., and a level shrinks away once the spread wants puffs further apart
    than it gives). A puff shrunk to nothing is a point: no pixels.
-   Smoke cleared by a crash (dissipate()) fades instead, by dithering: a fading puff drops a growing share of its pixels
+   At the end of its life a puff fades out rather than shrinking, and so does smoke cleared by a crash (dissipate()),
+   faster. Fading is dithering: a fading puff drops a growing share of its pixels
    in a noise pattern of its own, so it stays solid (no sorting, no blending) and overlapping ones thin out together
    rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade.
    makeSmoke(scene, anchor) -> { update(dt, P, on), cut(), dissipate(), clear(), mesh }
@@ -27,7 +28,7 @@ function makeSmoke(scene, anchor) {
   const R0 = 0.35;                 // m: puff radius as it leaves the plane
   const PUFF = [1.5, 0.12];        // m, s: it balloons to this at once (time constant), so the chase view sees it
   const R1 = 3, GROW = 2.5;        // m, s: then spreads to this, slowly
-  const SHRINK = 0.55;             // share of LIFE after which it shrinks away
+  const FADE = 0.55;               // share of LIFE after which it fades out
   const NEAR = [1, 3];             // m from the camera to the puff's surface: gone at the first, full size by the second
   const BIG = [0.12, 0.24];        // puff radius as a share of half the screen height: an old puff starts shrinking, gone
   const CLAMP = 0.14;              // a fresh one is only held down to this, so the chase view keeps its tail
@@ -54,7 +55,7 @@ function makeSmoke(scene, anchor) {
     uR: { value: new THREE.Vector4(R0, PUFF[0], PUFF[1], 0) }, uR1: { value: new THREE.Vector2(R1, GROW) },
     uNear: { value: new THREE.Vector2(NEAR[0], NEAR[1]) }, uBig: { value: new THREE.Vector4(BIG[0], BIG[1], CLAMP, 0) },
     uFresh: { value: new THREE.Vector2(FRESH[0], FRESH[1]) },
-    uThin: { value: new THREE.Vector3(THIN / SPACING, LEVELS, SHRINK) },
+    uThin: { value: new THREE.Vector3(THIN / SPACING, LEVELS, FADE) },
     uWind: { value: new THREE.Vector3(WIND[0], WIND[1], WIND[2]) },
     uGone: { value: new THREE.Vector4(-1e7, -1e7, GONE[0], GONE[1]) },   // the last dissipate() time, the one before it
     uTop: { value: TOP }, uBelly: { value: BELLY },
@@ -93,14 +94,15 @@ function makeSmoke(scene, anchor) {
       // CLAMP of it, so the trail from the plane runs on to the edge of the chase view
       float onScreen = r * projectionMatrix[1][1] / max(depth, 0.01);
       float big = mix(min(1.0, uBig.z / onScreen), 1.0 - smoothstep(uBig.x, uBig.y, onScreen), smoothstep(uFresh.x, uFresh.y, age));
-      float k = step(0.0, age) * step(age, uLife) * keep * big
-              * (1.0 - smoothstep(uThin.z, 1.0, life));                                  // shrinks away at the end
-      // laid before a crash (dissipate()): swells and fades out within a second (dithered: vFade.x the share of pixels
-      // kept, yz its pattern's offset); before the crash before that: long gone
+      float k = step(0.0, age) * step(age, uLife) * keep * big;
+      // fading out (dithered: vFade.x the share of pixels kept, yz its pattern's offset): at the end of its life, and
+      // when laid before a crash (dissipate()), gone within a second and swelling as it goes; laid before the crash
+      // before that: long gone
       float g0 = uGone.z * fract(seed * 17.3);
       float gone = aInfo.x <= uGone.y ? 0.0 : aInfo.x <= uGone.x ? 1.0 - clamp((uTime - uGone.x - g0) / uGone.w, 0.0, 1.0) : 1.0;
-      k *= gone < 0.02 ? 0.0 : 1.0 + ${GONE_SWELL.toFixed(3)} * (1.0 - gone);
-      vFade = vec3(gone, fract(seed * 23.1) * 97.0, fract(seed * 31.7) * 89.0);
+      float fade = (1.0 - smoothstep(uThin.z, 1.0, life)) * gone;
+      k *= fade < 0.02 ? 0.0 : 1.0 + ${GONE_SWELL.toFixed(3)} * (1.0 - gone);
+      vFade = vec3(fade, fract(seed * 23.1) * 97.0, fract(seed * 31.7) * 89.0);
       k *= smoothstep(uNear.x, uNear.y, depth - r * k);                                  // and right at the camera
       vec3 dir = smokeTurn(position, seed * 6.2832 + age * (fract(seed * 11.0) - 0.5) * 0.6, fract(seed * 13.7) * 3.1416);
       vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
