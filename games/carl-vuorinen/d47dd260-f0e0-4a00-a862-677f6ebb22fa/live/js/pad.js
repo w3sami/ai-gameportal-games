@@ -32,6 +32,29 @@ const click = (id) => { const el = $(id); if (shown(el) && !el.disabled) { el.cl
 function panel() { return ['board', 'start', 'pause', 'finish', 'watch'].map($).find(shown) || null; }   // watch: the replay's bar
 function targets(p) { return Array.from(p.querySelectorAll('button:not([disabled]), input[type="checkbox"]')).filter(shown); }
 function focus(el) { if (el) el.focus({ preventScroll: true }); }
+// Panels scroll when they don't fit (short landscape phones), and every focus() here and in menu.js passes preventScroll,
+// so the pad's selection could sit below the fold. While the pad is driving, whatever takes the focus inside a panel is
+// scrolled into its panel, nearest edge only: a mouse or touch player's scroll position is never touched.
+const EDGE = 12;
+function reveal(el) {
+  const p = el && el.closest && el.closest('.panel');
+  if (!p || p.scrollHeight <= p.clientHeight + 1) return;
+  const r = el.getBoundingClientRect(), pr = p.getBoundingClientRect();
+  const top = pr.top + p.clientTop + EDGE, bottom = pr.top + p.clientTop + p.clientHeight - EDGE;
+  const d = r.top < top ? r.top - top : r.bottom > bottom ? Math.min(r.bottom - bottom, r.top - top) : 0;
+  if (d) p.scrollBy({ top: d, behavior: 'smooth' });
+}
+// Right stick scrolls the open panel, for the texts below the last button (the control hints) and long boards.
+// Whole pixels with the remainder carried over, so a gentle push still creeps instead of rounding to nothing.
+const SCROLL_DZ = 0.15, SCROLL_SPEED = 900;                  // px/s at full throw
+let scrollCarry = 0;
+function stickScroll(p, dt) {
+  const v = Math.abs(pad.ry) > SCROLL_DZ ? expo(Math.sign(pad.ry) * (Math.abs(pad.ry) - SCROLL_DZ) / (1 - SCROLL_DZ)) : 0;
+  if (!v || !p || p.scrollHeight <= p.clientHeight + 1) { scrollCarry = 0; return; }
+  scrollCarry += v * SCROLL_SPEED * dt;
+  const px = Math.trunc(scrollCarry);
+  if (px) { scrollCarry -= px; p.scrollTop += px; }
+}
 function current(p) { const a = document.activeElement; return a && p.contains(a) && targets(p).includes(a) ? a : null; }
 function fallback(p) { const t = targets(p); return t.find((el) => el.classList.contains('primary')) || t.find((el) => el.getAttribute('aria-pressed') === 'true') || t[0]; }
 
@@ -91,12 +114,13 @@ function menuNav(dt) {
 function run(api) {
   const inp = api.input.pad;
   let boostLock = false, wasCrashing = false, lastHoop = 0, lastState = api.state;
+  document.addEventListener('focusin', (e) => { if (api.input.device === 'pad') reveal(e.target); });
   api.onFrame((dt) => {
     pad.poll();
     const state = api.state;
     if (!pad.connected) { inp.x = inp.y = 0; inp.boost = false; lastState = state; return; }
     const any = pad.pressedAny(), moved = Math.abs(pad.x) > 0.25 || Math.abs(pad.y) > 0.25;
-    if (any || moved) api.setDevice('pad');
+    if (any || moved || Math.abs(pad.ry) > 0.25) api.setDevice('pad');   // the right stick only scrolls: no focus jump
 
     if (state === 'playing') {
       inp.x = expo(pad.x); inp.y = shapeY(-pad.y);
@@ -111,6 +135,7 @@ function run(api) {
       const p = panel();
       if (p && (any || moved) && !current(p)) focus(fallback(p));      // first touch of the pad shows where it is
       else if (p) menuNav(dt);
+      stickScroll(p, dt);
       if (pad.pressed('confirm')) { boostLock = true; confirm(); }
       else if (pad.pressed('pause')) { boostLock = true; start(state); }
       else if (pad.pressed('back')) back(state);

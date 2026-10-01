@@ -4,8 +4,24 @@
 .btn.small { min-height: 34px; padding: 0 0.85em; font-size: 0.85rem; border-width: 1.5px; border-radius: 7px; }
 .watch-bar {
   display: none; position: fixed; top: calc(10px + var(--safe-t)); left: calc(10px + var(--safe-l));
-  align-items: center; gap: 12px; padding: 6px 6px 6px 12px;
+  align-items: center; gap: 8px; padding: 6px;
 }
 body.state-replay .watch-bar { display: flex; }
 .watch-label { font-size: 0.9rem; color: var(--ink-soft); }
 .watch-label b { font: 700 1.05rem/1 var(--mono); color: var(--ink); margin-left: 0.3em; }
+.watch-gates { font-size: 0.9rem; gap: 0.45rem; min-height: 32px; }
+/* it folds away to its chevron (js/watchbar.js): pointing left to fold, right to open again, in the same place */
+.watch-items { display: flex; align-items: center; gap: 12px; }
+.watch-bar.is-folded .watch-items { display: none; }
+.watch-fold {
+  width: 34px; height: 34px; padding: 0; display: grid; place-items: center; flex: none; cursor: pointer;
+  border: 0; border-radius: 7px; background: transparent; color: var(--ink); touch-action: manipulation;
+}
+.watch-fold svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.watch-bar.is-folded .watch-fold svg { transform: scaleX(-1); }
+/* folded, it fades back to stay out of the picture; under the mouse, or reached with the keyboard or pad, it comes back */
+.watch-bar { transition: opacity 0.3s ease; }
+.watch-bar.is-folded { opacity: 0.4; }
+.watch-bar.is-folded:has(:focus-visible) { opacity: 1; }
+@media (hover: hover) { .watch-bar.is-folded:hover { opacity: 1; } }   /* (a phone's tap would leave it stuck on) */
+.watch-fold:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }

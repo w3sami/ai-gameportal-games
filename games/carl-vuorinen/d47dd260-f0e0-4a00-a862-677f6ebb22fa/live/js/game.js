@@ -137,6 +137,9 @@ function buildScenery() {
   cloudDeck.build(worldGroup, v);
   buildHoops(worldGroup);
   Object.assign(lightStats, Sunlight.apply(worldGroup, scene));
+  // the other modules' marks for the player (userData.hint: thermal columns and specks, the wind up the cliffs) go
+  // with the gates in a replay without the hoops (renderFrame); their real things (clouds, birds) stay
+  worldGroup.traverse((o) => { if (o.userData.hint) gateMeshes.push(o); });
 }
 
 function buildTerrainMesh(group, plainR) {
@@ -280,9 +283,11 @@ const hoopMat = {
   soon: new THREE.MeshBasicMaterial({ color: '#ffffff' }),
   later: new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.5, depthWrite: false }),
 };
-for (const k in hoopMat) hoopMat[k].userData.shared = true;   // outlive course switches
+for (const k in hoopMat) { hoopMat[k].userData.shared = true; hoopMat[k].userData.gate = true; }   // outlive course switches;
+                                                            // gate: a gate's (clones keep it: see renderFrame)
 const Z_AXIS = new V3(0, 0, 1);
 let hoopMeshes = [];      // per gate: its hoop mesh, or null for a pylon gate
+let gateMeshes = [];      // the gates' marks, for Show hoops (renderFrame)
 const gateQ = [];         // per gate: orientation (+Z along the line)
 const pylons = createPylonKit(ROUTE_HEX);   // pylon gates' meshes and highlighting (js/pylons.js)
 const bridges = createBridgeKit();          // bridges over some hoops (js/bridges.js)
@@ -304,10 +309,17 @@ function buildHoops(group) {
     group.add(m);
     return m;
   });
-  pylons.build(group);
+  const pylonGroup = new THREE.Group(); group.add(pylonGroup);
+  pylons.build(pylonGroup);
   bridges.build(group);
   for (const k of gateKits) k.build(group);
   gateDisc.scale.setScalar((TUNE.HOOP_R - 0.6) / 7.4);
+  // what Show hoops hides: the other modules' gates are drawn in the hoops' materials (passed them as hoopMat), or are
+  // js/aerobatic.js's dashed rings, and the pylons' arrows are their only flat shapes (js/pylons.js). Everything else stays:
+  // the pylons themselves, the ribbon (just its magenta bows go), and the scenery (mills, barns, the fair)
+  gateMeshes = [];
+  group.traverse((o) => { if (o.isMesh && ((o.material && o.material.userData.gate) || o.userData.dashed)) gateMeshes.push(o); });
+  pylonGroup.traverse((o) => { if (o.isMesh && o.geometry.type === 'ShapeGeometry') gateMeshes.push(o); });
 }
 function resetPylons() { pylons.reset(); }
 const gateNoun = () => (HOOPS.length && HOOPS[0].kind !== 'hoop' ? 'gate' : 'hoop');
@@ -1002,7 +1014,7 @@ function updateVisuals(dt) {
     m.material = rel === 0 ? hoopMat.next : rel === 1 ? hoopMat.soon : hoopMat.later;
     m.scale.setScalar(rel === 0 ? 1 + Math.sin(t * 6) * 0.035 : 1);
   }
-  pylons.update(G.next, t);
+  pylons.update(gatesHidden() ? -1 : G.next, t);           // (hidden: no gate is next, so every pylon keeps its plain paint)
   pylons.animate(dt);
   for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast, rewind: G.replay ? () => {} : rewindTo, bonus: timeBonus });
   if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
@@ -1059,7 +1071,7 @@ function updateVisuals(dt) {
     smoke.trail.head(_v, sa, t);                            // and the start always at the nozzle
     smoke.trail.update(t, 3, camera.position);
   }
-  if (planeModel.puffs) planeModel.puffs.update(G.state === 'paused' ? 0 : dt, P, planeModel.group.visible && P.smoking);   // js/smoke.js
+  if (planeModel.puffs) planeModel.puffs.update(G.state === 'paused' ? 0 : dt, P, planeModel.group.visible && P.smoking, !!G.replay);   // js/smoke.js
 
   if (G.ghost) {                                            // the ghost: its run as far in as this one is
     const gh = G.ghost, S = Replay.at(gh.track, gh.t, gh.S), m = gh.model;
@@ -1289,6 +1301,7 @@ function resumeFromUser() {
 function finishRun() {
   const t = G.time, prev = getBest(), best = prev == null || t < prev;
   if (best) { settings.best[COURSE.id] = t; saveSettings(); }
+  if (G.rec) G.rec.sample(0, P, G.next, true);              // the finishing moment itself (this frame's own sample comes later)
   const gi = ghostInfo(), run = G.rec && G.rec.finish();
   if (run && (!gi || t < gi.time)) {                        // the fastest run is kept as the ghost (js/ghost.js)
     const id = COURSE.id, k = courseKey();
@@ -1339,7 +1352,7 @@ function playTrack(tr) {
   const dims = new THREE.Box3().setFromObject(planeModel.group).getSize(new V3());
   const size = clamp(Math.max(dims.x, dims.y, dims.z), 1.5, 30) || 9;   // the model's span or length, whichever is more
   // (the frame is kept at least a gate tall: zoomed in on a small wingsuit, a gate would fill the screen)
-  G.replay = { size, player: Replay.player(tr, { ground: groundAt, solid, size,
+  G.replay = { size, player: Replay.player(tr, { ground: groundAt, solid, size, gates: HOOPS.length,
     avoid: HOOPS.map((h) => h.pos), avoidR: TUNE.HOOP_R * 3, minFrame: TUNE.HOOP_R * 2 }), level: 0.35 };
   G.finishCam = null; G.crashTimer = 0;                     // (also calls off the victory lap)
   stepReplay(0);
@@ -1410,6 +1423,7 @@ function playWatch(tr, label) {
   Sound.init(); blurActive();
   resetRun();
   $('watch-time').textContent = label;
+  $('opt-gates-label').textContent = gateNoun() === 'gate' ? 'Show gates' : 'Show hoops';
   setState('replay');
   playTrack(tr);
   focusEl('btn-watch-exit');
@@ -1497,6 +1511,20 @@ function update(dt) {
   updateHUD();
   Sound.update(P, G.state === 'playing' ? 1 : G.state === 'paused' ? 0 : G.replay ? G.replay.level : 0.35);
 }
+// Show hoops (the replay bar): unticked, a replay looks like the real thing: the gates' marks (hoops, the target disc, the
+// pylons' arrows) and the other marks (thermals, wind lines) are left out of the picture, and the pylons stay in their plain paint instead of lighting up as the
+// next gate (updateVisuals). The marks are hidden only for the render, so the gate kits' own showing and fading carries
+// on underneath and comes back as it was
+let showGates = true;
+const hiddenNow = [];
+function gatesHidden() { return !showGates && G.state === 'replay'; }
+function renderFrame() {
+  const hide = gatesHidden();
+  if (hide) for (const o of [...gateMeshes, gateDisc]) if (o.visible) { o.visible = false; hiddenNow.push(o); }
+  renderer.render(scene, camera);
+  while (hiddenNow.length) hiddenNow.pop().visible = true;
+}
+$('opt-gates').addEventListener('change', (e) => { showGates = e.target.checked; });
 let last = performance.now(), errShown = false;
 function frame(now) {
   requestAnimationFrame(frame);
@@ -1504,7 +1532,7 @@ function frame(now) {
   last = now;
   resolution.frame(now, G.perf ? G.perf.update + G.perf.render : 0);
   if (dt <= 0) return;
-  try { const t0 = performance.now(); update(dt); const t1 = performance.now(); renderer.render(scene, camera); G.perf = { update: t1 - t0, render: performance.now() - t1 }; }
+  try { const t0 = performance.now(); update(dt); const t1 = performance.now(); renderFrame(); G.perf = { update: t1 - t0, render: performance.now() - t1 }; }
   catch (err) { if (!errShown) { errShown = true; console.error(err); showToast('Something broke: ' + (err && err.message), 8000); } }
 }
 resetRun();

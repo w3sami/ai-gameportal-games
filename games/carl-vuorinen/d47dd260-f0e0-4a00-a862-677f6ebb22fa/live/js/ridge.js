@@ -234,7 +234,7 @@ if (typeof SCENERY_PLUGINS !== 'undefined') SCENERY_PLUGINS.push((group) => {
       }`,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.frustumCulled = false; mesh.renderOrder = 3;
+  mesh.frustumCulled = false; mesh.renderOrder = 3; mesh.userData.hint = true;   // (js/game.js: a mark, not scenery)
   mesh.onBeforeRender = () => { U.wTime.value = (performance.now() / 1000) % 1000; };
   group.add(mesh);
 });
