@@ -1,5 +1,5 @@
 {
-  "_format": "Themes in menu order, each with its own aircraft; all themes are open from the start. vehicle picks the model, sound and controls, and loads config/<vehicle>.json over config/flight.json (prop, the default, is flight.json alone). levels are flown in order: level 1 is always open, each later one opens once the one before it has been finished. A level's id keys its saved best time, so keep ids unique across all themes and don't rename them; the id and name here override the ones inside the course file. A level may set its own vehicle to override the theme's.",
+  "_format": "Themes in menu order, each with its own aircraft; all themes are open from the start. vehicle picks the model, sound and controls, and loads config/<vehicle>.json over config/flight.json (prop, the default, is flight.json alone). levels are flown in order: level 1 is always open, each later one opens once the one before it has been finished. A level's id keys its saved best time and kept run, and names it on the leaderboard (js/boards.js: '<theme>-<level>-<id>', so the id should read as the level's name), so keep ids unique across all themes, and a rename needs its saved data carried over (js/game.js, settings); the id and name here override the ones inside the course file. A level may set its own vehicle to override the theme's.",
   "themes": [
     { "id": "valley", "name": "Valley", "vehicle": "prop", "levels": [
       { "id": "valley", "name": "Valley Run", "file": "courses/valley.json" },
@@ -12,9 +12,9 @@
       { "id": "gorge", "name": "Gorge Run", "file": "courses/gorge.json" }
     ] },
     { "id": "harbour", "name": "Harbour", "vehicle": "racer", "levels": [
-      { "id": "harbour", "name": "Bay Run", "file": "courses/harbour.json" },
+      { "id": "bay", "name": "Bay Run", "file": "courses/harbour.json" },
       { "id": "beach", "name": "Beach Run", "file": "courses/beach.json" },
-      { "id": "port", "name": "Harbour Run", "file": "courses/port.json" }
+      { "id": "harbour", "name": "Harbour Run", "file": "courses/port.json" }
     ] },
     { "id": "glacier", "name": "Glacier", "vehicle": "wingsuit", "levels": [
       { "id": "glacier", "name": "Glacier Run", "file": "courses/glacier.json" },
@@ -23,13 +23,13 @@
     ] },
     { "id": "lakeside", "name": "Lakeside", "vehicle": "sailplane", "levels": [
       { "id": "lakeside", "name": "Lakeside Run", "file": "courses/lakeside.json" },
-      { "id": "hillside", "name": "Cliffside Run", "file": "courses/hillside.json" },
+      { "id": "cliffside", "name": "Cliffside Run", "file": "courses/hillside.json" },
       { "id": "island", "name": "Island Run", "file": "courses/island.json" }
     ] },
     { "id": "farm", "name": "Farmlands", "vehicle": "biplane", "levels": [
       { "id": "barnyard", "name": "Barnyard Run", "file": "courses/barnyard.json" },
       { "id": "windmill", "name": "Windmill Run", "file": "courses/windmill.json" },
-      { "id": "fairground", "name": "Fairgrounds Run", "file": "courses/fairground.json" }
+      { "id": "fairgrounds", "name": "Fairgrounds Run", "file": "courses/fairground.json" }
     ] }
   ]
 }
