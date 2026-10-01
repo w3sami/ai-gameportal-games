@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="css/pad.css">
 <link rel="stylesheet" href="css/biplane.css">
 <link rel="stylesheet" href="css/ghost.css">
+<link rel="stylesheet" href="css/boards.css">
 </head>
 <body class="state-attract">
 <canvas id="scene" tabindex="-1" aria-label="Flight view"></canvas>
@@ -71,6 +72,7 @@
       <button class="btn fs-btn" type="button" title="Full screen (F)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><g class="fs-off"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></g><g class="fs-on"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></g></svg><span class="fs-off">Full screen</span><span class="fs-on">Exit full screen</span></button>
       <span class="best" id="start-best"></span>
       <span class="ghost-btns" id="ghost-btns" hidden><button class="btn small" id="btn-ghost" type="button">Race ghost</button><button class="btn small" id="btn-watch" type="button">Watch replay</button></span>
+      <button class="btn small" id="btn-board" type="button" hidden>Leaderboard</button>
     </div>
     <p class="controls for-mouse for-wingsuit">Aim with the mouse and the suit glides that way; aim above the horizon to level out, if you have the speed. Hold the left mouse button, <kbd>Shift</kbd> or <kbd>Space</kbd> to tuck in and dive. <span class="inv-off"><kbd>W</kbd> <kbd>S</kbd></span><span class="inv-on"><kbd>S</kbd> <kbd>W</kbd></span> flatten and steepen the glide, <kbd>A</kbd> <kbd>D</kbd> bank, and <kbd>Esc</kbd> pauses. A controller works too: press any button on it.</p>
     <p class="controls for-mouse for-sailplane">Aim with the mouse and the glider follows. It has no engine: aim up to climb while you have the speed, and circle in rising air to gain height. Hold the left mouse button, <kbd>Shift</kbd> or <kbd>Space</kbd> to dive with the flaps up, faster between thermals but no good for circling. <span class="inv-off"><kbd>W</kbd> <kbd>S</kbd></span><span class="inv-on"><kbd>S</kbd> <kbd>W</kbd></span> climb and dive, <kbd>A</kbd> <kbd>D</kbd> bank, and <kbd>Esc</kbd> pauses. A controller works too: press any button on it.</p>
@@ -120,11 +122,24 @@
   <div class="route" aria-hidden="true"></div>
   <p class="big-time" id="finish-time">0:00.00</p>
   <p class="lead" id="finish-best"></p>
+  <p class="note board-note" id="finish-board" hidden></p>
+  <div class="name-form" id="finish-name" hidden><input id="finish-name-input" type="text" maxlength="24" autocomplete="nickname" placeholder="Your name" aria-label="Your name for the leaderboard"><button class="btn small primary" id="btn-finish-post" type="button">Post time</button></div>
   <div class="cta-row">
     <button class="btn primary" id="btn-next" type="button" hidden>Next level</button>
     <button class="btn primary" id="btn-again" type="button">Fly again</button>
     <button class="btn" id="btn-menu" type="button">Menu</button>
   </div>
+</section>
+
+<section class="panel overlay board" id="board" aria-labelledby="board-title">
+  <div class="level-head">
+    <button class="back-btn" id="btn-board-back" type="button" aria-label="Back to the level" title="Back (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h2 class="level-title" id="board-title">Leaderboard<small id="board-course"></small></h2>
+  </div>
+  <p class="note" id="board-status" hidden></p>
+  <ol class="board-list" id="board-list"></ol>
+  <div class="board-me"><span id="board-me-text"></span><button class="btn small" id="btn-board-name" type="button">Set name</button></div>
+  <div class="name-form" id="board-name-form" hidden><input id="board-name-input" type="text" maxlength="24" autocomplete="nickname" placeholder="Your name" aria-label="Your name for the leaderboard"><button class="btn small primary" id="btn-board-name-save" type="button">Save</button></div>
 </section>
 
 <div class="watch-bar chip" id="watch"><span class="watch-label">Replay <b id="watch-time"></b></span><button class="btn small" id="btn-watch-exit" type="button">Back to menu</button></div>
@@ -172,5 +187,6 @@
 <script src="js/controls.js"></script>
 <script src="js/boot.js"></script>
 <script type="module" src="js/pad.js"></script>
+<script type="module" src="js/boards.js"></script>
 </body>
 </html>
