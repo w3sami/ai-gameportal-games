@@ -1,0 +1,5 @@
+/* Wingsuit (Glacier Run): its own control texts, and height above the ground in the HUD's g slot instead of a boost bar. */
+body:not(.vehicle-wingsuit) .for-wingsuit, body.vehicle-wingsuit .not-wingsuit { display: none; }
+body.vehicle-wingsuit .hud-g { display: inline; }
+body.vehicle-wingsuit .boost-bar { display: none; }
+.hud-g.is-low { color: var(--route); font-weight: 700; }
