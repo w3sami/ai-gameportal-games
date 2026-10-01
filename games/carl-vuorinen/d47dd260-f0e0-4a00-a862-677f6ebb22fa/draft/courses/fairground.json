@@ -1,6 +1,6 @@
 {
   "_format": "See the course section at the top of js/sim.js; the fair (tents, stalls, hay bales, balloons) and the ribbon (\"ribbon\" gate, cut upside down): js/fair.js; knife-edge slots (\"K\"), inverted and big hoops (\"I\", \"O\"), announcements (say) and sets flown as one (set): js/aerobatic.js; fields and the poles: js/farm.js. points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?, options?]. Each gate's height is the ground under it plus its clearance.",
-  "id": "fairground",
+  "id": "fairgrounds",
   "name": "Fairgrounds Run",
   "lead": "Down the midway, round the balloons on a wingtip, through the poles, then the airshow: loop, roll, Cuban eight, Immelmann, and the ribbon cut upside down.",
   "seeds": {
