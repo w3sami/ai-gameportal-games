@@ -19,4 +19,9 @@ body.state-replay .watch-bar { display: flex; }
 }
 .watch-fold svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
 .watch-bar.is-folded .watch-fold svg { transform: scaleX(-1); }
+/* folded, it fades back to stay out of the picture; under the mouse, or reached with the keyboard or pad, it comes back */
+.watch-bar { transition: opacity 0.3s ease; }
+.watch-bar.is-folded { opacity: 0.4; }
+.watch-bar.is-folded:has(:focus-visible) { opacity: 1; }
+@media (hover: hover) { .watch-bar.is-folded:hover { opacity: 1; } }   /* (a phone's tap would leave it stuck on) */
 .watch-fold:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
