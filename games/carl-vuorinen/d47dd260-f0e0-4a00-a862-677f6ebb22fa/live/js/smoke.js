@@ -1,20 +1,18 @@
 'use strict';
 /* =========================================================================
    SMOKE — airshow smoke that hangs in the air, puffs out and fades away (the biplane's, js/biplane.js).
-   Low-poly like the clouds (js/clouds.js): solid faceted balls, white on top and pale blue-grey underneath, lit with
-   the same wrap-round sunlight. One draw call: an instanced ball per puff, in a ring buffer. Puffs are laid every
-   SPACING m along the path (not per frame, so the trail has no gaps at speed or on a slow frame), and all ageing
-   (growth, drift, tumble, fading away) happens in the vertex shader from the birth time, so a new puff is the only
-   thing uploaded.
-   Solid, it has no blending or overdraw to pay for; what the shader does instead is keep the view clear: puffs shrink
-   to nothing near the camera (the chase camera flies up the fresh trail) and when one would fill too much of the
-   screen, and as puffs spread out the trail thins to fewer, further apart (each puff has a level, like a mip chain:
-   every 2nd puff is level 1, every 4th level 2..., and a level shrinks away once the spread wants puffs further apart
-   than it gives). A puff shrunk to nothing is a point: no pixels.
-   A puff is only partly drawn even when fresh (DENSE), thins out over its life rather than shrinking, and so does
-   smoke cleared by a crash (dissipate()), faster. All of it is dithering: a puff drops a share of its pixels
-   in a noise pattern of its own, so it stays solid (no sorting, no blending) and overlapping ones thin out together
-   rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade.
+   Low-poly like the clouds (js/clouds.js): faceted balls, white on top and pale blue-grey underneath, lit with the same
+   wrap-round sunlight, and see-through: blended over what's behind them. One draw call: an instanced ball per puff.
+   Puffs are laid every SPACING m along the path (not per frame, so the trail has no gaps at speed or on a slow frame)
+   into a ring buffer on the CPU; each frame the live ones are copied out sorted far to near from the camera (so they
+   blend in the right order) and uploaded, and all ageing (growth, drift, tumble, fading) happens in the vertex shader
+   from the birth time.
+   A puff starts DENSE (its opacity leaving the plane) and thins out over its life; smoke cleared by a crash
+   (dissipate()) thins out faster, swelling as it goes. The shader also keeps the view clear: puffs shrink to nothing
+   near the camera (the chase camera flies up the fresh trail) and when one would fill too much of the screen, and as
+   puffs spread out the trail thins to fewer, further apart (each puff has a level, like a mip chain: every 2nd puff is
+   level 1, every 4th level 2..., and a level shrinks away once the spread wants puffs further apart than it gives).
+   A puff shrunk to nothing is a point: no pixels, and no overdraw.
    makeSmoke(scene, anchor) -> { update(dt, P, on, tripod), cut(), dissipate(), clear(), mesh }
      anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame,
      tripod: the camera is a replay's trackside one, which never flies through the trail, so nothing is shrunk near it
@@ -30,8 +28,8 @@ function makeSmoke(scene, anchor) {
   const R0 = 0.35;                 // m: puff radius as it leaves the plane
   const PUFF = [1.5, 0.12];        // m, s: it balloons to this at once (time constant), so the chase view sees it
   const R1 = 3, GROW = 2.5;        // m, s: then spreads to this, slowly
-  const DENSE = 0.5;               // share of a puff's pixels drawn as it leaves the plane: thin smoke, not solid balls
-                                   // (overlapping puffs keep different pixels, so where the trail is thick it fills in)
+  const DENSE = 0.6;               // a puff's opacity as it leaves the plane: thin smoke, not solid balls (overlapping
+                                   // puffs build up, so where the trail is thick it fills in)
   const FADE = 0;                  // share of LIFE after which it fades out: from the start, eased (barely thinner
                                    // behind the plane, half gone by 7 s, past which it's rarely anywhere in view)
   const NEAR = [1, 3];             // m from the camera to the puff's surface: gone at the first, full size by the second
@@ -50,10 +48,11 @@ function makeSmoke(scene, anchor) {
   const ball = new THREE.IcosahedronGeometry(1, 0);         // 20 facets, non-indexed
   const geo = new THREE.InstancedBufferGeometry();
   geo.setAttribute('position', ball.attributes.position); geo.setAttribute('normal', ball.attributes.normal);
-  const posA = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
-  const infA = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3).fill(-1e6), 3).setUsage(THREE.DynamicDrawUsage);   // birth, seed, level
+  const ringP = new Float32Array(MAX * 3), ringI = new Float32Array(MAX * 3).fill(-1e6);   // the puffs: position; birth, seed, level
+  const posA = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);   // the live
+  const infA = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);   // ones, sorted
   geo.setAttribute('aPos', posA); geo.setAttribute('aInfo', infA);
-  geo.instanceCount = MAX;
+  geo.instanceCount = 0;
 
   const U = {
     uTime: { value: 0 }, uLife: { value: LIFE },
@@ -65,7 +64,7 @@ function makeSmoke(scene, anchor) {
     uGone: { value: new THREE.Vector4(-1e7, -1e7, GONE[0], GONE[1]) },   // the last dissipate() time, the one before it
     uTop: { value: TOP }, uBelly: { value: BELLY },
   };
-  const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true });
+  const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true, transparent: true, depthWrite: false });
   mat.userData.noSun = true;                                // not shaded by the terrain (js/sunlight.js), like the clouds
   mat.onBeforeCompile = (sh) => {
     Atmosphere.inject(sh);
@@ -78,7 +77,8 @@ function makeSmoke(scene, anchor) {
       uniform vec2 uR1, uNear, uFresh;
       uniform vec4 uBig, uGone;
       uniform vec3 uThin, uWind, uTop, uBelly;
-      varying vec3 vSmoke, vFade;
+      varying vec3 vSmoke;
+      varying float vFade;
       vec3 smokeTurn(vec3 p, float a, float b) {
         float ca = cos(a), sa = sin(a), cb = cos(b), sb = sin(b);
         p = vec3(ca * p.x + sa * p.z, p.y, - sa * p.x + ca * p.z);
@@ -100,24 +100,20 @@ function makeSmoke(scene, anchor) {
       float onScreen = r * projectionMatrix[1][1] / max(depth, 0.01);
       float big = mix(1.0, mix(min(1.0, uBig.z / onScreen), 1.0 - smoothstep(uBig.x, uBig.y, onScreen), smoothstep(uFresh.x, uFresh.y, age)), uShrink);
       float k = step(0.0, age) * step(age, uLife) * keep * big;
-      // fading out (dithered: vFade.x the share of pixels kept, yz its pattern's offset): at the end of its life, and
-      // when laid before a crash (dissipate()), gone within a second and swelling as it goes; laid before the crash
-      // before that: long gone
+      // opacity: DENSE thinning out over its life; laid before a crash (dissipate()), gone within a second and swelling
+      // as it goes; laid before the crash before that: long gone
       float g0 = uGone.z * fract(seed * 17.3);
       float gone = aInfo.x <= uGone.y ? 0.0 : aInfo.x <= uGone.x ? 1.0 - clamp((uTime - uGone.x - g0) / uGone.w, 0.0, 1.0) : 1.0;
       float fade = ${DENSE.toFixed(3)} * (1.0 - smoothstep(uThin.z, 1.0, life)) * gone;
       k *= fade < 0.01 ? 0.0 : 1.0 + ${GONE_SWELL.toFixed(3)} * (1.0 - gone);
-      vFade = vec3(fade, fract(seed * 23.1) * 97.0, fract(seed * 31.7) * 89.0);
+      vFade = fade;
       k *= mix(1.0, smoothstep(uNear.x, uNear.y, depth - r * k), uShrink);              // and right at the camera
       vec3 dir = smokeTurn(position, seed * 6.2832 + age * (fract(seed * 11.0) - 0.5) * 0.6, fract(seed * 13.7) * 3.1416);
       vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
       vec3 transformed = smokeC + dir * r * (k < 0.03 ? 0.0 : k);                       // gone: a point, no pixels
     `);
-    sh.fragmentShader = 'varying vec3 vSmoke, vFade;\n' + sh.fragmentShader
-      // fading: interleaved gradient noise, shifted per puff, against the share kept
-      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-	if ( vFade.x < 0.999 && fract( 52.9829189 * fract( dot( gl_FragCoord.xy + vFade.yz, vec2( 0.06711056, 0.00583715 ) ) ) ) >= vFade.x ) discard;`)
-      .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb *= vSmoke;')
+    sh.fragmentShader = 'varying vec3 vSmoke;\nvarying float vFade;\n' + sh.fragmentShader
+      .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb *= vSmoke;\n\tdiffuseColor.a = vFade;')
       // the clouds' light: the sun wraps round the sides, and the bellies take their light from the sky
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
 	#if NUM_DIR_LIGHTS > 0
@@ -134,35 +130,42 @@ function makeSmoke(scene, anchor) {
   scene.add(mesh);
 
   const at = new THREE.Vector3(), last = new THREE.Vector3(), d = new THREE.Vector3(), pt = new THREE.Vector3();
-  // T only ever runs on (clear() doesn't wind it back), so a birth left over from before can never come due again.
-  // dirty: the whole buffers are owed to the GPU until the mesh is next drawn (at first, and after clear(), which hides
-  // it). r159 uploads only the update ranges when there are any, so a range added before that draw would stand in for
-  // the whole upload and leave the last run's puffs on the GPU, to hatch again as T reached their births
-  let T = 0, head = 0, joined = false, carry = 0, lastBirth = -1e6, lo = -1, n = 0, dirty = true, count = 0;
-  mesh.onAfterRender = () => { dirty = false; };
+  // T only ever runs on (clear() doesn't wind it back), so a birth left over from before can never come due again
+  let T = 0, head = 0, joined = false, carry = 0, lastBirth = -1e6, count = 0, cam = null;
+  mesh.onBeforeRender = (renderer, sc, camera) => { cam = camera; };   // (sorted by in the next update())
+
+  // the live puffs into posA/infA, far to near from the camera (by their centres, drift included), as many as are live
+  const order = new Int32Array(MAX), dist = new Float32Array(MAX), idx = [];
+  function sortDraw() {
+    const cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
+    let m = 0;
+    for (let i = 0; i < MAX; i++) {
+      const age = T - ringI[i * 3];
+      if (age < 0 || age > LIFE) continue;
+      const dx = ringP[i * 3] + WIND[0] * age - cx, dy = ringP[i * 3 + 1] + WIND[1] * age - cy, dz = ringP[i * 3 + 2] + WIND[2] * age - cz;
+      order[m] = i; dist[i] = dx * dx + dy * dy + dz * dz; m++;
+    }
+    idx.length = m;
+    for (let k = 0; k < m; k++) idx[k] = order[k];
+    idx.sort((a, b) => dist[b] - dist[a]);
+    const sp = posA.array, sf = infA.array;
+    for (let k = 0; k < m; k++) {
+      const i = idx[k];
+      sp[k * 3] = ringP[i * 3]; sp[k * 3 + 1] = ringP[i * 3 + 1]; sp[k * 3 + 2] = ringP[i * 3 + 2];
+      sf[k * 3] = ringI[i * 3]; sf[k * 3 + 1] = ringI[i * 3 + 1]; sf[k * 3 + 2] = ringI[i * 3 + 2];
+    }
+    geo.instanceCount = m;
+    posA.needsUpdate = infA.needsUpdate = true;              // (all of it: a partial upload pending from a frame that
+  }                                                          // wasn't drawn could leave stale puffs on the GPU)
 
   function emit(p, birth) {
     const i = head; head = (head + 1) % MAX;
-    posA.array[i * 3] = p.x; posA.array[i * 3 + 1] = p.y; posA.array[i * 3 + 2] = p.z;
+    ringP[i * 3] = p.x; ringP[i * 3 + 1] = p.y; ringP[i * 3 + 2] = p.z;
     count++;
     let lvl = 0; while (lvl < LEVELS && !((count >> lvl) & 1)) lvl++;   // trailing zero bits: every 2nd is 1, every 4th 2...
-    infA.array[i * 3] = birth; infA.array[i * 3 + 1] = Math.random(); infA.array[i * 3 + 2] = lvl;
-    if (lo < 0) lo = i;
-    n++; lastBirth = birth;
+    ringI[i * 3] = birth; ringI[i * 3 + 1] = Math.random(); ringI[i * 3 + 2] = lvl;
+    lastBirth = birth;
   }
-  function flush() {                                        // upload just the slots written this frame (two runs if it wrapped)
-    if (dirty) {                                            // everything, until drawn
-      posA.clearUpdateRanges(); infA.clearUpdateRanges();
-      if (n) posA.needsUpdate = infA.needsUpdate = true;
-      lo = -1; n = 0; return;
-    }
-    if (!n) return;
-    const runs = n >= MAX ? [[0, MAX]] : lo + n <= MAX ? [[lo, n]] : [[lo, MAX - lo], [0, lo + n - MAX]];
-    for (const [s, c] of runs) { posA.addUpdateRange(s * 3, c * 3); infA.addUpdateRange(s * 3, c * 3); }
-    posA.needsUpdate = infA.needsUpdate = true;
-    lo = -1; n = 0;
-  }
-
   function update(dt, P, on, tripod) {
     T += dt;
     U.uTime.value = T; U.uShrink.value = tripod ? 0 : 1;
@@ -182,8 +185,8 @@ function makeSmoke(scene, anchor) {
       }
       last.copy(at); joined = true;
     } else if (dt > 0) joined = false;                      // let go: the next press starts a new trail
-    flush();
     mesh.visible = T - lastBirth < LIFE;
+    if (mesh.visible && cam) sortDraw();
   }
   return {
     mesh,
@@ -191,9 +194,7 @@ function makeSmoke(scene, anchor) {
     cut() { joined = false; },
     dissipate() { const g = U.uGone.value; g.y = g.x; g.x = T; },
     clear() {
-      infA.array.fill(-1e6);                                // uploaded whole the next time the mesh is drawn
-      posA.clearUpdateRanges(); infA.clearUpdateRanges(); posA.needsUpdate = infA.needsUpdate = true;
-      dirty = true; lo = -1; n = 0;
+      ringI.fill(-1e6); geo.instanceCount = 0;
       head = 0; joined = false; lastBirth = -1e6; mesh.visible = false;
     },
   };

@@ -961,7 +961,7 @@ function updateCamera(dt, snap) {
     camera.up.copy(WORLD_UP);
     camera.lookAt(f.look);
   }
-  if (G.replay) {                                           // replay: trackside tripods (js/replay.js)
+  if (G.replay && !chaseView()) {                           // replay: trackside tripods (js/replay.js)
     const rc = G.replay.player.cam;
     camera.position.copy(rc.pos);
     camera.up.copy(WORLD_UP);
@@ -975,9 +975,10 @@ function updateCamera(dt, snap) {
   }
   cam.shake = Math.max(0, cam.shake - dt * 2.2);
   const minV = 2 * Math.atan(Math.tan((66 * Math.PI / 180) / 2) / camera.aspect) * 180 / Math.PI;   // portrait: keep ~66° across
-  const fovWant = G.replay ? G.replay.player.cam.fov * Math.max(1, minV / 60)   // (the replay eases its own zoom)
+  const tripod = G.replay && !chaseView();
+  const fovWant = tripod ? G.replay.player.cam.fov * Math.max(1, minV / 60)   // (the replay eases its own zoom)
     : clamp(Math.max(60 + sp * (reducedMotion ? 3 : 11), minV), 40, 100);
-  cam.fov = snap || G.replay ? fovWant : lerp(cam.fov, fovWant, damp(3, dt));
+  cam.fov = snap || tripod ? fovWant : lerp(cam.fov, fovWant, damp(3, dt));
   // with a panel open, frame the plane beside it (right in landscape, above it in portrait)
   const panel = !body.classList.contains('state-playing') && !body.classList.contains('state-replay'), portrait = view.h > view.w;   // (not before a finish's results show)
   const tx = panel && !portrait ? 0.21 : 0, ty = panel && portrait ? 0.2 : 0;
@@ -1032,7 +1033,7 @@ function updateVisuals(dt) {
   if (planeModel.uniforms) planeModel.uniforms.afSun.value = 0.3 + 0.7 * Sunlight.at(P.pos.x, P.pos.y, P.pos.z)[0];
 
   // streaks
-  const inten = smoothstep(TUNE.CRUISE * 0.98, TUNE.BOOST * 0.97, P.speed) * (planeModel.group.visible && !G.replay ? 1 : 0);   // (a trackside camera sees none)
+  const inten = smoothstep(TUNE.CRUISE * 0.98, TUNE.BOOST * 0.97, P.speed) * (planeModel.group.visible && (!G.replay || chaseView()) ? 1 : 0);   // (a trackside camera sees none)
   streakMat.opacity = 0.45 * inten;
   streaks.visible = inten > 0.02;
   if (streaks.visible) {
@@ -1362,14 +1363,18 @@ function stepReplay(dt) {
   const r = G.replay, ev = r.player.step(dt), S = r.player.S;
   if (ev.loop) { resetGates(); G.next = 0; }
   else if (ev.cut) { trails.forEach((t) => t.clear()); smoke.trail.clear(); if (planeModel.puffs) planeModel.puffs.cut(); }
+  const chime = G.state === 'replay' && showGates && S.next > G.next && !ev.loop;   // watched with the hoops: their sounds too
   P.pos.copy(S.pos); P.q.copy(S.q); P.vdir.copy(S.vdir);
   P.speed = S.speed; P.gload = S.gload; P.tuck = S.tuck; P.boosting = S.boosting; P.smoking = S.smoking;
   P.stallWarn = 0; P.stall = false;
   planeModel.group.visible = S.visible;
   if (S.next > G.next) for (let i = G.next; i < S.next; i++) flashGate(i);
   else if (S.next < G.next) { for (const k of gateKits) k.reset(); for (let i = 0; i < S.next; i++) flashGate(i); }   // a loop broken off
+  if (chime) { if (S.next >= HOOPS.length) Sound.finish(); else Sound.hoop(); }   // (penalties aren't in a recording)
   G.next = S.next;
-  r.level = 0.35 * clamp(60 / Math.max(1, r.player.cam.pos.distanceTo(P.pos)), 0.15, 1);   // engine fades with distance
+  if ((ev.loop || ev.cut) && chaseView()) updateCamera(0, true);   // the chase camera jumps with the plane
+  // engine fades with distance from a tripod; behind the plane it's as loud as the demo's
+  r.level = chaseView() ? 0.35 : 0.35 * clamp(60 / Math.max(1, r.player.cam.pos.distanceTo(P.pos)), 0.15, 1);
 }
 
 /* ---------- ghost (js/ghost.js): the fastest run kept, to race against or watch from the menu ---------- */
@@ -1418,6 +1423,14 @@ async function watchReplay() {                              // the kept run from
   const tr = ghostReady() || await ghostTrack(), gi = ghostInfo();
   if (!tr || G.state !== 'attract') return;
   playWatch(tr, gi ? fmtTime(gi.time) : '');
+}
+// Change view (the replay bar): the trackside tripods, or the camera behind the plane as in a run. Watched replays only
+let chaseCam = false;
+const chaseView = () => chaseCam && G.state === 'replay';
+function setChaseView(on) {
+  chaseCam = on;
+  $('btn-watch-view').setAttribute('aria-pressed', String(on));
+  if (G.replay) updateCamera(0, true);                      // straight to the new view, no swoop across from the old one
 }
 function playWatch(tr, label) {
   Sound.init(); blurActive();
@@ -1513,7 +1526,7 @@ function update(dt) {
 }
 // Show hoops (the replay bar): unticked, a replay looks like the real thing: the gates' marks (hoops, the target disc, the
 // pylons' arrows) and the other marks (thermals, wind lines) are left out of the picture, and the pylons stay in their plain paint instead of lighting up as the
-// next gate (updateVisuals). The marks are hidden only for the render, so the gate kits' own showing and fading carries
+// next gate (updateVisuals). Ticked, the gates chime as they're passed, as in a run (stepReplay). The marks are hidden only for the render, so the gate kits' own showing and fading carries
 // on underneath and comes back as it was
 let showGates = true;
 const hiddenNow = [];
@@ -1525,6 +1538,7 @@ function renderFrame() {
   while (hiddenNow.length) hiddenNow.pop().visible = true;
 }
 $('opt-gates').addEventListener('change', (e) => { showGates = e.target.checked; });
+$('btn-watch-view').addEventListener('click', () => setChaseView(!chaseCam));
 let last = performance.now(), errShown = false;
 function frame(now) {
   requestAnimationFrame(frame);
