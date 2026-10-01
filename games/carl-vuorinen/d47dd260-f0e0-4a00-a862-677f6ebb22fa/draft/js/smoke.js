@@ -17,6 +17,12 @@
    rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade; drawn at
    under SHIMMER pixels per CSS pixel (a laptop screen, or a phone stepped down by js/resolution.js) the pattern would
    show as diagonal lines, so there it moves every frame and the eye blends the frames into an even fade.
+   Being tried out, three ways of drawing the fade (M on a keyboard steps through them, makeSmoke.mode holds the pick):
+     dither    as above (the default without antialiasing, phones included)
+     coverage  where the screen is antialiased (most laptops: js/game.js turns it on under 1.5 pixels per CSS pixel),
+               the fade sets how many of each pixel's samples a puff covers (alpha to coverage), so it's see-through
+               without a grain, nudged by the noise between the few levels there are (the default there)
+     blend     real see-through: the live puffs drawn sorted far to near, blended over what's behind
    makeSmoke(scene, anchor) -> { update(dt, P, on, tripod), cut(), dissipate(), clear(), mesh }
      anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame,
      tripod: the camera is a replay's trackside one, which never flies through the trail, so nothing is shrunk near it
@@ -48,6 +54,8 @@ function makeSmoke(scene, anchor) {
                                    // trail thins unevenly), gone the second after; all gone by the respawn (G.crashTimer 0.9 s)
   const GONE_SWELL = 0.35;         // and swells by this share as it fades: smoke thinning out, not a ball shrinking
   const SHIMMER = 1.5;             // pixel ratio below which the dither pattern moves every frame
+  const COVER = 0.25;              // coverage: how far the noise nudges the share covered (a sample's worth of 4)
+  const MODES = ['dither', 'coverage', 'blend'];
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');   // as the clouds
 
   const ball = new THREE.IcosahedronGeometry(1, 0);         // 20 facets, non-indexed
@@ -68,6 +76,7 @@ function makeSmoke(scene, anchor) {
     uGone: { value: new THREE.Vector4(-1e7, -1e7, GONE[0], GONE[1]) },   // the last dissipate() time, the one before it
     uTop: { value: TOP }, uBelly: { value: BELLY },
     uJit: { value: 0 },                                     // the dither pattern's offset this frame (0: still)
+    uMode: { value: 0 },                                    // index in MODES
   };
   const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true });
   mat.userData.noSun = true;                                // not shaded by the terrain (js/sunlight.js), like the clouds
@@ -117,11 +126,15 @@ function makeSmoke(scene, anchor) {
       vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
       vec3 transformed = smokeC + dir * r * (k < 0.03 ? 0.0 : k);                       // gone: a point, no pixels
     `);
-    sh.fragmentShader = 'varying vec3 vSmoke, vFade;\nuniform float uJit;\n' + sh.fragmentShader
+    // (#undef OPAQUE: three forces alpha to 1 in a material that isn't transparent, coverage's included)
+    sh.fragmentShader = 'varying vec3 vSmoke, vFade;\nuniform float uJit, uMode;\n#undef OPAQUE\n' + sh.fragmentShader
       // fading: interleaved gradient noise, shifted per puff (and per frame, when uJit moves), against the share kept
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-	if ( vFade.x < 0.999 && fract( 52.9829189 * fract( dot( gl_FragCoord.xy + vFade.yz + uJit, vec2( 0.06711056, 0.00583715 ) ) ) ) >= vFade.x ) discard;`)
-      .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb *= vSmoke;')
+	float smokeN = fract( 52.9829189 * fract( dot( gl_FragCoord.xy + vFade.yz + uJit, vec2( 0.06711056, 0.00583715 ) ) ) );
+	if ( uMode < 0.5 && vFade.x < 0.999 && smokeN >= vFade.x ) discard;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+	diffuseColor.rgb *= vSmoke;
+	diffuseColor.a = uMode < 0.5 ? 1.0 : uMode < 1.5 ? clamp( vFade.x + ( smokeN - 0.5 ) * ${COVER.toFixed(3)}, 0.0, 1.0 ) : vFade.x;`)
       // the clouds' light: the sun wraps round the sides, and the bellies take their light from the sky
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
 	#if NUM_DIR_LIGHTS > 0
@@ -146,8 +159,52 @@ function makeSmoke(scene, anchor) {
   mesh.onAfterRender = () => { dirty = false; };
   // the pattern moves by Jimenez's step for this noise (5.588238 px, 64 frames round), so each frame's lines fall
   // between the last ones'
-  let frame = 0;
-  mesh.onBeforeRender = (renderer) => { frame = (frame + 1) % 64; U.uJit.value = renderer.getPixelRatio() < SHIMMER ? 5.588238 * frame : 0; };
+  let frame = 0, msaa = null, cam = null;
+  mesh.onBeforeRender = (renderer, sc, camera) => {
+    frame = (frame + 1) % 64; U.uJit.value = renderer.getPixelRatio() < SHIMMER ? 5.588238 * frame : 0;
+    if (msaa == null) { const a = renderer.getContext().getContextAttributes(); msaa = !!(a && a.antialias); }
+    cam = camera;                                           // (blend sorts by it in the next update())
+  };
+
+  // the mode: switched in update(), before the frame is drawn (a geometry's buffers are uploaded before onBeforeRender)
+  // blend draws sorted copies of the live puffs (sPosA, sInfA, rebuilt every frame) in place of the ring buffer
+  const sPosA = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  const sInfA = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  const order = new Int32Array(MAX), dist = new Float32Array(MAX), idx = [];
+  let mode = null;
+  function setMode(m) {
+    if (m === mode) return;
+    const was = mode; mode = m; makeSmoke.shown = m;
+    U.uMode.value = MODES.indexOf(m);
+    mat.transparent = m === 'blend'; mat.depthWrite = m !== 'blend'; mat.alphaToCoverage = m === 'coverage'; mat.needsUpdate = true;
+    if (m === 'blend') { geo.setAttribute('aPos', sPosA); geo.setAttribute('aInfo', sInfA); geo.instanceCount = 0; }
+    else if (was === 'blend' || was == null) {               // back on the ring buffer: all of it again
+      geo.setAttribute('aPos', posA); geo.setAttribute('aInfo', infA); geo.instanceCount = MAX;
+      posA.clearUpdateRanges(); infA.clearUpdateRanges(); posA.needsUpdate = infA.needsUpdate = true; dirty = true;
+    }
+    if (was != null) smokeLabel(m + (m === 'coverage' && !msaa ? ' (no antialiasing on this screen: solid)' : ''));
+  }
+  function sortDraw() {                                     // blend: the live puffs, far to near from the camera
+    const p = posA.array, f = infA.array, cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
+    let m = 0;
+    for (let i = 0; i < MAX; i++) {
+      const age = T - f[i * 3];
+      if (age < 0 || age > LIFE) continue;
+      const dx = p[i * 3] + WIND[0] * age - cx, dy = p[i * 3 + 1] + WIND[1] * age - cy, dz = p[i * 3 + 2] + WIND[2] * age - cz;
+      order[m] = i; dist[i] = dx * dx + dy * dy + dz * dz; m++;
+    }
+    idx.length = m;
+    for (let k = 0; k < m; k++) idx[k] = order[k];
+    idx.sort((a, b) => dist[b] - dist[a]);
+    const sp = sPosA.array, sf = sInfA.array;
+    for (let k = 0; k < m; k++) {
+      const i = idx[k];
+      sp[k * 3] = p[i * 3]; sp[k * 3 + 1] = p[i * 3 + 1]; sp[k * 3 + 2] = p[i * 3 + 2];
+      sf[k * 3] = f[i * 3]; sf[k * 3 + 1] = f[i * 3 + 1]; sf[k * 3 + 2] = f[i * 3 + 2];
+    }
+    geo.instanceCount = m;
+    sPosA.needsUpdate = sInfA.needsUpdate = true;
+  }
 
   function emit(p, birth) {
     const i = head; head = (head + 1) % MAX;
@@ -159,6 +216,7 @@ function makeSmoke(scene, anchor) {
     n++; lastBirth = birth;
   }
   function flush() {                                        // upload just the slots written this frame (two runs if it wrapped)
+    if (mode === 'blend') { lo = -1; n = 0; return; }       // (not drawn from: sortDraw() copies what it needs)
     if (dirty) {                                            // everything, until drawn
       posA.clearUpdateRanges(); infA.clearUpdateRanges();
       if (n) posA.needsUpdate = infA.needsUpdate = true;
@@ -190,8 +248,10 @@ function makeSmoke(scene, anchor) {
       }
       last.copy(at); joined = true;
     } else if (dt > 0) joined = false;                      // let go: the next press starts a new trail
+    setMode(makeSmoke.mode || (msaa ? 'coverage' : 'dither'));
     flush();
     mesh.visible = T - lastBirth < LIFE;
+    if (mode === 'blend' && cam && mesh.visible) sortDraw();
   }
   return {
     mesh,
@@ -205,4 +265,23 @@ function makeSmoke(scene, anchor) {
       head = 0; joined = false; lastBirth = -1e6; mesh.visible = false;
     },
   };
+}
+
+// trying the modes out: M steps through them (makeSmoke.mode), with a note on screen saying which
+if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyM' || e.repeat || (e.target && e.target.tagName === 'INPUT')) return;
+  const M = ['dither', 'coverage', 'blend'];
+  makeSmoke.mode = M[(M.indexOf(makeSmoke.shown || 'dither') + 1) % M.length];
+});
+function smokeLabel(text) {
+  if (typeof document === 'undefined' || !document.body) return;
+  let el = smokeLabel.el;
+  if (!el) {
+    el = smokeLabel.el = document.createElement('div');
+    el.style.cssText = 'position:fixed;left:50%;top:18%;transform:translateX(-50%);padding:6px 12px;border-radius:8px;'
+      + 'background:rgba(0,0,0,.6);color:#fff;font:600 14px system-ui,sans-serif;pointer-events:none;z-index:99;transition:opacity .3s';
+    document.body.appendChild(el);
+  }
+  el.textContent = 'Smoke: ' + text; el.style.opacity = '1';
+  clearTimeout(smokeLabel.t); smokeLabel.t = setTimeout(() => { el.style.opacity = '0'; }, 1800);
 }
