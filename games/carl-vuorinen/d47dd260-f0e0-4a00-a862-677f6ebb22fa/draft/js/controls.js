@@ -5,7 +5,7 @@
      keep whatever they have saved.
    - The left mouse button boosts once the mouse is flying (pointer locked, or steering by cursor); the click that
      takes the mouse doesn't. mousedown rather than pointerdown: a second button pressed while another is held
-     only fires pointermove. game.js's pause/blur boostEnd() clears it like any other boost.
+     only fires pointermove. Released by mouseup only; game.js's pause/blur boostEnd() clears it like any other boost.
    - body.pitch-inv follows the option so control texts swap their up/down wording (css/courses.css). */
 (function controls() {
   const STORE_KEY = 'skyrace.v1', OLD_STORE_KEY = 'magenta-line.v1';   // same keys as game.js
@@ -28,8 +28,11 @@
       if (!input.mouse.locked && !input.mouse.lockFailed) return;
       input.boost.active = true; input.boost.id = 'mouse';
     });
+    // Release comes from mouseup alone. Under pointer lock every mouse event goes to the canvas and bubbles here, and
+    // unlocked the press started on the page, so its mouseup arrives even off the window. Movement is no evidence of a
+    // release: some browsers report buttons as 0 on moves under pointer lock, which cut the boost on every steer.
+    // Losing the window or the lock clears it anyway (blur, and pause() via boostEnd()).
     window.addEventListener('mouseup', (e) => { if (e.button === 0) end(); });
-    canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && !(e.buttons & 1)) end(); });   // came up where we didn't hear it
   };
   const wait = setInterval(() => {
     if (window.__ml) { clearInterval(wait); link(window.__ml); }
