@@ -1071,7 +1071,7 @@ function updateVisuals(dt) {
     smoke.trail.head(_v, sa, t);                            // and the start always at the nozzle
     smoke.trail.update(t, 3, camera.position);
   }
-  if (planeModel.puffs) planeModel.puffs.update(G.state === 'paused' ? 0 : dt, P, planeModel.group.visible && P.smoking);   // js/smoke.js
+  if (planeModel.puffs) planeModel.puffs.update(G.state === 'paused' ? 0 : dt, P, planeModel.group.visible && P.smoking, !!G.replay);   // js/smoke.js
 
   if (G.ghost) {                                            // the ghost: its run as far in as this one is
     const gh = G.ghost, S = Replay.at(gh.track, gh.t, gh.S), m = gh.model;
