@@ -137,6 +137,9 @@ function buildScenery() {
   cloudDeck.build(worldGroup, v);
   buildHoops(worldGroup);
   Object.assign(lightStats, Sunlight.apply(worldGroup, scene));
+  // the other modules' marks for the player (userData.hint: thermal columns and specks, the wind up the cliffs) go
+  // with the gates in a replay without the hoops (renderFrame); their real things (clouds, birds) stay
+  worldGroup.traverse((o) => { if (o.userData.hint) gateMeshes.push(o); });
 }
 
 function buildTerrainMesh(group, plainR) {
@@ -1509,7 +1512,7 @@ function update(dt) {
   Sound.update(P, G.state === 'playing' ? 1 : G.state === 'paused' ? 0 : G.replay ? G.replay.level : 0.35);
 }
 // Show hoops (the replay bar): unticked, a replay looks like the real thing: the gates' marks (hoops, the target disc, the
-// pylons' arrows) are left out of the picture, and the pylons stay in their plain paint instead of lighting up as the
+// pylons' arrows) and the other marks (thermals, wind lines) are left out of the picture, and the pylons stay in their plain paint instead of lighting up as the
 // next gate (updateVisuals). The marks are hidden only for the render, so the gate kits' own showing and fading carries
 // on underneath and comes back as it was
 let showGates = true;
