@@ -1,6 +1,6 @@
 {
   "_format": "See the course section at the top of js/sim.js (coast, palette.sand), js/shore.js and js/port.js (port). points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?]; gate \"G\" = air gate (pylon each side, fly level), \"L\"/\"R\" = single pylon on your left/right, 0 = waypoint. Sea to the west (-x); two container terminals jut out from x = 60, with the basin between them. Crane lanes: z = -450 (north terminal) and z = 240 (south), flown between the crane legs.",
-  "id": "port",
+  "id": "harbour",
   "name": "Harbour Run",
   "lead": "Race the container port. Thread the pylons between the crane legs along the quays and through the basin between the ships. Blue pairs wings level, red pylons on the side the arrow points.",
   "seeds": {"a": 44, "b": 71, "c": 23, "trees": 17},
