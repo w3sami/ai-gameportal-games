@@ -11,8 +11,8 @@
    screen, and as puffs spread out the trail thins to fewer, further apart (each puff has a level, like a mip chain:
    every 2nd puff is level 1, every 4th level 2..., and a level shrinks away once the spread wants puffs further apart
    than it gives). A puff shrunk to nothing is a point: no pixels.
-   At the end of its life a puff fades out rather than shrinking, and so does smoke cleared by a crash (dissipate()),
-   faster. Fading is dithering: a fading puff drops a growing share of its pixels
+   A puff is only partly drawn even when fresh (DENSE), thins out over its life rather than shrinking, and so does
+   smoke cleared by a crash (dissipate()), faster. All of it is dithering: a puff drops a share of its pixels
    in a noise pattern of its own, so it stays solid (no sorting, no blending) and overlapping ones thin out together
    rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade.
    makeSmoke(scene, anchor) -> { update(dt, P, on), cut(), dissipate(), clear(), mesh }
@@ -28,7 +28,9 @@ function makeSmoke(scene, anchor) {
   const R0 = 0.35;                 // m: puff radius as it leaves the plane
   const PUFF = [1.5, 0.12];        // m, s: it balloons to this at once (time constant), so the chase view sees it
   const R1 = 3, GROW = 2.5;        // m, s: then spreads to this, slowly
-  const FADE = 0;                  // share of LIFE after which it fades out: from the start, eased (still near solid
+  const DENSE = 0.5;               // share of a puff's pixels drawn as it leaves the plane: thin smoke, not solid balls
+                                   // (overlapping puffs keep different pixels, so where the trail is thick it fills in)
+  const FADE = 0;                  // share of LIFE after which it fades out: from the start, eased (barely thinner
                                    // behind the plane, half gone by 7 s, past which it's rarely anywhere in view)
   const NEAR = [1, 3];             // m from the camera to the puff's surface: gone at the first, full size by the second
   const BIG = [0.12, 0.24];        // puff radius as a share of half the screen height: an old puff starts shrinking, gone
@@ -101,8 +103,8 @@ function makeSmoke(scene, anchor) {
       // before that: long gone
       float g0 = uGone.z * fract(seed * 17.3);
       float gone = aInfo.x <= uGone.y ? 0.0 : aInfo.x <= uGone.x ? 1.0 - clamp((uTime - uGone.x - g0) / uGone.w, 0.0, 1.0) : 1.0;
-      float fade = (1.0 - smoothstep(uThin.z, 1.0, life)) * gone;
-      k *= fade < 0.02 ? 0.0 : 1.0 + ${GONE_SWELL.toFixed(3)} * (1.0 - gone);
+      float fade = ${DENSE.toFixed(3)} * (1.0 - smoothstep(uThin.z, 1.0, life)) * gone;
+      k *= fade < 0.01 ? 0.0 : 1.0 + ${GONE_SWELL.toFixed(3)} * (1.0 - gone);
       vFade = vec3(fade, fract(seed * 23.1) * 97.0, fract(seed * 31.7) * 89.0);
       k *= smoothstep(uNear.x, uNear.y, depth - r * k);                                  // and right at the camera
       vec3 dir = smokeTurn(position, seed * 6.2832 + age * (fract(seed * 11.0) - 0.5) * 0.6, fract(seed * 13.7) * 3.1416);
