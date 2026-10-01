@@ -1298,6 +1298,7 @@ function resumeFromUser() {
 function finishRun() {
   const t = G.time, prev = getBest(), best = prev == null || t < prev;
   if (best) { settings.best[COURSE.id] = t; saveSettings(); }
+  if (G.rec) G.rec.sample(0, P, G.next, true);              // the finishing moment itself (this frame's own sample comes later)
   const gi = ghostInfo(), run = G.rec && G.rec.finish();
   if (run && (!gi || t < gi.time)) {                        // the fastest run is kept as the ghost (js/ghost.js)
     const id = COURSE.id, k = courseKey();
@@ -1348,7 +1349,7 @@ function playTrack(tr) {
   const dims = new THREE.Box3().setFromObject(planeModel.group).getSize(new V3());
   const size = clamp(Math.max(dims.x, dims.y, dims.z), 1.5, 30) || 9;   // the model's span or length, whichever is more
   // (the frame is kept at least a gate tall: zoomed in on a small wingsuit, a gate would fill the screen)
-  G.replay = { size, player: Replay.player(tr, { ground: groundAt, solid, size,
+  G.replay = { size, player: Replay.player(tr, { ground: groundAt, solid, size, gates: HOOPS.length,
     avoid: HOOPS.map((h) => h.pos), avoidR: TUNE.HOOP_R * 3, minFrame: TUNE.HOOP_R * 2 }), level: 0.35 };
   G.finishCam = null; G.crashTimer = 0;                     // (also calls off the victory lap)
   stepReplay(0);
