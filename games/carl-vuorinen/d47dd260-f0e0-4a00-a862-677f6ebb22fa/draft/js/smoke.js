@@ -11,10 +11,13 @@
    screen, and as puffs spread out the trail thins to fewer, further apart (each puff has a level, like a mip chain:
    every 2nd puff is level 1, every 4th level 2..., and a level shrinks away once the spread wants puffs further apart
    than it gives). A puff shrunk to nothing is a point: no pixels.
+   Smoke cleared by a crash (dissipate()) fades instead, by dithering: a fading puff drops a growing share of its pixels
+   in a noise pattern of its own, so it stays solid (no sorting, no blending) and overlapping ones thin out together
+   rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade.
    makeSmoke(scene, anchor) -> { update(dt, P, on), cut(), dissipate(), clear(), mesh }
      anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame);
      cut(): the plane was moved (respawn), so don't join the trail up to the new spot; dissipate(): a crash, so all the
-     smoke laid so far crumbles away by the time the plane is back (no flying on through your own trail); clear():
+     smoke laid so far fades away by the time the plane is back (no flying on through your own trail); clear():
      remove all smoke.
    ========================================================================= */
 function makeSmoke(scene, anchor) {
@@ -33,8 +36,9 @@ function makeSmoke(scene, anchor) {
   const LEVELS = 4;                // top level (every 16th puff), never thinned
   const WIND = [0.9, 0.25, 0.5];   // m/s of drift (and a slow rise)
   const JUMP = 40;                 // m in one frame: a teleport, not flight
-  const GONE = [0.35, 0.55];       // s, s: dissipate(): each puff starts shrinking within the first (at random, so the
-                                   // trail crumbles), gone the second after; all gone by the respawn (G.crashTimer 0.9 s)
+  const GONE = [0.2, 0.7];         // s, s: dissipate(): each puff starts fading within the first (at random, so the
+                                   // trail thins unevenly), gone the second after; all gone by the respawn (G.crashTimer 0.9 s)
+  const GONE_SWELL = 0.35;         // and swells by this share as it fades: smoke thinning out, not a ball shrinking
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');   // as the clouds
 
   const ball = new THREE.IcosahedronGeometry(1, 0);         // 20 facets, non-indexed
@@ -68,7 +72,7 @@ function makeSmoke(scene, anchor) {
       uniform vec2 uR1, uNear, uFresh;
       uniform vec4 uBig, uGone;
       uniform vec3 uThin, uWind, uTop, uBelly;
-      varying vec3 vSmoke;
+      varying vec3 vSmoke, vFade;
       vec3 smokeTurn(vec3 p, float a, float b) {
         float ca = cos(a), sa = sin(a), cb = cos(b), sb = sin(b);
         p = vec3(ca * p.x + sa * p.z, p.y, - sa * p.x + ca * p.z);
@@ -91,15 +95,21 @@ function makeSmoke(scene, anchor) {
       float big = mix(min(1.0, uBig.z / onScreen), 1.0 - smoothstep(uBig.x, uBig.y, onScreen), smoothstep(uFresh.x, uFresh.y, age));
       float k = step(0.0, age) * step(age, uLife) * keep * big
               * (1.0 - smoothstep(uThin.z, 1.0, life));                                  // shrinks away at the end
-      // laid before a crash (dissipate()): shrinks away within a second; before the crash before that: long gone
+      // laid before a crash (dissipate()): swells and fades out within a second (dithered: vFade.x the share of pixels
+      // kept, yz its pattern's offset); before the crash before that: long gone
       float g0 = uGone.z * fract(seed * 17.3);
-      k *= aInfo.x <= uGone.y ? 0.0 : aInfo.x <= uGone.x ? 1.0 - smoothstep(g0, g0 + uGone.w, uTime - uGone.x) : 1.0;
+      float gone = aInfo.x <= uGone.y ? 0.0 : aInfo.x <= uGone.x ? 1.0 - clamp((uTime - uGone.x - g0) / uGone.w, 0.0, 1.0) : 1.0;
+      k *= gone < 0.02 ? 0.0 : 1.0 + ${GONE_SWELL.toFixed(3)} * (1.0 - gone);
+      vFade = vec3(gone, fract(seed * 23.1) * 97.0, fract(seed * 31.7) * 89.0);
       k *= smoothstep(uNear.x, uNear.y, depth - r * k);                                  // and right at the camera
       vec3 dir = smokeTurn(position, seed * 6.2832 + age * (fract(seed * 11.0) - 0.5) * 0.6, fract(seed * 13.7) * 3.1416);
       vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
       vec3 transformed = smokeC + dir * r * (k < 0.03 ? 0.0 : k);                       // gone: a point, no pixels
     `);
-    sh.fragmentShader = 'varying vec3 vSmoke;\n' + sh.fragmentShader
+    sh.fragmentShader = 'varying vec3 vSmoke, vFade;\n' + sh.fragmentShader
+      // fading: interleaved gradient noise, shifted per puff, against the share kept
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+	if ( vFade.x < 0.999 && fract( 52.9829189 * fract( dot( gl_FragCoord.xy + vFade.yz, vec2( 0.06711056, 0.00583715 ) ) ) ) >= vFade.x ) discard;`)
       .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb *= vSmoke;')
       // the clouds' light: the sun wraps round the sides, and the bellies take their light from the sky
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
