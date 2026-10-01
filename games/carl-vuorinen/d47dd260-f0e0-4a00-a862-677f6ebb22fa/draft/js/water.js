@@ -147,7 +147,8 @@ ${waveGLSL}
   SCENERY_PLUGINS.push((group) => {
     group.traverse((o) => {
       if (!o.isMesh || !o.userData.sunTex) return;
-      o.material.userData.sunHooks = [{ key: 'water', fn: hook }];
+      const h = o.material.userData.sunHooks || (o.material.userData.sunHooks = []);   // appended: other modules hook in too
+      if (!h.some((x) => x.key === 'water')) h.push({ key: 'water', fn: hook });
       if (!o.material.transparent) o.renderOrder = 1;   // opaque: after the terrain, so water hidden under it isn't shaded
       o.onBeforeRender = tick;
     });
