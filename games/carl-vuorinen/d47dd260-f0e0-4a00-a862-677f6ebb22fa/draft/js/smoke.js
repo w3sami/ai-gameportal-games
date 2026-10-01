@@ -14,7 +14,9 @@
    A puff is only partly drawn even when fresh (DENSE), thins out over its life rather than shrinking, and so does
    smoke cleared by a crash (dissipate()), faster. All of it is dithering: a puff drops a share of its pixels
    in a noise pattern of its own, so it stays solid (no sorting, no blending) and overlapping ones thin out together
-   rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade.
+   rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade; drawn at
+   under SHIMMER pixels per CSS pixel (a laptop screen, or a phone stepped down by js/resolution.js) the pattern would
+   show as diagonal lines, so there it moves every frame and the eye blends the frames into an even fade.
    makeSmoke(scene, anchor) -> { update(dt, P, on, tripod), cut(), dissipate(), clear(), mesh }
      anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame,
      tripod: the camera is a replay's trackside one, which never flies through the trail, so nothing is shrunk near it
@@ -45,6 +47,7 @@ function makeSmoke(scene, anchor) {
   const GONE = [0.2, 0.7];         // s, s: dissipate(): each puff starts fading within the first (at random, so the
                                    // trail thins unevenly), gone the second after; all gone by the respawn (G.crashTimer 0.9 s)
   const GONE_SWELL = 0.35;         // and swells by this share as it fades: smoke thinning out, not a ball shrinking
+  const SHIMMER = 1.5;             // pixel ratio below which the dither pattern moves every frame
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');   // as the clouds
 
   const ball = new THREE.IcosahedronGeometry(1, 0);         // 20 facets, non-indexed
@@ -64,6 +67,7 @@ function makeSmoke(scene, anchor) {
     uWind: { value: new THREE.Vector3(WIND[0], WIND[1], WIND[2]) },
     uGone: { value: new THREE.Vector4(-1e7, -1e7, GONE[0], GONE[1]) },   // the last dissipate() time, the one before it
     uTop: { value: TOP }, uBelly: { value: BELLY },
+    uJit: { value: 0 },                                     // the dither pattern's offset this frame (0: still)
   };
   const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true });
   mat.userData.noSun = true;                                // not shaded by the terrain (js/sunlight.js), like the clouds
@@ -113,10 +117,10 @@ function makeSmoke(scene, anchor) {
       vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
       vec3 transformed = smokeC + dir * r * (k < 0.03 ? 0.0 : k);                       // gone: a point, no pixels
     `);
-    sh.fragmentShader = 'varying vec3 vSmoke, vFade;\n' + sh.fragmentShader
-      // fading: interleaved gradient noise, shifted per puff, against the share kept
+    sh.fragmentShader = 'varying vec3 vSmoke, vFade;\nuniform float uJit;\n' + sh.fragmentShader
+      // fading: interleaved gradient noise, shifted per puff (and per frame, when uJit moves), against the share kept
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-	if ( vFade.x < 0.999 && fract( 52.9829189 * fract( dot( gl_FragCoord.xy + vFade.yz, vec2( 0.06711056, 0.00583715 ) ) ) ) >= vFade.x ) discard;`)
+	if ( vFade.x < 0.999 && fract( 52.9829189 * fract( dot( gl_FragCoord.xy + vFade.yz + uJit, vec2( 0.06711056, 0.00583715 ) ) ) ) >= vFade.x ) discard;`)
       .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb *= vSmoke;')
       // the clouds' light: the sun wraps round the sides, and the bellies take their light from the sky
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
@@ -140,6 +144,10 @@ function makeSmoke(scene, anchor) {
   // the whole upload and leave the last run's puffs on the GPU, to hatch again as T reached their births
   let T = 0, head = 0, joined = false, carry = 0, lastBirth = -1e6, lo = -1, n = 0, dirty = true, count = 0;
   mesh.onAfterRender = () => { dirty = false; };
+  // the pattern moves by Jimenez's step for this noise (5.588238 px, 64 frames round), so each frame's lines fall
+  // between the last ones'
+  let frame = 0;
+  mesh.onBeforeRender = (renderer) => { frame = (frame + 1) % 64; U.uJit.value = renderer.getPixelRatio() < SHIMMER ? 5.588238 * frame : 0; };
 
   function emit(p, birth) {
     const i = head; head = (head + 1) % MAX;
