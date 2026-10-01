@@ -5,8 +5,9 @@
    so every model works as it is, and the faint prop disc casts a faint disc). Every lit scenery material projects
    that target (a sunHooks entry, js/sunlight.js) and takes away direct sunlight where the plane blocks it: the
    same thing the baked terrain shadow does, so the plane's shadow on already-shaded ground adds nothing.
-   The penumbra widens and the shadow fades with distance from the plane, per pixel: a low pass shows a crisp
-   shape (a wing tip nearer the ground is sharper than the tail), a high one a soft, faint smudge.
+   Like a real sun shadow it keeps its size at any height (the light is parallel); what changes is the edge: the
+   penumbra widens with distance from the plane as the sun's 0.53 deg disc makes it, per pixel (a wing tip nearer
+   the ground is sharper than the tail), so thin parts soften first. It fades out from 60 m to MAX_D.
    Light direction: TUNE.SHADOW_SUN blends from straight down (0, the old altitude cue) to the sun (1).
    PlaneShadow.update(renderer, model, alt, sunDir)   after the model is posed, before the frame renders
    ========================================================================= */
@@ -14,7 +15,7 @@ Object.assign(TUNE, { SHADOW_SUN: 1 });
 if (typeof TUNE_DEFAULTS !== 'undefined') Object.assign(TUNE_DEFAULTS, { SHADOW_SUN: 1 });
 const PlaneShadow = (() => {
   const SIZE = 256, CAM_D = 60;
-  const MAX_D = 240;                                        // no shadow this far from the plane along the light
+  const MAX_D = 300;                                        // no shadow this far from the plane along the light (~185 m up)
   const U = {
     psView: { value: new THREE.Matrix4() },
     psK: { value: new THREE.Vector4(10, CAM_D, 0, 0.08) },  // half size (m), camera distance, strength, texel (m)
@@ -44,11 +45,11 @@ float psTap( vec2 uv, float lod ) {
 }
 float psShadow() {
   if ( psK.z <= 0.0 || vPs.z < 0.25 || vPs.x < 0.0 || vPs.y < 0.0 || vPs.x > 1.0 || vPs.y > 1.0 ) return 0.0;
-  float d = vPs.z, blur = 0.05 + d * 0.02;               // penumbra (m): the sun's disc, exaggerated a little
+  float d = vPs.z, blur = 0.05 + d * 0.0093;             // penumbra (m): the sun's 0.53 deg disc, as in life
   float lod = log2( max( blur / psK.w, 1.0 ) ), o = 0.3 * blur / ( 2.0 * psK.x );
   float a = 0.25 * ( psTap( vPs.xy + vec2( o, o * 0.4 ), lod ) + psTap( vPs.xy + vec2( -o * 0.4, o ), lod )
                    + psTap( vPs.xy + vec2( -o, -o * 0.4 ), lod ) + psTap( vPs.xy + vec2( o * 0.4, -o ), lod ) );
-  return a * psK.z * ( 1.0 - smoothstep( 25.0, ${MAX_D.toFixed(1)}, d ) );
+  return a * psK.z * ( 1.0 - smoothstep( 60.0, ${MAX_D.toFixed(1)}, d ) );
 }
 `;
   function inject(sh) {
