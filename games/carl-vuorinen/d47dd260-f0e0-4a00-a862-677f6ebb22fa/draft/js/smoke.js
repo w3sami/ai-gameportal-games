@@ -15,8 +15,10 @@
    smoke cleared by a crash (dissipate()), faster. All of it is dithering: a puff drops a share of its pixels
    in a noise pattern of its own, so it stays solid (no sorting, no blending) and overlapping ones thin out together
    rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade.
-   makeSmoke(scene, anchor) -> { update(dt, P, on), cut(), dissipate(), clear(), mesh }
-     anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame);
+   makeSmoke(scene, anchor) -> { update(dt, P, on, tripod), cut(), dissipate(), clear(), mesh }
+     anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame,
+     tripod: the camera is a replay's trackside one, which never flies through the trail, so nothing is shrunk near it
+     or for filling the screen);
      cut(): the plane was moved (respawn), so don't join the trail up to the new spot; dissipate(): a crash, so all the
      smoke laid so far fades away by the time the plane is back (no flying on through your own trail); clear():
      remove all smoke.
@@ -57,7 +59,7 @@ function makeSmoke(scene, anchor) {
     uTime: { value: 0 }, uLife: { value: LIFE },
     uR: { value: new THREE.Vector4(R0, PUFF[0], PUFF[1], 0) }, uR1: { value: new THREE.Vector2(R1, GROW) },
     uNear: { value: new THREE.Vector2(NEAR[0], NEAR[1]) }, uBig: { value: new THREE.Vector4(BIG[0], BIG[1], CLAMP, 0) },
-    uFresh: { value: new THREE.Vector2(FRESH[0], FRESH[1]) },
+    uFresh: { value: new THREE.Vector2(FRESH[0], FRESH[1]) }, uShrink: { value: 1 },   // 0: no view-keeping shrinks (tripod)
     uThin: { value: new THREE.Vector3(THIN / SPACING, LEVELS, FADE) },
     uWind: { value: new THREE.Vector3(WIND[0], WIND[1], WIND[2]) },
     uGone: { value: new THREE.Vector4(-1e7, -1e7, GONE[0], GONE[1]) },   // the last dissipate() time, the one before it
@@ -71,7 +73,7 @@ function makeSmoke(scene, anchor) {
     sh.vertexShader = `
       attribute vec3 aPos;
       attribute vec3 aInfo;
-      uniform float uTime, uLife;
+      uniform float uTime, uLife, uShrink;
       uniform vec4 uR;
       uniform vec2 uR1, uNear, uFresh;
       uniform vec4 uBig, uGone;
@@ -96,7 +98,7 @@ function makeSmoke(scene, anchor) {
       // filling the screen: an old puff shrinks away (flying through a trail stays clear), a fresh one is only held to
       // CLAMP of it, so the trail from the plane runs on to the edge of the chase view
       float onScreen = r * projectionMatrix[1][1] / max(depth, 0.01);
-      float big = mix(min(1.0, uBig.z / onScreen), 1.0 - smoothstep(uBig.x, uBig.y, onScreen), smoothstep(uFresh.x, uFresh.y, age));
+      float big = mix(1.0, mix(min(1.0, uBig.z / onScreen), 1.0 - smoothstep(uBig.x, uBig.y, onScreen), smoothstep(uFresh.x, uFresh.y, age)), uShrink);
       float k = step(0.0, age) * step(age, uLife) * keep * big;
       // fading out (dithered: vFade.x the share of pixels kept, yz its pattern's offset): at the end of its life, and
       // when laid before a crash (dissipate()), gone within a second and swelling as it goes; laid before the crash
@@ -106,7 +108,7 @@ function makeSmoke(scene, anchor) {
       float fade = ${DENSE.toFixed(3)} * (1.0 - smoothstep(uThin.z, 1.0, life)) * gone;
       k *= fade < 0.01 ? 0.0 : 1.0 + ${GONE_SWELL.toFixed(3)} * (1.0 - gone);
       vFade = vec3(fade, fract(seed * 23.1) * 97.0, fract(seed * 31.7) * 89.0);
-      k *= smoothstep(uNear.x, uNear.y, depth - r * k);                                  // and right at the camera
+      k *= mix(1.0, smoothstep(uNear.x, uNear.y, depth - r * k), uShrink);              // and right at the camera
       vec3 dir = smokeTurn(position, seed * 6.2832 + age * (fract(seed * 11.0) - 0.5) * 0.6, fract(seed * 13.7) * 3.1416);
       vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
       vec3 transformed = smokeC + dir * r * (k < 0.03 ? 0.0 : k);                       // gone: a point, no pixels
@@ -161,9 +163,9 @@ function makeSmoke(scene, anchor) {
     lo = -1; n = 0;
   }
 
-  function update(dt, P, on) {
+  function update(dt, P, on, tripod) {
     T += dt;
-    U.uTime.value = T;
+    U.uTime.value = T; U.uShrink.value = tripod ? 0 : 1;
     if (on && dt > 0) {
       at.copy(anchor).applyQuaternion(P.q).add(P.pos);
       d.subVectors(at, last);
