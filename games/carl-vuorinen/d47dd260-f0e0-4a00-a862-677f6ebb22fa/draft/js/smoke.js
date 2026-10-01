@@ -28,7 +28,8 @@ function makeSmoke(scene, anchor) {
   const R0 = 0.35;                 // m: puff radius as it leaves the plane
   const PUFF = [1.5, 0.12];        // m, s: it balloons to this at once (time constant), so the chase view sees it
   const R1 = 3, GROW = 2.5;        // m, s: then spreads to this, slowly
-  const FADE = 0.55;               // share of LIFE after which it fades out
+  const FADE = 0;                  // share of LIFE after which it fades out: from the start, eased (still near solid
+                                   // behind the plane, half gone by 7 s, past which it's rarely anywhere in view)
   const NEAR = [1, 3];             // m from the camera to the puff's surface: gone at the first, full size by the second
   const BIG = [0.12, 0.24];        // puff radius as a share of half the screen height: an old puff starts shrinking, gone
   const CLAMP = 0.14;              // a fresh one is only held down to this, so the chase view keeps its tail
