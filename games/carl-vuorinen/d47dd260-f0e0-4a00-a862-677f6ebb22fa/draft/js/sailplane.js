@@ -291,7 +291,7 @@ const ThermalScenery = (() => {
       const m = new THREE.Mesh(new THREE.CylinderGeometry(t.r * 0.55, t.r * 0.62, H, 28, 1, true), colMat);
       m.position.set(t.x, t.base + H / 2 - 10, t.z);
       m.onBeforeRender = () => { streakTex.offset.y = -(performance.now() / 1000) * 0.06; };
-      m.renderOrder = 2;
+      m.renderOrder = 2; m.userData.hint = true;              // (hint: a game's mark, hidden in a replay without the hoops)
       group.add(m);
     }
     // specks: each spirals up its column and starts again at the bottom
@@ -317,7 +317,7 @@ const ThermalScenery = (() => {
     };
     pm.customProgramCacheKey = () => 'thermal-specks';
     const pts = new THREE.Points(pg, pm);
-    pts.frustumCulled = false; pts.onBeforeRender = tick; pts.renderOrder = 3;
+    pts.frustumCulled = false; pts.onBeforeRender = tick; pts.renderOrder = 3; pts.userData.hint = true;
     group.add(pts);
     // birds: a few big soaring birds circling each column near the top, flapping now and then
     const bp = [], bc = [], bb = [];
