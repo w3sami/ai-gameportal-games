@@ -1011,7 +1011,7 @@ function updateVisuals(dt) {
     m.material = rel === 0 ? hoopMat.next : rel === 1 ? hoopMat.soon : hoopMat.later;
     m.scale.setScalar(rel === 0 ? 1 + Math.sin(t * 6) * 0.035 : 1);
   }
-  pylons.update(G.next, t);
+  pylons.update(gatesHidden() ? -1 : G.next, t);           // (hidden: no gate is next, so every pylon keeps its plain paint)
   pylons.animate(dt);
   for (const k of gateKits) k.update({ next: G.next, t, dt, P, playing: G.state === 'playing', crashing: G.crashTimer > 0, fresh: getBest() == null, toast: showToast, rewind: G.replay ? () => {} : rewindTo, bonus: timeBonus });
   if (G.next < HOOPS.length) {                              // faint target disc on the next gate (for pylons: the scoring circle)
@@ -1507,13 +1507,15 @@ function update(dt) {
   updateHUD();
   Sound.update(P, G.state === 'playing' ? 1 : G.state === 'paused' ? 0 : G.replay ? G.replay.level : 0.35);
 }
-// Show hoops (the replay bar): unticked, the gates' marks (hoops, the target disc, the pylons' arrows) are left out of the
-// picture while a replay is watched. Hidden only for the render, so the gate kits' own showing and fading carries on
-// underneath and comes back as it was
+// Show hoops (the replay bar): unticked, a replay looks like the real thing: the gates' marks (hoops, the target disc, the
+// pylons' arrows) are left out of the picture, and the pylons stay in their plain paint instead of lighting up as the
+// next gate (updateVisuals). The marks are hidden only for the render, so the gate kits' own showing and fading carries
+// on underneath and comes back as it was
 let showGates = true;
 const hiddenNow = [];
+function gatesHidden() { return !showGates && G.state === 'replay'; }
 function renderFrame() {
-  const hide = !showGates && G.state === 'replay';
+  const hide = gatesHidden();
   if (hide) for (const o of [...gateMeshes, gateDisc]) if (o.visible) { o.visible = false; hiddenNow.push(o); }
   renderer.render(scene, camera);
   while (hiddenNow.length) hiddenNow.pop().visible = true;
