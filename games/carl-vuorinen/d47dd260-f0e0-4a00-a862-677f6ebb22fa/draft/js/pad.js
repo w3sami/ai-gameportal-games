@@ -29,7 +29,7 @@ const $ = (id) => document.getElementById(id);
 const shown = (el) => !!el && !el.hidden && el.getClientRects().length > 0;
 const click = (id) => { const el = $(id); if (shown(el) && !el.disabled) { el.click(); return true; } return false; };
 
-function panel() { return ['start', 'pause', 'finish', 'watch'].map($).find(shown) || null; }   // watch: the replay's bar
+function panel() { return ['board', 'start', 'pause', 'finish', 'watch'].map($).find(shown) || null; }   // watch: the replay's bar
 function targets(p) { return Array.from(p.querySelectorAll('button:not([disabled]), input[type="checkbox"]')).filter(shown); }
 function focus(el) { if (el) el.focus({ preventScroll: true }); }
 function current(p) { const a = document.activeElement; return a && p.contains(a) && targets(p).includes(a) ? a : null; }
@@ -60,7 +60,7 @@ function confirm() {
   if (el) { focus(el); el.click(); }
 }
 function back(state) {
-  if (state === 'attract') { if ($('start').dataset.view === 'levels') click('btn-themes'); }
+  if (state === 'attract') { if (shown($('board'))) click('btn-board-back'); else if ($('start').dataset.view === 'levels') click('btn-themes'); }
   else if (state === 'paused') { if (!click('btn-confirm-no')) click('btn-resume'); }
   else if (state === 'finished') click('btn-menu');
   else if (state === 'replay') click('btn-watch-exit');
