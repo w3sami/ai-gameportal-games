@@ -111,8 +111,6 @@ function createMillKit(ctx) {
   const M = ctx.hoopMat;
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   mat.userData.shared = true;
-  const rodMat = new THREE.MeshLambertMaterial({ color: '#4a4540' });
-  rodMat.userData.shared = true;
   const Mx = createMesher(), { BOX, CYL } = Mx.G;
   const C = (h) => new THREE.Color(h);
   const BRICK = C('#9c5a43'), BODY = C('#4d4a45'), TRIM = C('#ece6d6'), CAP = C('#5f6e5a'), WOOD = C('#6b4a30');
@@ -193,22 +191,11 @@ function createMillKit(ctx) {
       holder.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(m.rx, 0, m.rz), WORLD_UP, new THREE.Vector3(-m.fx, 0, -m.fz)));
       const rotor = new THREE.Group();
       rotor.add(new THREE.Mesh(sailGeometry(m), mat));
-      // the hoop rides `gap` past sail 0, on two rods out to the sails either side of it
+      // the hoop rides `gap` past sail 0, turning with the sails but held by nothing, like every other hoop in the air
       const a = m.a0 + m.gap, hx = m.orbit * Math.sin(a), hy = m.orbit * Math.cos(a);
       const hoop = new THREE.Mesh(ring, M.later);
       hoop.position.set(hx, hy, 0.6);
       rotor.add(hoop);
-      for (const [sa, off] of [[m.a0, MILL_STOCK + m.width], [m.a0 + Math.PI / 2, MILL_STOCK]]) {
-        // from the ring toward the sail at angle sa: the foot of the perpendicular from the hoop's centre to its stock line
-        const s = Math.sin(sa), c = Math.cos(sa), ac = hx * c - hy * s;   // the hoop's centre across that sail's stock
-        const sign = Math.sign(ac), from = TUNE.HOOP_R + 0.4, to = Math.abs(ac) - (sign > 0 ? off : MILL_STOCK);
-        if (to <= from) continue;
-        const mid = (from + to) / 2, dirx = -sign * c, diry = sign * s;   // from the hoop toward the stock, across it
-        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, to - from, 6), rodMat);
-        rod.position.set(hx + dirx * mid, hy + diry * mid, 0.6);
-        rod.rotation.z = Math.atan2(-dirx, diry);
-        rotor.add(rod);
-      }
       holder.add(rotor);
       group.add(holder);
       items.push({ m, rotor, hoop, fade: 0, flash: null });
