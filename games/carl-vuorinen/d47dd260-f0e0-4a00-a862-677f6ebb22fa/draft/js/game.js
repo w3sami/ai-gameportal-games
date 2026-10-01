@@ -17,6 +17,19 @@ const settings = (() => {
   try { s = Object.assign(d, JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem(OLD_STORE_KEY) || '{}')); } catch (e) { /* keep defaults */ }
   if (typeof s.best === 'number') s.best = { valley: s.best };              // single-course prototype saves
   if (!s.best || typeof s.best !== 'object') s.best = {};
+  if (!s.ids) {                                             // course ids renamed to follow the level names (all at once:
+    const was = { harbour: 'bay', port: 'harbour', hillside: 'cliffside', fairground: 'fairgrounds' };   // harbour moved)
+    const best = {};
+    for (const k in s.best) best[was[k] || k] = s.best[k];
+    s.best = best; if (was[s.course]) s.course = was[s.course];
+    try {                                                   // the kept runs too (js/ghost.js)
+      const runs = {};
+      for (const k in was) runs[k] = localStorage.getItem('skyrace.ghost.' + k);
+      for (const k in was) localStorage.removeItem('skyrace.ghost.' + k);
+      for (const k in was) if (runs[k] != null) localStorage.setItem('skyrace.ghost.' + was[k], runs[k]);
+    } catch (e) { /* no storage */ }
+    s.ids = 2;
+  }
   return s;
 })();
 const getBest = () => (settings.best[COURSE.id] == null ? null : settings.best[COURSE.id]);   // best times are per course
@@ -1310,7 +1323,7 @@ function applyCourse() {                                    // scene, plane, sta
   setVehicleModel();
   for (const v in models) body.classList.toggle('vehicle-' + v, TUNE.VEHICLE === v);
   body.classList.toggle('course-pylons', gateNoun() === 'gate');
-  G.ghostWanted = false;
+  G.ghostWanted = false; G.ghostPick = null;
   const bl = hud.boostBtn.querySelector('span'); if (bl) bl.textContent = gliding() ? 'Tuck' : sailing() ? 'Dive' : TUNE.SMOKE ? 'Smoke' : 'Boost';
   smoke.trail.clear();
   renderBest();
@@ -1326,7 +1339,8 @@ function startRun() {
   G.rec = Replay.recorder(); startGhost();
   setState('playing');
   if (input.device === 'mouse' && !input.mouse.locked) tryLock({ onFail: cursorSteer });
-  showToast(`The clock starts at the first ${gateNoun()}.`, 2600);
+  const vs = G.ghost ? (G.ghostPick ? G.ghostPick.who : 'your best run') : null;
+  showToast(`${vs ? `Racing ${vs}. ` : ''}The clock starts at the first ${gateNoun()}.`, vs ? 3200 : 2600);
 }
 function restart() {
   if (G.state === 'attract' || G.state === 'replay') return;
@@ -1368,12 +1382,13 @@ function resumeFromUser() {
 function finishRun() {
   const t = G.time, prev = getBest(), best = prev == null || t < prev;
   if (best) { settings.best[COURSE.id] = t; saveSettings(); }
-  const gi = ghostInfo();
-  if (G.rec && (!gi || t < gi.time)) {                      // the fastest run is kept as the ghost (js/ghost.js)
-    const id = COURSE.id, k = courseKey(), tr = G.rec.finish();
-    Object.assign(ghostRun, { id, key: k, track: tr });
-    Ghost.save(id, k, t, tr).then(() => { if (COURSE.id === id) renderBest(); });
+  const gi = ghostInfo(), run = G.rec && G.rec.finish();
+  if (run && (!gi || t < gi.time)) {                        // the fastest run is kept as the ghost (js/ghost.js)
+    const id = COURSE.id, k = courseKey();
+    Object.assign(ghostRun, { id, key: k, track: run });
+    Ghost.save(id, k, t, run).then(() => { if (COURSE.id === id) renderBest(); });
   }
+  for (const fn of finishHooks) fn({ id: COURSE.id, key: courseKey(), time: t, track: run });   // js/boards.js posts it
   Sound.finish();
   $('finish-time').textContent = fmtTime(t);
   $('finish-best').textContent = prev == null ? 'First time on this course, saved as your best.'
@@ -1439,6 +1454,13 @@ function stepReplay(dt) {
 
 /* ---------- ghost (js/ghost.js): the fastest run kept, to race against or watch from the menu ---------- */
 const courseKey = () => Ghost.key(COURSE, TUNE.VEHICLE);
+function coursePlace() {                                    // [theme, level], from 1, in the menu's order
+  for (let t = 0; t < api.themes.length; t++) {
+    const l = api.themes[t].levels.findIndex((e) => e.id === COURSE.id);
+    if (l >= 0) return [t + 1, l + 1];
+  }
+  return [0, 0];
+}
 const ghostRun = { id: null, key: null, track: null };      // the kept run of the course loaded, once unpacked
 const ghostInfo = () => Ghost.info(COURSE.id, courseKey());
 function ghostReady() { return ghostRun.track && ghostRun.id === COURSE.id && ghostRun.key === courseKey() ? ghostRun.track : null; }
@@ -1449,23 +1471,38 @@ async function ghostTrack() {
   return tr;
 }
 function startGhost() {                                     // with Race ghost (and Fly again or a restart after it)
-  const tr = G.ghostWanted ? ghostReady() : null;
+  const tr = !G.ghostWanted ? null : G.ghostPick ? G.ghostPick.track : ghostReady();
   G.ghost = tr ? { track: tr, S: Replay.state(), t: 0, model: ghostModel() } : null;
+}
+// someone else's run, from the leaderboard (js/boards.js): who is 'Aino, 1:32.10'
+function raceTrack(track, who) {
+  if (G.state !== 'attract' || switching || !track) return false;
+  G.ghostPick = { track, who }; G.ghostWanted = true;
+  startRun();
+  return true;
+}
+function watchTrack(track, who) {
+  if (G.state !== 'attract' || switching || !track) return false;
+  playWatch(track, who);
+  return true;
 }
 async function raceGhost() {
   if (G.state !== 'attract' || switching) return;
   if (!ghostReady() && !(await ghostTrack())) return;       // (unpacked when the menu showed it, so normally at once:
   if (G.state !== 'attract') return;                        // the click still counts for the mouse lock and sound)
-  G.ghostWanted = true;
+  G.ghostPick = null; G.ghostWanted = true;
   startRun();
 }
 async function watchReplay() {                              // the kept run from trackside, until Back to menu or Esc
   if (G.state !== 'attract' || switching) return;
   const tr = ghostReady() || await ghostTrack(), gi = ghostInfo();
   if (!tr || G.state !== 'attract') return;
+  playWatch(tr, gi ? fmtTime(gi.time) : '');
+}
+function playWatch(tr, label) {
   Sound.init(); blurActive();
   resetRun();
-  $('watch-time').textContent = gi ? fmtTime(gi.time) : '';
+  $('watch-time').textContent = label;
   setState('replay');
   playTrack(tr);
   focusEl('btn-watch-exit');
@@ -1476,7 +1513,7 @@ function toMenu() {
   resetRun(); setState('attract'); menu.show('levels');
 }
 
-$('btn-start').addEventListener('click', () => { G.ghostWanted = false; startRun(); });
+$('btn-start').addEventListener('click', () => { G.ghostWanted = false; G.ghostPick = null; startRun(); });
 $('btn-ghost').addEventListener('click', raceGhost);
 $('btn-watch').addEventListener('click', watchReplay);
 $('btn-watch-exit').addEventListener('click', toMenu);
@@ -1506,7 +1543,7 @@ function boostEdges() {
 }
 
 const prevPos = new V3();
-const frameHooks = [];
+const frameHooks = [], finishHooks = [];
 function update(dt) {
   G.clock += dt;
   for (const fn of frameHooks) fn(dt);                      // polled input (js/pad.js) lands before this frame's physics
@@ -1570,6 +1607,12 @@ requestAnimationFrame((t) => { last = t; frame(t); });
 window.Skyrace = {
   input, setDevice, restart,
   onFrame: (fn) => { frameHooks.push(fn); },
+  // js/boards.js: the course flown, each finish with its run, and someone else's run to race or watch
+  course: { get id() { return COURSE.id; }, get name() { return COURSE.name; }, get key() { return courseKey(); }, get place() { return coursePlace(); } },
+  fmtTime,
+  onFinish: (fn) => { finishHooks.push(fn); },
+  race: raceTrack,
+  watch: watchTrack,
   get state() { return G.state; },
   get crashing() { return G.crashTimer > 0; },
   get hoop() { return G.next; },
