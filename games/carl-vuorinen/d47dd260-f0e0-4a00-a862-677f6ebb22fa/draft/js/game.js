@@ -80,6 +80,7 @@ scene.add(hemiLight);
 const sunLight = new THREE.DirectionalLight('#fff3df', 2.4);
 sunLight.position.copy(SUN_DIR).multiplyScalar(100);
 scene.add(sunLight);
+Airframe.ENV.afSky.value.copy(COL.sky); Airframe.ENV.afHorizon.value.copy(COL.horizon); Airframe.ENV.afGround.value.copy(COL.forest);   // aircraft rim and glass (js/airframe.js)
 
 const sky = (() => {
   const R = 4800, g = new THREE.SphereGeometry(R, 32, 16), p = g.attributes.position;
@@ -318,130 +319,8 @@ function modelKit(g) {
     const m = new THREE.Mesh(flat, mat); m.position.set(x, y, z); m.rotation.z = rz; g.add(m); return m;
   };
 }
-function makePropModel() {
-  const g = new THREE.Group(), add = modelKit(g);
-  const white = new THREE.MeshLambertMaterial({ color: '#f3f1ea' }), orange = new THREE.MeshLambertMaterial({ color: '#ff5a1f' });
-  const dark = new THREE.MeshLambertMaterial({ color: '#27313b' }), glass = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
-  add(new THREE.CylinderGeometry(0.62, 0.3, 6.2, 8).rotateX(-Math.PI / 2), white, 0, 0, 0.35);
-  add(new THREE.CylinderGeometry(0.52, 0.64, 1.0, 8).rotateX(-Math.PI / 2), orange, 0, 0, -3.1);
-  add(new THREE.ConeGeometry(0.3, 0.7, 8).rotateX(-Math.PI / 2), dark, 0, 0, -3.95);
-  add(new THREE.BoxGeometry(4.8, 0.16, 1.75), orange, -2.35, -0.22, -0.55, -0.07);   // wings with dihedral
-  add(new THREE.BoxGeometry(4.8, 0.16, 1.75), orange, 2.35, -0.22, -0.55, 0.07);
-  add(new THREE.BoxGeometry(3.4, 0.12, 1.0), orange, 0, 0.12, 3.05);
-  add(new THREE.BoxGeometry(0.12, 1.45, 1.15), orange, 0, 0.8, 3.1);
-  add(new THREE.BoxGeometry(0.78, 0.5, 1.5), glass, 0, 0.55, -0.85);
-  const prop = add(new THREE.BoxGeometry(3.0, 0.2, 0.06), dark, 0, 0, -3.72);
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.55, 24), new THREE.MeshBasicMaterial({ color: '#27313b', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
-  disc.position.set(0, 0, -3.74); g.add(disc);
-  scene.add(g);
-  return { group: g, tips: [new V3(-4.7, 0.1, 0.3), new V3(4.7, 0.1, 0.3)],
-           update(dt, P) { prop.rotation.z += dt * (P.boosting ? 55 : 34); } };
-}
-function makeJetModel() {
-  const g = new THREE.Group(), add = modelKit(g);
-  const skin = new THREE.MeshLambertMaterial({ color: '#a3adb7' }), dark = new THREE.MeshLambertMaterial({ color: '#2a333c' });
-  const orange = new THREE.MeshLambertMaterial({ color: '#ff5a1f' }), glass = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
-  // flat plates drawn in plan view: [x, z] outline, extruded `depth` downwards
-  const plate = (pts, depth) => new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))), { depth, bevelEnabled: false }).rotateX(Math.PI / 2);
-  add(new THREE.CylinderGeometry(0.85, 0.72, 10, 10).rotateX(-Math.PI / 2), skin, 0, 0, 0.8);
-  add(new THREE.ConeGeometry(0.85, 4.2, 10).rotateX(-Math.PI / 2), skin, 0, 0, -6.3);
-  add(new THREE.ConeGeometry(0.3, 1.1, 10).rotateX(-Math.PI / 2), dark, 0, 0, -8.0);
-  add(new THREE.SphereGeometry(0.62, 12, 8).scale(1, 0.8, 2.8), glass, 0, 0.62, -4.0);
-  add(new THREE.CylinderGeometry(0.66, 0.74, 1.1, 12).rotateX(-Math.PI / 2), dark, 0, 0, 6.3);   // nozzle
-  for (const s of [-1, 1]) {
-    add(new THREE.BoxGeometry(0.75, 1.0, 3.4), dark, s * 1.05, -0.2, -0.6);                          // intakes
-    add(plate([[0.6 * s, -2.4], [5.6 * s, 2.6], [5.6 * s, 3.5], [0.6 * s, 4.4]], 0.18), skin, 0, -0.02, 0);   // delta wing
-    add(plate([[0.6 * s, 5.0], [3.1 * s, 6.6], [3.1 * s, 7.2], [0.6 * s, 7.1]], 0.14), skin, 0, 0.1, 0);     // tailplane
-    const fin = new THREE.ExtrudeGeometry(new THREE.Shape([[0, 0], [2.9, 0], [3.3, 2.6], [2.2, 2.6]].map(([a, b]) => new THREE.Vector2(a, b))),
-      { depth: 0.14, bevelEnabled: false }).rotateY(-Math.PI / 2);                                // twin fins, canted out
-    add(fin, orange, s * 0.85, 0.55, 3.6, -s * 0.32);
-  }
-  const flameMat = new THREE.MeshBasicMaterial({ color: '#ffb35c', transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.55, 4, 12, 1, true).rotateX(Math.PI / 2).translate(0, 0, 2), flameMat);   // base at origin, tip aft
-  flame.position.z = 6.85; g.add(flame);
-  scene.add(g);
-  let burn = 0, t = 0;
-  return { group: g, tips: [new V3(-5.6, 0, 3.05), new V3(5.6, 0, 3.05)],
-           update(dt, P) {                                  // afterburner: flame grows and flickers while boosting
-             t += dt; burn = lerp(burn, P.boosting ? 1 : 0, damp(8, dt));
-             const w = 0.8 + 0.3 * burn;
-             flame.scale.set(w, w, 0.25 + burn * (1 + 0.15 * Math.sin(t * 60)));
-             flameMat.opacity = 0.3 + 0.55 * burn;
-           } };
-}
-function makeRacerModel() {                               // race plane: low wing, big round cowl, taildragger
-  const g = new THREE.Group(), add = modelKit(g);
-  const white = new THREE.MeshLambertMaterial({ color: '#f5f5f2' }), blue = new THREE.MeshLambertMaterial({ color: '#1d4fd8' });
-  const red = new THREE.MeshLambertMaterial({ color: '#e5262d' }), dark = new THREE.MeshLambertMaterial({ color: '#232b33' });
-  const glass = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
-  add(new THREE.CylinderGeometry(0.64, 0.24, 5.6, 10).rotateX(-Math.PI / 2), white, 0, 0, 0.55);
-  add(new THREE.CylinderGeometry(0.66, 0.74, 1.15, 12).rotateX(-Math.PI / 2), red, 0, 0, -2.75);   // cowl
-  add(new THREE.ConeGeometry(0.34, 0.75, 10).rotateX(-Math.PI / 2), red, 0, 0, -3.7);             // spinner
-  add(new THREE.SphereGeometry(0.5, 12, 8).scale(1, 0.85, 2.3), glass, 0, 0.55, -0.1);            // bubble canopy
-  for (const s of [-1, 1]) {
-    add(new THREE.BoxGeometry(3.4, 0.17, 1.55), blue, s * 2.05, -0.38, -0.95);                  // low wing, no dihedral
-    add(new THREE.BoxGeometry(0.5, 0.18, 1.3), white, s * 3.65, -0.38, -0.95);                  // white tips
-    add(new THREE.BoxGeometry(0.12, 1.25, 0.2), dark, s * 0.8, -0.95, -1.9, s * 0.45);           // gear legs
-    add(new THREE.SphereGeometry(0.3, 10, 6).scale(0.7, 1, 1.9), white, s * 1.08, -1.55, -1.85);   // wheel pants
-  }
-  add(new THREE.BoxGeometry(2.7, 0.12, 0.95), blue, 0, 0.08, 2.85);                               // tailplane
-  add(new THREE.BoxGeometry(0.12, 1.35, 1.1), red, 0, 0.72, 2.95);                                // fin
-  const prop = add(new THREE.BoxGeometry(2.3, 0.2, 0.06), dark, 0, 0, -3.5);
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.2, 24), new THREE.MeshBasicMaterial({ color: '#232b33', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
-  disc.position.set(0, 0, -3.52); g.add(disc);
-  scene.add(g);
-  return { group: g, tips: [new V3(-3.9, -0.38, -0.4), new V3(3.9, -0.38, -0.4)], smoke: new V3(0, 0.1, 3.4),
-           update(dt, P) { prop.rotation.z += dt * (P.boosting ? 60 : 42); } };
-}
-function makeWingsuitModel() {                            // flyer belly-down, head first; arm wings sweep back when tucked
-  const g = new THREE.Group(), add = modelKit(g);
-  const suit = new THREE.MeshLambertMaterial({ color: '#ff5a1f' }), dark = new THREE.MeshLambertMaterial({ color: '#2a333d' });
-  const white = new THREE.MeshLambertMaterial({ color: '#f3f1ea' }), visor = new THREE.MeshLambertMaterial({ color: '#2d4a63', emissive: '#0d1b28' });
-  // limb from a to b ([x, y, z]), tapering from ra to rb
-  const limb = (k, a, b, ra, rb, mat) => {
-    const d = new V3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length();
-    const m = k(new THREE.CylinderGeometry(rb, ra, L, 7), mat, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
-    m.quaternion.setFromUnitVectors(new V3(0, 1, 0), d.normalize());
-    return m;
-  };
-  // inflated wing: outline in plan view [x, z], `t` thick, bevelled so its edges round off
-  const wing = (pts, t) => new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))),
-    { depth: t * 0.4, bevelEnabled: true, bevelThickness: t * 0.3, bevelSize: 0.03, bevelSegments: 1 }).rotateX(Math.PI / 2).translate(0, t * 0.2, 0);
-  // torso: shoulders 0.44 wide tapering to the hips, about half as deep as wide
-  add(new THREE.CylinderGeometry(0.17, 0.22, 0.66, 8).rotateX(Math.PI / 2).scale(1, 0.72, 1), dark, 0, 0, -0.28);
-  add(new THREE.BoxGeometry(0.28, 0.09, 0.36), white, 0, 0.17, -0.32);                   // rig on the back
-  add(new THREE.BoxGeometry(0.4, 0.03, 0.06), suit, 0, 0.13, -0.54);                     // stripe across the shoulders
-  add(new THREE.SphereGeometry(0.13, 12, 9).scale(1, 1, 1.15), white, 0, 0.08, -0.76);   // helmet
-  add(new THREE.SphereGeometry(0.1, 10, 6).scale(1.05, 0.7, 0.8), visor, 0, 0.02, -0.84);
-  const arms = [], legs = [];
-  for (const s of [-1, 1]) {
-    // arm, hinged at the shoulder, reaching out and a little back and down; its wing runs from the wrist to the hip
-    const arm = new THREE.Group(); arm.position.set(s * 0.19, 0.02, -0.52); arm.rotation.z = -s * 0.08; g.add(arm);
-    const ak = modelKit(arm);
-    limb(ak, [0, 0, 0], [s * 0.6, -0.02, 0.1], 0.07, 0.05, dark);
-    ak(new THREE.BoxGeometry(0.1, 0.05, 0.12), dark, s * 0.64, -0.02, 0.1);                  // hand
-    ak(wing([[0, -0.03], [s * 0.66, 0.06], [s * 0.6, 0.2], [s * 0.4, 0.38], [s * 0.16, 0.54], [0, 0.56]], 0.07), suit, 0, 0, 0);
-    arms.push(arm);
-    // leg from the hip to the foot, the foot pointed back
-    const leg = new THREE.Group(); leg.position.set(s * 0.1, -0.01, 0.04); g.add(leg);
-    const lk = modelKit(leg);
-    limb(lk, [0, 0, 0], [s * 0.16, 0, 0.84], 0.085, 0.05, dark);
-    lk(new THREE.BoxGeometry(0.08, 0.09, 0.17), white, s * 0.17, -0.01, 0.93);               // shoe
-    legs.push(leg);
-  }
-  const tail = add(wing([[-0.1, 0.02], [0.1, 0.02], [0.28, 0.86], [0.14, 0.9], [0, 0.82], [-0.14, 0.9], [-0.28, 0.86]], 0.06), suit, 0, -0.01, 0.04);   // leg wing
-  scene.add(g);
-  const tips = [new V3(-0.85, 0, -0.42), new V3(0.85, 0, -0.42)];
-  return { group: g, tips, trails: false, shadow: 0.25,
-           update(dt, P) {                                  // tuck: arms sweep back to the sides, legs close, leg wing narrows
-             const T = P.tuck || 0;
-             arms.forEach((a, i) => { const s = i ? 1 : -1; a.rotation.y = -s * 1.05 * T; a.rotation.z = -s * (0.08 + 0.05 * T); });
-             legs.forEach((l, i) => { l.rotation.y = (i ? -1 : 1) * 0.17 * T; });
-             tail.scale.x = 1 - 0.55 * T;
-           } };
-}
-const MODEL_MAKERS = { prop: makePropModel, jet: makeJetModel, racer: makeRacerModel, wingsuit: makeWingsuitModel,
-  sailplane: () => makeSailplaneModel(scene, modelKit), biplane: () => makeBiplaneModel(scene, modelKit) };   // js/sailplane.js, js/biplane.js
+const MODEL_MAKERS = { prop: () => makePropPlaneModel(scene), jet: () => makeFighterModel(scene), racer: () => makeRacePlaneModel(scene), wingsuit: () => makeWingsuitFlyerModel(scene),
+  sailplane: () => makeGliderModel(scene), biplane: () => makeBiplaneModel(scene, modelKit) };   // js/glider.js, js/biplane.js
 const models = {};
 for (const v in MODEL_MAKERS) models[v] = MODEL_MAKERS[v]();
 let planeModel = models.prop;
@@ -452,10 +331,18 @@ function ghostModel() {
   const v = MODEL_MAKERS[TUNE.VEHICLE] ? TUNE.VEHICLE : 'prop';
   if (!ghostModels[v]) {
     const m = ghostModels[v] = MODEL_MAKERS[v]();
+    const pre = [];
     m.group.traverse((o) => {
       if (!o.material) return;
       o.material = o.material.clone(); o.material.transparent = true; o.material.opacity *= 0.5; o.renderOrder = 1;
+      if (o.material.depthWrite) pre.push(o);
     });
+    // depth first, so only the nearest surface shows through (no wing seen through the fuselage)
+    for (const o of pre) {
+      const d = new THREE.Mesh(o.geometry, o.material.clone());
+      d.material.colorWrite = false; d.renderOrder = 0.99;
+      o.add(d);                                              // a child, so it follows spinning props and moving limbs
+    }
     m.group.visible = false;
   }
   return ghostModels[v];
@@ -489,8 +376,9 @@ const streakPos = Array.from({ length: STREAKS }, () => new V3(1e9, 0, 0));
 // wingtip vapour trails (camera-facing ribbons, time-based fade)
 const trailMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
 class Trail {
-  constructor(max, w0 = 0.12, w1 = 0.9) {
-    this.max = max; this.pts = []; this.pool = []; this.w0 = w0; this.w1 = w1;
+  // fadeLen: the first metres behind the head fade in (by distance, so it can't pulse with the sample rate)
+  constructor(max, w0 = 0.12, w1 = 0.9, fadeLen = 0) {
+    this.max = max; this.pts = []; this.pool = []; this.w0 = w0; this.w1 = w1; this.fadeLen = fadeLen; this.live = null;
     this.pos = new Float32Array(max * 6); this.col = new Float32Array(max * 8);
     const idx = [];
     for (let i = 0; i < max - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
@@ -500,19 +388,44 @@ class Trail {
     g.setIndex(idx);
     this.mesh = new THREE.Mesh(g, trailMat); this.mesh.frustumCulled = false; scene.add(this.mesh);
   }
-  clear() { while (this.pts.length) this.pool.push(this.pts.pop()); this.geo.setDrawRange(0, 0); }
+  clear() { while (this.pts.length) this.pool.push(this.pts.pop()); this.live = null; this.geo.setDrawRange(0, 0); }
+  // a fixed sample (behind the live head, if there is one)
   push(p, a, now) {
     const pt = this.pts.length >= this.max ? this.pts.pop() : (this.pool.pop() || { p: new V3(), t: 0, a: 0 });
-    pt.p.copy(p); pt.t = now; pt.a = a; this.pts.unshift(pt);
+    pt.p.copy(p); pt.t = now; pt.a = a;
+    if (this.live && this.pts[0] === this.live) this.pts.splice(1, 0, pt); else this.pts.unshift(pt);
+  }
+  // the live head: moves to the emitter every frame, so the trail starts exactly there between samples
+  head(p, a, now) {
+    if (!this.live || this.pts[0] !== this.live) { this.live = null; this.push(p, a, now); this.live = this.pts[0]; }
+    this.live.p.copy(p); this.live.t = now; this.live.a = a;
   }
   update(now, life, camPos) {
-    while (this.pts.length && now - this.pts[this.pts.length - 1].t > life) this.pool.push(this.pts.pop());
-    const n = this.pts.length, d = Trail.d, s = Trail.s;
+    while (this.pts.length && now - this.pts[this.pts.length - 1].t > life) {
+      const q = this.pts.pop(); if (q === this.live) this.live = null; this.pool.push(q);
+    }
+    const n = this.pts.length, d = Trail.d, s = Trail.s, c = Trail.c, prev = Trail.prev;
+    let dist = 0;
+    prev.set(0, 0, 0);
     for (let i = 0; i < n; i++) {
-      const cur = this.pts[i], a = this.pts[Math.max(0, i - 1)].p, b = this.pts[Math.min(n - 1, i + 1)].p;
-      d.copy(a).sub(b); if (d.lengthSq() < 1e-8) d.set(0, 0, 1);
-      s.copy(camPos).sub(cur.p).cross(d).normalize();
-      const age = (now - cur.t) / life, w = this.w0 + age * this.w1, al = cur.a * (1 - age) * (1 - age);
+      const cur = this.pts[i];
+      // direction along the trail from neighbours at least 20 cm apart (a fresh sample sits on the head)
+      let lo = Math.max(0, i - 1), hi = Math.min(n - 1, i + 1);
+      d.copy(this.pts[lo].p).sub(this.pts[hi].p);
+      while (d.lengthSq() < 0.04 && (hi < n - 1 || lo > 0)) {
+        if (hi < n - 1) hi++; else lo--;
+        d.copy(this.pts[lo].p).sub(this.pts[hi].p);
+      }
+      if (d.lengthSq() < 1e-8) d.set(0, 0, 1);
+      c.copy(camPos).sub(cur.p);
+      s.crossVectors(c, d);
+      // seen end-on the cross product is noise: keep the previous point's sideways direction
+      if (s.lengthSq() < 1e-4 * c.lengthSq() * d.lengthSq() && prev.lengthSq() > 0) s.copy(prev); else s.normalize();
+      prev.copy(s);
+      if (i > 0) dist += cur.p.distanceTo(this.pts[i - 1].p);
+      const age = (now - cur.t) / life, w = this.w0 + age * this.w1;
+      let al = cur.a * (1 - age) * (1 - age);
+      if (this.fadeLen > 0) al *= smoothstep(0, this.fadeLen, dist);
       const o = i * 6;
       this.pos[o] = cur.p.x + s.x * w; this.pos[o + 1] = cur.p.y + s.y * w; this.pos[o + 2] = cur.p.z + s.z * w;
       this.pos[o + 3] = cur.p.x - s.x * w; this.pos[o + 4] = cur.p.y - s.y * w; this.pos[o + 5] = cur.p.z - s.z * w;
@@ -522,9 +435,9 @@ class Trail {
     this.geo.setDrawRange(0, Math.max(0, (n - 1) * 6));
   }
 }
-Trail.d = new V3(); Trail.s = new V3();
+Trail.d = new V3(); Trail.s = new V3(); Trail.c = new V3(); Trail.prev = new V3();
 const trails = [new Trail(150), new Trail(150)];
-const smoke = { trail: new Trail(200, 0.25, 2.4), last: 0 };   // race plane's tail smoke, sampled at 60 Hz
+const smoke = { trail: new Trail(200, 0.25, 2.4, 1.2), last: 0 };   // race plane's tail smoke: 60 Hz samples and a live head
 
 /* ---------- sound ---------- */
 const Sound = {
@@ -1099,21 +1012,12 @@ function updateVisuals(dt) {
     gateDisc.material.opacity = (0.09 + Math.sin(t * 6) * 0.04) * (hoopMeshes[G.next] ? 1 : 0.55);
   } else gateDisc.visible = false;
 
-  // shadow
+  // shadow: the aircraft's silhouette (js/planeshadow.js); the aircraft itself dims in terrain shadow
   const gy = groundAt(P.pos.x, P.pos.z), alt = P.pos.y - gy;
-  blob.visible = planeModel.group.visible && alt < 170;
-  if (blob.visible) {
-    blob.position.set(P.pos.x, gy + 0.3, P.pos.z);
-    if (gy > TER.WATER) {
-      const e = 4, gx = heightAt(P.pos.x + e, P.pos.z) - heightAt(P.pos.x - e, P.pos.z), gz = heightAt(P.pos.x, P.pos.z + e) - heightAt(P.pos.x, P.pos.z - e);
-      _v.set(-gx / (2 * e), 1, -gz / (2 * e)).normalize();
-      blob.quaternion.setFromUnitVectors(WORLD_UP, _v);
-    } else blob.quaternion.identity();
-    _q.setFromAxisAngle(WORLD_UP, yawOf(P.vdir)); blob.quaternion.multiply(_q);
-    const bs = planeModel.shadow || 1;
-    blob.scale.set((9 + alt * 0.05) * bs, 1, (7 + alt * 0.04) * bs);
-    blob.material.opacity = 0.5 * (1 - smoothstep(15, 170, alt)) * lerp(0.5, 1, Sunlight.visAt(P.pos.x, P.pos.z));   // fainter on shaded ground
-  }
+  blob.visible = false;
+  planeModel.group.updateMatrixWorld();
+  PlaneShadow.update(renderer, planeModel, alt, SUN_DIR);
+  if (planeModel.uniforms) planeModel.uniforms.afSun.value = 0.3 + 0.7 * Sunlight.at(P.pos.x, P.pos.y, P.pos.z)[0];
 
   // streaks
   const inten = smoothstep(TUNE.CRUISE * 0.98, TUNE.BOOST * 0.97, P.speed) * (planeModel.group.visible && !G.replay ? 1 : 0);   // (a trackside camera sees none)
@@ -1146,10 +1050,13 @@ function updateVisuals(dt) {
     trails[i].update(t, 0.9, camera.position);
   }
   if (planeModel.smoke) {
-    if (t - smoke.last >= 1 / 60) {
-      smoke.last = t;
-      smoke.trail.push(_v.copy(planeModel.smoke).applyQuaternion(P.q).add(P.pos), planeModel.group.visible ? 0.32 : 0, t);
+    _v.copy(planeModel.smoke).applyQuaternion(P.q).add(P.pos);
+    const sa = planeModel.group.visible ? 0.32 : 0;
+    if (t - smoke.last >= 1 / 60) {                         // history at a steady 60 Hz whatever the frame rate
+      smoke.last = Math.max(smoke.last + 1 / 60, t - 0.05);
+      smoke.trail.push(_v, sa, t);
     }
+    smoke.trail.head(_v, sa, t);                            // and the start always at the nozzle
     smoke.trail.update(t, 3, camera.position);
   }
   if (planeModel.puffs) planeModel.puffs.update(G.state === 'paused' ? 0 : dt, P, planeModel.group.visible && P.smoking);   // js/smoke.js
