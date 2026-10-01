@@ -14,7 +14,8 @@
    A puff is only partly drawn even when fresh (DENSE), thins out over its life rather than shrinking, and so does
    smoke cleared by a crash (dissipate()), faster. All of it is dithering: a puff drops a share of its pixels
    in a noise pattern of its own, so it stays solid (no sorting, no blending) and overlapping ones thin out together
-   rather than sharing holes. At phone pixel densities the grain is too fine to read as anything but a fade.
+   rather than sharing holes. The pattern is blue noise (an even grain with no lines or clumps at any density, so it
+   reads as a fade on a laptop screen as well as a phone's), each puff's shifted by its own whole number of pixels.
    makeSmoke(scene, anchor) -> { update(dt, P, on, tripod), cut(), dissipate(), clear(), mesh }
      anchor: the emitter in the plane's local frame; update(dt 0 while paused, P the plane, on: emitting this frame,
      tripod: the camera is a replay's trackside one, which never flies through the trail, so nothing is shrunk near it
@@ -46,6 +47,13 @@ function makeSmoke(scene, anchor) {
                                    // trail thins unevenly), gone the second after; all gone by the respawn (G.crashTimer 0.9 s)
   const GONE_SWELL = 0.35;         // and swells by this share as it fades: smoke thinning out, not a ball shrinking
   const TOP = new THREE.Color('#ffffff'), BELLY = new THREE.Color('#c2cdd8');   // as the clouds
+  if (!makeSmoke.blue) {                                    // made once, shared by every smoke (the ghost's model has one too)
+    const b = blueNoise(64, 1.5), d = new Uint8Array(64 * 64 * 4);
+    for (let i = 0; i < 64 * 64; i++) { d[i * 4] = b[i]; d[i * 4 + 3] = 255; }
+    const t = makeSmoke.blue = new THREE.DataTexture(d, 64, 64);
+    t.magFilter = t.minFilter = THREE.NearestFilter; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.generateMipmaps = false;
+    t.needsUpdate = true;
+  }
 
   const ball = new THREE.IcosahedronGeometry(1, 0);         // 20 facets, non-indexed
   const geo = new THREE.InstancedBufferGeometry();
@@ -63,7 +71,7 @@ function makeSmoke(scene, anchor) {
     uThin: { value: new THREE.Vector3(THIN / SPACING, LEVELS, FADE) },
     uWind: { value: new THREE.Vector3(WIND[0], WIND[1], WIND[2]) },
     uGone: { value: new THREE.Vector4(-1e7, -1e7, GONE[0], GONE[1]) },   // the last dissipate() time, the one before it
-    uTop: { value: TOP }, uBelly: { value: BELLY },
+    uTop: { value: TOP }, uBelly: { value: BELLY }, uBlue: { value: makeSmoke.blue },
   };
   const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true });
   mat.userData.noSun = true;                                // not shaded by the terrain (js/sunlight.js), like the clouds
@@ -107,16 +115,16 @@ function makeSmoke(scene, anchor) {
       float gone = aInfo.x <= uGone.y ? 0.0 : aInfo.x <= uGone.x ? 1.0 - clamp((uTime - uGone.x - g0) / uGone.w, 0.0, 1.0) : 1.0;
       float fade = ${DENSE.toFixed(3)} * (1.0 - smoothstep(uThin.z, 1.0, life)) * gone;
       k *= fade < 0.01 ? 0.0 : 1.0 + ${GONE_SWELL.toFixed(3)} * (1.0 - gone);
-      vFade = vec3(fade, fract(seed * 23.1) * 97.0, fract(seed * 31.7) * 89.0);
+      vFade = vec3(fade, floor(fract(seed * 23.1) * 64.0), floor(fract(seed * 31.7) * 64.0));
       k *= mix(1.0, smoothstep(uNear.x, uNear.y, depth - r * k), uShrink);              // and right at the camera
       vec3 dir = smokeTurn(position, seed * 6.2832 + age * (fract(seed * 11.0) - 0.5) * 0.6, fract(seed * 13.7) * 3.1416);
       vSmoke = mix(uBelly, uTop, smoothstep(-0.7, 0.6, dir.y));                         // bright top, pale belly
       vec3 transformed = smokeC + dir * r * (k < 0.03 ? 0.0 : k);                       // gone: a point, no pixels
     `);
-    sh.fragmentShader = 'varying vec3 vSmoke, vFade;\n' + sh.fragmentShader
-      // fading: interleaved gradient noise, shifted per puff, against the share kept
+    sh.fragmentShader = 'varying vec3 vSmoke, vFade;\nuniform sampler2D uBlue;\n' + sh.fragmentShader
+      // fading: the blue noise, shifted per puff, against the share kept
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-	if ( vFade.x < 0.999 && fract( 52.9829189 * fract( dot( gl_FragCoord.xy + vFade.yz, vec2( 0.06711056, 0.00583715 ) ) ) ) >= vFade.x ) discard;`)
+	if ( vFade.x < 0.999 && texture2D( uBlue, ( floor( gl_FragCoord.xy ) + vFade.yz + 0.5 ) / 64.0 ).r * 0.996 + 0.002 >= vFade.x ) discard;`)
       .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb *= vSmoke;')
       // the clouds' light: the sun wraps round the sides, and the bellies take their light from the sky
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
@@ -197,4 +205,38 @@ function makeSmoke(scene, anchor) {
       head = 0; joined = false; lastBirth = -1e6; mesh.visible = false;
     },
   };
+}
+
+// blue noise: an N x N tile (wrapping) of thresholds, each pixel's rank * 256 / N^2, from void-and-cluster (Ulichney
+// 1993): spread a tenth of the pixels evenly, then rank them by taking the tightest cluster out each time, and the rest
+// by filling the largest void each time ('tightest' and 'largest' by a Gaussian of SIGMA px). About 50 ms for 64 x 64,
+// once at start; seeded, so it's the same pattern every time
+function blueNoise(N, SIGMA) {
+  const R = Math.ceil(SIGMA * 3.5), K = [];
+  for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) K.push(dx, dy, Math.exp(-(dx * dx + dy * dy) / (2 * SIGMA * SIGMA)));
+  const M = N * N, E = new Float32Array(M), on = new Uint8Array(M), rank = new Uint16Array(M);
+  const splat = (i, s) => {                                 // add (s 1) or take away (s -1) one pixel's share of the energy
+    const x = i % N, y = (i / N) | 0;
+    for (let k = 0; k < K.length; k += 3) E[((y + K[k + 1] + N) % N) * N + (x + K[k] + N) % N] += s * K[k + 2];
+  };
+  const pick = (want, sign) => {                            // the most (sign 1) or least (-1) crowded pixel that is / isn't on
+    let best = -1, bv = -Infinity;
+    for (let i = 0; i < M; i++) if (on[i] === want && sign * E[i] > bv) { bv = sign * E[i]; best = i; }
+    return best;
+  };
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  for (let n = 0; n < M / 10;) { const i = (rnd() * M) | 0; if (!on[i]) { on[i] = 1; splat(i, 1); n++; } }
+  for (let guard = 0; guard < M; guard++) {                 // even them out: the tightest cluster moves to the largest void
+    const c = pick(1, 1); on[c] = 0; splat(c, -1);
+    const v = pick(0, -1); on[v] = 1; splat(v, 1);
+    if (v === c) break;
+  }
+  const on0 = on.slice(), E0 = E.slice(), ones = on.reduce((a, b) => a + b, 0);
+  for (let r = ones - 1; r >= 0; r--) { const c = pick(1, 1); on[c] = 0; splat(c, -1); rank[c] = r; }
+  on.set(on0); E.set(E0);
+  for (let r = ones; r < M; r++) { const v = pick(0, -1); on[v] = 1; splat(v, 1); rank[v] = r; }
+  const out = new Uint8Array(M);
+  for (let i = 0; i < M; i++) out[i] = (rank[i] * 256 / M) | 0;
+  return out;
 }
