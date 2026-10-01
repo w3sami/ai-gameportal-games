@@ -135,7 +135,7 @@ if (typeof SCENERY_PLUGINS !== 'undefined') SCENERY_PLUGINS.unshift((group) => {
   };
   pm.customProgramCacheKey = () => 'street-specks';
   const pts = new THREE.Points(pg, pm);
-  pts.frustumCulled = false; pts.onBeforeRender = tick; pts.renderOrder = 3;
+  pts.frustumCulled = false; pts.onBeforeRender = tick; pts.renderOrder = 3; pts.userData.hint = true;   // (js/game.js: a mark, not scenery)
   group.add(pts);
 
   // birds: gliding along the street under the clouds, rising and sinking a little with the cells, wrapping round
