@@ -603,6 +603,7 @@ function autopilotAim(P, hoopIdx, out) {
   if (ga && ga.aim && ga.aim(h, P, out)) return avoidGround(P, out, v);
   const k0 = i > 0 ? HOOPS[i - 1].sample : 0, k1 = h.sample;
   // missed approach: once the hoop is about to go by off-centre, fly out along the line behind it and come round again
+  if (P.apHoop !== i) { P.apHoop = i; P.apAround = false; }   // a go-around is for the hoop it was started for
   const along = _ax.copy(P.pos).sub(h.pos).dot(h.normal), lat = Math.sqrt(Math.max(0, P.pos.distanceToSquared(h.pos) - along * along));
   if (!RULES.hoopMiss && along > -v * 0.25 && along < v * 3 && lat > TUNE.HOOP_R + TUNE.HOOP_TOL) P.apAround = true;
   else if (along < -v * 2.5) P.apAround = false;
