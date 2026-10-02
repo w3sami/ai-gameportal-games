@@ -7,6 +7,11 @@
                the horizon (paid for with speed), down dives
      jets on   thrust: the stick's centre holds height, up climbs at up to CLIMB_MAX, down dives; it pulls up and
                noses over far quicker than the fighter, though it's slower
+   On the jets it's free to roll and loop (JET_FREE): the attitude core of the stunt plane and biplane (js/sim.js
+   stepFlight's body rates, attitude() and assist(); touch and the controller through js/aerobatic.js's aeroStick, so
+   the stick's side banks and its end rolls on, its up/down is the elevator and a full pull loops; let go and it levels
+   out), with this wing's own thrust, drag and gravity. The path follows the nose (GRIP) as the stunt plane's does.
+   Jets off it's back to the glide above, picked up from wherever the jets left it (upside down it rolls upright).
    The boost meter is the fuel: it drains only while the jets burn (BOOST_DRAIN) and every hoop fills it (BOOST_HOOP;
    1 = full), so a course is mostly flown on the jets with a glide at the end of the longer legs.
    The stick asks for a bank and a path angle; the wing does what its lift allows, so a slow zoom runs out of lift and
@@ -26,6 +31,8 @@ const JETWING_DEFAULTS = {
                          // hard pull-up doesn't bleed half the speed); steady flight keeps the full glide polar
   JET_TURN: 1.8,         // arcade turn gain over a true coordinated turn
   JET_ROLL_P: 6, JET_ROLL_RATE: 3.2,   // bank loop (1/s) and roll rate limit (rad/s)
+  JET_FREE: true,        // on the jets: roll and loop freely (below); false keeps the glide's controls on the jets too
+  JET_GRIP: 6,           // on the jets: how fast the path swings to the nose (1/s)
   RESPAWN_BOOST: null,   // back at a hoop after a crash, the meter is at least this (config/jetwing.json: 1, the hoop's own
                          // refill); null leaves it as it was, as for every other vehicle
 };
@@ -55,6 +62,8 @@ function stepJetwing(P, ctl, dt) {
   const th = S.th, v = P.speed;
   P.tuck = th;
 
+  if (TUNE.JET_FREE && want) { if (!S.free) toFree(P, S); stepJetsFree(P, ctl, dt, S, th); return; }
+  if (S.free) toGlide(P, S);
   // what the stick asks for: centre = best glide off, level on; up = zoom off, climb on
   const trim = lerp(ae.gam, 0, th), up = lerp(TUNE.ZOOM_MAX, TUNE.CLIMB_MAX, th), dive = TUNE.JET_DIVE;
   const pathFor = (c) => (c >= 0 ? lerp(trim, up, Math.min(c, 1)) : lerp(trim, -dive, Math.min(-c, 1)));
@@ -90,4 +99,61 @@ function stepJetwing(P, ctl, dt) {
   P.q.multiply(_jq.setFromAxisAngle(_jzAxis, -S.phi)).multiply(_jq.setFromAxisAngle(_jx, TUNE.ALPHA_VIS * clamp(S.cl, 0, 1.3)));
   P.bank = S.phi; P.turn = S.psiDot; P.rp = P.ry = P.rr = 0;
   P.gload = lerp(P.gload, Math.abs(L) / G, damp(6, dt));
+}
+
+/* ---------- on the jets: free to roll and loop ---------- */
+const _jf = new THREE.Vector3(), _jw = new THREE.Vector3(), _jdq = new THREE.Quaternion(), _jax = new THREE.Vector3();
+function toFree(P, S) {                                      // from the glide: its attitude is already P.q
+  S.free = true; P.rp = P.rr = P.ry = 0;
+}
+function toGlide(P, S) {                                     // jets off: carry on gliding from the same path and bank
+  S.free = false;
+  S.gam = clamp(pitchOf(P.vdir), -1.5, 1.45); S.psi = yawOf(P.vdir); S.psiDot = 0;
+  S.phi = computeBank(P, forwardOf(P, _jf)).bank;           // upside down: +-PI, and the glide rolls it upright
+  const q = TUNE.G * S.ae.a * P.speed * P.speed;
+  S.cl = clamp(TUNE.G * Math.cos(S.gam) / Math.max(q, 1e-3), 0, 1);
+}
+function stepJetsFree(P, ctl, dt, S, th) {
+  const G = TUNE.G, ae = S.ae, v = P.speed, f = forwardOf(P, _jf);
+  const { bank, horiz } = computeBank(P, f);
+  P.bank = bank;
+  const auth = clamp(v / TUNE.CRUISE, 0.3, 1.15);
+  // let go: level out at level flight (a glide's stick fraction is a climb here, of up to CLIMB_MAX)
+  let c = ctl.att ? attitude(P, f, bank, ctl.att.bank, ctl.att.climb * TUNE.CLIMB_MAX) : ctl.aim ? assist(P, f, bank, horiz, ctl.aim, auth) : ctl;
+  if (ctl.rollTo != null) c = { p: c.p, y: c.y, r: clamp(wrapAngle(ctl.rollTo - bank) * TUNE.ROLL_P * 1.6, -1, 1) };
+  const k = damp(TUNE.RATE_K, dt);
+  P.rp += (c.p * TUNE.MAX_PITCH * auth - P.rp) * k;
+  P.rr += (c.r * TUNE.MAX_ROLL * auth - P.rr) * k;
+  P.ry += (c.y * TUNE.MAX_YAW * auth - P.ry) * k;
+  _jw.set(P.rp, -P.ry, -P.rr);
+  const wl = _jw.length();
+  if (wl > 1e-7) { _jdq.setFromAxisAngle(_jw.multiplyScalar(1 / wl), wl * dt); P.q.multiply(_jdq); }
+  const turn = -bankTurn(P, bank, horiz, auth);              // bank-to-turn (faded on edge and while rolling on)
+  P.turn = turn;
+  if (turn !== 0) { _jdq.setFromAxisAngle(WORLD_UP, turn * dt); P.q.premultiply(_jdq); }
+  // too slow to fly (over the top of a loop run out of speed): the path sags and the nose follows it down
+  const sink = clamp((TUNE.LEVEL_SPEED - v) / (TUNE.LEVEL_SPEED * 0.4), 0, 1);
+  forwardOf(P, f);
+  const dfv = clamp(f.dot(P.vdir), -1, 1);
+  if (dfv < 0.999999) {
+    _jax.crossVectors(f, P.vdir);
+    const al = _jax.length();
+    if (al > 1e-7) { _jdq.setFromAxisAngle(_jax.divideScalar(al), Math.acos(dfv) * damp(TUNE.WEATHERVANE + 2 * sink, dt)); P.q.premultiply(_jdq); }
+  }
+  P.q.normalize();
+  // energy: thrust, gravity along the path, drag; the lift that bends the path costs induced drag as in the glide
+  forwardOf(P, f);
+  const q = G * ae.a * v * v, cg = Math.sqrt(Math.max(0, 1 - P.vdir.y * P.vdir.y));
+  const L = G * cg * Math.abs(Math.cos(bank)) + v * (Math.abs(P.rp) + Math.abs(turn) * cg);
+  const cl = Math.min(L / Math.max(q, 1e-3), TUNE.CL_MAX), cl0 = Math.min(G * cg / Math.max(q, 1e-3), 1);
+  const D = G * ae.a * v * v * (ae.cd0 + ae.k * (cl0 * cl0 + TUNE.PULL_DRAG * Math.max(0, cl * cl - cl0 * cl0))) + G * Math.pow(v / TUNE.VMAX, 12);
+  P.speed = Math.max(TUNE.MIN_SPEED, v + (TUNE.THRUST * G * th - D - G * P.vdir.y) * dt);
+  P.vdir.lerp(f, damp(TUNE.JET_GRIP * clamp(v / TUNE.LEVEL_SPEED, 0.3, 1.2), dt)).normalize();
+  if (sink > 0) {                                            // gravity takes the path, not the jets
+    _jw.copy(P.vdir).multiplyScalar(P.speed); _jw.y -= G * sink * dt;
+    P.speed = _jw.length(); P.vdir.copy(_jw).divideScalar(P.speed);
+  }
+  P.pos.addScaledVector(P.vdir, P.speed * dt);
+  S.cl = cl;
+  P.gload = lerp(P.gload, L / G, damp(6, dt));
 }
