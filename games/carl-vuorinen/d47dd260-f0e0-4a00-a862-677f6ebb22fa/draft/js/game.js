@@ -124,10 +124,11 @@ function buildScenery() {
   const v = Object.assign({}, VIEW, COURSE.view);
   camera.near = v.near; camera.far = v.far; camera.updateProjectionMatrix();
   scene.fog.near = v.fog[0]; scene.fog.far = v.fog[1];
+  if (typeof Skylight !== 'undefined') Skylight.configure(COURSE, { SUN_DIR, COL, sky, sunDisc, sunLight, hemiLight, scene });   // the course's time of day (js/skylight.js)
   Atmosphere.configure(v, COURSE);
   lightStats.bake = Sunlight.bake(SUN_DIR);                 // terrain shadows and occlusion (js/sunlight.js)
   const k = v.far / VIEW.far;                               // sky dome, sun and outer plain grow with the view range
-  sky.scale.setScalar(k); sunDisc.scale.setScalar(k); sunDist = 4200 * k;
+  sky.scale.setScalar(k); sunDisc.scale.setScalar(k * (typeof Skylight !== 'undefined' ? Skylight.discScale : 1)); sunDist = 4200 * k;
   buildTerrainMesh(worldGroup, Math.max(9000, v.far * 1.4));
   buildTrees(worldGroup);
   buildRocks(worldGroup);
@@ -332,7 +333,7 @@ function modelKit(g) {
   };
 }
 const MODEL_MAKERS = { prop: () => makePropPlaneModel(scene), jet: () => makeFighterModel(scene), racer: () => makeRacePlaneModel(scene), wingsuit: () => makeWingsuitFlyerModel(scene),
-  sailplane: () => makeGliderModel(scene), biplane: () => makeBiplaneModel(scene, modelKit) };   // js/glider.js, js/biplane.js
+  sailplane: () => makeGliderModel(scene), biplane: () => makeBiplaneModel(scene, modelKit), jetwing: () => makeJetwingModel(scene) };   // js/glider.js, js/biplane.js, js/jetman.js
 const models = {};
 for (const v in MODEL_MAKERS) models[v] = MODEL_MAKERS[v]();
 let planeModel = models.prop;
@@ -488,7 +489,8 @@ const Sound = {
     this.wind.gain.setTargetAtTime(level * (0.05 + s * s * 0.45), t, 0.1);
     this.windF.frequency.setTargetAtTime(260 + rel * 484, t, 0.1);
     this.hiss.gain.setTargetAtTime(level * smoothstep(1.09, 1.82, rel) * 0.07, t, 0.15);
-    if (this.jet !== jet) { this.jet = jet; this.osc[0].type = jet ? 'triangle' : 'sawtooth'; this.osc[1].type = jet ? 'sine' : 'square'; }
+    const tw = jet || TUNE.VEHICLE === 'jetwing';            // turbines: smooth waves
+    if (this.jet !== tw) { this.jet = tw; this.osc[0].type = tw ? 'triangle' : 'sawtooth'; this.osc[1].type = tw ? 'sine' : 'square'; }
     if (TUNE.VEHICLE === 'wingsuit') {                      // no engine: wind, and fabric buffeting that builds with speed
       this.eng.gain.setTargetAtTime(0, t, 0.2);
       this.rumble.gain.setTargetAtTime(level * (0.05 + smoothstep(TUNE.CRUISE, TUNE.BOOST * 1.2, v) * 0.5), t, 0.15);
@@ -501,6 +503,15 @@ const Sound = {
       this.rumbleF.frequency.setTargetAtTime(140 + v * 1.5, t, 0.2);
       if (!this.vario) this.vario = createVario(this.ctx, this.master);
       this.vario.update(P.vario || 0, level >= 1 && planeModel.group.visible ? 1 : 0);
+      return;
+    }
+    if (TUNE.VEHICLE === 'jetwing') {                       // jetwing: wind, and four small turbines whining up with the spool
+      const T = P.tuck || 0, w = 1150 + T * 650 + rel * 120;
+      this.osc[0].frequency.setTargetAtTime(w, t, 0.35); this.osc[1].frequency.setTargetAtTime(w * 1.49, t, 0.35);
+      this.eng.gain.setTargetAtTime(level * (0.002 + 0.012 * T), t, 0.25);
+      this.engF.frequency.setTargetAtTime(5200, t, 0.3);
+      this.rumble.gain.setTargetAtTime(level * (0.06 + 0.32 * T + smoothstep(TUNE.CRUISE, TUNE.BOOST * 1.1, v) * 0.15), t, 0.2);
+      this.rumbleF.frequency.setTargetAtTime(170 + T * 260, t, 0.3);
       return;
     }
     if (jet) {                                              // turbine whine over low-passed noise; afterburner opens the roar up
@@ -641,6 +652,7 @@ function respawn() {
   let v = gliding() && h ? Math.max(TUNE.RESPAWN_SPEED || TUNE.CRUISE, G.hoopSpeed || 0) : sailing() && h ? TUNE.RESPAWN_SPEED || TUNE.CRUISE : TUNE.CRUISE;
   if (h && RULES.respawnMax) v = Math.min(v, RULES.respawnMax);
   placePlane(P, pos, h ? h.normal : START_DIR, v);
+  if (TUNE.RESPAWN_BOOST != null) { P.boost = Math.max(P.boost, TUNE.RESPAWN_BOOST); P.boostLock = false; }   // jetwing: back at a hoop, its refill
   setAimFrom(P.vdir); input.neutral = true;
   G.invuln = 1.2;
   planeModel.group.visible = true;
@@ -919,7 +931,7 @@ const _aimTmp = new V3();
 
 function autoControl() {                                    // attract mode and victory lap
   if (G.next >= HOOPS.length) { dirFromYawPitch(yawOf(P.vdir), 0.08, aimDir); return { aim: aimDir, p: 0, r: 0, y: 0, boost: false }; }
-  const ctl = { aim: autopilotAim(P, G.next, aimDir), p: 0, r: 0, y: 0, boost: false }, roll = aeroRollTo(P, G.next);   // js/aerobatic.js
+  const ctl = { aim: autopilotAim(P, G.next, aimDir), p: 0, r: 0, y: 0, boost: !!TUNE.AP_BOOST }, roll = aeroRollTo(P, G.next);   // js/aerobatic.js; AP_BOOST: the jetwing flies on its jets
   if (TUNE.SMOKE) ctl.smoke = airshowAuto(P, G.next);      // shows the smoke bonus being flown (js/airshow.js)
   if (roll != null) ctl.rollTo = roll;
   return ctl;
@@ -1190,12 +1202,13 @@ function renderBest() {
   if (refill) refill.textContent = gliding() ? `There\u2019s no flying back up: a missed hoop adds ${RULES.missed} s, and a crash puts you back at the last one.`
     : sailing() ? sailTip()
     : TUNE.SMOKE ? `${pen}Keep smoke on during aerobatic manoeuvres for a time bonus.`
+    : jetwinging() ? `Every ${gateNoun()} refills the jets. Run dry and you glide.`
     : `${pen}Boost refills over time and with every ${gateNoun()}.`;
   menu.render();
 }
 
 /* ---------- start menu: themes, then levels (js/menu.js) ---------- */
-const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit', sailplane: 'Sailplane', biplane: 'Biplane' };
+const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit', sailplane: 'Sailplane', biplane: 'Biplane', jetwing: 'Jetwing' };
 // Loads run one at a time; picking again while one loads just retargets it, and the last pick wins.
 let switching = null, wantCourse = null;
 function switchCourse(entry) {
@@ -1494,7 +1507,7 @@ function update(dt) {
       const steps = Math.ceil(dt / (1 / 120)), h = dt / steps;
       for (let s = 0; s < steps; s++) {
         prevPos.copy(P.pos);
-        (sailing() ? stepSail : gliding() ? stepGlide : stepFlight)(P, ctl, h);
+        (sailing() ? stepSail : gliding() ? stepGlide : jetwinging() ? stepJetwing : stepFlight)(P, ctl, h);
         if (G.state === 'playing' && G.started) G.time += h;
         const cross = G.next < HOOPS.length ? gateCross(prevPos, P.pos, G.next) : null;
         if (cross) {
