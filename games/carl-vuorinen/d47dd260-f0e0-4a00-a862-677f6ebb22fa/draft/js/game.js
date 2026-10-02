@@ -899,11 +899,16 @@ function resolveControl(dt) {
     syncAim();
     return ctl;
   }
+  // the jetwing on its jets flies as the biplane does (js/jetwing.js: free to roll and loop), off them as a glider
+  const jetsFree = TUNE.JET_FREE && jetwinging() && ctl.boost && !P.boostLock && P.boost > 0;
   if (st) {                                                 // horizontal = bank angle, vertical = climb angle
-    if (TUNE.ROLL_DETENT) {                                  // the biplane (js/aerobatic.js): bank as here, but the stick's
+    if (TUNE.ROLL_DETENT || jetsFree) {                      // the biplane (js/aerobatic.js): bank as here, but the stick's
       const a = aeroStick(P, st.x, st.y * inv, dt);         // up/down is the elevator, and the end of the throw rolls on
       ctl.p = a.p; ctl.r = a.r;
-    } else ctl.att = { bank: st.x * TUNE.TOUCH_BANK, climb: touchClimb(input.climb, st.y * inv, dt) };
+    } else {
+      ctl.att = { bank: st.x * TUNE.TOUCH_BANK, climb: touchClimb(input.climb, st.y * inv, dt) };
+      if (jetwinging()) { P.stickBase = null; P.rollOn = 0; }   // the jets' roll starts afresh from the glide's bank
+    }
     input.neutral = true;
     syncAim();
     return ctl;
