@@ -69,7 +69,7 @@ ${GLSL}
   function inject(shader) { Object.assign(shader.uniforms, U); }
   THREE.Material.prototype.onBeforeCompile = function (shader) { inject(shader); };
 
-  const warm = new THREE.Color('#fff2d8');
+  const WARM = new THREE.Color('#fff2d8'), warm = WARM.clone();   // the fog's tint toward the sun; a course's light may change it (js/skylight.js)
   let sunLight = null, sunBase = 1, glow = 0.55;
 
   // the dome is fog-free with its own gradient: blend the same sun tint in toward the horizon, plus a halo
@@ -125,5 +125,6 @@ ${GLSL}
     return Math.min(1 - Math.exp(-od), max);
   }
 
-  return { init, configure, update, inject, hazeAt, uniforms: U };
+  const setWarm = (c) => warm.copy(c || WARM);
+  return { init, configure, update, inject, hazeAt, setWarm, uniforms: U };
 })();
