@@ -7,8 +7,16 @@
                 quays and a riverside walk are the river's own, the blocks keep clear of them
      bridges: [{ a: [x, z], b: [x, z], w, h, ramp, type }]   road bridges over it: a deck h m above the streets from a
                 to b, ramping up over ramp m at each end; type 'arch' (steel arches over the deck, no piers between
-                them), 'truss' (a railway in a box truss) or 'beam' (piers only)
-     zones: [{ x, z, r, kind: 'industrial' }]   blocks within r: warehouses, tanks, now and then a smokestack
+                them), 'truss' (a railway in a box truss), 'beam' (piers only) or 'suspension' (towers: [d0, d1] m
+                along it, tower: their height above the deck; each tower a portal of two legs outside the deck with a
+                beam a third of the way up and one at the top, cables slung between them, no piers under the spans)
+     boats: [{ kind: 'ship' | 'sail', x, z, len, beam }]   moored along the river (pointing the way it runs there): a
+                ship has twin funnels side by side amidships, a low superstructure aft and containers forward; a
+                sailboat a tall mast and its sail
+     signs: [{ a: [x, z], b: [x, z], clear, h }]   a billboard gantry: legs at a and b, an advert panel between them
+                from clear m above the streets, h m tall (one advert each way)
+     zones: [{ x, z, r, kind: 'industrial' | 'business', h }]   blocks within r: warehouses, tanks, now and then a
+                smokestack; or a business park of towers h: [min, max] tall (tallest in its middle), kept off the line
      billboards: { every, size: [w, h], height }   along every highway (not the bridges), each side by turns
      traffic                    cars per km of highway, each way (0: none)
    }
@@ -16,7 +24,8 @@
    buildings and the billboards as shore boxes. Game part: the quays, bridge steel, buildings, billboards (one
    texture of made-up adverts) and the traffic (one instanced mesh, moved before each frame it's drawn).
    ========================================================================= */
-const OUT = { river: null, boards: [], stacks: [] };
+const OUT = { river: null, boards: [], stacks: [], steel: [], boats: [], signs: [] };
+const outVerge = () => OUT.verge || VERGE;
 const OUT_DEF = { billboards: { every: 230, size: [16, 6], height: 13 }, traffic: 10 };
 
 // the river's curve, every ~8 m, and the distance to it
@@ -32,13 +41,15 @@ function outRiverNear(x, z) {
   }
   return Math.sqrt(bd);
 }
-const WALK = 26;                                             // riverside walk beyond each quay (m)
+const WALK = 26, VERGE = 18;                                 // riverside walk beyond each quay, and a lawn beyond that (m, at least:
+                                                             // wider if the terrain's cells are coarse, see terrain())
 
 CITY_PLUGINS.push({
   terrain(C, G) {
     OUT.river = null; OUT.boards.length = 0; OUT.stacks.length = 0;
     OUT.C = Object.assign({}, OUT_DEF, { billboards: Object.assign({}, OUT_DEF.billboards, C.billboards), traffic: C.traffic != null ? C.traffic : OUT_DEF.traffic });
     if (!C.river) return;
+    OUT.verge = VERGE;
     const rv = C.river, cv = new THREE.CatmullRomCurve3(rv.pts.map((p) => new THREE.Vector3(p[0], 0, p[1])), false, 'centripetal');
     const n = Math.ceil(cv.getLength() / 8) + 1, R = OUT.river = { w: rv.w || 140, depth: rv.depth || 6, X: [], Z: [], n, x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
     const p = new THREE.Vector3(), pad = R.w + 200;
@@ -46,13 +57,13 @@ CITY_PLUGINS.push({
       cv.getPointAt(i / (n - 1), p); R.X.push(p.x); R.Z.push(p.z);
       R.x0 = Math.min(R.x0, p.x - pad); R.x1 = Math.max(R.x1, p.x + pad); R.z0 = Math.min(R.z0, p.z - pad); R.z1 = Math.max(R.z1, p.z + pad);
     }
-    // the bed: deep under the water, up to the streets under the walk (the quay walls hide the terrain's coarse edge)
-    const W = TER.N + 1, half = R.w / 2;
+    // the bed: every grid point within a cell's diagonal of the quay goes down to it, so no terrain triangle can rise
+    // inside the walls; the slope back up from there (another diagonal) is under the walk and the lawn (OUT.verge)
+    const W = TER.N + 1, half = R.w / 2, reach = half + TER.CELL * Math.SQRT2;
+    OUT.verge = Math.max(VERGE, TER.CELL * 2 * Math.SQRT2 + 2 - WALK);
     for (let j = 0; j <= TER.N; j++) for (let i = 0; i <= TER.N; i++) {
-      const x = TER.X0 + i * TER.CELL, z = TER.Z0 + j * TER.CELL, d = outRiverNear(x, z);
-      if (d > half + WALK + TER.CELL * 1.5) continue;
-      const k = j * W + i;
-      TH[k] = Math.min(TH[k], lerp(TER.WATER - R.depth, G - 0.3, smoothstep(half + 6, half + WALK + TER.CELL * 1.5, d)));
+      const x = TER.X0 + i * TER.CELL, z = TER.Z0 + j * TER.CELL;
+      if (outRiverNear(x, z) < reach) TH[j * W + i] = TER.WATER - R.depth;
     }
   },
   // the bridges are highways: straight, ramping up to their deck; arches stand on no piers between their feet
@@ -61,17 +72,29 @@ CITY_PLUGINS.push({
       const [ax, az] = b.a, [bx, bz] = b.b, L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, r = Math.min(b.ramp || 200, L * 0.4);
       const pt = (d, h) => [ax + ux * d, az + uz * d, h];
       return { w: b.w || 20, noBoards: true, bridge: b, pts: [pt(0, 0), pt(r * 0.5, b.h * 0.45), pt(r, b.h), pt(L / 2, b.h), pt(L - r, b.h), pt(L - r * 0.5, b.h * 0.45), pt(L, 0)],
-        clear: b.type === 'arch' ? [[r + 4, L - r - 4]] : [] };
+        clear: b.type === 'arch' ? [[r + 4, L - r - 4]] : b.type === 'suspension' ? [[r + 2, L - r - 2]] : [] };
     });
   },
-  exclude(x, z, rd) { return outRiverNear(x, z) < (OUT.river ? OUT.river.w / 2 + WALK : 0) + rd; },
-  skipBlock(blk) {                                           // blocks the river or its walk would cut into
-    return OUT.river ? outRiverNear(blk.x, blk.z) < OUT.river.w / 2 + WALK + 55 : false;
+  exclude(x, z, rd) { return outRiverNear(x, z) < (OUT.river ? OUT.river.w / 2 + WALK + outVerge() : 0) + rd; },
+  skipBlock(blk) {                                           // blocks the river, its walk or the lawn would cut into
+    return OUT.river ? outRiverNear(blk.x, blk.z) < OUT.river.w / 2 + WALK + outVerge() + 50 : false;
   },
   block(ctx, blk) {
     const z = (ctx.C.zones || []).find((q) => Math.hypot(blk.x - q.x, blk.z - q.z) < q.r);
-    if (!z || z.kind !== 'industrial') return false;
+    if (!z) return false;
     const rnd = mulberry32((blk.i * 7349 + blk.j * 1931) ^ 0x5bd1), { G, inner, at } = ctx;
+    if (z.kind === 'business') {                             // a business park: a tower a block, cut back from the line
+      blk.lot = '#a29f97';
+      const t = Math.hypot(blk.x - z.x, blk.z - z.z) / z.r, hr = z.h || [70, 140];
+      const H = ctx.span([hr[1], hr[0]], t) * (0.75 + rnd() * 0.4), hu = inner / 2 - 8 - rnd() * 10, hv = inner / 2 - 8 - rnd() * 10;
+      const F = rnd() < 0.85 ? ctx.fit(blk.x, blk.z, hu, hv, G + H * 1.15, 22) : null;
+      if (F) {
+        const kind = rnd(), tiers = kind < 0.5 ? [[F.hu, F.hv, G + H]] : [[F.hu, F.hv, G + H * 0.65], [F.hu * 0.78, F.hv * 0.78, G + H]];
+        ctx.add({ k: 'tower', x: F.x, z: F.z, y0: G, tiers, st: 1, c: Math.floor(rnd() * 6), crown: rnd() < 0.5 ? 1 : 2, cap: H * 0.1, seed: Math.floor(rnd() * 999) });
+      }
+      return true;
+    }
+    if (z.kind !== 'industrial') return false;
     blk.lot = '#8b8880';
     const lay = rnd(), parts = lay < 0.45 ? [[0, 0, inner / 2 - 4, inner / 2 - 14]] : [[0, -inner / 4, inner / 2 - 4, inner / 4 - 4], [0, inner / 4 + 2, inner / 2 - 10, inner / 4 - 6]];
     for (const [ou, ov, hu, hv] of parts) {
@@ -95,12 +118,13 @@ CITY_PLUGINS.push({
   after(ctx) {
     const R = OUT.river;
     if (R) {                                                 // a row of trees along each walk
-      const rt = mulberry32(911), off = R.w / 2 + WALK + 5;
+      const rt = mulberry32(911), off = R.w / 2 + WALK + 7;
       for (let k = 0; k < R.n - 1; k += 2) {
         const dx = R.X[k + 1] - R.X[k], dz = R.Z[k + 1] - R.Z[k], l = Math.hypot(dx, dz) || 1;
         for (const sd of [-1, 1]) if (rt() < 0.8) ctx.tree(R.X[k] - dz / l * off * sd, R.Z[k] + dx / l * off * sd, 8 + rt() * 5, 2.8 + rt() * 1.4);
       }
     }
+    outSteel(ctx.G); outBoats(ctx); outSigns(ctx);
     const B = OUT.C.billboards, rnd = mulberry32(4242), G = ctx.G, [bw, bh] = B.size;
     for (const H of CITY.hw) {
       if (H.spec.noBoards) continue;
@@ -112,7 +136,8 @@ CITY_PLUGINS.push({
         next = dist + B.every * (0.8 + rnd() * 0.4); side = -side;
         const ux = dx / L, uz = dz / L, nx = -uz * side, nz = ux * side, off = H.w / 2 + 9;
         const x = H.X[i] + nx * off, z = H.Z[i] + nz * off, top = G + Math.max(B.height, H.H[i] + 9) + bh;
-        if (outRiverNear(x, z) < (OUT.river ? OUT.river.w / 2 + WALK : 0) + 10) continue;
+        if (outRiverNear(x, z) < (OUT.river ? OUT.river.w / 2 + WALK + outVerge() : 0) + 10) continue;
+        if (OUT.signs.some((sg) => Math.hypot(sg.x - x, sg.z - z) < 60)) continue;
         if (ctx.clash(x, z, bw / 2, bw / 2, top)) continue;
         if (CITY.hw.some((O) => O !== H && cityHighwayNear(x, z, O).d < O.w / 2 + 6)) continue;
         // facing back down the road, turned a little toward it, so the traffic (and anyone flying along it) reads it
@@ -159,7 +184,7 @@ CITY_PLUGINS.push({
   kit: { build(K, group) { outKitBuild(K, group); } },
 });
 var CRASH_TEXT = CRASH_TEXT || {};
-Object.assign(CRASH_TEXT, { board: 'Hit a billboard', warehouse: 'Hit a warehouse', stack: 'Hit a smokestack', tank: 'Hit a tank' });
+Object.assign(CRASH_TEXT, { board: 'Hit a billboard', warehouse: 'Hit a warehouse', stack: 'Hit a smokestack', tank: 'Hit a tank', boat: 'Hit a boat', funnel: 'Hit a funnel', mast: 'Hit a mast' });
 
 // an n-sided tube from radius r0 at y0 to r1 at y1 (a cap on top if asked)
 function outPrism(K, x, z, r0, r1, y0, y1, n, col, cap) {
@@ -206,7 +231,7 @@ function outKitBuild(K, group) {
   /* the quays: a wall each side, from the riverbed up to a parapet, and the walk behind it */
   const R = OUT.river;
   if (R) {
-    const half = R.w / 2, WALL = C3('#a8a196'), WALK_C = C3('#9b968c'), y0 = TER.WATER - R.depth, y1 = G + 0.9;
+    const half = R.w / 2, WALL = C3('#a8a196'), WALK_C = C3('#9b968c'), VERGE_C = C3('#7a9a52'), y0 = TER.WATER - R.depth, y1 = G + 0.9;
     const nrm = (k) => { const k0 = Math.max(0, k - 1), k1 = Math.min(R.n - 1, k + 1), dx = R.X[k1] - R.X[k0], dz = R.Z[k1] - R.Z[k0], l = Math.hypot(dx, dz) || 1; return [-dz / l, dx / l]; };
     for (let k = 0; k < R.n - 1; k++) {
       const [ax, az] = nrm(k), [bx, bz] = nrm(k + 1);
@@ -218,53 +243,15 @@ function outKitBuild(K, group) {
         K.quad(M, A(half + 0.6, G), Bp(half + 0.6, G), Bp(half + 0.6, y1), A(half + 0.6, y1), WALL, [ax * sd, 0, az * sd]);
         K.GR.at(R.X[k], R.Z[k]);
         K.quad(K.GR, A(half + 0.6, G), Bp(half + 0.6, G), Bp(half + WALK, G), A(half + WALK, G), WALK_C, [0, 1, 0]);
+        K.quad(K.GR, A(half + WALK, G), Bp(half + WALK, G), Bp(half + WALK + outVerge(), G), A(half + WALK + outVerge(), G), VERGE_C, [0, 1, 0]);
       }
     }
   }
-  /* bridge steel over the decks: arches with hangers, or a box truss */
-  const STEEL = C3('#c9472e'), GREY = C3('#7d8288');
-  for (const H of CITY.hw) {
-    const b = H.spec.bridge;
-    if (!b || b.type === 'beam') continue;
-    const [ax, az] = b.a, [bx, bz] = b.b, L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, vx = -uz, vz = ux;
-    const r = Math.min(b.ramp || 200, L * 0.4), deck = G + b.h, w = H.w / 2;
-    const P = (d, o, y) => [ax + ux * d + vx * o, y, az + uz * d + vz * o];
-    M.at((ax + bx) / 2, (az + bz) / 2);
-    if (b.type === 'arch') {
-      const s0 = r, s1 = L - r, rise = (s1 - s0) * 0.2, N = 16;
-      for (const sd of [-1, 1]) {
-        const o = sd * (w + 0.4), Y = (t) => deck + 0.5 + rise * 4 * t * (1 - t);
-        for (let i = 0; i < N; i++) {
-          const t0 = i / N, t1 = (i + 1) / N;
-          K.beam(M, P(lerp(s0, s1, t0), o, Y(t0)), P(lerp(s0, s1, t1), o, Y(t1)), 1.6, STEEL);
-          const xm = lerp(s0, s1, (t0 + t1) / 2), ym = Y((t0 + t1) / 2);
-          if (i > 0) K.beam(M, P(lerp(s0, s1, t0), o, deck + 0.5), P(lerp(s0, s1, t0), o, Y(t0)), 0.3, GREY);   // hanger
-          const [cx, , cz] = P(xm, o, 0);
-          shoreBox('bridge', cx, cz, ux, uz, (s1 - s0) / N / 2 + 0.5, 1.2, Math.min(Y(t0), Y(t1)) - 1, Math.max(Y(t0), Y(t1)) + 1);
-        }
-      }
-      for (let i = 2; i < N - 1; i += 3) {                   // braces across the top
-        const t = i / N, y = deck + 0.5 + rise * 4 * t * (1 - t);
-        K.beam(M, P(lerp(s0, s1, t), -w, y), P(lerp(s0, s1, t), w, y), 0.8, STEEL);
-      }
-    } else if (b.type === 'truss') {
-      const s0 = r, s1 = L - r, ht = 9, panels = Math.max(4, Math.round((s1 - s0) / 9)), dl = (s1 - s0) / panels;
-      for (const sd of [-1, 1]) {
-        const o = sd * (w + 0.3);
-        K.beam(M, P(s0, o, deck + ht), P(s1, o, deck + ht), 1.0, GREY);   // top chord
-        for (let i = 0; i <= panels; i++) {
-          const d = s0 + i * dl;
-          K.beam(M, P(d, o, deck), P(d, o, deck + ht), 0.6, GREY);
-          if (i < panels) K.beam(M, P(d, o, i % 2 ? deck + ht : deck), P(d + dl, o, i % 2 ? deck : deck + ht), 0.5, GREY);
-        }
-        const [cx, , cz] = P((s0 + s1) / 2, o, 0);
-        shoreBox('bridge', cx, cz, ux, uz, (s1 - s0) / 2, 0.8, deck, deck + ht + 0.6);
-      }
-      for (let i = 0; i <= panels; i += 2) { const d = s0 + i * dl; K.beam(M, P(d, -w, deck + ht), P(d, w, deck + ht), 0.5, GREY); }
-      const [cx, , cz] = P((s0 + s1) / 2, 0, 0);
-      shoreBox('bridge', cx, cz, ux, uz, (s1 - s0) / 2, w, deck + ht - 0.5, deck + ht + 0.6);
-    }
-  }
+  /* bridge steel (laid out, and given its boxes, by outSteel), the boats and the gantries */
+  const COLS = { steel: C3('#c9472e'), grey: C3('#7d8288'), tower: C3('#d8d3c8'), cable: C3('#5e6266') };
+  for (const bm of OUT.steel) { M.at(bm.p0[0], bm.p0[2]); K.beam(M, bm.p0, bm.p1, bm.size, COLS[bm.col]); }
+  outDrawBoats(K);
+  outDrawSigns(K, group);
   /* billboards: a pole, the back of the frame, and an advert each side (unlit, so they glow a little at dusk) */
   if (OUT.boards.length) {
     const [bw, bh] = OUT.C.billboards.size, POLE = C3('#5d6166'), FRAME = C3('#3d4044');
@@ -339,4 +326,192 @@ function mergeGeo(list) {
   for (const g of list) { const n = g.index ? g.toNonIndexed() : g; pos.push(...n.attributes.position.array); }
   const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.computeVertexNormals();
   return out;
+}
+
+/* ---------- bridge steel: beams [p0, p1, size, colour], boxes for the ones you could hit ---------- */
+function outSteel(G) {
+  OUT.steel.length = 0;
+  const beam = (p0, p1, size, col, hit) => {
+    OUT.steel.push({ p0, p1, size, col });
+    if (!hit) return;
+    const dx = p1[0] - p0[0], dz = p1[2] - p0[2], L = Math.hypot(dx, dz), ux = L > 0.5 ? dx / L : 1, uz = L > 0.5 ? dz / L : 0;
+    shoreBox('bridge', (p0[0] + p1[0]) / 2, (p0[2] + p1[2]) / 2, ux, uz, L / 2 + size / 2, size / 2 + 0.3, Math.min(p0[1], p1[1]) - size / 2, Math.max(p0[1], p1[1]) + size / 2);
+  };
+  for (const H of CITY.hw) {
+    const b = H.spec.bridge;
+    if (!b || b.type === 'beam') continue;
+    const [ax, az] = b.a, [bx, bz] = b.b, L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, vx = -uz, vz = ux;
+    const r = Math.min(b.ramp || 200, L * 0.4), deck = G + b.h, w = H.w / 2;
+    const P = (d, o, y) => [ax + ux * d + vx * o, y, az + uz * d + vz * o];
+    if (b.type === 'arch') {
+      const s0 = r, s1 = L - r, rise = (s1 - s0) * 0.2, N = 16, Y = (t) => deck + 0.5 + rise * 4 * t * (1 - t);
+      for (const sd of [-1, 1]) {
+        const o = sd * (w + 0.4);
+        for (let i = 0; i < N; i++) {
+          const t0 = i / N, t1 = (i + 1) / N;
+          beam(P(lerp(s0, s1, t0), o, Y(t0)), P(lerp(s0, s1, t1), o, Y(t1)), 1.6, 'steel', true);
+          if (i > 0) beam(P(lerp(s0, s1, t0), o, deck + 0.5), P(lerp(s0, s1, t0), o, Y(t0)), 0.3, 'grey', false);   // hanger
+        }
+      }
+      for (let i = 2; i < N - 1; i += 3) { const t = i / N; beam(P(lerp(s0, s1, t), -w, Y(t)), P(lerp(s0, s1, t), w, Y(t)), 0.8, 'steel', true); }
+    } else if (b.type === 'truss') {
+      const s0 = r, s1 = L - r, ht = 9, panels = Math.max(4, Math.round((s1 - s0) / 9)), dl = (s1 - s0) / panels;
+      for (const sd of [-1, 1]) {
+        const o = sd * (w + 0.3);
+        beam(P(s0, o, deck + ht), P(s1, o, deck + ht), 1.0, 'grey', true);
+        beam(P(s0, o, deck + ht / 2), P(s1, o, deck + ht / 2), 0.1, 'grey', true);   // (the sides' box; drawn as a hairline)
+        for (let i = 0; i <= panels; i++) {
+          const d = s0 + i * dl;
+          beam(P(d, o, deck), P(d, o, deck + ht), 0.6, 'grey', false);
+          if (i < panels) beam(P(d, o, i % 2 ? deck + ht : deck), P(d + dl, o, i % 2 ? deck : deck + ht), 0.5, 'grey', false);
+        }
+      }
+      for (let i = 0; i <= panels; i += 2) { const d = s0 + i * dl; beam(P(d, -w, deck + ht), P(d, w, deck + ht), 0.5, 'grey', true); }
+      // the sides are solid to the crash test (a box the height of the truss along each side)
+      for (const sd of [-1, 1]) { const [cx, , cz] = P((s0 + s1) / 2, sd * (w + 0.3), 0); shoreBox('bridge', cx, cz, ux, uz, (s1 - s0) / 2, 0.8, deck, deck + ht + 0.6); }
+    } else if (b.type === 'suspension') {
+      const [d0, d1] = b.towers, T = b.tower || 80, o = w + 2.5, legW = 4;
+      const cableY = (d) => {                                // the main cable's height along the bridge
+        if (d <= d0) return lerp(deck + 1.5, deck + T, smoothstep(r, d0, d) * 0.4 + (d - r) / (d0 - r) * 0.6);
+        if (d >= d1) return lerp(deck + 1.5, deck + T, smoothstep(L - r, d1, d) * 0.4 + (L - r - d) / (L - r - d1) * 0.6);
+        const t = (d - d0) / (d1 - d0); return deck + 4 + (T - 4) * Math.pow(2 * t - 1, 2);
+      };
+      for (const d of [d0, d1]) {
+        const base = Math.min(G, groundAt(...P(d, 0, 0).filter((_, k) => k !== 1))) - 1;
+        for (const sd of [-1, 1]) beam(P(d, sd * o, base), P(d, sd * o, deck + T), legW, 'tower', true);
+        beam(P(d, -o, deck - 3), P(d, o, deck - 3), 3, 'tower', true);                   // under the deck
+        beam(P(d, -o, deck + T * 0.3), P(d, o, deck + T * 0.3), 3.2, 'tower', true);     // a third of the way up
+        beam(P(d, -o, deck + T - 2), P(d, o, deck + T - 2), 4, 'tower', true);           // the top
+      }
+      const step = 10;
+      for (const sd of [-1, 1]) {
+        let prev = null;
+        for (let d = r; d <= L - r + 0.1; d += step) {
+          const p = P(d, sd * o, cableY(d));
+          if (prev) beam(prev, p, 1.0, 'cable', true);
+          if (d > r + 1 && d < L - r - 1 && Math.abs(d - d0) > 3 && Math.abs(d - d1) > 3) beam(P(d, sd * (w + 0.6), deck + 1), P(d, sd * (w + 0.6), p[1]), 0.25, 'cable', false);
+          prev = p;
+        }
+      }
+    }
+  }
+}
+
+/* ---------- boats: a ship (twin funnels side by side amidships) and sailboats, moored along the river ---------- */
+function outRiverDir(x, z) {                                 // the way the river runs nearest (x, z)
+  const R = OUT.river;
+  let bd = Infinity, bk = 0;
+  for (let k = 0; k < R.n - 1; k++) { const d = (R.X[k] - x) ** 2 + (R.Z[k] - z) ** 2; if (d < bd) { bd = d; bk = k; } }
+  const dx = R.X[bk + 1] - R.X[bk], dz = R.Z[bk + 1] - R.Z[bk], l = Math.hypot(dx, dz) || 1;
+  return [dx / l, dz / l];
+}
+function outBoats(ctx) {
+  OUT.boats.length = 0;
+  if (!OUT.river) return;
+  const Wy = TER.WATER;
+  for (const spec of ctx.C.boats || []) {
+    const [ux, uz] = outRiverDir(spec.x, spec.z), vx = -uz, vz = ux, rnd = mulberry32(Math.round(spec.x * 7 + spec.z * 13));
+    const bt = Object.assign({ ux, uz, vx, vz, c: Math.floor(rnd() * 1000) }, spec);
+    const P = (u, v) => [spec.x + ux * u + vx * v, spec.z + uz * u + vz * v];
+    const box = (u, v, hu, hv, y0, y1, kind) => { const [x, z] = P(u, v); shoreBox(kind || 'boat', x, z, ux, uz, hu, hv, y0, y1); };
+    if (spec.kind === 'ship') {
+      const L = spec.len || 200, Bm = spec.beam || 50, deck = Wy + 10;
+      Object.assign(bt, { L, Bm, deck, fu: (spec.funnelAt || 0) * L / 2, fo: Bm / 2 - 6, fr: 4.5, fh: 30 });
+      box(-L * 0.08, 0, L * 0.42, Bm / 2, Wy - 3, deck);                             // the hull (the bow is pointed: two boxes)
+      box(L * 0.4, 0, L * 0.1, Bm * 0.3, Wy - 3, deck);
+      box(-L / 2 + 26, 0, 22, Bm / 2 - 3, deck, deck + 7);                           // the superstructure, aft
+      for (const sd of [-1, 1]) box(bt.fu, sd * bt.fo, bt.fr, bt.fr, deck, deck + bt.fh, 'funnel');
+      bt.cargo = [];                                         // containers forward, two high, clear of the middle line
+      for (let u = bt.fu + 18; u < L * 0.36; u += 13) for (const v of [-Bm / 2 + 7, -Bm / 2 + 16, Bm / 2 - 16, Bm / 2 - 7]) {
+        const n = 1 + Math.floor(rnd() * 2); bt.cargo.push([u, v, n, Math.floor(rnd() * 6)]);
+        box(u, v, 6.1, 1.25, deck, deck + 2.6 * n);
+      }
+    } else {                                                 // a sailboat: hull, mast, sail
+      const L = spec.len || 13, mast = L * 1.9;
+      Object.assign(bt, { L, mast, sail: Math.floor(rnd() * 4) });
+      box(0, 0, L / 2, 2.2, Wy - 1, Wy + 1.4);
+      box(L * 0.08, 0, 0.4, 0.4, Wy + 1.4, Wy + 1.4 + mast, 'mast');
+      box(-L * 0.12, 0, L * 0.22, 0.3, Wy + 3, Wy + 1.4 + mast * 0.92, 'mast');
+    }
+    OUT.boats.push(bt);
+  }
+}
+function outDrawBoats(K) {
+  const M = K.M, Wy = TER.WATER, C3 = K.C3;
+  for (const bt of OUT.boats) {
+    const { ux, uz, vx, vz } = bt, P = (u, v, y) => [bt.x + ux * u + vx * v, y, bt.z + uz * u + vz * v];
+    M.at(bt.x, bt.z);
+    // an outline in the boat's own (u, v), extruded from y0 to y1
+    const prism = (pts, y0, y1, side, top) => {
+      for (let i = 0; i < pts.length; i++) {
+        const [u0, v0] = pts[i], [u1, v1] = pts[(i + 1) % pts.length], du = u1 - u0, dv = v1 - v0;
+        const n = [ux * dv - vx * du, 0, uz * dv - vz * du];             // outward for a clockwise-in-(u, v) outline
+        K.quad(M, P(u0, v0, y0), P(u1, v1, y0), P(u1, v1, y1), P(u0, v0, y1), side, [-n[0], 0, -n[2]]);
+      }
+      if (top) for (let i = 1; i < pts.length - 1; i++) M.tri(P(...pts[0], y1), P(...pts[i], y1), P(...pts[i + 1], y1), top, K.W0, K.W0, K.W0, 0, 1, 0);
+    };
+    if (bt.kind === 'ship') {
+      const { L, Bm, deck } = bt, h = Bm / 2;
+      const hull = [[-L / 2, -h], [-L / 2, h], [L * 0.3, h], [L / 2, 0], [L * 0.3, -h]];
+      prism(hull, Wy - 3, Wy + 0.8, C3('#9b2f25'), null);                        // red below the waterline
+      prism(hull, Wy + 0.8, deck, C3('#1f3550'), C3('#6f6a62'));                 // navy hull, deck
+      K.plainBox(...P(-L / 2 + 26, 0, 0).filter((_, k) => k !== 1), ux, uz, 22, h - 3, deck, deck + 7, C3('#ecebe6'));   // superstructure
+      K.plainBox(...P(-L / 2 + 40, 0, 0).filter((_, k) => k !== 1), ux, uz, 6, h - 8, deck + 7, deck + 9.5, C3('#3a4652'));   // its bridge windows
+      for (const sd of [-1, 1]) {                            // the funnels: buff, a red band, black tops
+        const [fx, , fz] = P(bt.fu, sd * bt.fo, 0);
+        outPrism(K, fx, fz, bt.fr, bt.fr, deck, deck + bt.fh * 0.72, 10, C3('#e3cf9a'));
+        outPrism(K, fx, fz, bt.fr, bt.fr, deck + bt.fh * 0.72, deck + bt.fh * 0.88, 10, C3('#c8362a'));
+        outPrism(K, fx, fz, bt.fr, bt.fr * 0.95, deck + bt.fh * 0.88, deck + bt.fh, 10, C3('#1b1d20'), true);
+      }
+      const CC = ['#c8442e', '#2f6fa8', '#e0b23c', '#3c8a5a', '#d7d2c6', '#7a4aa0'].map(C3);
+      for (const [u, v, n, c] of bt.cargo) K.plainBox(...P(u, v, 0).filter((_, k) => k !== 1), ux, uz, 6.1, 1.25, deck, deck + 2.6 * n, CC[c]);
+    } else {
+      const { L, mast } = bt;
+      prism([[-L / 2, -1.6], [-L / 2, 1.6], [L * 0.2, 2.2], [L / 2, 0], [L * 0.2, -2.2]], Wy - 1, Wy + 1.4, C3('#f2f0ea'), C3('#b98f5f'));
+      const [mx, , mz] = P(L * 0.08, 0, 0);
+      K.plainBox(mx, mz, ux, uz, 0.25, 0.25, Wy + 1.4, Wy + 1.4 + mast, C3('#d0d0cc'), true);
+      const SAIL = ['#f4f1e8', '#f4f1e8', '#e8584a', '#3d7cc9'][bt.sail];
+      const a = P(L * 0.06, 0, Wy + 3), b = P(L * 0.06, 0, Wy + 1.4 + mast * 0.95), c = P(-L * 0.36, 0, Wy + 3);
+      M.tri(a, b, c, C3(SAIL), K.W0, K.W0, K.W0, vx, 0, vz); M.tri(a, c, b, C3(SAIL), K.W0, K.W0, K.W0, -vx, 0, -vz);   // both faces
+    }
+  }
+}
+
+/* ---------- billboard gantries over the road ---------- */
+function outSigns(ctx) {
+  OUT.signs.length = 0;
+  const G = ctx.G, rnd = mulberry32(31337);
+  for (const sg of ctx.C.signs || []) {
+    const [ax, az] = sg.a, [bx, bz] = sg.b, L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L;
+    const x = (ax + bx) / 2, z = (az + bz) / 2, y0 = G + sg.clear, y1 = y0 + sg.h;
+    OUT.signs.push({ x, z, ux, uz, L, y0, y1, ad: [Math.floor(rnd() * 8), Math.floor(rnd() * 8), Math.floor(rnd() * 8), Math.floor(rnd() * 8)] });
+    for (const [px, pz] of [sg.a, sg.b]) shoreBox('board', px, pz, ux, uz, 1, 1, G - 1, y1);
+    shoreBox('board', x, z, ux, uz, L / 2 + 1, 0.8, y0 - 0.6, y1 + 0.4);
+  }
+}
+function outDrawSigns(K, group) {
+  if (!OUT.signs.length) return;
+  const M = K.M, G = CITY.G, LEG = K.C3('#6a6e73'), FRAME = K.C3('#3d4044'), pos = [], uv = [];
+  for (const s of OUT.signs) {
+    const nx = -s.uz, nz = s.ux;                             // the panel faces along the road (both ways)
+    for (const e of [-1, 1]) {
+      const px = s.x + s.ux * s.L / 2 * e, pz = s.z + s.uz * s.L / 2 * e;
+      M.at(px, pz); K.plainBox(px, pz, s.ux, s.uz, 1, 1, G - 0.3, s.y1 + 0.4, LEG);
+    }
+    M.at(s.x, s.z);
+    K.plainBox(s.x, s.z, s.ux, s.uz, s.L / 2 + 1, 0.5, s.y0 - 0.6, s.y1 + 0.4, FRAME);
+    for (const sgn of [1, -1]) for (let half = 0; half < 2; half++) {   // two adverts side by side on each face
+      const ad = s.ad[(sgn > 0 ? 0 : 2) + half], u0 = (ad % 4) / 4, v0 = 1 - Math.floor(ad / 4) / 2, u1 = u0 + 0.25, v1 = v0 - 0.5;
+      const e0 = (half - 1) * sgn, e1 = half * sgn, o = 0.55 * sgn;
+      const c = (e, y) => [s.x + s.ux * (s.L / 2 - 1) * e + nx * o, y, s.z + s.uz * (s.L / 2 - 1) * e + nz * o];
+      const p0 = c(e0, s.y0), p1 = c(e1, s.y0), p2 = c(e1, s.y1), p3 = c(e0, s.y1);
+      pos.push(...p0, ...p1, ...p2, ...p0, ...p2, ...p3); uv.push(u0, v1, u1, v1, u1, v0, u0, v1, u1, v0, u0, v0);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeBoundingSphere();
+  const mat = new THREE.MeshBasicMaterial({ map: OutLook.ads(), color: '#d8d0c4', side: THREE.DoubleSide });
+  mat.userData.noSun = true;
+  group.add(new THREE.Mesh(g, mat));
 }
