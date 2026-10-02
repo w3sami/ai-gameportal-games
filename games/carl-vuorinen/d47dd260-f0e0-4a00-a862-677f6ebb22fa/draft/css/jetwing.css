@@ -1,0 +1,2 @@
+/* Jetwing (Cityscape): its own control texts; it uses the boost bar as its fuel. */
+body:not(.vehicle-jetwing) .for-jetwing, body.vehicle-jetwing .for-prop { display: none; }
