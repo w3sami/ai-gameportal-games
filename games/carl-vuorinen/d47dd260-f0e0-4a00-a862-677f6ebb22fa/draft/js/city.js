@@ -23,10 +23,11 @@
                                  (none in the flight corridor where the line passes under the deck, nor on another deck)
      parks: [[x, z, r], ...]     no buildings: lawn and trees
    }
-   Sim part (no DOM): buildCity() (from buildShore, after the terrain). createCityKit(): the meshes (the course's
+   Sim part (no DOM): buildCity() (from buildShore, after the terrain); cityRayBlocked(c, d), which js/glare.js asks
+   whether the sun is behind a building. createCityKit(): the meshes (the course's
    windows, lit at dusk, in a shader on the building material; see CityLook below).
    ========================================================================= */
-const CITY = { on: false, G: 0, bld: [], trees: [], blocks: [], hw: [], piers: [], stats: {} };
+const CITY = { on: false, G: 0, top: 0, bld: [], trees: [], blocks: [], hw: [], piers: [], stats: {} };
 const CITY_DEF = {
   seed: 1, ground: 20, centre: [0, 0], angle: 0, block: 110, street: 18,
   rings: [450, 900, 1500, 3200], tower: [110, 260], mid: [24, 80], flats: [12, 32], houses: [6, 8.5],
@@ -56,6 +57,41 @@ function cityHighwayNear(x, z, only) {
     }
   }
   return _ch;
+}
+
+// does the ray from c along d (unit, toward the sun) hit a building, a deck or a tree? The shore grid's cells along
+// its way, about half a cell apart, until it's above every roof; each box tested once, exactly (slabs)
+let _rayStamp = 0;
+function cityRayBlocked(c, d) {
+  if (!CITY.on) return false;
+  const stamp = ++_rayStamp, hz = Math.hypot(d.x, d.z);
+  const tEnd = Math.min(d.y > 1e-4 ? (CITY.top - c.y) / d.y : 6000, 6000);
+  if (tEnd <= 0) return false;
+  const step = hz > 1e-3 ? (SHORE_CELL / 2) / hz : tEnd;
+  let lastKey = -1;
+  for (let t = 0; t <= tEnd + step; t += step) {
+    const key = treeKey(Math.floor((c.x + d.x * t) / SHORE_CELL), Math.floor((c.z + d.z * t) / SHORE_CELL));
+    if (key === lastKey) continue;
+    lastKey = key;
+    const list = SHORE.grid.get(key);
+    if (list) for (const b of list) { if (b._ray !== stamp) { b._ray = stamp; if (rayHitsBox(c, d, b)) return true; } }
+  }
+  return false;
+}
+function rayHitsBox(o, d, b) {
+  const ox = o.x - b.x, oz = o.z - b.z;
+  const s = [ox * b.ux + oz * b.uz, d.x * b.ux + d.z * b.uz, b.hu, oz * b.ux - ox * b.uz, d.z * b.ux - d.x * b.uz, b.hv];
+  let t0 = 0, t1 = Infinity;
+  for (let i = 0; i < 9; i += 3) {                          // u, v (half sizes either side), then height
+    const p = i < 6 ? s[i] : o.y, q = i < 6 ? s[i + 1] : d.y, lo = i < 6 ? -s[i + 2] : b.y0, hi = i < 6 ? s[i + 2] : b.y1;
+    if (Math.abs(q) < 1e-9) { if (p < lo || p > hi) return false; continue; }
+    let a = (lo - p) / q, e = (hi - p) / q;
+    if (a > e) { const w = a; a = e; e = w; }
+    if (a > t0) t0 = a;
+    if (e < t1) t1 = e;
+    if (t0 > t1) return false;
+  }
+  return true;
 }
 
 function buildCity() {
@@ -261,8 +297,10 @@ function buildCity() {
     }
   }
   CITY.stats = st;
+  CITY.top = SHORE.boxes.reduce((m, bx) => Math.max(m, bx.y1), G);
 }
 SHORE_PLUGINS.push({ build: buildCity, createKit: () => createCityKit() });
+if (typeof GLARE_BLOCKERS !== 'undefined') GLARE_BLOCKERS.push((c, d) => (cityRayBlocked(c, d) ? 0 : 1));   // no dazzle through buildings (js/glare.js)
 var CRASH_TEXT = CRASH_TEXT || {};
 Object.assign(CRASH_TEXT, { tower: 'Hit a tower', mid: 'Hit a building', podium: 'Hit a building', flats: 'Hit a building', house: 'Hit a house', row: 'Hit the rooftops', highway: 'Hit the highway' });
 
