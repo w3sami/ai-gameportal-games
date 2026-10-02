@@ -53,6 +53,7 @@ function createCloudDeck(env) {
 
   function build(group, view) {
     base.near = view.fog[0]; base.far = view.fog[1];
+    if (typeof Skylight !== 'undefined') { base.color.copy(scene.fog.color); base.sun = sun.intensity; base.hemi = hemi.intensity; }   // the course's own light (js/skylight.js has just set it)
     D = COURSE.deck ? Object.assign({}, DECK_DEF, COURSE.deck, {
       under: Object.assign({}, DECK_DEF.under, COURSE.deck.under), inside: Object.assign({}, DECK_DEF.inside, COURSE.deck.inside) }) : null;
     apply(0, 0);
