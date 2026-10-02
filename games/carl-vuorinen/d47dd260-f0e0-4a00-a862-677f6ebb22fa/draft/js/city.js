@@ -26,20 +26,27 @@
      parks: [[x, z, r], ...]     no buildings: lawn and trees
      sprawl                      the city carries on out to this far from the centre (m) in plain blocks, no detail:
                                  every block beyond the detailed ones (by ring and distance from the line) is one or
-                                 two boxes on one grey quad, so it reads as city right out into the haze
+                                 two boxes on one grey quad, so it reads as city right out into the haze; past
+                                 sprawlNear m from the line it thins out to one box on about half the blocks
      clusters: [{ x, z, r, n, h: [min, max] }]   other business districts out there: n towers within r of (x, z)
    }
+   Plugins (CITY_PLUGINS, js/outskirts.js): { terrain(C, G), highways(C, G) -> more highway specs, exclude(x, z, rd),
+   skipBlock(blk), block(ctx, blk) -> true if it built the block, after(ctx), draw: { kind: fn(kctx, b) },
+   kit: { build(kctx, group) } }; ctx: the builders below (add, fit, clash, offLimits, tree, at, ...), kctx: the
+   kit's (quad, plainBox, walls, beam, jit and the M / GR / RD chunk sets). A highway spec may carry clear: [[from,
+   to], ...] (m along it) where it stands on no piers, and noBoards: true.
    Sim part (no DOM): buildCity() (from buildShore, after the terrain); cityRayBlocked(c, d), which js/glare.js asks
    whether the sun is behind a building. createCityKit(): the meshes (the course's
    windows, lit at dusk, in a shader on the building material; see CityLook below).
    ========================================================================= */
-const CITY = { on: false, G: 0, top: 0, bld: [], trees: [], blocks: [], hw: [], piers: [], stats: {} };
+const CITY = { on: false, G: 0, top: 0, bld: [], trees: [], blocks: [], hw: [], piers: [], stats: {}, hwGrid: new Map() };
 const CITY_DEF = {
   seed: 1, ground: 20, centre: [0, 0], angle: 0, block: 110, street: 18,
   rings: [450, 900, 1500, 3200], tower: [110, 260], mid: [24, 80], flats: [12, 32], houses: [6, 8.5],
   near: 350, middle: 1000, far: 2200, gap: 14, under: 22, blend: 500, highways: [], parks: [], sprawl: 0, clusters: [], landmarks: [],
 };
 const PIER_GAP = 34, DECK_T = 1.6, BARRIER_H = 1.1;
+const CITY_PLUGINS = [];
 
 // nearest point of the course line (horizontally): d (m) and the sample there
 const _cl = { d: 0, s: null };
@@ -50,13 +57,18 @@ function cityLineNear(x, z) {
   _cl.d = Math.sqrt(bd); _cl.s = SAMPLES[bk];
   return _cl;
 }
-// nearest highway centreline (of them all, or only that one): d (m), deck height above the ground there, and the road's half width
-const _ch = { d: Infinity, h: 0, hw: 0 };
+// nearest highway centreline (of them all, or only that one) within about HW_CELL m: d (m, Infinity if none that
+// close), deck height above the ground there, and the road's half width. Segments are filed by their middle in a grid
+const _ch = { d: Infinity, h: 0, hw: 0 }, HW_CELL = 100;
 function cityHighwayNear(x, z, only) {
   _ch.d = Infinity; _ch.h = 0; _ch.hw = 0;
-  for (const H of only ? [only] : CITY.hw) {
-    if (x < H.x0 - 60 || x > H.x1 + 60 || z < H.z0 - 60 || z > H.z1 + 60) continue;
-    for (let i = 0; i < H.n - 1; i++) {
+  const ci = Math.floor(x / HW_CELL), cj = Math.floor(z / HW_CELL);
+  for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+    const list = CITY.hwGrid.get(treeKey(ci + di, cj + dj));
+    if (!list) continue;
+    for (let k = 0; k < list.length; k += 2) {
+      const H = list[k], i = list[k + 1];
+      if (only && H !== only) continue;
       const ax = H.X[i], az = H.Z[i], dx = H.X[i + 1] - ax, dz = H.Z[i + 1] - az, L2 = dx * dx + dz * dz || 1;
       const t = clamp(((x - ax) * dx + (z - az) * dz) / L2, 0, 1), ex = x - ax - dx * t, ez = z - az - dz * t, d = Math.sqrt(ex * ex + ez * ez);
       if (d < _ch.d) { _ch.d = d; _ch.h = lerp(H.H[i], H.H[i + 1], t); _ch.hw = H.w / 2; }
@@ -103,6 +115,7 @@ function rayHitsBox(o, d, b) {
 function buildCity() {
   CITY.on = false;
   for (const k of ['bld', 'trees', 'blocks', 'hw', 'piers']) CITY[k].length = 0;
+  CITY.hwGrid.clear();
   if (!COURSE.city) return;
   const C = CITY.C = Object.assign({}, CITY_DEF, COURSE.city);
   CITY.on = true;
@@ -119,12 +132,14 @@ function buildCity() {
     const k = j * W + i;
     TH[k] = lerp(TH[k], G - 0.3, smoothstep(Rf, Rcity, d));
   }
+  for (const pl of CITY_PLUGINS) if (pl.terrain) pl.terrain(C, G);
 
   // highways: a smooth curve through the points, every ~8 m, with the deck's height
-  for (const spec of C.highways) {
+  const specs = C.highways.concat(...CITY_PLUGINS.map((pl) => (pl.highways ? pl.highways(C, G) : [])));
+  for (const spec of specs) {
     const pts = spec.pts.map((p) => new THREE.Vector3(p[0], p[2] || 0, p[1]));
     const cv = new THREE.CatmullRomCurve3(pts, false, 'centripetal'), len = cv.getLength(), n = Math.max(2, Math.ceil(len / 8) + 1);
-    const H = { w: spec.w || 26, lanes: spec.lanes || 3, X: [], Z: [], H: [], n, x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
+    const H = { w: spec.w || 26, lanes: spec.lanes || 3, X: [], Z: [], H: [], n, len, spec, x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
     const p = new THREE.Vector3();
     for (let i = 0; i < n; i++) {
       cv.getPointAt(i / (n - 1), p);
@@ -132,19 +147,25 @@ function buildCity() {
       H.x0 = Math.min(H.x0, p.x); H.x1 = Math.max(H.x1, p.x); H.z0 = Math.min(H.z0, p.z); H.z1 = Math.max(H.z1, p.z);
     }
     CITY.hw.push(H);
+    for (let i = 0; i < n - 1; i++) {
+      const key = treeKey(Math.floor((H.X[i] + H.X[i + 1]) / 2 / HW_CELL), Math.floor((H.Z[i] + H.Z[i + 1]) / 2 / HW_CELL));
+      let list = CITY.hwGrid.get(key); if (!list) CITY.hwGrid.set(key, list = []);
+      list.push(H, i);
+    }
   }
   // their decks and piers, as boxes
   CITY.hw.forEach((H, hi) => {
-    let along = PIER_GAP / 2;
+    let along = PIER_GAP / 2, dist = 0;
+    const clear = H.spec.clear || [];
     for (let i = 0; i < H.n - 1; i++) {
       const dx = H.X[i + 1] - H.X[i], dz = H.Z[i + 1] - H.Z[i], L = Math.hypot(dx, dz) || 1, h = (H.H[i] + H.H[i + 1]) / 2;
       const top = G + Math.max(0.25, h);
       if (h > 1.5) shoreBox('highway', (H.X[i] + H.X[i + 1]) / 2, (H.Z[i] + H.Z[i + 1]) / 2, dx / L, dz / L, L / 2 + 0.4, H.w / 2, top - DECK_T, top + BARRIER_H);
-      along += L;
+      along += L; dist += L;
       if (along < PIER_GAP) continue;
       along = 0;
       const px = H.X[i], pz = H.Z[i], ph = H.H[i];
-      if (ph < 4) continue;
+      if (ph < 4 || clear.some(([d0, d1]) => dist > d0 && dist < d1)) continue;
       // not in the flight corridor where the line runs under this deck, nor on another road
       const ln = cityLineNear(px, pz);
       if (ln.d < ln.s.width + 6 && ln.s.y < G + ph) continue;
@@ -175,6 +196,7 @@ function buildCity() {
   };
   const offLimits = (x, z, rd) => {
     for (const [px, pz, pr] of parks) if (Math.hypot(x - px, z - pz) < pr + rd) return true;
+    for (const pl of CITY_PLUGINS) if (pl.exclude && pl.exclude(x, z, rd)) return true;
     const q = cityHighwayNear(x, z);
     return q.d < q.hw + rd + 5;
   };
@@ -198,7 +220,7 @@ function buildCity() {
     let y0 = b.y0;
     for (const [hu, hv, y1] of b.tiers) { shoreBox(b.k, b.x, b.z, UX, UZ, hu, hv, y0, y1 + (b.cap || 0) * (y1 === b.tiers[b.tiers.length - 1][2] ? 1 : 0)); y0 = y1; }
     CITY.bld.push(b);
-    st[b.k === 'podium' ? 'mid' : b.k]++;
+    const sk = b.k === 'podium' ? 'mid' : b.k; st[sk] = (st[sk] || 0) + 1;
   };
   const tree = (x, z, h, r) => {
     if (blocked(x, z, r, G + h)) return;
@@ -208,9 +230,11 @@ function buildCity() {
   };
   const at = (bx, bz, u, v) => [bx + UX * u + VX * v, bz + UZ * u + VZ * v];
   const span = (r, t) => r[0] + (r[1] - r[0]) * t;
+  const ctx = { C, G, R, UX, UZ, VX, VZ, at, span, clash, fit, offLimits, add, tree, st, lineNear: cityLineNear, highwayNear: cityHighwayNear };
 
   // blocks: the grid's cells (a street runs through the centre), out to the last ring, each by its ring and detail
   const B = C.block, S = C.street, inner = B - S, nB = Math.ceil(Rcity / B) + 1;
+  ctx.B = B; ctx.inner = inner;
   // other business districts out in the sprawl: towers on their own blocks of the grid, placed first
   const taken = new Set(), frand = mulberry32(C.seed * 104729 + 3);   // (their own numbers: the detailed city stays as it was)
   for (const cl of C.clusters || []) {
@@ -248,12 +272,16 @@ function buildCity() {
     const ring = d < R[0] ? 0 : d < R[1] ? 1 : d < R[2] ? 2 : 3;
     const dl = cityLineNear(bx, bz).d;
     const detail = ring <= 1 ? 2 : d > R[3] ? -1 : dl < C.near ? 2 : dl < C.middle ? 1 : dl < C.far ? 0 : -1;
+    const blk = { x: bx, z: bz, i, j, ring, detail, park: false, d, dl };
+    if (CITY_PLUGINS.some((pl) => pl.skipBlock && pl.skipBlock(blk))) continue;
+    if (CITY_PLUGINS.some((pl) => pl.block && pl.block(ctx, blk))) { CITY.blocks.push(blk); continue; }
     if (detail < 0) {                                        // far off: plain blocks, if the city reaches this far
       if (!C.sprawl || parks.some(([px, pz, pr]) => Math.hypot(bx - px, bz - pz) < pr)) continue;
       const q = cityHighwayNear(bx, bz);
       CITY.blocks.push({ x: bx, z: bz, ring, detail: -1, park: false, d });
       if (q.d < q.hw + B * 0.45 || taken.has(i + ',' + j)) continue;   // a highway runs through, or a cluster's tower: just the street
-      const two = frand() < 0.5, hgt = (r) => ring === 2 ? 12 + r * 22 : 7 + r * (d > R[3] ? 16 : 9);
+      if (dl > (C.sprawlNear || 1e9) && frand() < 0.45) continue;   // well off the line: sparser, and one box at most
+      const two = dl <= (C.sprawlNear || 1e9) && frand() < 0.5, hgt = (r) => ring === 2 ? 12 + r * 22 : 7 + r * (d > R[3] ? 16 : 9);
       const parts = two ? [[-inner / 4, inner / 4 - 3, inner / 2 - 4], [inner / 4, inner / 4 - 3, inner / 2 - 4]] : [[0, inner / 2 - 6 - frand() * 8, inner / 2 - 6 - frand() * 8]];
       for (const [ou, hu, hv] of parts) {
         const [x, z] = at(bx, bz, ou, 0), top = G + Math.round(hgt(frand()) / 3.1) * 3.1;
@@ -351,6 +379,7 @@ function buildCity() {
       if (detail === 2 && rand() < 0.7) { const [tx, tz] = atL((rand() - 0.5) * inner * 0.8, side * (ld - 2)); tree(tx, tz, 8 + rand() * 4, 3 + rand()); }   // street tree
     }
   }
+  for (const pl of CITY_PLUGINS) if (pl.after) pl.after(ctx);
   CITY.stats = st;
   CITY.top = SHORE.boxes.reduce((m, bx) => Math.max(m, bx.y1), G);
 }
@@ -457,7 +486,7 @@ function createCityKit() {
   const TREE = ['#4f7a3a', '#5d8a40', '#6b8f3f', '#45703a'].map(C3);
   const URBAN = C3('#6a6966'), ASPHALT = C3('#4b4d51'), WALK = C3('#9c9a95'), PLAZA = C3('#a29f97'), LAWN = C3('#7a9a52'), YARD = C3('#86a05a'), LOT = C3('#8c8b86');
   const DECK = C3('#6a6c70'), DECKSIDE = C3('#a8a59d'), BARRIER = C3('#c4c1b8'), PIER = C3('#a39f96');
-  const ICO = new THREE.IcosahedronGeometry(1, 0).attributes.position;   // (already non-indexed)
+  const ICO = new THREE.OctahedronGeometry(1, 0).attributes.position;    // tree crowns: 8 facets (already non-indexed)
 
   // one chunk's arrays; triangles come out facing `want` (their normal is flipped to point that way)
   const CH = 6 * 110;
@@ -533,7 +562,7 @@ function createCityKit() {
   }
   function treeMesh(t) {
     const h = t.h, r = t.r, G = CITY.G, col = jit(TREE[Math.floor(t.c * 4)], t.c), cy = G + h - r * 0.95;
-    const s = [r, r * 0.9, r], rot = t.c * 6.28, cr = Math.cos(rot), sr = Math.sin(rot);
+    const s = [r * 1.08, r * 0.95, r * 1.08], rot = t.c * 6.28, cr = Math.cos(rot), sr = Math.sin(rot);
     for (let i = 0; i < ICO.count; i += 3) {
       const v = [];
       for (let k = 0; k < 3; k++) { const x = ICO.getX(i + k) * s[0], y = ICO.getY(i + k) * s[1], z = ICO.getZ(i + k) * s[2]; v.push([t.x + x * cr - z * sr, cy + y, t.z + x * sr + z * cr]); }
@@ -543,7 +572,27 @@ function createCityKit() {
     plainBox(t.x, t.z, 1, 0, 0.22, 0.22, G, cy - r * 0.5, TRUNK, false);
   }
 
+  // a box between two points (a beam, a cable), size m square; `up` keeps its sides square to the world's up
+  const _b0 = new THREE.Vector3(), _b1 = new THREE.Vector3(), _bs = new THREE.Vector3(), _bu = new THREE.Vector3();
+  function beam(K, p0, p1, size, col) {
+    _b0.set(...p0); _b1.set(...p1).sub(_b0);
+    const L = _b1.length(); if (L < 1e-4) return;
+    _b1.divideScalar(L);
+    _bs.crossVectors(_b1, Math.abs(_b1.y) > 0.95 ? _bu.set(1, 0, 0) : _bu.set(0, 1, 0)).normalize().multiplyScalar(size / 2);
+    _bu.crossVectors(_bs, _b1).normalize().multiplyScalar(size / 2);
+    const P = (t, a, c) => [_b0.x + _b1.x * L * t + _bs.x * a + _bu.x * c, _b0.y + _b1.y * L * t + _bs.y * a + _bu.y * c, _b0.z + _b1.z * L * t + _bs.z * a + _bu.z * c];
+    for (const [a1, c1, a2, c2] of [[1, 1, 1, -1], [1, -1, -1, -1], [-1, -1, -1, 1], [-1, 1, 1, 1]]) {
+      const nx = (a1 + a2) / 2, nc = (c1 + c2) / 2;
+      const n = [_bs.x * nx * 2 / size + _bu.x * nc * 2 / size, _bs.y * nx * 2 / size + _bu.y * nc * 2 / size, _bs.z * nx * 2 / size + _bu.z * nc * 2 / size];
+      quad(K, P(0, a1, c1), P(0, a2, c2), P(1, a2, c2), P(1, a1, c1), col, n);
+    }
+  }
+  const kctx = { C3, W0, quad, plainBox, walls, beam, jit, get M() { return M; }, get GR() { return GR; }, get RD() { return RD; }, chunks };
+  const DRAW = Object.assign({}, ...CITY_PLUGINS.map((pl) => pl.draw || {}));
+  const LOTS = {};
+
   function building(b) {
+    if (DRAW[b.k]) return DRAW[b.k](kctx, b);
     const r = mulberry32(b.seed * 31 + 7), G = CITY.G;
     if (b.k === 'tower') {
       let y0 = b.y0;
@@ -593,7 +642,7 @@ function createCityKit() {
     };
     const o = B / 2, s = B / 2 - S / 2, l = s - 2.5;
     ring(o, s, ASPHALT); ring(s, l, WALK);
-    const lot = blk.park ? LAWN : blk.ring === 0 ? PLAZA : blk.ring === 1 ? LOT : blk.ring === 2 ? YARD : LAWN;
+    const lot = blk.lot ? (LOTS[blk.lot] || (LOTS[blk.lot] = C3(blk.lot))) : blk.park ? LAWN : blk.ring === 0 ? PLAZA : blk.ring === 1 ? LOT : blk.ring === 2 ? YARD : LAWN;
     quad(GR, P(-l, -l), P(l, -l), P(l, l), P(-l, l), lot, [0, 1, 0]);
   }
 
@@ -642,6 +691,7 @@ function createCityKit() {
     for (const p of CITY.piers) pier(p);
     for (const blk of CITY.blocks) { GR.at(blk.x, blk.z); ground(blk); }
     const g = new THREE.Group(); g.userData.city = true;
+    for (const pl of CITY_PLUGINS) if (pl.kit) pl.kit.build(kctx, g);
     M.meshes(mat, g); GR.meshes(gmat, g); RD.meshes(rmat, g);
     group.add(g);
     CITY.stats.tris = tris;
