@@ -10,7 +10,9 @@
      centre: [x, z], angle       downtown, and the street grid's rotation (deg); a street runs through the centre
      block, street               block pitch, street included (m), and street width
      rings: [towers, mid, flats, houses]   distances from the centre out to which each kind of block stands
-     tower: [min, max]           tower heights: max at the centre, min at rings[0] (a little random either way)
+     tower: [min, max]           tower heights: max at the centre, min at rings[0] (and random either way); a block
+                                 holds one big tower, two, or four slimmer ones
+     landmarks: [{ x, z, h }]    the skyline's own supertalls, h m tall with a spire, each on its block (and its podium)
      mid, flats, houses: [min, max]   heights for those rings (taller nearer the centre)
      near, middle, far           detail by distance from the course line (m): full (gardens, trees, chimneys) out to
                                  near, plainer to middle, rows of rooftops only to far; nothing beyond (the inner
@@ -35,7 +37,7 @@ const CITY = { on: false, G: 0, top: 0, bld: [], trees: [], blocks: [], hw: [], 
 const CITY_DEF = {
   seed: 1, ground: 20, centre: [0, 0], angle: 0, block: 110, street: 18,
   rings: [450, 900, 1500, 3200], tower: [110, 260], mid: [24, 80], flats: [12, 32], houses: [6, 8.5],
-  near: 350, middle: 1000, far: 2200, gap: 14, under: 22, blend: 500, highways: [], parks: [], sprawl: 0, clusters: [],
+  near: 350, middle: 1000, far: 2200, gap: 14, under: 22, blend: 500, highways: [], parks: [], sprawl: 0, clusters: [], landmarks: [],
 };
 const PIER_GAP = 34, DECK_T = 1.6, BARRIER_H = 1.1;
 
@@ -230,6 +232,15 @@ function buildCity() {
       placed++;
     }
   }
+  for (const lm of C.landmarks || []) {                      // the supertalls: centred on their blocks, cut back from the line
+    const i = Math.floor(((lm.x - cx) * UX + (lm.z - cz) * UZ) / B), j = Math.floor(((lm.x - cx) * VX + (lm.z - cz) * VZ) / B);
+    const [x0, z0] = at(cx, cz, (i + 0.5) * B, (j + 0.5) * B), hw = lm.w || inner / 2 - 8;
+    const F = fit(x0, z0, hw, hw, G + lm.h * 1.25, 28);
+    if (!F) continue;
+    taken.add(i + ',' + j);
+    const H = lm.h, tiers = [[F.hu, F.hv, G + H * 0.5], [F.hu * 0.84, F.hv * 0.84, G + H * 0.75], [F.hu * 0.66, F.hv * 0.66, G + H * 0.9], [F.hu * 0.5, F.hv * 0.5, G + H]];
+    add({ k: 'tower', x: F.x, z: F.z, y0: G, tiers, st: 1, c: Math.floor(frand() * 6), crown: 3, cap: H * 0.22, seed: Math.floor(frand() * 999), landmark: true });
+  }
   for (let j = -nB; j < nB; j++) for (let i = -nB; i < nB; i++) {
     const [bx, bz] = at(cx, cz, (i + 0.5) * B, (j + 0.5) * B);
     const d = Math.hypot(bx - cx, bz - cz);
@@ -260,13 +271,19 @@ function buildCity() {
       for (let n = 0; n < 7; n++) { const [x, z] = at(bx, bz, (rand() - 0.5) * inner * 0.85, (rand() - 0.5) * inner * 0.85); tree(x, z, 9 + rand() * 6, 3.5 + rand() * 2); }
       continue;
     }
-    if (ring === 0) {                                        // towers: one big one, or two, on a podium
-      const t = clamp(d / R[0], 0, 1), Hm = span([C.tower[1], C.tower[0]], t * t * (3 - 2 * t));
-      const two = rand() < 0.4, pod = 9 + Math.floor(rand() * 3) * 4;
-      const list = two ? [[-inner / 4, 0, inner / 4 - 3, inner / 2 - 6], [inner / 4, 0, inner / 4 - 3, inner / 2 - 6]] : [[0, 0, inner / 2 - 4 - rand() * 6, inner / 2 - 4 - rand() * 6]];
+    if (ring === 0) {                                        // towers: one big one, two, or four slimmer ones, on a podium
+      const t = clamp(d / R[0], 0, 1), Hm = span([C.tower[1], C.tower[0]], Math.pow(t, 0.6));
+      const lay = rand(), n = lay < 0.3 ? 1 : lay < 0.65 ? 2 : 4, pod = 9 + Math.floor(rand() * 3) * 4;
+      const q4 = inner / 4 - 3;
+      const list = taken.has(i + ',' + j) ? []                // a landmark's block: just its podium
+        : n === 1 ? [[0, 0, inner / 2 - 4 - rand() * 6, inner / 2 - 4 - rand() * 6]]
+        : n === 2 ? (rand() < 0.5 ? [[-inner / 4, 0, q4, inner / 2 - 6], [inner / 4, 0, q4, inner / 2 - 6]] : [[0, -inner / 4, inner / 2 - 6, q4], [0, inner / 4, inner / 2 - 6, q4]])
+        : [[-inner / 4, -inner / 4, q4 - rand() * 3, q4 - rand() * 3], [inner / 4, -inner / 4, q4 - rand() * 3, q4 - rand() * 3],
+           [-inner / 4, inner / 4, q4 - rand() * 3, q4 - rand() * 3], [inner / 4, inner / 4, q4 - rand() * 3, q4 - rand() * 3]];
       for (let [ou, ov, hu, hv] of list) {
-        const H = Math.max(C.tower[0] * 0.7, Hm * (0.62 + rand() * 0.5) * (two ? 0.85 : 1)), [x0, z0] = at(bx, bz, ou, ov);
-        const F = fit(x0, z0, hu, hv, G + H * 1.2, 22);
+        if (n === 4 && rand() < 0.15) continue;              // now and then a gap
+        const H = Math.max(C.tower[0] * 0.6, Hm * (0.45 + rand() * 0.8) * (n === 4 ? 0.8 : n === 2 ? 0.9 : 1)), [x0, z0] = at(bx, bz, ou, ov);
+        const F = fit(x0, z0, hu, hv, G + H * 1.2, n === 4 ? 16 : 22);
         if (!F) { st.dropped++; continue; }
         const { x, z } = F; hu = F.hu; hv = F.hv;
         const kind = rand(), tiers = [];
