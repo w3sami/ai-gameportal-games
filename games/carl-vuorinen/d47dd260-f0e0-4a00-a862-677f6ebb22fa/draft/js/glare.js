@@ -9,12 +9,15 @@
             the middle of the screen and out the other side, so they swing across the view opposite the sun as you turn;
             only while the sun itself is in frame (GHOSTS: where along the line, size, shape, tint)
    Hidden by what's between the camera and the sun: terrain (the soft sun shadow of js/sunlight.js, so it fades as
-   the sun slips behind a ridge), overhangs, cloud puffs, and the cloud deck from below or inside. Eased in and out
+   the sun slips behind a ridge), overhangs, cloud puffs, the cloud deck from below or inside, and whatever other
+   modules register in GLARE_BLOCKERS: (camera position, sun direction) -> how much of the sun gets past, 0..1
+   (js/city.js: its buildings). Eased in and out
    over a fraction of a second so it flares rather than flickers.
    One full-screen additive quad, drawn last; when there's no glare its corners collapse to a point, so it costs a
    draw call and no pixels. The sun direction comes from Atmosphere.uniforms (js/atmosphere.js).
    Plugs in through SCENERY_PLUGINS (js/sunlight.js), so js/game.js needs no changes.
    ========================================================================= */
+const GLARE_BLOCKERS = [];
 const Glare = (() => {
   const TUNE = {
     core: 0.5, halo: 0.3, rays: 0.14, veil: 0.16,   // strengths at full glare
@@ -112,6 +115,7 @@ ${GHOST_GLSL}
         if (overhangHit(_p)) return 0;
       }
     }
+    for (const f of GLARE_BLOCKERS) { v *= f(c, sd); if (v <= 0) return 0; }
     return v;
   }
 
