@@ -1,49 +1,55 @@
 {
-  "_format": "See the course section at the top of js/sim.js, js/city.js (city) and js/skylight.js (light). points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?]; in the city floorHalfWidth is also the flight corridor (buildings stand gap m clear of it unless the line passes well over them). Downtown is at (0, 0), the grid's streets run along x and z every 110 m; the route comes in from the south-east suburbs along the east-west freeway, under the north-south flyover at its crossing, over the flats and mid-rises, then west down the avenue at z = 330 between the towers, north up the one at x = -440, then a wide sweep east over the mid-rises with the skyline alongside and south down the avenue at x = 330, past the tallest towers, to the finish. The sprawl carries the city on to the edge of the map, with four other business districts out in it as distant skylines.",
+  "_format": "See the course section at the top of js/sim.js, js/city.js (city), js/outskirts.js (river, bridges, zones, billboards, traffic) and js/skylight.js (light). points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?]; in the city floorHalfWidth is also the flight corridor. Downtown is at (0, 0): the skyline ahead, not flown through (that's Downtown Run). The route comes in from the outer suburbs along highway A, under the ring road B's flyover at the A x B stack, down onto the river, along it under the arch bridge, the railway truss and highway C's bridge, then up over the industrial zone and along A's elevated stretch to finish about 2.3 km out, the towers ahead. Laid out by work/design.py (the river's own curve places the river hoops and the bridges).",
   "id": "skyline",
   "name": "Skyline Run",
-  "lead": "From the suburbs to the towers at sunset. Boost fires the jets.",
+  "lead": "From the outskirts toward the city at sunset. Boost fires the jets.",
   "seeds": {"a": 61, "b": 29, "c": 47, "trees": 13},
-  "terrain": {"size": 9600, "cx": 300, "cz": 300, "n": 320, "water": 0, "edge": 20, "carveR": 300, "micro": 2},
+  "terrain": {"size": 9000, "cx": 2900, "cz": 2600, "n": 320, "water": 12, "edge": 20, "carveR": 300, "micro": 2},
   "relief": {"base": 26, "amp": 260, "pow": 2.4, "freq": 0.0009, "ridgeAmp": 40, "ridgeFreq": 0.002},
   "palette": {"dry": [60, 200], "forestTop": [160, 260], "high": [240, 330], "pathTint": false},
   "lake": null,
   "hills": [],
   "trees": {"near": 0, "scattered": 5000, "minAlt": 24, "maxAlt": 260, "mask": 0.5},
-  "view": {"near": 1, "far": 9000, "fog": [1200, 7000], "haze": {"density": 0.3, "max": 0.25, "glow": 0.75}},
+  "view": {"near": 1, "far": 13000, "fog": [1500, 11000], "haze": {"density": 0.25, "max": 0.22, "glow": 0.75}},
   "clouds": {"count": 34, "y": [700, 1100], "size": [45, 90], "near": 0, "clear": 300},
   "light": {"preset": "sunset"},
   "rules": {"respawnMax": 75},
   "autopilot": {"clear": 10, "ahead": 1.2},
   "city": {
     "seed": 5, "ground": 20, "centre": [0, 0], "angle": 0, "block": 110, "street": 18,
-    "rings": [850, 1350, 2400, 3700], "tower": [150, 360], "mid": [26, 110],
-    "landmarks": [{"x": 160, "z": -60, "h": 460}, {"x": -170, "z": 170, "h": 390}, {"x": -60, "z": -280, "h": 410}], "flats": [12, 34], "houses": [6, 8.5],
-    "near": 380, "middle": 1100, "far": 2300, "gap": 8, "under": 20, "blend": 600, "sprawl": 4600,
+    "rings": [850, 1350, 2600, 7000], "tower": [150, 360], "mid": [26, 110], "flats": [12, 34], "houses": [6, 8.5],
+    "landmarks": [{"x": 160, "z": -60, "h": 460}, {"x": -170, "z": 170, "h": 390}, {"x": -60, "z": -280, "h": 410}],
+    "near": 300, "middle": 850, "far": 1800, "gap": 8, "under": 20, "blend": 600, "sprawl": 8500, "sprawlNear": 1400,
     "clusters": [{"x": -800, "z": -4300, "r": 450, "n": 14, "h": [80, 190]}, {"x": -4300, "z": 600, "r": 400, "n": 10, "h": [70, 160]}, {"x": 3300, "z": -3000, "r": 380, "n": 10, "h": [70, 150]}, {"x": -2600, "z": 3500, "r": 350, "n": 8, "h": [60, 130]}],
-    "highways": [
-      {"w": 28, "pts": [[3900, 1580, 0], [3000, 1540, 0], [2400, 1460, 0], [1800, 1362, 0], [1300, 1250, 4], [800, 1080, 9], [300, 900, 10], [-300, 830, 10], [-1000, 900, 7], [-1800, 1080, 2], [-2800, 1300, 0], [-3900, 1500, 0]]},
-      {"w": 24, "pts": [[1980, 3900, 0], [1920, 2700, 2], [1860, 2000, 22], [1800, 1362, 40], [1760, 700, 24], [1720, 0, 8], [1680, -1000, 3], [1640, -2400, 0], [1600, -3900, 0]]}
+    "river": {"pts": [[7300, 5450], [6300, 5150], [5300, 4450], [4400, 4150], [3600, 3500], [2800, 3150], [2050, 2650], [1300, 2380], [500, 2280], [-400, 2420], [-1500, 2760]], "w": 150, "depth": 6},
+    "bridges": [
+      {"a": [3386, 3713], "b": [3655, 3197], "w": 20, "h": 30, "ramp": 170, "type": "arch"},
+      {"a": [2848, 3506], "b": [3082, 2951], "w": 12, "h": 30, "ramp": 180, "type": "truss"}
     ],
-    "parks": [[2380, 1900, 90], [-700, -1100, 200], [-385, 275, 70], [-385, -605, 60]]
+    "highways": [
+      {"w": 28, "pts": [[6976, 4893, 0], [6090, 4459, 0], [4955, 3865, 0], [4496, 3672, 0], [3956, 3198, 6], [3140, 2814, 12], [2551, 2431, 12], [1250, 1500, 10], [300, 600, 8], [-1000, 0, 6]]},
+      {"w": 26, "pts": [[2713, 5896, 0], [3401, 5038, 4], [3839, 4492, 18], [4089, 4180, 32], [4214, 4024, 32], [4371, 3828, 36], [4496, 3672, 38], [4652, 3477, 34], [5027, 3009, 10], [5715, 2151, 0]]},
+      {"w": 24, "pts": [[1104, 4656, 0], [1819, 3691, 6], [2235, 3129, 30], [2414, 2888, 32], [2592, 2647, 30], [2890, 2245, 14], [3366, 1602, 10], [3961, 798, 8]]}
+    ],
+    "zones": [{"x": 1850, "z": 2250, "r": 430, "kind": "industrial"}, {"x": 4338, "z": 4832, "r": 380, "kind": "industrial"}],
+    "traffic": 30, "parks": [[5600, 3300, 160], [2400, 4300, 220]]
   },
   "points": [
-    [2960, 68, 2060, 25, 28, 0.5, 0],
-    [2560, 58, 1810, 25, 28, 0.5],
-    [2160, 50, 1560, 25, 26, 0.5],
-    [1800, 39, 1365, 25, 20, 0.5],
-    [1360, 70, 1185, 25, 22, 0.5],
-    [900, 98, 975, 25, 22, 0.5],
-    [560, 80, 540, 25, 22, 0.5],
-    [190, 62, 340, 25, 22, 0.5],
-    [-250, 62, 330, 25, 22, 0.5],
-    [-445, 72, -60, 25, 22, 0.5],
-    [-440, 88, -430, 25, 22, 0.5],
-    [-300, 140, -720, 25, 24, 0.5],
-    [40, 165, -820, 25, 24, 0.5],
-    [330, 150, -600, 25, 24, 0.5],
-    [330, 120, -250, 25, 22, 0.5],
-    [330, 90, 110, 25, 22, 0.5],
-    [330, 85, 450, 25, 22, 0.5, 0]
+    [5468, 70, 4031, 25, 26, 0.5, 0],
+    [5004, 56, 3877, 25, 26, 0.5],
+    [4682, 44, 3786, 25, 24, 0.5],
+    [4496, 38, 3672, 25, 22, 0.5],
+    [4195, 36, 3563, 25, 22, 0.5],
+    [3823, 32, 3525, 25, 22, 0.5],
+    [3520, 30, 3455, 25, 22, 0.5],
+    [3245, 30, 3336, 25, 22, 0.5],
+    [2965, 30, 3229, 25, 22, 0.5],
+    [2674, 30, 3074, 25, 22, 0.5],
+    [2414, 30, 2888, 25, 22, 0.5],
+    [2187, 36, 2646, 25, 22, 0.5],
+    [1960, 52, 2400, 25, 22, 0.5],
+    [1720, 72, 2090, 25, 22, 0.5],
+    [1470, 90, 1810, 25, 24, 0.5],
+    [1270, 98, 1560, 25, 24, 0.5, 0]
   ]
 }
