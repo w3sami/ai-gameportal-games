@@ -157,7 +157,7 @@ function makeJetwingModel(scene, shading) {
   if (scene) scene.add(g);
 
   /* ---- wingtip trails while the jets burn: two thin ribbons turned to the camera, fading over TRAIL_LIFE s ---- */
-  const TIPS = [new V3(-0.816, WING_Y - 0.09, 0.03), new V3(0.816, WING_Y - 0.09, 0.03)], TRAIL_LIFE = 0.6, TRAIL_MAX = 40;
+  const TIPS = [new V3(-0.816, WING_Y - 0.09, 0.03), new V3(0.816, WING_Y - 0.09, 0.03)], TRAIL_LIFE = 0.3, TRAIL_MAX = 24;
   const trailMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
   trailMat.userData.noSun = true;
   const _a = new V3(), _d = new V3(), _s = new V3(), _c = new V3();
@@ -177,7 +177,7 @@ function makeJetwingModel(scene, shading) {
         _d.copy(lo.p).sub(hi.p); if (_d.lengthSq() < 1e-8) _d.set(0, 0, 1);
         _s.crossVectors(_c.copy(camera.position).sub(q.p), _d).normalize();
         // (faded out where it nears the camera: the chase camera flies in the trail's wake, and close by it'd be a streak)
-        const age = (t - q.t) / TRAIL_LIFE, w = 0.05 + age * 0.1, near = smoothstep(3, 7, _c.length()), al = q.a * (1 - age) * (1 - age) * 0.9 * near, o = i * 6;
+        const age = (t - q.t) / TRAIL_LIFE, w = 0.02 + age * 0.03, near = smoothstep(3, 7, _c.length()), al = q.a * (1 - age) * (1 - age) * 0.9 * near, o = i * 6;
         pos[o] = q.p.x + _s.x * w; pos[o + 1] = q.p.y + _s.y * w; pos[o + 2] = q.p.z + _s.z * w;
         pos[o + 3] = q.p.x - _s.x * w; pos[o + 4] = q.p.y - _s.y * w; pos[o + 5] = q.p.z - _s.z * w;
         col.fill(1, i * 8, i * 8 + 8); col[i * 8 + 3] = al; col[i * 8 + 7] = al;
