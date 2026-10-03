@@ -33,7 +33,8 @@
    Plugins (CITY_PLUGINS, js/outskirts.js): { terrain(C, G), highways(C, G) -> more highway specs, exclude(x, z, rd),
    skipBlock(blk), block(ctx, blk) -> true if it built the block, after(ctx), draw: { kind: fn(kctx, b) },
    kit: { build(kctx, group) } }; ctx: the builders below (add, fit, clash, offLimits, tree, at, ...), kctx: the
-   kit's (quad, plainBox, walls, beam, jit and the M / GR / RD chunk sets). A highway spec may carry clear: [[from,
+   kit's (quad, plainBox, walls, beam, jit and the M / GR / RD chunk sets); a block a plugin marks grass: true is drawn as
+   one lawn quad, no streets. A highway spec may carry clear: [[from,
    to], ...] (m along it) where it stands on no piers, and noBoards: true.
    Sim part (no DOM): buildCity() (from buildShore, after the terrain); cityRayBlocked(c, d), which js/glare.js asks
    whether the sun is behind a building. createCityKit(): the meshes (the course's
@@ -635,7 +636,7 @@ function createCityKit() {
   function ground(blk) {
     const { UX, UZ, VX, VZ } = CITY.axes, B = CITY.C.block, S = CITY.C.street, y = CITY.G;
     const P = (u, v) => [blk.x + UX * u + VX * v, y, blk.z + UZ * u + VZ * v];
-    if (blk.detail < 0) { const o = B / 2; quad(GR, P(-o, -o), P(o, -o), P(o, o), P(-o, o), URBAN, [0, 1, 0]); return; }   // the sprawl: one quad
+    if (blk.grass || blk.detail < 0) { const o = B / 2; quad(GR, P(-o, -o), P(o, -o), P(o, o), P(-o, o), blk.grass ? LAWN : URBAN, [0, 1, 0]); return; }   // grass (a plugin's), the sprawl: one quad
     const ring = (o, i, col) => {                           // the frame between half-sizes o and i
       quad(GR, P(-o, -o), P(o, -o), P(i, -i), P(-i, -i), col, [0, 1, 0]); quad(GR, P(o, -o), P(o, o), P(i, i), P(i, -i), col, [0, 1, 0]);
       quad(GR, P(o, o), P(-o, o), P(-i, i), P(i, i), col, [0, 1, 0]); quad(GR, P(-o, o), P(-o, -o), P(-i, -i), P(-i, i), col, [0, 1, 0]);
