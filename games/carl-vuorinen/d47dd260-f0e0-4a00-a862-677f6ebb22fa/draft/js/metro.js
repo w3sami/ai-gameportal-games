@@ -10,25 +10,29 @@
               counted from pierPhase m along; none on another line's deck or on a road, nor right on the course line
               where it runs under the deck), an embankment below that, on the ground at 0, in a cutting below 0. 'T'
               covers the stretch to the next point: a tunnel, its ceiling METRO_ROOF m over the bed (h must be at least
-              that far below 0 there)
+              that far below 0 there); 'H' a station hall over the viaduct to the next point, METRO_HALL m high over the
+              bed, open at both ends (solid: you fly over it)
      w        viaduct width (m, default METRO.w); color: the trains' stripe
-     tracks   [{ off, dir, phase, every }]: off m right of the way the points run, dir 1 that way and -1 back; phase (m)
-              shifts its trains along; every: this track's own gap between trains
+     tracks   [{ off, dir, phase, every, endHall }]: off m right of the way the points run, dir 1 that way and -1 back;
+              phase (m) shifts its trains along; every: this track's own gap between trains; endHall: its trains end in the
+              first station hall they come to (they go in and aren't seen again)
      speed, every, cars    the trains' speed (m/s), the gap from one train's front to the next (m), cars a train.
               Trains run from end to end of the line and start again from the first end; they're always running (the
               run's own clock), so the ends belong out in the haze or down a tunnel
-   Gate (a point's 7th value, GATE_TYPES in js/sim.js): "train", options { line, track, lo, hi, lock, r }. The point is
-   placed over that track (design.py), where it runs straight along the course line; the hoop (radius r m, default
-   METRO_HOOP of a hoop's) rides on the middle of a train there, as high over the rail as the point is: on the first
-   train ahead of you, along the line through the point, that is between lo and hi m past the point (lo negative: before
-   it). Once it's your next gate, and you're within lock m of lo (default: anywhere), it stays on that train for as long
-   as the train is still ahead of you, so a hoop on a train running away from you is a chase; fly through it wherever it
-   has got to. Miss it, and it's the next train's; crash, and it picks its train afresh from where you start again
-   (metroUnlock).
+   Gate (a point's 7th value, GATE_TYPES in js/sim.js): "train", options { line, track, lo, hi, lock, r, wait, acc }.
+   The point is placed over that track (design.py), where it runs straight along the course line; the hoop (radius r m,
+   default METRO_HOOP of a hoop's) rides on the middle of a train there, as high over the rail as the point is: on the
+   first train ahead of you, along the line through the point, that is between lo and hi m past the point (lo negative:
+   before it). Once it's your next gate, and you're within lock m of lo (default: anywhere), it stays on that train for
+   as long as the train is still ahead of you, so a hoop on a train running away from you is a chase; fly through it
+   wherever it has got to. Miss it, and it's the next train's; crash, and it picks its train afresh from where you start
+   again (metroUnlock). With wait, the hoop has a train of its own instead: standing with its middle wait m past the
+   point (along the line) until you pass the gate before, then pulling away at acc m/s² up to the line's speed; crash,
+   and it's back where it stood, leaving again as you start.
    Respawning there puts you over the track (the trains pass under). Everything is a crash: decks, piers, cutting walls,
    tunnel roofs ('metro') and the trains ('train').
    Sim part (no DOM): METRO, metroTick(dt), metroReset(), metroStep(dt, P, next) (the clock, then which train each gate's
-   hoop is on; next: the run's next gate), metroUnlock(), metroAt(L, s, off, out), metroTrainHit(P) (CRASH_PLUGINS).
+   hoop is on; next: the run's next gate), metroUnlock(next), metroAt(L, s, off, out), metroTrainHit(P) (CRASH_PLUGINS).
    Game part: the lines (in the city's own meshes: js/city.js kit), createMetroKit() (GATE_KITS): the trains and the
    hoops riding on them.
    ========================================================================= */
@@ -40,12 +44,14 @@ const METRO_ROOF = 14;                                        // tunnel ceiling 
 const METRO_EASE = 18;                                        // m over which a change of gradient is eased
 const METRO_CAR = { len: 17, gap: 1.2, hw: 1.45, h: 3.6 };    // a car: length, gap between cars, half width, height over the rail
 const METRO_CELL = 60;                                        // grid of line samples, for the plugin's lookups
-const METRO_HOOP = 0.65;                                      // a train's hoop, as a share of a hoop's size: smaller, told apart
+const METRO_HOOP = 0.5;                                       // a train's hoop, as a share of a hoop's size: smaller, told apart
+const METRO_HALL = 17;                                        // a station hall's roof over the bed (m); it reaches 3 m past the deck
 let METRO_DIG = 0;                                            // reach of the dug ground past the walls (set from the terrain's cell)
 
 function metroTick(dt) { METRO.T += dt; }
-function metroReset() { METRO.T = 0; for (const g of METRO.gates) { g.on = false; g.a = 1e6; g.j = null; } }
-function metroUnlock() { for (const g of METRO.gates) g.j = null; }   // each gate picks its train again
+function metroReset() { METRO.T = 0; for (const g of METRO.gates) { g.on = false; g.a = 1e6; g.j = null; if (g.held) g.tr.held.t0 = null; } }
+// each gate from the next one (next) on picks its train again; a waiting train goes back to where it stood
+function metroUnlock(next) { for (const g of METRO.gates) if (g.i >= next) { g.j = null; if (g.held) g.tr.held.t0 = null; } }
 
 // the line's samples, every `step` m along it: X, Z, Hb (bed height above the streets), TX, TZ (unit tangent), and the
 // kind of each: 'via' | 'emb' | 'grade' | 'cut' | 'tun'
@@ -56,7 +62,7 @@ function metroBuildLine(spec, G) {
   const sCtrl = pts.map((p, i) => lens[i * 40]);              // where each point is along the curve
   const n = Math.max(2, Math.ceil(len / 4) + 1), step = len / (n - 1);
   const L = { id: spec.id, spec, len, n, step, X: new Float32Array(n), Z: new Float32Array(n), Hb: new Float32Array(n), TX: new Float32Array(n), TZ: new Float32Array(n),
-              kind: [], w: spec.w || METRO.w, G, tracks: [], piers: [] };
+              kind: [], hall: new Uint8Array(n), halls: [], w: spec.w || METRO.w, G, tracks: [], piers: [] };
   const p = new THREE.Vector3(), t = new THREE.Vector3(), raw = new Float32Array(n);
   let seg = 0;
   for (let i = 0; i < n; i++) {
@@ -68,6 +74,11 @@ function metroBuildLine(spec, G) {
     const f = clamp((s - sCtrl[seg]) / Math.max(1e-6, sCtrl[seg + 1] - sCtrl[seg]), 0, 1);
     raw[i] = lerp(pts[seg][2], pts[seg + 1][2], f);
     L.kind.push(pts[seg][3] === 'T' ? 'tun' : null);
+    L.hall[i] = pts[seg][3] === 'H' ? 1 : 0;
+  }
+  for (let i = 0; i < n; i++) if (L.hall[i] && (i === 0 || !L.hall[i - 1])) {   // each hall: from s0 to s1 m along
+    let j = i; while (j < n - 1 && L.hall[j + 1]) j++;
+    L.halls.push({ s0: i * step, s1: (j + 1) * step });
   }
   const k = Math.max(1, Math.round(METRO_EASE / 2 / step));   // ease the gradient changes (a moving average)
   for (let i = 0; i < n; i++) {
@@ -112,12 +123,24 @@ function metroTracks(L) {
   const S = L.spec, cars = S.cars || 4, tlen = cars * METRO_CAR.len + (cars - 1) * METRO_CAR.gap;
   for (const tr of S.tracks || [{ off: 2.1, dir: 1 }, { off: -2.1, dir: -1 }]) {
     const every = Math.max(tr.every || S.every || 300, tlen + 40), N = Math.ceil((L.len + tlen) / every) + 1;
-    L.tracks.push({ L, off: tr.off, dir: tr.dir || 1, phase: tr.phase || 0, v: S.speed || 22, every, cars, tlen, N, loop: N * every });
+    const dir = tr.dir || 1, hl = !tr.endHall ? null : dir > 0 ? L.halls[0] : L.halls[L.halls.length - 1];
+    const until = hl ? (dir > 0 ? hl.s0 + METRO_CAR.len / 2 + 1 : hl.s1 - METRO_CAR.len / 2 - 1) : null;   // a car past it is in the hall
+    L.tracks.push({ L, off: tr.off, dir, phase: tr.phase || 0, v: S.speed || 22, every, cars, tlen, N, loop: N * every, until });
   }
 }
-// travel coordinate q of train j's front (m from the end it starts at); it's on the line while 0 < q < len + tlen
-function metroFront(tr, j) { const q = (METRO.T * tr.v + j * tr.every + tr.phase) % tr.loop; return q < 0 ? q + tr.loop : q; }
+// travel coordinate q of train j's front (m from the end it starts at); it's on the line while 0 < q < len + tlen. A
+// gate's own waiting train (held) stands at q0 until it's let go at t0, then pulls away at acc up to the line's speed
+function metroFront(tr, j) {
+  const H = tr.held;
+  if (H) {
+    if (H.t0 == null) return H.q0;
+    const t = METRO.T - H.t0, ta = tr.v / H.acc;
+    return H.q0 + (t < ta ? 0.5 * H.acc * t * t : 0.5 * tr.v * ta + tr.v * (t - ta));
+  }
+  const q = (METRO.T * tr.v + j * tr.every + tr.phase) % tr.loop; return q < 0 ? q + tr.loop : q;
+}
 const metroS = (tr, q) => (tr.dir > 0 ? q : tr.L.len - q);   // travel coordinate -> m along the line
+const metroShown = (tr, s) => tr.until == null || (tr.dir > 0 ? s <= tr.until : s >= tr.until);   // not gone into its hall
 
 /* ---------- the plugin: ground, lines, boxes ---------- */
 CITY_PLUGINS.push({
@@ -189,7 +212,8 @@ function metroBoxes(L, G) {
     const k = L.kind[i], hb = (L.Hb[i] + L.Hb[i + 1]) / 2, x = (L.X[i] + L.X[i + 1]) / 2, z = (L.Z[i] + L.Z[i + 1]) / 2;
     const dx = L.X[i + 1] - L.X[i], dz = L.Z[i + 1] - L.Z[i], l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l;
     const s = i * L.step;
-    if (k === 'via' || k === 'emb') shoreBox('metro', x, z, ux, uz, l / 2 + 0.3, half, k === 'via' ? G + hb - METRO_DECK : G - 1, G + hb + METRO_PARAPET);
+    if (L.hall[i]) shoreBox('metro', x, z, ux, uz, l / 2 + 0.3, half + 3, G + hb - METRO_DECK, G + hb + METRO_HALL + 0.5);
+    else if (k === 'via' || k === 'emb') shoreBox('metro', x, z, ux, uz, l / 2 + 0.3, half, k === 'via' ? G + hb - METRO_DECK : G - 1, G + hb + METRO_PARAPET);
     else if (k === 'grade') shoreBox('metro', x, z, ux, uz, l / 2 + 0.3, half, G - 1, G + 0.4);
     else {                                                   // cutting or tunnel: the walls (solid out over the dug slope)
       const top = G + (k === 'tun' ? 0.3 : 1.1), bot = G + hb - 3, wd = METRO_DIG / 2;
@@ -238,7 +262,7 @@ function metroTrainHit(P) {
       if (Math.abs(_mtA.y + 2 - py) > 14 || (_mtA.x - px) ** 2 + (_mtA.z - pz) ** 2 > (tr.tlen / 2 + 25) ** 2) continue;
       for (let k = 0; k < tr.cars; k++) {
         const qc = q - k * (C.len + C.gap) - C.len / 2;
-        if (qc < -C.len / 2 || qc > L.len + C.len / 2) continue;
+        if (qc < -C.len / 2 || qc > L.len + C.len / 2 || !metroShown(tr, metroS(tr, qc))) continue;
         const c = metroCarPose(tr, metroS(tr, qc), _mc);
         for (let sd = -1; sd <= 1; sd++) {
           const pad = sd ? 0.25 : 0.9, x = px + _mt.x * W * sd - c.x, y = py + _mt.y * W * sd - c.y, z = pz + _mt.z * W * sd - c.z;
@@ -264,7 +288,7 @@ function metroGates() {
     if (h.kind !== 'train') return;
     const o = h.opts || {}, L = METRO.lines.find((l) => l.id === o.line) || METRO.lines[0];
     if (!L) return;
-    const tr = L.tracks[o.track || 0] || L.tracks[0];
+    let tr = L.tracks[o.track || 0] || L.tracks[0];
     // the track's height under the point (for the hoop's height over it) and which way along the line the course runs
     let best = 0, bd = Infinity;
     for (let k = 0; k < L.n; k++) { const d = (L.X[k] - h.pos.x) ** 2 + (L.Z[k] - h.pos.z) ** 2; if (d < bd) { bd = d; best = k; } }
@@ -272,6 +296,12 @@ function metroGates() {
     const g = { i, h, L, tr, up, du: 0, dv: 0, lo: o.lo != null ? o.lo : -200, hi: o.hi != null ? o.hi : 800, lock: o.lock,
                 r: o.r || TUNE.HOOP_R * METRO_HOOP, sgn: Math.sign(L.TX[best] * h.normal.x + L.TZ[best] * h.normal.z) || 1,
                 on: false, a: 1e6, j: null, pos: new THREE.Vector3() };
+    if (o.wait != null) {                                    // its own train, standing until let go
+      const sm = best * L.step + o.wait * g.sgn, q0 = (tr.dir > 0 ? sm : L.len - sm) + tr.tlen / 2;
+      g.tr = tr = Object.assign({}, tr, { N: 1, every: 1e9, loop: 1e12, phase: 0, until: null, held: { q0, acc: o.acc || 3, t0: null } });
+      L.tracks.push(tr);
+      g.held = true;
+    }
     h.metro = g;
     METRO.gates.push(g);
   });
@@ -285,12 +315,15 @@ function metroStep(dt, P, next) {
     // where train j's hoop is, m along the gate's normal from the point (null: the train's off the line)
     const at = (j) => {
       const q = metroFront(tr, j);
-      if (q <= 0 || q - tr.tlen >= tr.L.len) return null;
+      if (q <= 0 || q - tr.tlen >= tr.L.len || !metroShown(tr, metroS(tr, q - tr.tlen / 2))) return null;
       metroAt(tr.L, metroS(tr, q - tr.tlen / 2), tr.off, _mtB);
       return (_mtB.x - h.pos.x) * n.x + (_mtB.y + g.up - h.pos.y) * n.y + (_mtB.z - h.pos.z) * n.z;
     };
     const keep = g.j != null && g.i === next && (g.lock == null || ap >= g.lo - g.lock) ? at(g.j) : null;
-    if (keep == null || keep < ap - 3) {                     // (kept until you're past it: the crossing is scored first)
+    if (g.held) {                                            // its own train: let go once the gate before is passed
+      if (tr.held.t0 == null && next >= g.i) tr.held.t0 = METRO.T;
+      g.j = at(0) != null ? 0 : null;
+    } else if (keep == null || keep < ap - 3) {              // (kept until you're past it: the crossing is scored first)
       let a = 1e6, pick = null;
       for (let j = 0; j < tr.N; j++) {
         const aj = at(j);
@@ -339,6 +372,7 @@ function metroDraw(K, group) {
   const C3 = K.C3, M = K.M, G = CITY.G;
   const CONC = C3('#b9b4aa'), CONC_D = C3('#8f8a82'), UNDER = C3('#d8d2c6'), BED = C3('#5d564f'), BALLAST = C3('#6e665c');
   const RAIL = C3('#a7a9ab'), WALL = C3('#a29d94'), TUNW = C3('#262422'), TUNC = C3('#1f1e1c'), LAWN = C3('#5f7d45');
+  const HALL = C3('#7d8a93'), HALL_D = C3('#16181a');
   const lamps = [];                                          // tunnel lamps and portal lights: unlit quads (below)
   for (const L of METRO.lines) {
     const half = L.w / 2;
@@ -372,6 +406,7 @@ function metroDraw(K, group) {
           K.quad(M, A(e2, ya + METRO_PARAPET), B(e2, yb + METRO_PARAPET), B(e, yb + METRO_PARAPET), A(e, ya + METRO_PARAPET), CONC, [0, 1, 0]);
         }
         if (k === 'via') K.quad(M, A(-half, ya - METRO_DECK), B(-half, yb - METRO_DECK), B(half, yb - METRO_DECK), A(half, ya - METRO_DECK), UNDER, [0, -1, 0]);
+        if (L.hall[i]) metroHall(K, L, i, A, B, ya, yb, nrm, lamps, HALL, HALL_D);
         continue;
       }
       // cutting or tunnel: the walls, a parapet and lawn along the top of an open cutting; a ceiling inside a tunnel
@@ -423,6 +458,32 @@ function metroDraw(K, group) {
     const mat = new THREE.MeshBasicMaterial({ color: '#ffe2b0' });
     mat.userData.noSun = true;
     group.add(new THREE.Mesh(g, mat));
+  }
+}
+
+// a station hall over the viaduct, segment i: walls and roof 3 m out past the deck, a row of lit windows along each
+// wall, and at each end a face round the opening the trains run through, dark inside (the trains that end there go in
+// and aren't drawn past it)
+function metroHall(K, L, i, A, B, ya, yb, nrm, lamps, HALL, DARK) {
+  const M = K.M, hw = L.w / 2 + 3, y0a = ya - METRO_DECK, y0b = yb - METRO_DECK, top = METRO_HALL;
+  for (const sd of [-1, 1]) {
+    const e = sd * hw, [nx, nz] = nrm(i);
+    K.quad(M, A(e, y0a), B(e, y0b), B(e, yb + top), A(e, ya + top), HALL, [nx * sd, 0, nz * sd]);
+    if (i % 3 === 0) lamps.push([L.X[i] + nx * (e + sd * 0.05), ya + 6, L.Z[i] + nz * (e + sd * 0.05), nx * sd, nz * sd, 7, 2.2]);
+  }
+  K.quad(M, A(-hw, ya + top), B(-hw, yb + top), B(hw, yb + top), A(hw, ya + top), HALL, [0, 1, 0]);
+  K.quad(M, A(-hw, y0a), B(-hw, y0b), B(hw, y0b), A(hw, y0a), HALL, [0, -1, 0]);
+  for (const end of [i, i + 1]) {                            // the ends: where the run of hall segments starts or stops
+    const inHall = end === i ? (i === 0 || !L.hall[i - 1]) : (end >= L.n - 1 || !L.hall[end]);
+    if (!inHall) continue;
+    const dir = end === i ? -1 : 1, x = L.X[end], z = L.Z[end], y = L.G + L.Hb[end], [nx, nz] = nrm(end), tx = nz, tz = -nx;
+    const P = (o, yy, f) => [x + nx * o + tx * f, yy, z + nz * o + tz * f], n = [tx * dir, 0, tz * dir], op = hw - 3.5, oh = 7;
+    K.quad(M, P(-hw, y - METRO_DECK, 0), P(-op, y - METRO_DECK, 0), P(-op, y + top, 0), P(-hw, y + top, 0), HALL, n);
+    K.quad(M, P(op, y - METRO_DECK, 0), P(hw, y - METRO_DECK, 0), P(hw, y + top, 0), P(op, y + top, 0), HALL, n);
+    K.quad(M, P(-op, y + oh, 0), P(op, y + oh, 0), P(op, y + top, 0), P(-op, y + top, 0), HALL, n);
+    K.quad(M, P(-op, y - METRO_DECK, 0), P(op, y - METRO_DECK, 0), P(op, y + 0.02, 0), P(-op, y + 0.02, 0), HALL, n);
+    K.quad(M, P(-op, y, -dir * 1.5), P(op, y, -dir * 1.5), P(op, y + oh, -dir * 1.5), P(-op, y + oh, -dir * 1.5), DARK, n);   // inside: dark
+    for (let o = -op + 1.2; o <= op - 1.1; o += 2.4) lamps.push([x + nx * o + tx * dir * 0.08, y + oh + 0.7, z + nz * o + tz * dir * 0.08, tx * dir, tz * dir, 1, 0.3]);
   }
 }
 
@@ -505,7 +566,7 @@ function createMetroKit(ctx) {
   function update(s) {
     if (!METRO.lines.length) return;
     if (!paused()) metroStep(s.dt, s.P, s.next);
-    if (s.crashing) metroUnlock();                           // the restart is further back: a train as far ahead as the first time
+    if (s.crashing) metroUnlock(s.next);                     // the restart is further back: a train as far ahead as the first time
     for (const it of items) {
       let nc = 0, nt = 0;
       const C = METRO_CAR, L = it.L;
@@ -513,10 +574,11 @@ function createMetroKit(ctx) {
         const q = metroFront(tr, j), on = q > 0 && q - tr.tlen < L.len;
         for (let k = 0; k < tr.cars; k++) {
           const qc = q - k * (C.len + C.gap) - C.len / 2;
-          if (on && qc > -C.len / 2 && qc < L.len + C.len / 2) { metroCarPose(tr, metroS(tr, qc), pose); place(it.body, nc, pose, tr.dir < 0); }
+          const shown = on && qc > -C.len / 2 && qc < L.len + C.len / 2 && metroShown(tr, metroS(tr, qc));
+          if (shown) { metroCarPose(tr, metroS(tr, qc), pose); place(it.body, nc, pose, tr.dir < 0); }
           else it.body.setMatrixAt(nc, m4.compose(pv.set(0, -1e4, 0), qn.identity(), zero));
-          if (k === 0) { if (on && qc > -C.len / 2 && qc < L.len + C.len / 2) place(it.head, nt, pose, tr.dir < 0); else it.head.setMatrixAt(nt, m4.compose(pv.set(0, -1e4, 0), qn.identity(), zero)); }
-          if (k === tr.cars - 1) { if (on && qc > -C.len / 2 && qc < L.len + C.len / 2) place(it.tail, nt, pose, tr.dir < 0); else it.tail.setMatrixAt(nt, m4.compose(pv.set(0, -1e4, 0), qn.identity(), zero)); }
+          if (k === 0) { if (shown) place(it.head, nt, pose, tr.dir < 0); else it.head.setMatrixAt(nt, m4.compose(pv.set(0, -1e4, 0), qn.identity(), zero)); }
+          if (k === tr.cars - 1) { if (shown) place(it.tail, nt, pose, tr.dir < 0); else it.tail.setMatrixAt(nt, m4.compose(pv.set(0, -1e4, 0), qn.identity(), zero)); }
           nc++;
         }
         nt++;
