@@ -10,11 +10,14 @@
                 them), 'truss' (a railway in a box truss), 'beam' (piers only) or 'suspension' (towers: [d0, d1] m
                 along it, tower: their height above the deck; each tower a portal of two legs outside the deck with a
                 beam a third of the way up and one at the top, cables slung between them, no piers under the spans)
-     boats: [{ kind: 'ship' | 'sail', x, z, len, beam }]   moored along the river (pointing the way it runs there): a
-                ship has twin funnels side by side amidships, a low superstructure aft and containers forward; a
-                sailboat a tall mast and its sail
-     signs: [{ a: [x, z], b: [x, z], clear, h }]   a billboard gantry: legs at a and b, an advert panel between them
-                from clear m above the streets, h m tall (one advert each way)
+     boats: [{ kind: 'ship' | 'sail', x, z, len, beam, funnelGap }]   moored along the river (pointing the way it runs
+                there): a ship has twin funnels amidships, side by side, or one behind the other funnelGap m apart on
+                its centreline; a low superstructure aft and containers forward; a sailboat a tall mast and its sail
+     signs: [{ a: [x, z], b: [x, z], clear, h }]   a billboard on two legs, at a and b, its panel between them from clear
+                m above the streets, h m tall: an advert each way, or two side by side on a wide one (a gantry)
+     towers: [{ x, z, w, d, h }]   towers placed by hand (a tight spot to fly between): w by d m, h tall, standing as given
+                (the line's clearance is the course's to keep); the rest of their block stays an open plaza, or in a
+                business park its other towers keep away from them
      zones: [{ x, z, r, kind: 'industrial' | 'business', h }]   blocks within r: warehouses, tanks, now and then a
                 smokestack; or a business park of towers h: [min, max] tall (tallest in its middle), kept off the line
      billboards: { every, size: [w, h], height }   along every highway (not the bridges), each side by turns
@@ -81,20 +84,32 @@ CITY_PLUGINS.push({
   },
   block(ctx, blk) {
     const z = (ctx.C.zones || []).find((q) => Math.hypot(blk.x - q.x, blk.z - q.z) < q.r);
-    if (!z) return false;
     const rnd = mulberry32((blk.i * 7349 + blk.j * 1931) ^ 0x5bd1), { G, inner, at } = ctx;
-    if (z.kind === 'business') {                             // a business park: a tower a block, cut back from the line
+    const loc = (t) => [(t.x - blk.x) * ctx.UX + (t.z - blk.z) * ctx.UZ, (t.x - blk.x) * ctx.VX + (t.z - blk.z) * ctx.VZ];
+    const own = (ctx.C.towers || []).filter((t) => { const [u, v] = loc(t); return Math.abs(u) <= ctx.B / 2 && Math.abs(v) <= ctx.B / 2; });
+    for (const t of own) {                                   // hand-placed towers first
+      const hw = t.w / 2, hd = (t.d || t.w) / 2;
+      ctx.add({ k: 'tower', x: t.x, z: t.z, y0: G, tiers: [[hw, hd, G + t.h * 0.72], [hw * 0.84, hd * 0.84, G + t.h]], st: 1, c: Math.floor(rnd() * 6), crown: 2, cap: t.h * 0.1, seed: Math.floor(rnd() * 999) });
+    }
+    if (!z || (z.kind !== 'business' && z.kind !== 'industrial')) {
+      if (!own.length) return false;
       blk.lot = '#a29f97';
-      const t = Math.hypot(blk.x - z.x, blk.z - z.z) / z.r, hr = z.h || [70, 140];
-      const H = ctx.span([hr[1], hr[0]], t) * (0.75 + rnd() * 0.4), hu = inner / 2 - 8 - rnd() * 10, hv = inner / 2 - 8 - rnd() * 10;
-      const F = rnd() < 0.85 ? ctx.fit(blk.x, blk.z, hu, hv, G + H * 1.15, 22) : null;
-      if (F) {
-        const kind = rnd(), tiers = kind < 0.5 ? [[F.hu, F.hv, G + H]] : [[F.hu, F.hv, G + H * 0.65], [F.hu * 0.78, F.hv * 0.78, G + H]];
+      return true;
+    }
+    if (z.kind === 'business') {                             // a business park: four towers a block, each cut back from the line
+      blk.lot = '#a29f97';                                   // on its own, so they crowd right up to it on both sides
+      const t = Math.hypot(blk.x - z.x, blk.z - z.z) / z.r, hr = z.h || [70, 140], q = inner / 4;
+      for (const [qu, qv] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        if (rnd() < 0.15) continue;
+        const H = ctx.span([hr[1], hr[0]], t) * (0.65 + rnd() * 0.5), [x0, z0] = at(blk.x, blk.z, qu * q, qv * q);
+        if (own.some((o) => Math.abs(o.x - x0) < o.w / 2 + q && Math.abs(o.z - z0) < (o.d || o.w) / 2 + q)) continue;
+        const F = ctx.fit(x0, z0, q - 3 - rnd() * 3, q - 3 - rnd() * 3, G + H * 1.15, 12);
+        if (!F) continue;
+        const tiers = rnd() < 0.5 ? [[F.hu, F.hv, G + H]] : [[F.hu, F.hv, G + H * 0.7], [F.hu * 0.8, F.hv * 0.8, G + H]];
         ctx.add({ k: 'tower', x: F.x, z: F.z, y0: G, tiers, st: 1, c: Math.floor(rnd() * 6), crown: rnd() < 0.5 ? 1 : 2, cap: H * 0.1, seed: Math.floor(rnd() * 999) });
       }
       return true;
     }
-    if (z.kind !== 'industrial') return false;
     blk.lot = '#8b8880';
     const lay = rnd(), parts = lay < 0.45 ? [[0, 0, inner / 2 - 4, inner / 2 - 14]] : [[0, -inner / 4, inner / 2 - 4, inner / 4 - 4], [0, inner / 4 + 2, inner / 2 - 10, inner / 4 - 6]];
     for (const [ou, ov, hu, hv] of parts) {
@@ -416,13 +431,16 @@ function outBoats(ctx) {
     const box = (u, v, hu, hv, y0, y1, kind) => { const [x, z] = P(u, v); shoreBox(kind || 'boat', x, z, ux, uz, hu, hv, y0, y1); };
     if (spec.kind === 'ship') {
       const L = spec.len || 200, Bm = spec.beam || 50, deck = Wy + 10;
-      Object.assign(bt, { L, Bm, deck, fu: (spec.funnelAt || 0) * L / 2, fo: Bm / 2 - 6, fr: 4.5, fh: 30 });
+      Object.assign(bt, { L, Bm, deck, fr: 4.5, fh: 30 });
+      bt.funnels = spec.funnelGap ? [[-spec.funnelGap / 2, 0], [spec.funnelGap / 2, 0]] : [[0, -(Bm / 2 - 6)], [0, Bm / 2 - 6]];
+      const fwd = Math.max(...bt.funnels.map((f) => f[0]));
       box(-L * 0.08, 0, L * 0.42, Bm / 2, Wy - 3, deck);                             // the hull (the bow is pointed: two boxes)
       box(L * 0.4, 0, L * 0.1, Bm * 0.3, Wy - 3, deck);
       box(-L / 2 + 26, 0, 22, Bm / 2 - 3, deck, deck + 7);                           // the superstructure, aft
-      for (const sd of [-1, 1]) box(bt.fu, sd * bt.fo, bt.fr, bt.fr, deck, deck + bt.fh, 'funnel');
+      for (const [fu, fv] of bt.funnels) box(fu, fv, bt.fr, bt.fr, deck, deck + bt.fh, 'funnel');
       bt.cargo = [];                                         // containers forward, two high, clear of the middle line
-      for (let u = bt.fu + 18; u < L * 0.36; u += 13) for (const v of [-Bm / 2 + 7, -Bm / 2 + 16, Bm / 2 - 16, Bm / 2 - 7]) {
+      const rows = Bm > 40 ? [-Bm / 2 + 7, -Bm / 2 + 16, Bm / 2 - 16, Bm / 2 - 7] : [-Bm / 2 + 5, -Bm / 2 + 11, Bm / 2 - 11, Bm / 2 - 5];
+      for (let u = fwd + 18; u < L * 0.36; u += 13) for (const v of rows) {
         const n = 1 + Math.floor(rnd() * 2); bt.cargo.push([u, v, n, Math.floor(rnd() * 6)]);
         box(u, v, 6.1, 1.25, deck, deck + 2.6 * n);
       }
@@ -457,8 +475,8 @@ function outDrawBoats(K) {
       prism(hull, Wy + 0.8, deck, C3('#1f3550'), C3('#6f6a62'));                 // navy hull, deck
       K.plainBox(...P(-L / 2 + 26, 0, 0).filter((_, k) => k !== 1), ux, uz, 22, h - 3, deck, deck + 7, C3('#ecebe6'));   // superstructure
       K.plainBox(...P(-L / 2 + 40, 0, 0).filter((_, k) => k !== 1), ux, uz, 6, h - 8, deck + 7, deck + 9.5, C3('#3a4652'));   // its bridge windows
-      for (const sd of [-1, 1]) {                            // the funnels: buff, a red band, black tops
-        const [fx, , fz] = P(bt.fu, sd * bt.fo, 0);
+      for (const [fu, fv] of bt.funnels) {                   // the funnels: buff, a red band, black tops
+        const [fx, , fz] = P(fu, fv, 0);
         outPrism(K, fx, fz, bt.fr, bt.fr, deck, deck + bt.fh * 0.72, 10, C3('#e3cf9a'));
         outPrism(K, fx, fz, bt.fr, bt.fr, deck + bt.fh * 0.72, deck + bt.fh * 0.88, 10, C3('#c8362a'));
         outPrism(K, fx, fz, bt.fr, bt.fr * 0.95, deck + bt.fh * 0.88, deck + bt.fh, 10, C3('#1b1d20'), true);
@@ -500,9 +518,10 @@ function outDrawSigns(K, group) {
     }
     M.at(s.x, s.z);
     K.plainBox(s.x, s.z, s.ux, s.uz, s.L / 2 + 1, 0.5, s.y0 - 0.6, s.y1 + 0.4, FRAME);
-    for (const sgn of [1, -1]) for (let half = 0; half < 2; half++) {   // two adverts side by side on each face
+    const n = s.L > 24 ? 2 : 1;                              // one advert a face, or two side by side on a wide one
+    for (const sgn of [1, -1]) for (let half = 0; half < n; half++) {
       const ad = s.ad[(sgn > 0 ? 0 : 2) + half], u0 = (ad % 4) / 4, v0 = 1 - Math.floor(ad / 4) / 2, u1 = u0 + 0.25, v1 = v0 - 0.5;
-      const e0 = (half - 1) * sgn, e1 = half * sgn, o = 0.55 * sgn;
+      const e0 = n === 2 ? (half - 1) * sgn : -sgn, e1 = n === 2 ? half * sgn : sgn, o = 0.55 * sgn;
       const c = (e, y) => [s.x + s.ux * (s.L / 2 - 1) * e + nx * o, y, s.z + s.uz * (s.L / 2 - 1) * e + nz * o];
       const p0 = c(e0, s.y0), p1 = c(e1, s.y0), p2 = c(e1, s.y1), p3 = c(e0, s.y1);
       pos.push(...p0, ...p1, ...p2, ...p0, ...p2, ...p3); uv.push(u0, v1, u1, v1, u1, v0, u0, v1, u1, v0, u0, v0);
