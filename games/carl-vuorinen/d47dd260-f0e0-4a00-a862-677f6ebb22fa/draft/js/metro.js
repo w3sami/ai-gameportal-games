@@ -23,11 +23,11 @@
    point, that is between lo and hi m past the point (lo negative: before it). Once it's your next gate, and you're
    within lock m of lo (default: anywhere), it stays on that train for as long as the train is still ahead of you, so a
    hoop on a train running away from you is a chase; fly through it wherever it has got to. Miss it, and it's the next
-   train's.
+   train's; crash, and it picks its train afresh from where you start again (metroUnlock).
    Respawning there puts you over the track (the trains pass under). Everything is a crash: decks, piers, cutting walls,
    tunnel roofs ('metro') and the trains ('train').
    Sim part (no DOM): METRO, metroTick(dt), metroReset(), metroStep(dt, P, next) (the clock, then which train each gate's
-   hoop is on; next: the run's next gate), metroAt(L, s, off, out), metroTrainHit(P) (CRASH_PLUGINS).
+   hoop is on; next: the run's next gate), metroUnlock(), metroAt(L, s, off, out), metroTrainHit(P) (CRASH_PLUGINS).
    Game part: the lines (in the city's own meshes: js/city.js kit), createMetroKit() (GATE_KITS): the trains and the
    hoops riding on them.
    ========================================================================= */
@@ -43,6 +43,7 @@ let METRO_DIG = 0;                                            // reach of the du
 
 function metroTick(dt) { METRO.T += dt; }
 function metroReset() { METRO.T = 0; for (const g of METRO.gates) { g.on = false; g.a = 1e6; g.j = null; } }
+function metroUnlock() { for (const g of METRO.gates) g.j = null; }   // each gate picks its train again
 
 // the line's samples, every `step` m along it: X, Z, Hb (bed height above the streets), TX, TZ (unit tangent), and the
 // kind of each: 'via' | 'emb' | 'grade' | 'cut' | 'tun'
@@ -502,6 +503,7 @@ function createMetroKit(ctx) {
   function update(s) {
     if (!METRO.lines.length) return;
     if (!paused()) metroStep(s.dt, s.P, s.next);
+    if (s.crashing) metroUnlock();                           // the restart is further back: a train as far ahead as the first time
     for (const it of items) {
       let nc = 0, nt = 0;
       const C = METRO_CAR, L = it.L;
