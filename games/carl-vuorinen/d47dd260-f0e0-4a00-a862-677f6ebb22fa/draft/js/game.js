@@ -665,7 +665,8 @@ function respawn() {
 function onHoop(missed = false) {
   const i = G.next, h = HOOPS[i];
   G.next++; G.hoopSpeed = P.speed;
-  if (!missed) P.boost = Math.min(1, P.boost + TUNE.BOOST_HOOP);
+  // a gate's own refill (option refill, 0..1: js/metro.js's Metro Run saves the tank through its tunnel), else BOOST_HOOP
+  if (!missed) P.boost = Math.min(1, P.boost + (h.opts && h.opts.refill != null ? h.opts.refill : TUNE.BOOST_HOOP));
   if (!missed && TUNE.SMOKE) P.smokeLeft = Math.min(1, P.smokeLeft + TUNE.SMOKE_HOOP);   // the smoke meter (js/airshow.js)
   flashGate(i);
   if (G.state !== 'playing') return;
@@ -936,7 +937,9 @@ const _aimTmp = new V3();
 
 function autoControl() {                                    // attract mode and victory lap
   if (G.next >= HOOPS.length) { dirFromYawPitch(yawOf(P.vdir), 0.08, aimDir); return { aim: aimDir, p: 0, r: 0, y: 0, boost: false }; }
-  const ctl = { aim: autopilotAim(P, G.next, aimDir), p: 0, r: 0, y: 0, boost: !!TUNE.AP_BOOST }, roll = aeroRollTo(P, G.next);   // js/aerobatic.js; AP_BOOST: the jetwing flies on its jets
+  // AP_BOOST: the jetwing flies on its jets, but glides into a gate that won't refill them (option refill: 0), saving them for after it
+  const nx = HOOPS[G.next], coast = !!(nx && nx.opts && nx.opts.refill === 0);
+  const ctl = { aim: autopilotAim(P, G.next, aimDir), p: 0, r: 0, y: 0, boost: !!TUNE.AP_BOOST && !coast }, roll = aeroRollTo(P, G.next);   // js/aerobatic.js
   if (TUNE.SMOKE) ctl.smoke = airshowAuto(P, G.next);      // shows the smoke bonus being flown (js/airshow.js)
   if (roll != null) ctl.rollTo = roll;
   return ctl;
