@@ -15,6 +15,7 @@
                 its centreline; a low superstructure aft and containers forward; a sailboat a tall mast and its sail
      signs: [{ a: [x, z], b: [x, z], clear, h }]   a billboard on two legs, at a and b, its panel between them from clear
                 m above the streets, h m tall: an advert each way, or two side by side on a wide one (a gantry)
+     (Blocks a highway on the ground runs through are grass, with a few trees: no streets or buildings round it.)
      towers: [{ x, z, w, d, h }]   towers placed by hand (a tight spot to fly between): w by d m, h tall, standing as given
                 (the line's clearance is the course's to keep); the rest of their block stays an open plaza, or in a
                 business park its other towers keep away from them
@@ -79,10 +80,22 @@ CITY_PLUGINS.push({
     });
   },
   exclude(x, z, rd) { return outRiverNear(x, z) < (OUT.river ? OUT.river.w / 2 + WALK + outVerge() : 0) + rd; },
-  skipBlock(blk) {                                           // blocks the river, its walk or the lawn would cut into
-    return OUT.river ? outRiverNear(blk.x, blk.z) < OUT.river.w / 2 + WALK + outVerge() + 50 : false;
+  skipBlock(blk) {                                           // blocks the river, its walk or the lawn would cut into, at any corner
+    if (!OUT.river) return false;
+    const lim = OUT.river.w / 2 + WALK + outVerge() + 2, h = CITY.C.block / 2, { UX, UZ, VX, VZ } = CITY.axes;
+    for (const [u, v] of [[0, 0], [-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]])
+      if (outRiverNear(blk.x + (UX * u + VX * v) * h, blk.z + (UZ * u + VZ * v) * h) < lim) return true;
+    return false;
   },
   block(ctx, blk) {
+    // a highway on the ground through the block: no streets, no buildings, just grass (and a few trees) either side
+    const hq = cityHighwayNear(blk.x, blk.z);
+    if (hq.d < ctx.inner / 2 + hq.hw * 0.6 && hq.h < 1.5) {
+      blk.grass = true;
+      const rt = mulberry32((blk.i * 3121 + blk.j * 7717) ^ 0x2f1);
+      for (let n = 0; n < 5; n++) { const [x, zz] = ctx.at(blk.x, blk.z, (rt() - 0.5) * ctx.B * 0.85, (rt() - 0.5) * ctx.B * 0.85); ctx.tree(x, zz, 8 + rt() * 6, 3 + rt() * 1.6); }
+      return true;
+    }
     const z = (ctx.C.zones || []).find((q) => Math.hypot(blk.x - q.x, blk.z - q.z) < q.r);
     const rnd = mulberry32((blk.i * 7349 + blk.j * 1931) ^ 0x5bd1), { G, inner, at } = ctx;
     const loc = (t) => [(t.x - blk.x) * ctx.UX + (t.z - blk.z) * ctx.UZ, (t.x - blk.x) * ctx.VX + (t.z - blk.z) * ctx.VZ];
@@ -137,6 +150,14 @@ CITY_PLUGINS.push({
       for (let k = 0; k < R.n - 1; k += 2) {
         const dx = R.X[k + 1] - R.X[k], dz = R.Z[k + 1] - R.Z[k], l = Math.hypot(dx, dz) || 1;
         for (const sd of [-1, 1]) if (rt() < 0.8) ctx.tree(R.X[k] - dz / l * off * sd, R.Z[k] + dx / l * off * sd, 8 + rt() * 5, 2.8 + rt() * 1.4);
+      }
+    }
+    if (R) {                                                 // the quays, the walk and the lawn are solid (the ground under them is dug out)
+      const half = R.w / 2, wide = WALK + outVerge() + 0.5, y0 = TER.WATER - R.depth - 1;
+      for (let k = 0; k < R.n - 1; k += 4) {
+        const k1 = Math.min(R.n - 1, k + 4), dx = R.X[k1] - R.X[k], dz = R.Z[k1] - R.Z[k], l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l;
+        const mx = (R.X[k] + R.X[k1]) / 2, mz = (R.Z[k] + R.Z[k1]) / 2, o = half - 0.5 + wide / 2;
+        for (const sd of [-1, 1]) shoreBox('quay', mx + nx * o * sd, mz + nz * o * sd, dx / l, dz / l, l / 2 + 2, wide / 2, y0, ctx.G + 0.9);
       }
     }
     outSteel(ctx.G); outBoats(ctx); outSigns(ctx);
@@ -199,7 +220,7 @@ CITY_PLUGINS.push({
   kit: { build(K, group) { outKitBuild(K, group); } },
 });
 var CRASH_TEXT = CRASH_TEXT || {};
-Object.assign(CRASH_TEXT, { board: 'Hit a billboard', warehouse: 'Hit a warehouse', stack: 'Hit a smokestack', tank: 'Hit a tank', boat: 'Hit a boat', funnel: 'Hit a funnel', mast: 'Hit a mast' });
+Object.assign(CRASH_TEXT, { board: 'Hit a billboard', warehouse: 'Hit a warehouse', stack: 'Hit a smokestack', tank: 'Hit a tank', boat: 'Hit a boat', funnel: 'Hit a funnel', mast: 'Hit a mast', quay: 'Hit the quay' });
 
 // an n-sided tube from radius r0 at y0 to r1 at y1 (a cap on top if asked)
 function outPrism(K, x, z, r0, r1, y0, y1, n, col, cap) {
