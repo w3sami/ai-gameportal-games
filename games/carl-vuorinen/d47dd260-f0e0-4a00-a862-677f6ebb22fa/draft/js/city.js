@@ -35,7 +35,8 @@
    kit: { build(kctx, group) } }; ctx: the builders below (add, fit, clash, offLimits, tree, at, ...), kctx: the
    kit's (quad, plainBox, walls, beam, jit and the M / GR / RD chunk sets); a block a plugin marks grass: true is drawn as
    one lawn quad, no streets. A highway spec may carry clear: [[from,
-   to], ...] (m along it) where it stands on no piers, and noBoards: true.
+   to], ...] (m along it) where it stands on no piers, noBoards: true, and piersInLine: true (its piers stand every
+   PIER_GAP m even where the line runs under it: the course puts the hoop between two).
    Sim part (no DOM): buildCity() (from buildShore, after the terrain); cityRayBlocked(c, d), which js/glare.js asks
    whether the sun is behind a building. createCityKit(): the meshes (the course's
    windows, lit at dusk, in a shader on the building material; see CityLook below).
@@ -167,9 +168,10 @@ function buildCity() {
       along = 0;
       const px = H.X[i], pz = H.Z[i], ph = H.H[i];
       if (ph < 4 || clear.some(([d0, d1]) => dist > d0 && dist < d1)) continue;
-      // not in the flight corridor where the line runs under this deck, nor on another road
+      // not in the flight corridor where the line runs under this deck (unless the spec keeps them: piersInLine, and
+      // the course puts its hoop between two of them), nor on another road
       const ln = cityLineNear(px, pz);
-      if (ln.d < ln.s.width + 6 && ln.s.y < G + ph) continue;
+      if (!H.spec.piersInLine && ln.d < ln.s.width + 6 && ln.s.y < G + ph) continue;
       if (CITY.hw.some((O, oi) => oi !== hi && cityHighwayNear(px, pz, O).d < O.w / 2 + 3 && Math.abs(_ch.h - ph) > 2)) continue;
       CITY.piers.push({ x: px, z: pz, ux: dx / L, uz: dz / L, top: G + ph - DECK_T, w: H.w });
       shoreBox('highway', px, pz, dx / L, dz / L, 1.3, 1.6, G - 1, G + ph - DECK_T);
