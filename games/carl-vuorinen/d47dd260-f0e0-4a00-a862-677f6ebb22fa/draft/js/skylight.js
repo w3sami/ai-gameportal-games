@@ -11,8 +11,11 @@
      warm                             the fog's tint toward the sun (js/atmosphere.js)
      disc, discScale                  the sun's colour and size; glare: the dazzle's tint (js/glare.js)
      lights                           how many windows are lit (js/city.js: 0 none .. 1 dusk)
-   presets: 'sunset'. The sky dome, fog, sun and both lights are game.js's; it hands them over on every course load
-   (configure(course, env), before the terrain's shadows are baked). current: the light in use, for other modules
+     ghosts                           the lens flare's ghosts (js/glare.js; default as they are, 0 none)
+     stars                            stars on the dome, this bright (0..1; default none)
+   presets: 'sunset', 'night' (the moon is the sun: a small pale disc, a dim blue light, no flare). The sky dome, fog,
+   sun and both lights are game.js's; it hands them over on every course load (configure(course, env), before the
+   terrain's shadows are baked). current: the light in use, for other modules
    (js/city.js's glass reflects its sky), or null for the afternoon.
    ========================================================================= */
 const Skylight = (() => {
@@ -22,6 +25,12 @@ const Skylight = (() => {
       hemiSky: '#8a9cc9', hemiGround: '#5b4b45', hemiIntensity: 1.05,
       zenith: '#24508f', mid: '#c98f86', horizon: '#ffb070', away: '#b89ab0',
       warm: '#ffa45c', disc: '#ffe0b0', discScale: 1.35, glare: '#ffc48a', lights: 0.45,
+    },
+    night: {
+      sunDir: [-0.5, 0.37, -0.78], sunColor: '#9db2e2', sunIntensity: 0.6,
+      hemiSky: '#3b5185', hemiGround: '#262630', hemiIntensity: 0.8,
+      zenith: '#060d24', mid: '#16244c', horizon: '#2a3e6e', away: '#1f2f5a',
+      warm: '#34497e', disc: '#eef1fa', discScale: 0.8, glare: '#141c30', ghosts: 0, lights: 1, stars: 1,
     },
   };
   let base = null, cur = null;
@@ -34,7 +43,26 @@ const Skylight = (() => {
       sky: env.COL.sky.clone(), horizon: env.COL.horizon.clone(), disc: env.sunDisc.material.color.clone(),
       af: [Airframe.ENV.afSky.value.clone(), Airframe.ENV.afHorizon.value.clone(), Airframe.ENV.afGround.value.clone()],
       glare: typeof Glare !== 'undefined' ? Glare.uniforms.glColor.value.clone() : null,
+      ghosts: typeof Glare !== 'undefined' ? Glare.TUNE.ghosts : null,
     };
+  }
+
+  // stars: points on the dome (a child of it, so they follow the camera and grow with the view), made on first use
+  let stars = null;
+  function starField(sky) {
+    if (stars) return stars;
+    const R = sky.geometry.parameters.radius * 0.97, rnd = mulberry32(9071), n = 1400, pos = [], col = [];
+    for (let i = 0; i < n; i++) {
+      const y = Math.pow(rnd(), 0.8) * 0.98 + 0.02, a = rnd() * Math.PI * 2, h = Math.sqrt(1 - y * y), b = 0.35 + 0.65 * Math.pow(rnd(), 3);
+      pos.push(Math.cos(a) * h * R, y * R, Math.sin(a) * h * R);
+      const t = rnd(); col.push(b * (0.85 + 0.15 * t), b * 0.9, b * (1.05 - 0.15 * t));
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, fog: false, depthWrite: false, transparent: true }));
+    stars.renderOrder = -1.5; stars.frustumCulled = false;
+    sky.add(stars);
+    return stars;
   }
 
   // the dome's vertex colours: the afternoon's two-colour gradient, or the light's three colours, warmer toward the sun
@@ -83,6 +111,9 @@ const Skylight = (() => {
     Atmosphere.init({ sunDir: sd, sun: env.sunLight });     // sun direction and full-sun level for the fog's tint
     if (Atmosphere.setWarm) Atmosphere.setWarm(P && P.warm ? C(P.warm) : null);
     if (base.glare) Glare.uniforms.glColor.value.copy(P && P.glare ? C(P.glare) : base.glare);
+    if (base.ghosts != null) Glare.TUNE.ghosts = P && P.ghosts != null ? P.ghosts : base.ghosts;
+    if (P && P.stars) { const st = starField(env.sky); st.visible = true; st.material.opacity = P.stars; }
+    else if (stars) stars.visible = false;
   }
 
   return { configure, PRESETS, get current() { return cur; }, get discScale() { return cur ? cur.discScale : 1; } };
