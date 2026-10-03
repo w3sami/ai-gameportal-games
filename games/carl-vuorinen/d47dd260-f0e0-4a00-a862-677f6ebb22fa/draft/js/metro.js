@@ -17,13 +17,14 @@
      speed, every, cars    the trains' speed (m/s), the gap from one train's front to the next (m), cars a train.
               Trains run from end to end of the line and start again from the first end; they're always running (the
               run's own clock), so the ends belong out in the haze or down a tunnel
-   Gate (a point's 7th value, GATE_TYPES in js/sim.js): "train", options { line, track, lo, hi, lock }. The point is
-   placed over that track (design.py), where it runs straight along the course line; the hoop rides on the middle of a
-   train there, as high over the rail as the point is: on the first train ahead of you, along the line through the
-   point, that is between lo and hi m past the point (lo negative: before it). Once it's your next gate, and you're
-   within lock m of lo (default: anywhere), it stays on that train for as long as the train is still ahead of you, so a
-   hoop on a train running away from you is a chase; fly through it wherever it has got to. Miss it, and it's the next
-   train's; crash, and it picks its train afresh from where you start again (metroUnlock).
+   Gate (a point's 7th value, GATE_TYPES in js/sim.js): "train", options { line, track, lo, hi, lock, r }. The point is
+   placed over that track (design.py), where it runs straight along the course line; the hoop (radius r m, default
+   METRO_HOOP of a hoop's) rides on the middle of a train there, as high over the rail as the point is: on the first
+   train ahead of you, along the line through the point, that is between lo and hi m past the point (lo negative: before
+   it). Once it's your next gate, and you're within lock m of lo (default: anywhere), it stays on that train for as long
+   as the train is still ahead of you, so a hoop on a train running away from you is a chase; fly through it wherever it
+   has got to. Miss it, and it's the next train's; crash, and it picks its train afresh from where you start again
+   (metroUnlock).
    Respawning there puts you over the track (the trains pass under). Everything is a crash: decks, piers, cutting walls,
    tunnel roofs ('metro') and the trains ('train').
    Sim part (no DOM): METRO, metroTick(dt), metroReset(), metroStep(dt, P, next) (the clock, then which train each gate's
@@ -39,6 +40,7 @@ const METRO_ROOF = 14;                                        // tunnel ceiling 
 const METRO_EASE = 18;                                        // m over which a change of gradient is eased
 const METRO_CAR = { len: 17, gap: 1.2, hw: 1.45, h: 3.6 };    // a car: length, gap between cars, half width, height over the rail
 const METRO_CELL = 60;                                        // grid of line samples, for the plugin's lookups
+const METRO_HOOP = 0.65;                                      // a train's hoop, as a share of a hoop's size: smaller, told apart
 let METRO_DIG = 0;                                            // reach of the dug ground past the walls (set from the terrain's cell)
 
 function metroTick(dt) { METRO.T += dt; }
@@ -268,7 +270,8 @@ function metroGates() {
     for (let k = 0; k < L.n; k++) { const d = (L.X[k] - h.pos.x) ** 2 + (L.Z[k] - h.pos.z) ** 2; if (d < bd) { bd = d; best = k; } }
     const up = h.pos.y - (L.G + L.Hb[best]);                 // the hoop's height over the bed
     const g = { i, h, L, tr, up, du: 0, dv: 0, lo: o.lo != null ? o.lo : -200, hi: o.hi != null ? o.hi : 800, lock: o.lock,
-                sgn: Math.sign(L.TX[best] * h.normal.x + L.TZ[best] * h.normal.z) || 1, on: false, a: 1e6, j: null, pos: new THREE.Vector3() };
+                r: o.r || TUNE.HOOP_R * METRO_HOOP, sgn: Math.sign(L.TX[best] * h.normal.x + L.TZ[best] * h.normal.z) || 1,
+                on: false, a: 1e6, j: null, pos: new THREE.Vector3() };
     h.metro = g;
     METRO.gates.push(g);
   });
@@ -311,9 +314,9 @@ function metroStep(dt, P, next) {
 GATE_TYPES.train = {
   // scored on the hoop's circle where it has got to: the plane it's in moves along the line with it (along)
   along: (h) => (h.metro && h.metro.on ? h.metro.a : 1e6),
-  shape: (h, u, v) => !!(h.metro && h.metro.on) && (u - h.metro.du) ** 2 + (v - h.metro.dv) ** 2 < (TUNE.HOOP_R + TUNE.HOOP_TOL) ** 2,
+  shape: (h, u, v) => !!(h.metro && h.metro.on) && (u - h.metro.du) ** 2 + (v - h.metro.dv) ** 2 < (h.metro.r + TUNE.HOOP_TOL) ** 2,
   disc: () => 0,                                             // it moves: a disc at the point would mark the wrong place
-  top: () => TUNE.HOOP_R + 2,
+  top: (h) => (h.metro ? h.metro.r : TUNE.HOOP_R) + 2,
   // autopilot: along the line as usual, but on past the point to wherever the hoop has got to (the usual search for the
   // nearest point of the line stops at the point, so past it the aim would turn back)
   aim(h, P, out) {
@@ -485,9 +488,8 @@ function createMetroKit(ctx) {
       for (const m of [body, wins, head, tail]) { m.frustumCulled = false; group.add(m); }
       items.push({ L, body, wins, head, tail });
     }
-    const ring = new THREE.TorusGeometry(TUNE.HOOP_R, 0.75 * TUNE.HOOP_R / 8, 8, 44);
-    for (const g of METRO.gates) {
-      const m = new THREE.Mesh(ring, HM.later);
+    for (const g of METRO.gates) {                           // (a hoop's own thickness, on its smaller ring)
+      const m = new THREE.Mesh(new THREE.TorusGeometry(g.r, 0.75 * TUNE.HOOP_R / 8, 8, 44), HM.later);
       m.visible = false;
       group.add(m);
       hoops.push({ g, m, fade: 0, flash: null, at: new THREE.Vector3() });
