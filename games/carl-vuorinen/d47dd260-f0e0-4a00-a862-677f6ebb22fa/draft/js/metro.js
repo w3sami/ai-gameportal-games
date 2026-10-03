@@ -17,15 +17,17 @@
      speed, every, cars    the trains' speed (m/s), the gap from one train's front to the next (m), cars a train.
               Trains run from end to end of the line and start again from the first end; they're always running (the
               run's own clock), so the ends belong out in the haze or down a tunnel
-   Gate (a point's 7th value, GATE_TYPES in js/sim.js): "train", options { line, track, lo, hi }. The point is placed
-   over that track (design.py), where it runs straight along the course line; the hoop rides on the middle of a train
-   there, as high over the rail as the point is: on the first train ahead of you, along the line through the point, that
-   is between lo and hi m past the point (lo negative: before it), or the one it's on now while that's still ahead of
-   you. Overtake it or meet it head on, and fly through it wherever it has got to; miss it, and it's the next train's.
+   Gate (a point's 7th value, GATE_TYPES in js/sim.js): "train", options { line, track, lo, hi, lock }. The point is
+   placed over that track (design.py), where it runs straight along the course line; the hoop rides on the middle of a
+   train there, as high over the rail as the point is: on the first train ahead of you, along the line through the
+   point, that is between lo and hi m past the point (lo negative: before it). Once it's your next gate, and you're
+   within lock m of lo (default: anywhere), it stays on that train for as long as the train is still ahead of you, so a
+   hoop on a train running away from you is a chase; fly through it wherever it has got to. Miss it, and it's the next
+   train's.
    Respawning there puts you over the track (the trains pass under). Everything is a crash: decks, piers, cutting walls,
    tunnel roofs ('metro') and the trains ('train').
-   Sim part (no DOM): METRO, metroTick(dt), metroReset(), metroStep(dt, P) (the clock, then which train each gate's hoop
-   is on), metroAt(L, s, off, out), metroTrainHit(P) (CRASH_PLUGINS).
+   Sim part (no DOM): METRO, metroTick(dt), metroReset(), metroStep(dt, P, next) (the clock, then which train each gate's
+   hoop is on; next: the run's next gate), metroAt(L, s, off, out), metroTrainHit(P) (CRASH_PLUGINS).
    Game part: the lines (in the city's own meshes: js/city.js kit), createMetroKit() (GATE_KITS): the trains and the
    hoops riding on them.
    ========================================================================= */
@@ -264,33 +266,41 @@ function metroGates() {
     let best = 0, bd = Infinity;
     for (let k = 0; k < L.n; k++) { const d = (L.X[k] - h.pos.x) ** 2 + (L.Z[k] - h.pos.z) ** 2; if (d < bd) { bd = d; best = k; } }
     const up = h.pos.y - (L.G + L.Hb[best]);                 // the hoop's height over the bed
-    const g = { i, h, L, tr, up, du: 0, dv: 0, lo: o.lo != null ? o.lo : -200, hi: o.hi != null ? o.hi : 800, s0: best * L.step,
+    const g = { i, h, L, tr, up, du: 0, dv: 0, lo: o.lo != null ? o.lo : -200, hi: o.hi != null ? o.hi : 800, lock: o.lock,
                 sgn: Math.sign(L.TX[best] * h.normal.x + L.TZ[best] * h.normal.z) || 1, on: false, a: 1e6, j: null, pos: new THREE.Vector3() };
     h.metro = g;
     METRO.gates.push(g);
   });
 }
-// the clock, then each gate's train: the nearest one ahead of the plane (along the line through the point) within lo..hi
-function metroStep(dt, P) {
+// the clock, then each gate's train: the nearest one ahead of the plane (along the line through the point) within lo..hi,
+// picked afresh until the gate is the next one (next), then kept while it's still ahead
+function metroStep(dt, P, next) {
   metroTick(dt);
   for (const g of METRO.gates) {
-    const h = g.h, tr = g.tr, ap = P ? (P.pos.x - h.pos.x) * h.normal.x + (P.pos.y - h.pos.y) * h.normal.y + (P.pos.z - h.pos.z) * h.normal.z : -1e9;
-    const at = (j) => { const q = metroFront(tr, j); return q <= 0 || q - tr.tlen >= tr.L.len ? null : (metroS(tr, q - tr.tlen / 2) - g.s0) * g.sgn; };
-    // the nearest train ahead within lo..hi; the one it's on now counts even once it has run out of them, so a hoop
-    // that's about to be flown through doesn't hop to the next train
-    let a = 1e6, pick = null;
-    for (let j = 0; j < tr.N; j++) {
-      const aj = at(j);                                      // the train's middle, m past the point
-      if (aj == null || aj <= ap || (j !== g.j && (aj < g.lo || aj > g.hi))) continue;
-      if (aj < a) { a = aj; pick = j; }
+    const h = g.h, n = h.normal, tr = g.tr, ap = P ? (P.pos.x - h.pos.x) * n.x + (P.pos.y - h.pos.y) * n.y + (P.pos.z - h.pos.z) * n.z : -1e9;
+    // where train j's hoop is, m along the gate's normal from the point (null: the train's off the line)
+    const at = (j) => {
+      const q = metroFront(tr, j);
+      if (q <= 0 || q - tr.tlen >= tr.L.len) return null;
+      metroAt(tr.L, metroS(tr, q - tr.tlen / 2), tr.off, _mtB);
+      return (_mtB.x - h.pos.x) * n.x + (_mtB.y + g.up - h.pos.y) * n.y + (_mtB.z - h.pos.z) * n.z;
+    };
+    const keep = g.j != null && g.i === next && (g.lock == null || ap >= g.lo - g.lock) ? at(g.j) : null;
+    if (keep == null || keep < ap - 3) {                     // (kept until you're past it: the crossing is scored first)
+      let a = 1e6, pick = null;
+      for (let j = 0; j < tr.N; j++) {
+        const aj = at(j);
+        if (aj == null || aj <= ap || aj < g.lo || aj > g.hi) continue;
+        if (aj < a) { a = aj; pick = j; }
+      }
+      g.j = pick;
     }
-    g.j = pick;
     g.on = g.j != null; g.a = 1e6;
     if (g.on) {                                              // where it really is: over the track at the train's middle
       const q = metroFront(tr, g.j);
       metroAt(tr.L, metroS(tr, q - tr.tlen / 2), tr.off, _mtB);
       g.pos.set(_mtB.x, _mtB.y + g.up, _mtB.z);
-      const n = h.normal, dx = g.pos.x - h.pos.x, dy = g.pos.y - h.pos.y, dz = g.pos.z - h.pos.z;
+      const dx = g.pos.x - h.pos.x, dy = g.pos.y - h.pos.y, dz = g.pos.z - h.pos.z;
       g.a = dx * n.x + dy * n.y + dz * n.z;                  // the plane it's scored in, m along the gate's normal
       const hx = dx - n.x * g.a, hy = dy - n.y * g.a, hz = dz - n.z * g.a, rl = Math.hypot(n.x, n.z) || 1;
       g.du = hx * -n.z / rl + hz * n.x / rl; g.dv = hy * rl - (hx * n.x + hz * n.z) * n.y / rl;   // and where in it
@@ -491,7 +501,7 @@ function createMetroKit(ctx) {
   const pose = { x: 0, y: 0, z: 0, ux: 1, uz: 0, pitch: 0 };
   function update(s) {
     if (!METRO.lines.length) return;
-    if (!paused()) metroStep(s.dt, s.P);
+    if (!paused()) metroStep(s.dt, s.P, s.next);
     for (const it of items) {
       let nc = 0, nt = 0;
       const C = METRO_CAR, L = it.L;
