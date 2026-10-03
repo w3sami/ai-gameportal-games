@@ -157,7 +157,7 @@ function makeJetwingModel(scene, shading) {
   if (scene) scene.add(g);
 
   /* ---- wingtip trails while the jets burn: two thin ribbons turned to the camera, fading over TRAIL_LIFE s ---- */
-  const TIPS = [new V3(-0.816, WING_Y - 0.09, 0.03), new V3(0.816, WING_Y - 0.09, 0.03)], TRAIL_LIFE = 0.3, TRAIL_MAX = 24;
+  const TIPS = [new V3(-0.816, WING_Y - 0.09, 0.03), new V3(0.816, WING_Y - 0.09, 0.03)], TRAIL_LIFE = 0.2, TRAIL_MAX = 16;
   const trailMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
   trailMat.userData.noSun = true;
   const _a = new V3(), _d = new V3(), _s = new V3(), _c = new V3();
