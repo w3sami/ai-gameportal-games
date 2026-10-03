@@ -1,5 +1,5 @@
 {
-  "_format": "See the course section at the top of js/sim.js, js/city.js (city), js/outskirts.js (river, bridges, boats, signs, zones, billboards, traffic) and js/skylight.js (light). points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?]; in the city floorHalfWidth is also the flight corridor. Downtown is at (0, 0): the skyline ahead, not flown through (that's Downtown Run). The route comes in from the outer suburbs along highway A: under a billboard gantry, over ramp R1, under the ring road B's flyover, over ramp R2; down onto the river, under the arch bridge, between the ship's funnels, under the railway truss, weaving round three sailboats, under highway C's bridge; up and through the suspension bridge's north tower, between its legs; then through the business park to finish about 2.3 km out, the towers ahead. Laid out by work/design.py (the river's own curve places the river hoops, the bridges and the boats).",
+  "_format": "See the course section at the top of js/sim.js, js/city.js (city), js/outskirts.js (river, bridges, boats, signs, zones, billboards, traffic) and js/skylight.js (light). points: [x, y, z, clearance, floorHalfWidth, wallSteepness, gate?]; in the city floorHalfWidth is also the flight corridor. Downtown is at (0, 0): the skyline ahead, not flown through (that's Downtown Run). The route comes in from the outer suburbs along highway A: under a billboard by the road, over ramp R1, under the ring road B's flyover, over ramp R2; down onto the river, under the arch bridge, across the ship's deck between its funnels (one behind the other), under the railway truss, weaving round three sailboats, under highway C's bridge; up and through the suspension bridge's north tower, between its legs; then down under highway A (raised there) and up between two pairs of towers in the business park to finish about 1.7 km out, the skyline ahead. Laid out by work/design.py (the river's own curve places the river hoops, the bridges and the boats).",
   "id": "skyline",
   "name": "Skyline Run",
   "lead": "From the outskirts toward the city at sunset. Boost fires the jets.",
@@ -28,14 +28,14 @@
       {"a": [2153, 3039], "b": [1776, 2178], "w": 30, "h": 34, "ramp": 220, "type": "suspension", "towers": [340, 600], "tower": 82}
     ],
     "highways": [
-      {"w": 28, "pts": [[6976, 4893, 0], [6090, 4459, 0], [4955, 3865, 0], [4496, 3672, 0], [3956, 3198, 6], [3140, 2814, 12], [2551, 2431, 12], [1250, 1500, 10], [300, 600, 8], [-1000, 0, 6]]},
-      {"w": 26, "pts": [[2713, 5896, 0], [3401, 5038, 4], [3839, 4492, 18], [4089, 4180, 32], [4214, 4024, 32], [4371, 3828, 36], [4496, 3672, 38], [4652, 3477, 34], [5027, 3009, 10], [5715, 2151, 0]]},
+      {"w": 28, "pts": [[6976, 4893, 0], [6090, 4459, 0], [4955, 3865, 0], [4496, 3672, 0], [3956, 3198, 6], [3140, 2814, 12], [2551, 2431, 12], [1900, 1965, 22], [1420, 1622, 30], [960, 1290, 18], [300, 600, 8], [-1000, 0, 6]]},
+      {"w": 26, "pts": [[2713, 5896, 0], [3401, 5038, 4], [3839, 4492, 18], [4089, 4180, 32], [4214, 4024, 32], [4371, 3828, 29], [4496, 3672, 27], [4652, 3477, 25], [5027, 3009, 10], [5715, 2151, 0]]},
       {"w": 24, "pts": [[1104, 4656, 0], [1819, 3691, 6], [2235, 3129, 30], [2414, 2888, 32], [2592, 2647, 30], [2890, 2245, 14], [3366, 1602, 10], [3961, 798, 8]]},
-      {"w": 14, "noBoards": true, "pts": [[5307, 4065, 0], [5075, 3972, 4], [4869, 3868, 10], [4726, 3770, 14], [4634, 3654, 18], [4607, 3513, 20], [4680, 3392, 16], [4848, 3354, 8], [5048, 3395, 0]]},
+      {"w": 14, "noBoards": true, "pts": [[5307, 4065, 0], [5075, 3972, 4], [4869, 3868, 10], [4726, 3770, 14], [4634, 3654, 16], [4607, 3513, 15], [4680, 3392, 13], [4848, 3354, 8], [5048, 3395, 0]]},
       {"w": 14, "noBoards": true, "pts": [[4598, 3226, 0], [4457, 3329, 10], [4339, 3453, 16], [4275, 3578, 18], [4177, 3656, 14], [4078, 3582, 7], [3964, 3492, 0]]}
     ],
     "boats": [
-      {"kind": "ship", "x": 3245, "z": 3336, "len": 210, "beam": 52, "funnelAt": 0.0},
+      {"kind": "ship", "x": 3245, "z": 3336, "len": 210, "beam": 30, "funnelGap": 60},
       {"kind": "sail", "x": 2824, "z": 3154},
       {"kind": "sail", "x": 2670, "z": 3081},
       {"kind": "sail", "x": 2548, "z": 2975},
@@ -43,21 +43,24 @@
       {"kind": "sail", "x": 2582, "z": 3084},
       {"kind": "sail", "x": 2452, "z": 2988}
     ],
-    "signs": [{"a": [5023, 3865], "b": [5001, 3916], "clear": 34, "h": 9}],
-    "zones": [{"x": 1564, "z": 1830, "r": 330, "kind": "business", "h": [80, 150]}, {"x": 1700, "z": 2700, "r": 300, "kind": "industrial"}, {"x": 4338, "z": 4832, "r": 380, "kind": "industrial"}],
+    "towers": [{"x": 1263, "z": 1457, "w": 28, "d": 28, "h": 128}, {"x": 1317, "z": 1423, "w": 28, "d": 28, "h": 150}, {"x": 1152, "z": 1265, "w": 28, "d": 28, "h": 142}, {"x": 1208, "z": 1235, "w": 28, "d": 28, "h": 116}],
+    "signs": [{"a": [5028, 3852], "b": [5022, 3867], "clear": 21, "h": 6}],
+    "zones": [{"x": 1250, "z": 1370, "r": 320, "kind": "business", "h": [90, 160]}, {"x": 1700, "z": 2700, "r": 300, "kind": "industrial"}, {"x": 4338, "z": 4832, "r": 380, "kind": "industrial"}],
     "traffic": 30, "parks": [[5600, 3300, 160], [2400, 4300, 220]]
   },
   "points": [
     [5877, 70, 4257, 25, 26, 0.5, 0],
-    [5463, 58, 4082, 25, 26, 0.5],
-    [5012, 40, 3891, 25, 22, 0.5],
+    [5467, 58, 4073, 25, 26, 0.5],
+    [5025, 34, 3859, 25, 22, 0.5],
     [4726, 52, 3770, 25, 22, 0.5],
-    [4496, 38, 3672, 25, 22, 0.5],
+    [4496, 33, 3672, 25, 22, 0.5],
     [4275, 54, 3578, 25, 22, 0.5],
     [4073, 40, 3559, 25, 22, 0.5, 0],
     [3773, 32, 3536, 25, 22, 0.5],
     [3520, 30, 3455, 25, 22, 0.5],
-    [3245, 42, 3336, 25, 22, 0.5],
+    [3335, 32, 3420, 25, 22, 0.5, 0],
+    [3245, 36, 3336, 25, 22, 0.5],
+    [3153, 32, 3253, 25, 22, 0.5, 0],
     [2965, 30, 3229, 25, 22, 0.5],
     [2811, 30, 3178, 25, 22, 0.5],
     [2685, 30, 3057, 25, 22, 0.5],
@@ -66,10 +69,11 @@
     [2268, 48, 2782, 25, 22, 0.5],
     [1965, 78, 2609, 25, 22, 0.5],
     [1913, 104, 2490, 25, 22, 0.5],
-    [1808, 106, 2251, 25, 22, 0.5, 0],
-    [1648, 84, 1976, 25, 22, 0.5],
-    [1458, 86, 1746, 25, 22, 0.5],
-    [1308, 92, 1496, 25, 22, 0.5],
-    [1188, 98, 1276, 25, 22, 0.5, 0]
+    [1808, 92, 2251, 25, 22, 0.5, 0],
+    [1648, 62, 1976, 25, 22, 0.5],
+    [1420, 34, 1622, 25, 22, 0.5],
+    [1290, 62, 1440, 25, 8, 0.5],
+    [1180, 85, 1250, 25, 8, 0.5],
+    [1080, 95, 1050, 25, 22, 0.5, 0]
   ]
 }
