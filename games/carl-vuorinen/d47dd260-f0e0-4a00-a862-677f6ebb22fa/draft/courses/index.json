@@ -33,7 +33,8 @@
     ] },
     { "id": "city", "name": "Cityscape", "vehicle": "jetwing", "levels": [
       { "id": "skyline", "name": "Skyline Run", "file": "courses/skyline.json" },
-      { "id": "metro", "name": "Metro Run", "file": "courses/metro.json" }
+      { "id": "metro", "name": "Metro Run", "file": "courses/metro.json" },
+      { "id": "downtown", "name": "Downtown Run", "file": "courses/downtown.json" }
     ] }
   ]
 }
