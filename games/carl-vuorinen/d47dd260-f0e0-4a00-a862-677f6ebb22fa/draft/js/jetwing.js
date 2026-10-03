@@ -1,7 +1,7 @@
 'use strict';
 /* =========================================================================
    JETWING — the Cityscape theme's flyer (FLIGHT_MODEL 'jetwing'): a rigid carbon wing strapped to the pilot's back,
-   four small jet turbines under it (the real "jetman" rig). A point mass with lift and drag like the wingsuit
+   two small jet turbines under it (the real "jetman" rig). A point mass with lift and drag like the wingsuit
    (js/glide.js), with two differences: the wing is stiff and glides better, and Boost spools the turbines up.
      jets off  it glides: the stick's centre is the best glide, up flattens it and, with speed to spare, zooms above
                the horizon (paid for with speed), down dives
@@ -9,8 +9,9 @@
                noses over far quicker than the fighter, though it's slower
    On the jets it's free to roll and loop (JET_FREE): the attitude core of the stunt plane and biplane (js/sim.js
    stepFlight's body rates, attitude() and assist(); touch and the controller through js/aerobatic.js's aeroStick, so
-   the stick's side banks and its end rolls on, its up/down is the elevator and a full pull loops; let go and it levels
-   out), with this wing's own thrust, drag and gravity. The path follows the nose (GRIP) as the stunt plane's does.
+   the stick's side banks and its end rolls on; its up/down asks for a climb angle (centre: level, held through a bank,
+   so a turn keeps its height) until the end of its throw, where it becomes the elevator and a full pull loops; let go
+   and it levels out), with this wing's own thrust, drag and gravity. The path follows the nose (GRIP) as the stunt plane's does.
    Jets off it's back to the glide above, picked up from wherever the jets left it (upside down it rolls upright).
    The boost meter is the fuel: it drains only while the jets burn (BOOST_DRAIN) and every hoop fills it (BOOST_HOOP;
    1 = full), so a course is mostly flown on the jets with a glide at the end of the longer legs.
@@ -120,6 +121,12 @@ function stepJetsFree(P, ctl, dt, S, th) {
   const auth = clamp(v / TUNE.CRUISE, 0.3, 1.15);
   // let go: level out at level flight (a glide's stick fraction is a climb here, of up to CLIMB_MAX)
   let c = ctl.att ? attitude(P, f, bank, ctl.att.bank, ctl.att.climb * TUNE.CLIMB_MAX) : ctl.aim ? assist(P, f, bank, horiz, ctl.aim, auth) : ctl;
+  if (!ctl.att && !ctl.aim && Math.abs(ctl.p) <= TUNE.OD_THRESH) {
+    // the stick short of the end of its throw: a climb angle to hold (whatever the bank), not a pitch rate, so a thumb
+    // that wanders a little doesn't send the nose wandering; past it, the elevator (keys are always all the way)
+    const a = attitude(P, f, bank, bank, ctl.p / TUNE.OD_THRESH * TUNE.CLIMB_MAX);
+    c = { p: a.p, y: a.y + (ctl.y || 0), r: ctl.r };
+  }
   if (ctl.rollTo != null) c = { p: c.p, y: c.y, r: clamp(wrapAngle(ctl.rollTo - bank) * TUNE.ROLL_P * 1.6, -1, 1) };
   const k = damp(TUNE.RATE_K, dt);
   P.rp += (c.p * TUNE.MAX_PITCH * auth - P.rp) * k;
