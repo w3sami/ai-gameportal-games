@@ -75,7 +75,10 @@ CITY_PLUGINS.push({
     return (C.bridges || []).map((b) => {
       const [ax, az] = b.a, [bx, bz] = b.b, L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, r = Math.min(b.ramp || 200, L * 0.4);
       const pt = (d, h) => [ax + ux * d, az + uz * d, h];
-      return { w: b.w || 20, noBoards: true, bridge: b, pts: [pt(0, 0), pt(r * 0.5, b.h * 0.45), pt(r, b.h), pt(L / 2, b.h), pt(L - r, b.h), pt(L - r * 0.5, b.h * 0.45), pt(L, 0)],
+      // points every 50 m or so along the flat part, so the curve through them can't bulge between the ramps
+      const flat = [], nf = Math.max(1, Math.ceil((L - 2 * r) / 50));
+      for (let k = 0; k <= nf; k++) flat.push(pt(r + (L - 2 * r) * k / nf, b.h));
+      return { w: b.w || 20, noBoards: true, bridge: b, pts: [pt(0, 0), pt(r * 0.5, b.h * 0.45), ...flat, pt(L - r * 0.5, b.h * 0.45), pt(L, 0)],
         clear: b.type === 'arch' ? [[r + 4, L - r - 4]] : b.type === 'suspension' ? [[r + 2, L - r - 2]] : [] };
     });
   },
@@ -336,6 +339,20 @@ function outKitBuild(K, group) {
     const col = new THREE.Color(), CAR = ['#d8d8d4', '#2b2e33', '#9aa0a6', '#b8322b', '#2f5c9e', '#e4e1d8', '#4a5a3e', '#c9a43a'];
     cars.forEach((c, i) => mesh.setColorAt(i, col.set(CAR[Math.floor(rnd() * CAR.length)])));
     mesh.frustumCulled = false;
+    // their lights: two white dots in front, two red behind, unlit so they show at dusk; same matrices as the cars
+    const lp = [], lc = [], dot = (x, z, nz, c) => {
+      const hw = 0.22, hh = 0.13, y = 0.95;
+      const q = [[x - hw, y - hh], [x + hw, y - hh], [x + hw, y + hh], [x - hw, y + hh]].map(([a, b2]) => [a, b2, z]);
+      for (const k of nz > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2]) { lp.push(...q[k]); lc.push(...c); }
+    };
+    for (const sx of [-0.62, 0.62]) { dot(sx, 2.21, 1, [1, 0.97, 0.88]); dot(sx, -2.21, -1, [0.9, 0.08, 0.06]); }
+    const lgeo = new THREE.BufferGeometry();
+    lgeo.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3)); lgeo.setAttribute('color', new THREE.Float32BufferAttribute(lc, 3));
+    const lmat = new THREE.MeshBasicMaterial({ vertexColors: true }); lmat.userData.noSun = true;
+    const lights = new THREE.InstancedMesh(lgeo, lmat, cars.length);
+    lights.instanceMatrix = mesh.instanceMatrix;             // (one buffer, moved once a frame for both)
+    lights.frustumCulled = false;
+    group.add(lights);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
     let last = performance.now();
     mesh.onBeforeRender = () => {
@@ -379,6 +396,7 @@ function outSteel(G) {
     const [ax, az] = b.a, [bx, bz] = b.b, L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, vx = -uz, vz = ux;
     const r = Math.min(b.ramp || 200, L * 0.4), deck = G + b.h, w = H.w / 2;
     const P = (d, o, y) => [ax + ux * d + vx * o, y, az + uz * d + vz * o];
+    const deckAt = (d) => G + H.H[Math.round(clamp(d / H.len, 0, 1) * (H.n - 1))];   // the deck's own height there
     if (b.type === 'arch') {
       const s0 = r, s1 = L - r, rise = (s1 - s0) * 0.2, N = 16, Y = (t) => deck + 0.5 + rise * 4 * t * (1 - t);
       for (const sd of [-1, 1]) {
@@ -386,7 +404,7 @@ function outSteel(G) {
         for (let i = 0; i < N; i++) {
           const t0 = i / N, t1 = (i + 1) / N;
           beam(P(lerp(s0, s1, t0), o, Y(t0)), P(lerp(s0, s1, t1), o, Y(t1)), 1.6, 'steel', true);
-          if (i > 0) beam(P(lerp(s0, s1, t0), o, deck + 0.5), P(lerp(s0, s1, t0), o, Y(t0)), 0.3, 'grey', false);   // hanger
+          if (i > 0) beam(P(lerp(s0, s1, t0), o, deckAt(lerp(s0, s1, t0)) + 0.2), P(lerp(s0, s1, t0), o, Y(t0)), 0.3, 'grey', false);   // hanger
         }
       }
       for (let i = 2; i < N - 1; i += 3) { const t = i / N; beam(P(lerp(s0, s1, t), -w, Y(t)), P(lerp(s0, s1, t), w, Y(t)), 0.8, 'steel', true); }
@@ -398,8 +416,8 @@ function outSteel(G) {
         beam(P(s0, o, deck + ht / 2), P(s1, o, deck + ht / 2), 0.1, 'grey', true);   // (the sides' box; drawn as a hairline)
         for (let i = 0; i <= panels; i++) {
           const d = s0 + i * dl;
-          beam(P(d, o, deck), P(d, o, deck + ht), 0.6, 'grey', false);
-          if (i < panels) beam(P(d, o, i % 2 ? deck + ht : deck), P(d + dl, o, i % 2 ? deck : deck + ht), 0.5, 'grey', false);
+          beam(P(d, o, deckAt(d)), P(d, o, deck + ht), 0.6, 'grey', false);
+          if (i < panels) beam(P(d, o, i % 2 ? deck + ht : deckAt(d)), P(d + dl, o, i % 2 ? deckAt(d + dl) : deck + ht), 0.5, 'grey', false);
         }
       }
       for (let i = 0; i <= panels; i += 2) { const d = s0 + i * dl; beam(P(d, -w, deck + ht), P(d, w, deck + ht), 0.5, 'grey', true); }
@@ -425,7 +443,8 @@ function outSteel(G) {
         for (let d = r; d <= L - r + 0.1; d += step) {
           const p = P(d, sd * o, cableY(d));
           if (prev) beam(prev, p, 1.0, 'cable', true);
-          if (d > r + 1 && d < L - r - 1 && Math.abs(d - d0) > 3 && Math.abs(d - d1) > 3) beam(P(d, sd * (w + 0.6), deck + 1), P(d, sd * (w + 0.6), p[1]), 0.25, 'cable', false);
+          // hanger: from the deck's edge, where the deck really is, up to the cable itself
+          if (d > r + 1 && d < L - r - 1 && Math.abs(d - d0) > 3 && Math.abs(d - d1) > 3 && p[1] > deckAt(d) + 2) beam(P(d, sd * (w + 0.3), deckAt(d) + 0.2), P(d, sd * o, p[1]), 0.25, 'cable', false);
           prev = p;
         }
       }
