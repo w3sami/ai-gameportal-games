@@ -2,13 +2,13 @@
 /* =========================================================================
    JETMAN — the Cityscape theme's flyer (vehicle 'jetwing'), built with js/airframe.js.
    A pilot lying belly down, arms along his sides and legs together, with a rigid carbon wing strapped to his back:
-   about 2 m across, swept, with turned-down tips, and four small jet turbines slung under it, two each side.
+   about 1.6 m across, swept, with turned-down tips, and two small jet turbines slung under it, one each side.
    Light colours so it reads against the dark of a dusk city: a white suit with orange panels, an orange helmet with
    a white stripe and a dark visor; a white wing with an orange leading edge, chevron and tips, dark pinstripes and a
    carbon trailing edge; silver turbines with orange intakes; red and green wingtip lights and a white strobe.
    The exhaust lights up with the jets' spool (P.tuck, see js/jetwing.js), so replays and ghosts show it too: a hot
    ring at each nozzle and a short flickering plume behind it.
-   Nose (head) along -Z; wingtips at about ±1.02 m.
+   Nose (head) along -Z; wingtips at about ±0.82 m.
    makeJetwingModel(scene, shading?) -> { group, tips, update(dt, P), tris, uniforms }
    ========================================================================= */
 function makeJetwingModel(scene, shading) {
@@ -18,8 +18,8 @@ function makeJetwingModel(scene, shading) {
   const R = {
     torso: A.region(8, 8, 252, 136, -0.74, 0.12, 0, 1),
     helmet: A.region(260, 8, 504, 136, -0.15, 0.15, 0, 1),
-    wingT: A.region(8, 144, 504, 264, 0, 1.05, 0, 1),        // a = span from the centre, b = chord fraction
-    wingB: A.region(8, 272, 504, 360, 0, 1.05, 0, 1),
+    wingT: A.region(8, 144, 504, 264, 0, 0.84, 0, 1),        // a = span from the centre, b = chord fraction
+    wingB: A.region(8, 272, 504, 360, 0, 0.84, 0, 1),
     black: A.solid(8, 400, BLACK), dark: A.solid(32, 400, DARK), grey: A.solid(56, 400, GREY), steel: A.solid(80, 400, STEEL),
     white: A.solid(104, 400, WHITE), orange: A.solid(128, 400, ORANGE), soot: A.solid(152, 400, '#121416'),
     leg: A.region(8, 424, 252, 504, 0, 0.45, 0, 1),         // a tube's own length (from its first end), b round it
@@ -58,15 +58,15 @@ function makeJetwingModel(scene, shading) {
 
   /* ---- the wing: swept, thin, tips turned down ---- */
   const wingSt = [
-    { s: 0, c: 0.74, le: -0.5, t: 0.09 }, { s: 0.15, c: 0.7, le: -0.46, t: 0.085 }, { s: 0.35, c: 0.6, le: -0.38, t: 0.08 },
-    { s: 0.6, c: 0.48, le: -0.27, t: 0.075 }, { s: 0.85, c: 0.36, le: -0.16, t: 0.07 }, { s: 0.96, c: 0.3, le: -0.11, t: 0.07, y: -0.03 },
-    { s: 1.02, c: 0.24, le: -0.07, t: 0.06, y: -0.09 },
+    { s: 0, c: 0.651, le: -0.44, t: 0.079 }, { s: 0.12, c: 0.616, le: -0.405, t: 0.075 }, { s: 0.28, c: 0.528, le: -0.334, t: 0.07 },
+    { s: 0.48, c: 0.422, le: -0.238, t: 0.066 }, { s: 0.68, c: 0.317, le: -0.141, t: 0.062 }, { s: 0.768, c: 0.264, le: -0.097, t: 0.062, y: -0.03 },
+    { s: 0.816, c: 0.211, le: -0.062, t: 0.053, y: -0.09 },
   ];
   const WING_Y = 0.2;
   for (const s of [-1, 1]) AF.wing(M, body, { root: new V3(0, WING_Y, 0), side: s, dihedral: 0.03, stations: wingSt, camber: 0.02, top: R.wingT, bottom: R.wingB });
-  // four turbines on short pylons under the wing: intake lip, casing, nozzle cone
+  // two turbines on short pylons under the wing: intake lip, casing, nozzle cone
   const ENG = [];
-  for (const s of [-1, 1]) for (const sp of [0.36, 0.64]) {
+  for (const s of [-1, 1]) for (const sp of [0.42]) {                // one turbine under each wing
     const st = AF.stationAt(wingSt, sp), x = s * sp, y = WING_Y - 0.12, z0 = st.le + 0.04, z1 = z0 + 0.5;
     AF.tube(M, body, new V3(x, WING_Y - 0.03, z0 + 0.15), new V3(x, y + 0.04, z0 + 0.22), 0.02, 0.02, { region: R.steel, seg: 6 });   // pylon
     AF.tube(M, body, new V3(x, y, z0), new V3(x, y, z0 + 0.04), 0.068, 0.072, { region: R.orange, seg: 12 });   // intake lip
@@ -75,8 +75,8 @@ function makeJetwingModel(scene, shading) {
     ENG.push(new V3(x, y, z1));
   }
   // lights: red on the left tip, green on the right, a white strobe on the back of the harness
-  AF.ellipsoid(M, lamp, new V3(-1.02, WING_Y - 0.1, -0.02), new V3(0.022, 0.02, 0.035), { region: R.red, seg: 6, rings: 3 });
-  AF.ellipsoid(M, lamp, new V3(1.02, WING_Y - 0.1, -0.02), new V3(0.022, 0.02, 0.035), { region: R.green, seg: 6, rings: 3 });
+  AF.ellipsoid(M, lamp, new V3(-0.816, WING_Y - 0.1, -0.02), new V3(0.022, 0.02, 0.035), { region: R.red, seg: 6, rings: 3 });
+  AF.ellipsoid(M, lamp, new V3(0.816, WING_Y - 0.1, -0.02), new V3(0.022, 0.02, 0.035), { region: R.green, seg: 6, rings: 3 });
   AF.ellipsoid(M, flash, new V3(0, WING_Y + 0.07, 0.18), new V3(0.025, 0.02, 0.03), { region: R.strobe, seg: 6, rings: 3 });
 
   /* ---- livery ---- */
@@ -109,19 +109,19 @@ function makeJetwingModel(scene, shading) {
       band(c, 0.23, 0.36, 0.4, 0.6, ORANGE);                                                           // warning flash
     });
     on(R.wingT, WHITE, (c, r) => {                          // a: span from the centre, b: 0 at the leading edge .. 1 trailing
-      P(c, [[-0.1, -0.1], [1.1, -0.1], [1.1, 0.1], [-0.1, 0.07]], ORANGE);                             // leading edge
-      P(c, [[0, 0.22], [0.62, 0.42], [0.62, 0.6], [0, 0.42]], ORANGE);                                 // chevron, point forward
-      P(c, [[0, 0.2], [0.62, 0.4], [0.62, 0.42], [0, 0.22]], DARK); P(c, [[0, 0.42], [0.62, 0.6], [0.62, 0.62], [0, 0.44]], DARK);   // its pinstripes
-      band(c, 0.86, 1.1, -0.1, 1.1, ORANGE);                                                           // tips
-      band(c, 0.82, 0.86, -0.1, 1.1, DARK);
-      band(c, -0.1, 1.1, 0.88, 1.1, CARBON);                                                           // carbon trailing edge
-      for (let x = 0.66; x < 0.8; x += 0.05) band(c, x, x + 0.018, 0.5, 0.82, DARK);                   // vent slots
+      P(c, [[-0.08, -0.1], [0.88, -0.1], [0.88, 0.1], [-0.08, 0.07]], ORANGE);                             // leading edge
+      P(c, [[0, 0.22], [0.496, 0.42], [0.496, 0.6], [0, 0.42]], ORANGE);                                 // chevron, point forward
+      P(c, [[0, 0.2], [0.496, 0.4], [0.496, 0.42], [0, 0.22]], DARK); P(c, [[0, 0.42], [0.496, 0.6], [0.496, 0.62], [0, 0.44]], DARK);   // its pinstripes
+      band(c, 0.688, 0.88, -0.1, 1.1, ORANGE);                                                           // tips
+      band(c, 0.656, 0.688, -0.1, 1.1, DARK);
+      band(c, -0.08, 0.88, 0.88, 1.1, CARBON);                                                           // carbon trailing edge
+      for (let x = 0.53; x < 0.64; x += 0.04) band(c, x, x + 0.014, 0.5, 0.82, DARK);                   // vent slots
     });
     on(R.wingB, '#dcdcd8', (c) => {
-      band(c, -0.1, 1.1, -0.1, 0.12, ORANGE);
-      band(c, 0.86, 1.1, -0.1, 1.1, ORANGE);
-      band(c, 0.15, 0.75, 0.45, 0.58, ORANGE);
-      band(c, -0.1, 1.1, 0.88, 1.1, CARBON);
+      band(c, -0.08, 0.88, -0.1, 0.12, ORANGE);
+      band(c, 0.688, 0.88, -0.1, 1.1, ORANGE);
+      band(c, 0.12, 0.6, 0.45, 0.58, ORANGE);
+      band(c, -0.08, 0.88, 0.88, 1.1, CARBON);
     });
   });
 
@@ -156,15 +156,61 @@ function makeJetwingModel(scene, shading) {
   });
   if (scene) scene.add(g);
 
+  /* ---- wingtip trails while the jets burn: two thin ribbons turned to the camera, fading over TRAIL_LIFE s ---- */
+  const TIPS = [new V3(-0.816, WING_Y - 0.09, 0.03), new V3(0.816, WING_Y - 0.09, 0.03)], TRAIL_LIFE = 0.6, TRAIL_MAX = 40;
+  const trailMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
+  trailMat.userData.noSun = true;
+  const _a = new V3(), _d = new V3(), _s = new V3(), _c = new V3();
+  const tipTrails = TIPS.map(() => {
+    const pos = new Float32Array(TRAIL_MAX * 6), col = new Float32Array(TRAIL_MAX * 8), idx = [];
+    for (let i = 0; i < TRAIL_MAX - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage));
+    geo.setIndex(idx); geo.setDrawRange(0, 0);
+    const mesh = new THREE.Mesh(geo, trailMat); mesh.frustumCulled = false; mesh.renderOrder = 2;
+    const tr = { pts: [], pos, col, geo, mesh, last: -1 };
+    mesh.onBeforeRender = (renderer, sc, camera) => {       // the ribbon, square to the view, thin at the tip and widening a little
+      const n = tr.pts.length;
+      for (let i = 0; i < n; i++) {
+        const q = tr.pts[i], lo = tr.pts[Math.max(0, i - 1)], hi = tr.pts[Math.min(n - 1, i + 1)];
+        _d.copy(lo.p).sub(hi.p); if (_d.lengthSq() < 1e-8) _d.set(0, 0, 1);
+        _s.crossVectors(_c.copy(camera.position).sub(q.p), _d).normalize();
+        // (faded out where it nears the camera: the chase camera flies in the trail's wake, and close by it'd be a streak)
+        const age = (t - q.t) / TRAIL_LIFE, w = 0.05 + age * 0.1, near = smoothstep(3, 7, _c.length()), al = q.a * (1 - age) * (1 - age) * 0.9 * near, o = i * 6;
+        pos[o] = q.p.x + _s.x * w; pos[o + 1] = q.p.y + _s.y * w; pos[o + 2] = q.p.z + _s.z * w;
+        pos[o + 3] = q.p.x - _s.x * w; pos[o + 4] = q.p.y - _s.y * w; pos[o + 5] = q.p.z - _s.z * w;
+        col.fill(1, i * 8, i * 8 + 8); col[i * 8 + 3] = al; col[i * 8 + 7] = al;
+      }
+      geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
+      geo.setDrawRange(0, Math.max(0, (n - 1) * 6));
+    };
+    if (scene) scene.add(mesh);
+    return tr;
+  });
+  function updateTrails(T) {
+    for (let k = 0; k < 2; k++) {
+      const tr = tipTrails[k];
+      while (tr.pts.length && t - tr.pts[tr.pts.length - 1].t > TRAIL_LIFE) tr.pts.pop();
+      if (!g.visible) { tr.pts.length = 0; continue; }
+      if (T < 0.05 && !tr.pts.length) continue;
+      _a.copy(TIPS[k]).applyQuaternion(g.quaternion).add(g.position);   // (the game has just placed the group)
+      if (tr.pts.length && t - tr.last < 1 / 60) { tr.pts[0].p.copy(_a); tr.pts[0].t = t; tr.pts[0].a = T; continue; }   // the head follows the tip
+      tr.pts.unshift({ p: _a.clone(), t, a: T }); tr.last = t;
+      if (tr.pts.length > TRAIL_MAX) tr.pts.length = TRAIL_MAX;
+    }
+  }
+
   let t = 0;
   return {
-    group: g, tris: B.tris, uniforms: B.U, shadow: 0.3, trails: false,   // no vapour: on the jets it would trail all the time
-    tips: [new V3(-1.02, WING_Y - 0.09, -0.07 + 0.12), new V3(1.02, WING_Y - 0.09, -0.07 + 0.12)],
+    group: g, tris: B.tris, uniforms: B.U, shadow: 0.3, trails: false,   // (its own thin wingtip trails below; the game's vapour is too broad for this wing)
+    tips: [new V3(-0.816, WING_Y - 0.09, 0.03), new V3(0.816, WING_Y - 0.09, 0.03)],
     update(dt, P) {
       t += dt;
       const T = clamp(P.tuck || 0, 0, 1), on = T > 0.01;
       // each mesh's own material: a ghost (js/game.js) swaps in a see-through copy per mesh, drawn at half strength
       const k = plumes[0].p.material === plumeMat ? 1 : 0.5;
+      updateTrails(k === 1 ? T : 0);                         // (a ghost leaves none)
       plumes.forEach((pl, i) => {
         pl.p.material.opacity = 0.55 * T * k; pl.c.material.opacity = 0.8 * T * k; pl.r.material.opacity = Math.min(1, 0.3 + T) * k;
         const f = 1 + 0.12 * Math.sin(t * 61 + i * 1.7) + 0.08 * Math.sin(t * 37 + i * 2.9);
