@@ -44,7 +44,7 @@ const METRO_ROOF = 14;                                        // tunnel ceiling 
 const METRO_EASE = 18;                                        // m over which a change of gradient is eased
 const METRO_CAR = { len: 17, gap: 1.2, hw: 1.45, h: 3.6 };    // a car: length, gap between cars, half width, height over the rail
 const METRO_CELL = 60;                                        // grid of line samples, for the plugin's lookups
-const METRO_HOOP = 0.5;                                       // a train's hoop, as a share of a hoop's size: smaller, told apart
+const METRO_HOOP = 0.55;                                      // a train's hoop, as a share of a hoop's size: smaller, told apart
 const METRO_HALL = 17;                                        // a station hall's roof over the bed (m); it reaches 3 m past the deck
 let METRO_DIG = 0;                                            // reach of the dug ground past the walls (set from the terrain's cell)
 
