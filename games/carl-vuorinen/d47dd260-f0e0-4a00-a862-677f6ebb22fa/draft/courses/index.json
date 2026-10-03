@@ -32,7 +32,8 @@
       { "id": "fairgrounds", "name": "Fairgrounds Run", "file": "courses/fairground.json" }
     ] },
     { "id": "city", "name": "Cityscape", "vehicle": "jetwing", "levels": [
-      { "id": "skyline", "name": "Skyline Run", "file": "courses/skyline.json" }
+      { "id": "skyline", "name": "Skyline Run", "file": "courses/skyline.json" },
+      { "id": "metro", "name": "Metro Run", "file": "courses/metro.json" }
     ] }
   ]
 }
