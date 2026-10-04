@@ -74,6 +74,18 @@
     };
   }
 
+  /* Paikan väri (nopat piirretään vuorossa olevan paikan värillä). Laite
+     vaihtaa vain omien paikkojensa värin, milloin tahansa, ja väri on
+     huoneessa yksilöllinen. */
+  function setSeatColor(room, userId, seatId, color) {
+    const seat = room.players.find(p => p.seatId === seatId);
+    if (!seat || seat.userId !== userId) throw new Error('Voit vaihtaa vain omien pelaajiesi värin.');
+    if (!PALETTE.includes(color)) throw new Error('Tuntematon väri.');
+    if (room.players.some(p => p !== seat && p.color === color)) throw new Error('Väri on jo toisella pelaajalla.');
+    seat.color = color;
+    return seat;
+  }
+
   /* Poistaa ehdon täyttävät paikat ja korjaa vuoron. Isäntyys siirtyy, jos
      isännän tilille ei jää paikkaa. Tyhjäksi jäänyt huone jää kutsujan
      hoidettavaksi (room.players.length === 0). */
@@ -284,7 +296,7 @@
   const api = {
     PALETTE, MAX_PLAYERS, ROLL_MODES,
     sanitizeVariant, diceCountFor, colsFor, emptyScs,
-    accountSeatId, accountSeat, seatsOf, nameTaken, freeColor, newSeat, dropSeats,
+    accountSeatId, accountSeat, seatsOf, nameTaken, freeColor, newSeat, dropSeats, setSeatColor,
     startGame, resetForRematch, currentPlayer, requireTurn, bankAvailable,
     roll, hold, resetTurn, score, rankings, publicState,
   };

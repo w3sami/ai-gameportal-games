@@ -110,6 +110,10 @@ window.LocalRoom = (function () {
         data.undo = null;
         commit(); broadcast();
       },
+      'room:color'({ seatId, color }) {
+        R().setSeatColor(data.room, LOCAL_USER.id, seatId, color);
+        commit(); broadcast();
+      },
       /* ✕ vie takaisin aloitusnäkymään; peli jää talteen jatkettavaksi. */
       'room:leave'() {},
     };

@@ -97,6 +97,10 @@
 .peopleRow { display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;background:rgba(0,0,0,.25);margin-bottom:4px; }
 .peopleWho { flex:1;min-width:0;overflow-wrap:anywhere;display:flex;flex-wrap:wrap;align-items:center;gap:0 6px; }
 .peopleNote { flex-basis:100%;font-size:.72rem;color:var(--dim); }
+.peopleSwatches { flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:6px; }
+.peopleSw { width:22px;height:22px;border-radius:50%;padding:0;cursor:pointer;border:2px solid rgba(0,0,0,.45); }
+.peopleSw.on { outline:2px solid var(--gold-bright);outline-offset:2px; }
+.peopleSw:disabled { opacity:.2;cursor:default; }
 .peopleActs { display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end; }
 .peopleActs button, .dialogBtns button { font:inherit;font-size:.78rem;padding:5px 9px;border-radius:8px;cursor:pointer;
   background:#171009;color:var(--text);border:1px solid var(--wood-light); }
