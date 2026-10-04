@@ -380,10 +380,10 @@
     "id": "815b8f31-3db2-4c11-aeed-b050862ae798",
     "slug": "jatsi",
     "title": "3D-Jatsi",
-    "description": "Yatzy aidoilla 3D-fysiikkanopilla. Pelaa yksin tai samalla laitteella kavereiden kanssa, tai kirjaudu moninpeliin ja pelaa verkossa 2–6 pelaajan huoneissa. Pohjoismaiset säännöt, tuplasarake, 6 nopan Yatzy (yläkertabonus 100), heittopankki ja ravistusheitto. Jokaisen pelaajan tulos menee yhteiseen tulostauluun sääntöjen mukaan, ja rivillä näkyvät pelin variantit ja lopputulos.",
+    "description": "Yatzy aidoilla 3D-fysiikkanopilla. Pelaa offline samalla laitteella kavereiden kanssa tai kirjaudu ja pelaa verkossa enintään 6 pelaajan huoneissa — verkossakin samalta laitteelta voi pelata useampi. Myöhästyneet voivat katsoa käynnissä olevaa peliä. Pohjoismaiset säännöt, tuplasarake, 6 nopan Yatzy (yläkertabonus 100), heittopankki ja ravistusheitto. Jokaisen pelaajan tulos menee yhteiseen tulostauluun sääntöjen mukaan, ja taulua voi suodattaa rivin varianteilla.",
     "descriptions": {
-      "fi": "Yatzy aidoilla 3D-fysiikkanopilla. Pelaa yksin tai samalla laitteella kavereiden kanssa, tai kirjaudu moninpeliin ja pelaa verkossa 2–6 pelaajan huoneissa. Pohjoismaiset säännöt, tuplasarake, 6 nopan Yatzy (yläkertabonus 100), heittopankki ja ravistusheitto. Jokaisen pelaajan tulos menee yhteiseen tulostauluun sääntöjen mukaan, ja rivillä näkyvät pelin variantit ja lopputulos.",
-      "en": "Yatzy with real 3D physics dice. Play solo or pass-and-play on one device, or sign in to play online in rooms of 2–6 players. Nordic rules, two-column mode, six-dice Yatzy (upper bonus 100), roll banking and shake-to-roll. Every player's score goes on a shared leaderboard by ruleset, each row showing the variants played and the game's result."
+      "fi": "Yatzy aidoilla 3D-fysiikkanopilla. Pelaa offline samalla laitteella kavereiden kanssa tai kirjaudu ja pelaa verkossa enintään 6 pelaajan huoneissa — verkossakin samalta laitteelta voi pelata useampi. Myöhästyneet voivat katsoa käynnissä olevaa peliä. Pohjoismaiset säännöt, tuplasarake, 6 nopan Yatzy (yläkertabonus 100), heittopankki ja ravistusheitto. Jokaisen pelaajan tulos menee yhteiseen tulostauluun sääntöjen mukaan, ja taulua voi suodattaa rivin varianteilla.",
+      "en": "Yatzy with real 3D physics dice. Play offline, passing one device around, or sign in and play online in rooms of up to 6 — several players can share a device online too. Latecomers can watch a game in progress. Nordic rules, two-column mode, six-dice Yatzy (upper bonus 100), roll banking and shake-to-roll. Every player's score goes on a shared leaderboard by ruleset, filterable by the variants played."
     },
     "author": "Sami Lehtilä",
     "tags": [
@@ -398,10 +398,10 @@
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
-    "revision": 4,
+    "revision": 5,
     "sizeBytes": 978269,
     "createdAt": "2026-09-25T18:18:37.663Z",
-    "updatedAt": "2026-10-04T14:08:09.417Z"
+    "updatedAt": "2026-10-04T14:09:03.703Z"
   },
   {
     "id": "5559e903-d2e7-4d3a-8527-4d61df747918",
