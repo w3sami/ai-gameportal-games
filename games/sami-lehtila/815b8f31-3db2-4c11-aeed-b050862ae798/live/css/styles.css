@@ -177,8 +177,12 @@
   .hdrBtns{display:flex;gap:5px}
   .hdrBtn{
     width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:.95rem;
-    background:#241b11;color:var(--dim);border:1px solid var(--wood);padding:0;
+    background:#2b2015;color:var(--gold);border:1px solid rgba(224,169,61,.45);padding:0;
   }
+  .hdrBtn:hover{color:var(--gold-bright);border-color:var(--gold)}
+  /* Peruuttamaton toiminto (poisto, luovutus): selvästi käytettävissä, mutta punainen. */
+  .dangerBtn{color:#ffb3a8 !important;background:#3a1a14 !important;border:1px solid #a8483a !important}
+  .dangerBtn:hover{color:#fff !important;border-color:#e0675a !important}
   .hdrBtn.on{color:#241a08;background:var(--gold);border-color:var(--gold-bright)}
   /* 🙈: kokonaan käytetty rivi poistetaan (tilaa!), osittain käytetty solu himmennetään */
   td.fadeUsed{opacity:.32}
@@ -219,6 +223,10 @@
   .modeTab{flex:1;text-align:center;padding:9px 6px;border-radius:10px;font-size:.9rem;font-weight:700;
     color:var(--dim);text-decoration:none;border:1px solid transparent}
   .modeTab:hover{color:var(--text)}
+  .modeTool{flex:none;width:40px;border-radius:10px;font-size:1rem;cursor:pointer;
+    background:none;color:var(--gold);border:1px solid rgba(224,169,61,.35)}
+  .lbOpenBtn{display:block;margin:-6px auto 12px;font:inherit;font-size:.85rem;padding:6px 14px;border-radius:14px;cursor:pointer;
+    background:#2b2015;color:var(--gold);border:1px solid rgba(224,169,61,.45)}
   .modeTab.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);pointer-events:none}
   /* overlays */
   .overlay{
@@ -265,28 +273,28 @@
   #finalList{margin:14px 0;color:var(--dim);font-size:.95rem;line-height:1.7}
   /* koko näyttö rattaan vieressä (ks. js/portal.js) */
   #fsBtn{right:54px;padding:0;line-height:1}
-  #lbWrap{margin:6px 0 4px;text-align:left}
+  .lbBox{margin:6px 0 4px;text-align:left}
   @media (prefers-reduced-motion: reduce){
     #banner.show span{animation:none;transform:scale(1)}
     .popScore{animation-duration:.6s}
   }
   /* portaalin tulostaulu voittoruudussa (js/portal.js): kenttävalitsin ja
      rivit, joissa variantit ja pelin tulos */
-  #lbWrap .lbHead{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:4px 0 6px;text-align:center}
-  #lbWrap .lbTabs{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-bottom:8px}
-  #lbWrap .lbTab{font:inherit;font-size:.75rem;padding:4px 9px;border-radius:12px;cursor:pointer;
+  .lbBox .lbHead{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:4px 0 6px;text-align:center}
+  .lbBox .lbTabs{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-bottom:8px}
+  .lbBox .lbTab{font:inherit;font-size:.75rem;padding:4px 9px;border-radius:12px;cursor:pointer;
     background:#171009;color:var(--dim);border:1px solid var(--wood)}
-  #lbWrap .lbTab.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);font-weight:700}
-  #lbWrap .lbList{list-style:none;margin:0;padding:0;max-height:32vh;overflow-y:auto}
-  #lbWrap .lbRow{padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.25);margin-bottom:4px}
-  #lbWrap .lbRow.you{outline:1px solid var(--gold-bright);background:rgba(224,169,61,.14)}
-  #lbWrap .lbTop{display:flex;gap:8px;align-items:baseline}
-  #lbWrap .lbRank{color:var(--dim);min-width:1.8em;font-variant-numeric:tabular-nums}
-  #lbWrap .lbName{flex:1;overflow-wrap:anywhere;color:var(--text)}
-  #lbWrap .lbScore{font-weight:800;color:var(--gold-bright);font-variant-numeric:tabular-nums}
-  #lbWrap .lbMeta{display:flex;flex-wrap:wrap;gap:4px 8px;margin:3px 0 0 2.3em;font-size:.72rem;color:var(--dim)}
-  #lbWrap .lbTag{border:1px solid var(--wood-light);border-radius:6px;padding:0 5px;margin-right:3px}
-  #lbWrap button.lbFilter{font:inherit;color:inherit;background:none;cursor:pointer;line-height:inherit}
-  #lbWrap button.lbFilter:hover{border-color:var(--gold);color:var(--text)}
-  #lbWrap .lbFilter.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);font-weight:700}
-  #lbWrap .lbEmpty{color:var(--dim);font-size:.85rem;text-align:center;padding:8px}
+  .lbBox .lbTab.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);font-weight:700}
+  .lbBox .lbList{list-style:none;margin:0;padding:0;max-height:32vh;overflow-y:auto}
+  .lbBox .lbRow{padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.25);margin-bottom:4px}
+  .lbBox .lbRow.you{outline:1px solid var(--gold-bright);background:rgba(224,169,61,.14)}
+  .lbBox .lbTop{display:flex;gap:8px;align-items:baseline}
+  .lbBox .lbRank{color:var(--dim);min-width:1.8em;font-variant-numeric:tabular-nums}
+  .lbBox .lbName{flex:1;overflow-wrap:anywhere;color:var(--text)}
+  .lbBox .lbScore{font-weight:800;color:var(--gold-bright);font-variant-numeric:tabular-nums}
+  .lbBox .lbMeta{display:flex;flex-wrap:wrap;gap:4px 8px;margin:3px 0 0 2.3em;font-size:.72rem;color:var(--dim)}
+  .lbBox .lbTag{border:1px solid var(--wood-light);border-radius:6px;padding:0 5px;margin-right:3px}
+  .lbBox button.lbFilter{font:inherit;color:inherit;background:none;cursor:pointer;line-height:inherit}
+  .lbBox button.lbFilter:hover{border-color:var(--gold);color:var(--text)}
+  .lbBox .lbFilter.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);font-weight:700}
+  .lbBox .lbEmpty{color:var(--dim);font-size:.85rem;text-align:center;padding:8px}

@@ -15,7 +15,9 @@
     <nav class="modeTabs">
       <button type="button" class="modeTab on" data-mode="online">🌐 Verkossa</button>
       <button type="button" class="modeTab" data-mode="offline">📱 Tällä laitteella</button>
+      <button type="button" class="modeTool fsToggle" title="Koko näyttö">⛶</button>
     </nav>
+    <button type="button" class="lbOpenBtn" style="display:none">🏆 Tulostaulu</button>
     <h1>YATZY <span style="font-size:1rem;color:var(--dim)">ONLINE</span></h1>
     <div class="sub">Kirjaudu tai luo tunnus pelataksesi ystävien kanssa</div>
     <div id="authError" class="mpError"></div>
@@ -34,7 +36,9 @@
     <nav class="modeTabs">
       <button type="button" class="modeTab" data-mode="online">🌐 Verkossa</button>
       <button type="button" class="modeTab on" data-mode="offline">📱 Tällä laitteella</button>
+      <button type="button" class="modeTool fsToggle" title="Koko näyttö">⛶</button>
     </nav>
+    <button type="button" class="lbOpenBtn" style="display:none">🏆 Tulostaulu</button>
     <h1>YATZY</h1>
     <div class="sub">Pelaajat vuorotellen tällä laitteella — ei tiliä, ei verkkoa</div>
     <label>Pelaajat</label>
@@ -67,7 +71,9 @@
     <nav class="modeTabs">
       <button type="button" class="modeTab on" data-mode="online">🌐 Verkossa</button>
       <button type="button" class="modeTab" data-mode="offline">📱 Tällä laitteella</button>
+      <button type="button" class="modeTool fsToggle" title="Koko näyttö">⛶</button>
     </nav>
+    <button type="button" class="lbOpenBtn" style="display:none">🏆 Tulostaulu</button>
     <div class="mpLobbyHeader">
       <h1 style="font-size:1.6rem">AULA</h1>
       <div>
@@ -148,7 +154,7 @@
     <div id="mpGuestNote" class="mpWaitMsg"></div>
     <button class="bigBtn" id="mpJoinBtn" style="display:none">LIITY PELIIN</button>
     <div id="mpWaitMsg" class="mpWaitMsg">Odotetaan isäntää aloittamaan peli…</div>
-    <button id="mpDeleteRoomBtn" class="hdrBtn" style="display:none;width:auto;padding:8px 14px;margin-top:6px" title="Poistaa huoneen kaikilta — ei voi perua">🗑 Poista huone</button>
+    <button id="mpDeleteRoomBtn" class="hdrBtn dangerBtn" style="display:none;width:auto;padding:8px 14px;margin-top:6px" title="Poistaa huoneen kaikilta — ei voi perua">🗑 Poista huone</button>
   </div>
   <div id="controls" style="display:none">
     <button id="rollBtn">HEITÄ NOPAT</button>
@@ -169,7 +175,7 @@
     <div id="winnerName"></div>
     <div id="winnerScore"></div>
     <div id="finalList"></div>
-    <div id="lbWrap" style="display:none"></div>
+    <div id="lbWrap" class="lbBox" style="display:none"></div>
     <div id="rematchVariantRow" style="display:none;text-align:left;margin-top:10px">
       <label style="margin-top:0">Uuden pelin säännöt</label>
       <div class="mpVariantRow">
@@ -187,6 +193,14 @@
     </div>
     <button class="bigBtn" id="rematchBtn" style="display:none">UUSI PELI (SAMAT PELAAJAT)</button>
     <div id="mpWaitRematchMsg" class="mpWaitMsg" style="display:none">Odotetaan isäntää aloittamaan uutta peliä…</div>
+  </div>
+</div>
+
+<!-- ---------- Tulostaulu alkuruudusta (vain portaalissa) ---------- -->
+<div class="overlay" id="lbOverlay" style="display:none">
+  <div class="panel" style="position:relative">
+    <button id="closeLb" class="hdrBtn" style="position:absolute;top:10px;right:10px" title="Sulje">✕</button>
+    <div id="lbWrapStart" class="lbBox"></div>
   </div>
 </div>
 

@@ -395,6 +395,7 @@
     document.getElementById('controls').style.display = preGame ? 'none' : 'flex';
     document.getElementById('mpPlayers').style.display = preGame ? 'none' : 'flex';
     document.getElementById('board').style.display = preGame ? 'none' : 'block';
+    document.getElementById('hint').style.visibility = preGame ? 'hidden' : '';
 
     if (preGame) {
       window.MpUI.renderOrder(document.getElementById('mpPlayersPre'), state, me.id, (seatIds) =>
@@ -612,6 +613,20 @@
     if (ev.key === 'Enter') doAuth('login');
   });
   window.JatsiPortal.wireFullscreen(document.getElementById('fsBtn'));
+  document.querySelectorAll('.fsToggle').forEach((b) => window.JatsiPortal.wireFullscreen(b));
+
+  /* Tulostaulu alkuruudusta; nappi näkyy vain portaalissa, jossa taulu on. */
+  const lbOverlay = document.getElementById('lbOverlay');
+  document.querySelectorAll('.lbOpenBtn').forEach((b) => {
+    if (!window.JatsiPortal.onPortal) return;
+    b.style.display = '';
+    b.addEventListener('click', () => {
+      lbOverlay.style.display = 'flex';
+      window.JatsiPortal.openBoard(document.getElementById('lbWrapStart'));
+    });
+  });
+  document.getElementById('closeLb').addEventListener('click', () => { lbOverlay.style.display = 'none'; });
+  lbOverlay.addEventListener('click', (ev) => { if (ev.target === lbOverlay) lbOverlay.style.display = 'none'; });
 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
     try { await window.MpApi.logout(); } catch (e) {}

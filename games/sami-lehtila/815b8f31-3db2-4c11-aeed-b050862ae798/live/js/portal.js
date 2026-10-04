@@ -39,6 +39,19 @@ window.JatsiPortal = (function () {
       if (r && typeof r.catch === 'function') r.catch(() => {});
     } catch (e) { /* selain kieltäytyi — nappi vain ei tee mitään */ }
   }
+  /* Kosketusnäytöllä pelin aloitus vie koko näyttöön: portaalin kehys
+     tekstiensä kanssa vie pieneltä ruudulta liikaa tilaa. Pyyntö tehdään
+     napautuksen käsittelijässä, koska selain sallii sen vain käyttäjän
+     eleestä. */
+  const TOUCH = matchMedia('(pointer: coarse)').matches;
+  function fullscreenOnStart(ev) {
+    if (!TOUCH || fsElement() || !fsRequest()) return;
+    const t = ev.target.closest && ev.target.closest('.bigBtn, .mpRoomRow button:not(.dangerBtn)');
+    if (!t || t.disabled) return;
+    toggleFullscreen();
+  }
+  if (TOUCH) document.addEventListener('click', fullscreenOnStart, true);
+
   function wireFullscreen(btn) {
     if (!btn) return;
     if (!fsRequest() || document.fullscreenEnabled === false) { btn.style.display = 'none'; return; }
@@ -253,5 +266,8 @@ window.JatsiPortal = (function () {
     openOn(wrap, variant, highlightId);
   }
 
-  return { onPortal: ON_PORTAL, wireFullscreen, toggleFullscreen, submitLocalGame, showBoard, levelFor };
+  /* Alkuruudun tulostaulu: kaikki kentät ja aiemmat valinnat. */
+  function openBoard(wrap) { return render(wrap, null); }
+
+  return { onPortal: ON_PORTAL, openBoard, wireFullscreen, toggleFullscreen, submitLocalGame, showBoard, levelFor };
 })();
