@@ -9,9 +9,10 @@
                noses over far quicker than the fighter, though it's slower
    On the jets it's free to roll and loop (JET_FREE): the attitude core of the stunt plane and biplane (js/sim.js
    stepFlight's body rates, attitude() and assist(); touch and the controller through js/aerobatic.js's aeroStick, so
-   the stick's side banks and its end rolls on; its up/down asks for a climb angle (centre: level, held through a bank,
-   so a turn keeps its height) until the end of its throw, where it becomes the elevator and a full pull loops; let go
-   and it levels out), with this wing's own thrust, drag and gravity. The path follows the nose (GRIP) as the stunt plane's does.
+   the stick's side banks, its end the steepest bank (ROLL_EDGE false); its up/down asks for a climb angle (centre:
+   level, held through a bank, so a turn keeps its height) until the end of its throw, where it becomes the elevator
+   and a full pull loops; let go and it levels out), with this wing's own thrust, drag and gravity (less of it going up: JET_CLIMB; and FREE_CLIMB
+   lets the stick hold a climb up to near vertical). The path follows the nose (GRIP) as the stunt plane's does.
    Jets off it's back to the glide above, picked up from wherever the jets left it (upside down it rolls upright).
    The boost meter is the fuel: it drains only while the jets burn (BOOST_DRAIN) and every hoop fills it (BOOST_HOOP;
    1 = full), so a course is mostly flown on the jets with a glide at the end of the longer legs.
@@ -23,6 +24,10 @@ const JETWING_DEFAULTS = {
   THRUST: 0.55,          // thrust at full spool, in g
   SPOOL_UP: 3, SPOOL_DOWN: 1.8,   // how fast the turbines spool (full swing per second)
   CLIMB_MAX: 0.85,       // steepest climb the stick asks for with the jets on (rad)
+  FREE_CLIMB: 0,         // ... when free to roll and loop (JET_FREE): the steepest climb the stick holds short of the
+                         // end of its throw (rad; 0: CLIMB_MAX), so a near-vertical climb can be held, not just looped
+  JET_CLIMB: 0,          // climb assist (arcade): the share of gravity along a climbing path the jets cancel at full
+                         // spool, so going up costs little speed while level flight, acceleration and top speed don't change
   ZOOM_MAX: 0.5,         // ... and off: a zoom on spare speed (rad); mouse aim only zooms above ZOOM_SPEED
   ZOOM_SPEED: 50,        // m/s
   JET_DIVE: 1.0,         // steepest dive the stick asks for (rad)
@@ -114,17 +119,24 @@ function toGlide(P, S) {                                     // jets off: carry 
   const q = TUNE.G * S.ae.a * P.speed * P.speed;
   S.cl = clamp(TUNE.G * Math.cos(S.gam) / Math.max(q, 1e-3), 0, 1);
 }
+// the stick's up/down short of the end of its throw (-1..1) to the climb angle to hold: down dives at up to CLIMB_MAX;
+// up climbs at CLIMB_MAX at the end, or with FREE_CLIMB, steepening over the last of the throw to that (the middle of it
+// much as without), so a near-vertical climb can be held without the climbs short of it getting twitchier
+function freeClimb(s) {
+  const k = TUNE.CLIMB_MAX, top = TUNE.FREE_CLIMB || k;
+  return s <= 0 ? s * k : k * s + (top - k) * s * s * s;
+}
 function stepJetsFree(P, ctl, dt, S, th) {
   const G = TUNE.G, ae = S.ae, v = P.speed, f = forwardOf(P, _jf);
   const { bank, horiz } = computeBank(P, f);
   P.bank = bank;
   const auth = clamp(v / TUNE.CRUISE, 0.3, 1.15);
   // let go: level out at level flight (a glide's stick fraction is a climb here, of up to CLIMB_MAX)
-  let c = ctl.att ? attitude(P, f, bank, ctl.att.bank, ctl.att.climb * TUNE.CLIMB_MAX) : ctl.aim ? assist(P, f, bank, horiz, ctl.aim, auth) : ctl;
+  let c = ctl.att ? attitude(P, f, bank, ctl.att.bank, freeClimb(ctl.att.climb)) : ctl.aim ? assist(P, f, bank, horiz, ctl.aim, auth) : ctl;
   if (!ctl.att && !ctl.aim && Math.abs(ctl.p) <= TUNE.OD_THRESH) {
     // the stick short of the end of its throw: a climb angle to hold (whatever the bank), not a pitch rate, so a thumb
     // that wanders a little doesn't send the nose wandering; past it, the elevator (keys are always all the way)
-    const a = attitude(P, f, bank, bank, ctl.p / TUNE.OD_THRESH * TUNE.CLIMB_MAX);
+    const a = attitude(P, f, bank, bank, freeClimb(ctl.p / TUNE.OD_THRESH));
     c = { p: a.p, y: a.y + (ctl.y || 0), r: ctl.r };
   }
   if (ctl.rollTo != null) c = { p: c.p, y: c.y, r: clamp(wrapAngle(ctl.rollTo - bank) * TUNE.ROLL_P * 1.6, -1, 1) };
@@ -154,7 +166,8 @@ function stepJetsFree(P, ctl, dt, S, th) {
   const L = G * cg * Math.abs(Math.cos(bank)) + v * (Math.abs(P.rp) + Math.abs(turn) * cg);
   const cl = Math.min(L / Math.max(q, 1e-3), TUNE.CL_MAX), cl0 = Math.min(G * cg / Math.max(q, 1e-3), 1);
   const D = G * ae.a * v * v * (ae.cd0 + ae.k * (cl0 * cl0 + TUNE.PULL_DRAG * Math.max(0, cl * cl - cl0 * cl0))) + G * Math.pow(v / TUNE.VMAX, 12);
-  P.speed = Math.max(TUNE.MIN_SPEED, v + (TUNE.THRUST * G * th - D - G * P.vdir.y) * dt);
+  const up = P.vdir.y > 0 ? 1 - TUNE.JET_CLIMB * th : 1;     // climb assist: the jets take some of gravity going up
+  P.speed = Math.max(TUNE.MIN_SPEED, v + (TUNE.THRUST * G * th - D - G * P.vdir.y * up) * dt);
   P.vdir.lerp(f, damp(TUNE.JET_GRIP * clamp(v / TUNE.LEVEL_SPEED, 0.3, 1.2), dt)).normalize();
   if (sink > 0) {                                            // gravity takes the path, not the jets
     _jw.copy(P.vdir).multiplyScalar(P.speed); _jw.y -= G * sink * dt;
