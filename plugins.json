@@ -163,13 +163,37 @@
         "sizeBytes": 85548,
         "entryFile": "index.js",
         "publishedAt": "2026-10-04T16:21:10.631Z"
+      },
+      {
+        "version": "1.1.1",
+        "files": [
+          {
+            "path": "controls.js",
+            "sizeBytes": 18848
+          },
+          {
+            "path": "index.js",
+            "sizeBytes": 17138
+          },
+          {
+            "path": "README.md",
+            "sizeBytes": 14006
+          },
+          {
+            "path": "ui.js",
+            "sizeBytes": 35754
+          }
+        ],
+        "sizeBytes": 85746,
+        "entryFile": "index.js",
+        "publishedAt": "2026-10-04T16:27:43.985Z"
       }
     ],
     "aliases": {
-      "v1": "1.1.0"
+      "v1": "1.1.1"
     },
     "createdAt": "2026-09-19T16:12:02.205Z",
-    "updatedAt": "2026-10-04T16:21:10.631Z"
+    "updatedAt": "2026-10-04T16:27:43.985Z"
   },
   {
     "name": "portal-events",
