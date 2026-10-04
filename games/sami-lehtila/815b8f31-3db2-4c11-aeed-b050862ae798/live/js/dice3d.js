@@ -2,7 +2,7 @@
 /* ============================================================
    dice3d.js — Three.js (grafiikka) + cannon.js (fysiikka)
    Vastaa vain nopan 3D-esityksestä ja fysiikkasimulaatiosta.
-   Ei tiedä pisteytyksestä eikä vuoroista — GameLogic ohjaa sitä
+   Ei tiedä pisteytyksestä eikä vuoroista — MpGame ohjaa sitä
    julkisen window.Dice3D-rajapinnan kautta.
 
    Moninpelitila: heittävä pelaaja pyörittää oman fysiikkansa

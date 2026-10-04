@@ -2,7 +2,7 @@
    multiplayer.css — lisätyylit moninpelin aula- ja huonenäkymille.
    Perustyylit (paneelit, napit, värit) tulevat styles.css:stä.
    ============================================================ */
-#authView input, .mpCreateRow input, .mpCreateRow select {
+#authView input, .mpCreateRow input, .mpCreateRow select, .mpGuestRow input {
   width:100%;margin-top:8px;padding:10px 12px;border-radius:10px;font-size:1rem;
   background:#120d08;color:var(--text);border:1px solid var(--wood);
 }
@@ -80,6 +80,41 @@
 }
 .mpPlayerChip.cur { border-color:var(--gold-bright);box-shadow:0 0 8px rgba(255,214,107,.4); }
 .mpPlayerChip.disconnected { opacity:.45; }
+.mpPlayerChip.spectator { border-style:dashed;color:var(--dim); }
+.mpPlayerChip.clickable { cursor:pointer; }
+.mpGuestRow { display:flex;gap:6px;width:100%;max-width:340px; }
+.mpGuestRow input { flex:1;min-width:0;margin-top:0; }
+.mpGuestRow button { font:inherit;font-size:.9rem;padding:8px 12px;border-radius:10px;cursor:pointer;
+  background:#171009;color:var(--text);border:1px solid var(--wood-light);white-space:nowrap; }
+#mpGuestNote:empty { display:none; }
+.mpWatchBox { margin:0 !important;text-transform:none !important;letter-spacing:normal !important;display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--dim);white-space:nowrap;cursor:pointer; }
+.mpWatchBox:has(input:disabled) { cursor:default;opacity:.7; }
+#peopleBtn { position:absolute;top:8px;right:130px;width:36px;height:36px;border-radius:50%;
+  background:rgba(0,0,0,.45);border:1px solid rgba(224,169,61,.4);color:var(--gold);font-size:1rem;
+  cursor:pointer;backdrop-filter:blur(3px);padding:0;line-height:1; }
+#peopleList { text-align:left;margin-top:8px; }
+.peopleHead { font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:14px 0 6px; }
+.peopleRow { display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;background:rgba(0,0,0,.25);margin-bottom:4px; }
+.peopleWho { flex:1;min-width:0;overflow-wrap:anywhere;display:flex;flex-wrap:wrap;align-items:center;gap:0 6px; }
+.peopleNote { flex-basis:100%;font-size:.72rem;color:var(--dim); }
+.peopleActs { display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end; }
+.peopleActs button, .dialogBtns button { font:inherit;font-size:.78rem;padding:5px 9px;border-radius:8px;cursor:pointer;
+  background:#171009;color:var(--text);border:1px solid var(--wood-light); }
+.peopleActs button.danger { color:#ff8a7e;border-color:#5a2a20; }
+#dialogText { color:var(--text);font-size:.92rem;margin:10px 0 18px;line-height:1.4; }
+.dialogBtns { display:flex;gap:10px;justify-content:center; }
+.dialogBtns button { font-size:.95rem;padding:10px 18px; }
+.dialogBtns button.danger { background:#b3261e;color:#fff;border-color:#d0463c; }
 
-/* Toinen napautus poistaa (ks. MpUI.confirmTap). */
-button.armed { background: #b3261e !important; color: #fff !important; }
+/* Offline: pelaajat tällä laitteella */
+#offPlayers { display:flex;flex-direction:column;gap:6px; }
+.offPlayerRow { display:flex;align-items:center;gap:8px; }
+.offPlayerRow input { flex:1;min-width:0;padding:10px 12px;border-radius:10px;font-size:1rem;
+  background:#120d08;color:var(--text);border:1px solid var(--wood); }
+.offColor { width:30px;height:30px;flex:none;border-radius:50%;border:2px solid rgba(0,0,0,.5);cursor:pointer;padding:0; }
+.offRemove { flex:none;background:none;border:none;color:var(--dim);font-size:1rem;cursor:pointer;padding:4px 6px; }
+.offRemove:hover { color:#ff6b5e; }
+.offAddBtn { margin-top:8px;font:inherit;font-size:.9rem;padding:8px 12px;border-radius:10px;cursor:pointer;
+  background:#171009;color:var(--text);border:1px solid var(--wood-light); }
+#offlineView .bigBtn { margin-top:12px; }
+.modeTab { font-family:inherit;background:none;cursor:pointer; }

@@ -32,7 +32,7 @@ window.MpGame = (function () {
   let myRollInFlight = false; // true kun OMA paikallinen heitto on käynnissä/lähetetty, kunnes kaiku saapuu
   let armed = false; // ravistustila viritetty
   let motionEnabled = false, shakeSamples = [], shakePeakAcc = 0;
-  const listeners = { lobby: null, roomState: null, roomError: null, rejoin: null, deleted: null };
+  const listeners = { lobby: null, roomState: null, roomError: null, rejoin: null, deleted: null, blocked: null, notice: null };
 
   function onLobby(cb) { listeners.lobby = cb; }
   function onRoomState(cb) { listeners.roomState = cb; }
@@ -43,14 +43,21 @@ window.MpGame = (function () {
   function onRejoin(cb) { listeners.rejoin = cb; }
   /* Kutsutaan kun isäntä poistaa huoneen jossa ollaan parhaillaan mukana. */
   function onDeleted(cb) { listeners.deleted = cb; }
+  /* Kutsutaan kun isäntä estää tämän käyttäjän huoneesta. */
+  function onBlocked(cb) { listeners.blocked = cb; }
+  /* Palvelimen ilmoitus tälle käyttäjälle (esim. isäntä poisti pelistä). */
+  function onNotice(cb) { listeners.notice = cb; }
   function err(msg) { if (listeners.roomError) listeners.roomError(msg); }
 
-  function connect(user) {
+  /* transport: valinnainen socketin kaltainen olio (offline-pelissä
+     LocalRoom.socket()); ilman sitä yhteys palvelimelle. */
+  function connect(user, transport) {
+    if (socket) disconnect();
     me = user;
     /* Portaalissa palvelin on toisella nimellä ja tunnistus kulkee tokenina
        (ks. mp-api.js); omalla palvelimella sama origin ja istuntoeväste. */
     const api = window.MpApi;
-    socket = api.base ? io(api.base, { auth: { token: api.token() } }) : io();
+    socket = transport || (api.base ? io(api.base, { auth: { token: api.token() } }) : io());
     socket.on('lobby:update', (rooms) => listeners.lobby && listeners.lobby(rooms));
     socket.on('room:state', (state) => handleRoomState(state));
     socket.on('room:rejoin', (state) => {
@@ -75,6 +82,18 @@ window.MpGame = (function () {
       clearInFlightRoll();
       currentRoomId = null; lastState = null; myRollInFlight = false;
       if (listeners.deleted) listeners.deleted();
+    });
+    socket.on('room:blocked', () => {
+      clearInFlightRoll();
+      disarmShake();
+      currentRoomId = null; lastState = null; myRollInFlight = false;
+      if (listeners.blocked) listeners.blocked();
+    });
+    socket.on('room:notice', ({ message } = {}) => {
+      clearInFlightRoll();
+      disarmShake();
+      myRollInFlight = false;
+      if (listeners.notice) listeners.notice(message);
     });
     socket.on('game:rollPlayback', (payload) => handleRollPlayback(payload));
     socket.on('connect_error', (e) => {
@@ -134,6 +153,11 @@ window.MpGame = (function () {
     if (myRollInFlight && window.Dice3D.isRolling() && window.Dice3D.isNudgeAvailable() && nudgeSetting) {
       hintEl.textContent = 'Napauta pöytää — tälli käytettävissä!';
       hintEl.classList.add('nudge');
+    } else if (lastState && !lastState.players.some((p) => p.userId === me.id)) {
+      const mine = (lastState.spectators || []).find((s) => s.userId === me.id);
+      hintEl.textContent = mine && mine.admitted ? 'Katsot peliä • pääset mukaan seuraavaan peliin'
+        : 'Katsot peliä • isäntä voi päästää sinut seuraavaan peliin';
+      hintEl.classList.remove('nudge');
     } else {
       hintEl.textContent = 'Heitä nopat • napauta noppaa lukitaksesi sen';
       hintEl.classList.remove('nudge');
@@ -339,7 +363,7 @@ window.MpGame = (function () {
       const state = lastState;
       /* Kolmannen heiton jälkeen lukita saa vain jos pankissa on heittoja —
          muuten pankkiheitto heittäisi aina kaikki nopat. Sama ehto kuin
-         yksinpelissä (game-logic.js) ja palvelimen hold():ssa. */
+         sääntöjen hold():ssa (js/room-rules.js). */
       if (!isMyTurn(state) || state.rollsUsed === 0 || (state.rollsUsed >= 3 && !state.bankAvailable)) return;
       const i = window.Dice3D.hitTestDie(ev.clientX, ev.clientY);
       if (i < 0) return;
@@ -397,6 +421,26 @@ window.MpGame = (function () {
   function joinRoom(roomId, cb) {
     socket.emit('room:join', { roomId }, (res) => cb && cb(res));
   }
+  /* Katsojana sisään: ack tuo tilan heti, jotta nopat voi asettaa
+     palvelimen silmäluvuille (samoin kuin uudelleenliittyessä) eikä
+     katsoja näe oletusnoppia seuraavaan heittoon asti. */
+  function watchRoom(roomId, cb) {
+    socket.emit('room:watch', { roomId }, (res) => {
+      if (res.ok) {
+        handleRoomState(res.state);
+        if (res.state.status === 'playing' && window.Dice3D) window.Dice3D.restoreDisplay(res.state.diceValues, res.state.held);
+      }
+      cb && cb(res);
+    });
+  }
+  /* Isännän toiminto huoneen ihmiselle: kick | block | unblock | admit | unadmit. */
+  function admin(action, target, cb) {
+    socket.emit('room:admin', Object.assign({ roomId: currentRoomId, action }, target), (res) => cb && cb(res));
+  }
+  /* Oma vieras: { action: 'add', name } tai { action: 'remove', seatId }. */
+  function guest(payload, cb) {
+    socket.emit('room:guest', Object.assign({ roomId: currentRoomId }, payload), (res) => cb && cb(res));
+  }
   /* Poistuu huoneesta pysyvästi (kesken pelin = luovutus). roomId on
      valinnainen: aulan "Luovuta"-nappi voi osoittaa huonetta suoraan. */
   function leaveRoom(cb, roomId) {
@@ -408,6 +452,16 @@ window.MpGame = (function () {
       if (wasCurrent) { currentRoomId = null; lastState = null; }
       cb && cb(res);
     });
+  }
+  /* ---------- Offline (LocalRoom) ---------- */
+  function localCreate(players, variant, cb) {
+    socket.emit('local:create', { players, variant }, (res) => cb && cb(res));
+  }
+  function localResume(cb) {
+    socket.emit('local:resume', {}, (res) => cb && cb(res));
+  }
+  function undo(cb) {
+    socket.emit('local:undo', {}, (res) => cb && cb(res));
   }
   function startGame(cb) {
     socket.emit('room:start', { roomId: currentRoomId }, (res) => cb && cb(res));
@@ -423,8 +477,8 @@ window.MpGame = (function () {
   }
 
   return {
-    connect, disconnect, onLobby, onRoomState, onRoomError, onRejoin, onDeleted,
-    createRoom, joinRoom, leaveRoom, startGame, rematch, deleteRoom, scoreCategory,
+    connect, disconnect, onLobby, onRoomState, onRoomError, onRejoin, onDeleted, onBlocked, onNotice,
+    createRoom, joinRoom, watchRoom, admin, guest, leaveRoom, localCreate, localResume, undo, startGame, rematch, deleteRoom, scoreCategory,
     getMe: () => me, getRoomId: () => currentRoomId,
   };
 })();

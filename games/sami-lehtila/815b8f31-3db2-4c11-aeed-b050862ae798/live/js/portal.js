@@ -11,8 +11,8 @@
    osoitteesta, joten jatsi.bigbools.fi:ssä sitä ei ladata lainkaan.
    Yksi taulu `pisteet`, kentät noppamäärästä ja sarakkeista (levelFor).
    Muut variantit (pankki, ravistus) ja koko pelin tulos kulkevat rivin
-   datassa ja näkyvät rivillä. Oma lista top():n päälle eikä valmis
-   <leaderboard-panel>, koska paneeli ei näytä dataa.
+   datassa ja näkyvät rivillä, ja niillä voi suodattaa. Oma lista top():n
+   päälle eikä valmis <leaderboard-panel>, koska paneeli ei näytä dataa.
    ============================================================ */
 window.JatsiPortal = (function () {
   const ON_PORTAL = /\.game\.bigbools\.fi$/.test(location.hostname);
@@ -78,7 +78,7 @@ window.JatsiPortal = (function () {
 
   /* Rivin data, sama muoto yksin- ja moninpelissä (moninpelin kirjoittaa
      palvelin, ks. server/leaderboard.js):
-       { v: { six, tupla, pankki, ravistus }, mode: 'yksin'|'moninpeli',
+       { v: { six, tupla, pankki, ravistus }, mode: 'offline'|'verkossa',
          place, of, game: [{ n, s }] }   — game on koko pelin tulos. */
   function rowData({ variant, mode, players, me }) {
     const game = players.map((p) => ({ n: p.name, s: p.score })).sort((a, b) => b.s - a.s);
@@ -88,30 +88,49 @@ window.JatsiPortal = (function () {
     };
   }
 
+  /* Tagit joka rivillä. Kenttää määräävät (noppamäärä, tuplasarake) ovat
+     kaikilla kentän riveillä samat, joten niillä ei suodateta. */
+  /* Varhaiset rivit kantavat nimet yksin/moninpeli; samat tagit kuin nyt. */
+  const MODE_TAG = { yksin: 'offline', moninpeli: 'verkossa' };
+  const LEVEL_TAGS = new Set(['5 noppaa', '6 noppaa', 'tuplasarake']);
   function variantTags(d) {
     const v = (d && d.v) || {};
     const tags = [v.six ? '6 noppaa' : '5 noppaa'];
     if (v.tupla) tags.push('tuplasarake');
     if (v.pankki) tags.push('heittopankki');
     if (v.ravistus) tags.push('ravistus');
-    if (d && d.mode) tags.push(d.mode);
+    if (d && d.mode) tags.push(MODE_TAG[d.mode] || d.mode);
     return tags;
   }
   function gameLine(entry) {
     const d = entry.data || {};
-    if (!Array.isArray(d.game) || d.game.length < 2) return d.mode === 'yksin' ? 'yksin' : '';
+    if (!Array.isArray(d.game) || d.game.length < 2) return '';
     const others = d.game.filter((g, i) => i !== d.place - 1).map((g) => `${g.n} ${g.s}`);
     return `${d.place}./${d.of} · ${d.place === 1 ? 'voitti' : 'vastassa'} ${others.join(', ')}`;
   }
 
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-  /* Piirtää taulun wrap-elementtiin: kenttävalitsin + kymmenen parasta,
+  /* Tag-suodatin: palvelimen top() ei suodata datalla, joten haetaan kentän
+     kaikki rivit (enintään 100 × 2 kt) ja suodatetaan täällä. Rivin tagin
+     napautus lisää sen suodattimeksi, suodatinrivin napautus poistaa.
+     Valitut tagit rajaavat yhdessä (kaikki pitää löytyä), ja sija lasketaan
+     suodatetun listan sisällä. Valinta säilyy kentästä toiseen. */
+  const filters = new Set();
+  let cache = { level: null, entries: [], reason: null };
+
+  /* Piirtää taulun wrap-elementtiin: kenttävalitsin, suodatin ja lista,
      joka rivillä variantit ja pelin tulos. Nimet textContentilla — ne ovat
-     pelaajien kirjoittamia. */
-  async function render(wrap, level, highlightId) {
+     pelaajien kirjoittamia. fetch=false piirtää edellisestä hausta (suodattimen
+     vaihto ei hae uudelleen). */
+  async function render(wrap, level, highlightId, fetch = true) {
     const m = await lb();
     if (!m) { wrap.style.display = 'none'; return; }
+    if (fetch || cache.level !== level) {
+      const { entries, reason } = await m.top({ board: BOARD, level, limit: 100 });
+      cache = { level, entries, reason };
+    }
+    const redraw = () => render(wrap, level, highlightId, false);
     wrap.style.display = '';
     wrap.innerHTML = '';
     const tabs = el('div', 'lbTabs');
@@ -123,23 +142,46 @@ window.JatsiPortal = (function () {
     });
     wrap.appendChild(el('div', 'lbHead', 'Tulostaulu'));
     wrap.appendChild(tabs);
+    if (filters.size) {
+      const bar = el('div', 'lbFilters');
+      filters.forEach((t) => {
+        const b = el('button', 'lbTag lbFilter on', t + ' ✕');
+        b.type = 'button';
+        b.title = 'Poista suodatin';
+        b.addEventListener('click', () => { filters.delete(t); redraw(); });
+        bar.appendChild(b);
+      });
+      wrap.appendChild(bar);
+    }
     const list = el('ol', 'lbList');
     wrap.appendChild(list);
-    const { entries, reason } = await m.top({ board: BOARD, level, limit: 10 });
+    const { entries, reason } = cache;
     if (!entries.length) {
       list.appendChild(el('li', 'lbEmpty', reason ? 'Tulostaulua ei saatu haettua.' : 'Ei vielä tuloksia näillä säännöillä.'));
       return;
     }
-    entries.forEach((e) => {
+    const shown = entries.filter((e) => { const t = variantTags(e.data); return [...filters].every((f) => t.includes(f)); });
+    if (!shown.length) {
+      list.appendChild(el('li', 'lbEmpty', 'Ei tuloksia näillä suodattimilla.'));
+      return;
+    }
+    shown.forEach((e, i) => {
       const li = el('li', 'lbRow' + (e.id === highlightId ? ' you' : ''));
       const top = el('div', 'lbTop');
-      top.appendChild(el('span', 'lbRank', e.rank + '.'));
+      top.appendChild(el('span', 'lbRank', (i + 1) + '.'));
       top.appendChild(el('span', 'lbName', e.name));
       top.appendChild(el('span', 'lbScore', String(e.score)));
       li.appendChild(top);
       const meta = el('div', 'lbMeta');
       const tags = el('span', 'lbTags');
-      variantTags(e.data).forEach((t) => tags.appendChild(el('span', 'lbTag', t)));
+      variantTags(e.data).forEach((t) => {
+        if (LEVEL_TAGS.has(t) || filters.has(t)) { tags.appendChild(el('span', 'lbTag', t)); return; }
+        const b = el('button', 'lbTag lbFilter', t);
+        b.type = 'button';
+        b.title = 'Näytä vain nämä';
+        b.addEventListener('click', () => { filters.add(t); redraw(); });
+        tags.appendChild(b);
+      });
       meta.appendChild(tags);
       const line = gameLine(e);
       if (line) meta.appendChild(el('span', 'lbGame', line));
@@ -168,7 +210,7 @@ window.JatsiPortal = (function () {
       markSent(gameKey);
       for (const p of players) {
         const res = await m.submit({ board: BOARD, level, score: p.score, name: p.name,
-          data: rowData({ variant, mode: 'yksin', players, me: p }) });
+          data: rowData({ variant, mode: 'offline', players, me: p }) });
         if (res && res.kept && !firstKept) firstKept = res.entry;
       }
     }

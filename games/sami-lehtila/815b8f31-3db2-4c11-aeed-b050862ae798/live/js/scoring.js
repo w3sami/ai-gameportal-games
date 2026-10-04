@@ -47,9 +47,8 @@
   ];
 
   /* moduulin sisäinen tila: kumpi variantti on voimassa OLETUKSENA.
-     Yksinpeli (selain) kutsuu näitä funktioita ilman parametria ja nojaa
-     tähän jaettuun tilaan (game-logic.js: setSixMode/getSixMode).
-     Palvelin (rooms.js) sen sijaan välittää `six`-parametrin EKSPLISIITTISESTI
+     Parametriton kutsu nojaa tähän jaettuun tilaan (setSixMode/getSixMode).
+     Huoneen säännöt (room-rules.js) sen sijaan välittää `six`-parametrin EKSPLISIITTISESTI
      joka kutsussa, koska sama Node-prosessi ajaa useita huoneita YHTÄAIKAA,
      joilla voi olla eri variantti — jaettuun moduulitilaan ei silloin voi
      luottaa (se aiheuttaisi huoneiden välistä sääntövuotoa). `six ?? sixMode`

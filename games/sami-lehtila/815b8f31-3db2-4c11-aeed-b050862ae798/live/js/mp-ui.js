@@ -10,24 +10,23 @@ window.MpUI = (function () {
   const S = () => window.Scoring;
   const esc = window.UI ? window.UI.esc : (s => s);
 
-  /* Peruuttamaton toiminto vaatii toisen napautuksen samaan nappiin:
-     ensimmäinen vaihtaa tekstin varmistukseksi, toinen 3 s sisällä tekee
-     sen. confirm()-ikkunaa ei voi käyttää, koska portaalin hiekkalaatikko
-     estää sen (eikä se näytä pelin omalta muutenkaan). */
-  function confirmTap(btn, armedText, action) {
-    let timer = null;
-    const idle = btn.textContent;
-    btn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      if (timer) {
-        clearTimeout(timer); timer = null;
-        btn.textContent = idle; btn.classList.remove('armed');
-        action();
-        return;
-      }
-      btn.textContent = armedText; btn.classList.add('armed');
-      timer = setTimeout(() => { timer = null; btn.textContent = idle; btn.classList.remove('armed'); }, 3000);
-    });
+  /* Varmistusikkuna pelin omana näkymänä: confirm() ei toimi portaalin
+     hiekkalaatikossa. Ilman onOk-kutsua pelkkä ilmoitus OK-napilla. */
+  function dialog({ title, text, okText, danger, onOk }) {
+    const ov = document.getElementById('dialogOverlay');
+    document.getElementById('dialogTitle').textContent = title || '';
+    document.getElementById('dialogText').textContent = text || '';
+    const ok = document.getElementById('dialogOk');
+    const cancel = document.getElementById('dialogCancel');
+    ok.textContent = okText || 'OK';
+    ok.classList.toggle('danger', !!danger);
+    cancel.style.display = onOk ? '' : 'none';
+    const close = () => { ov.style.display = 'none'; ok.onclick = null; cancel.onclick = null; };
+    ok.onclick = () => { close(); if (onOk) onOk(); };
+    cancel.onclick = close;
+    ov.onclick = (ev) => { if (ev.target === ov) close(); };
+    ov.style.display = 'flex';
+    (onOk ? cancel : ok).focus();
   }
 
   function variantBadges(variant) {
@@ -39,19 +38,104 @@ window.MpUI = (function () {
     return tags;
   }
 
-  function renderPlayers(el, state, myUserId) {
+  /* Paikan tarkenne nimen perään: oma tili, oma vieras tai toisen vieras. */
+  function seatNote(p, myUserId) {
+    if (p.guest) return p.userId === myUserId ? ' (tällä laitteella)' : ' (vieras)';
+    return p.userId === myUserId ? ' (sinä)' : '';
+  }
+
+  /* Pelaajat ja katsojat (👁) siruina; napautus avaa henkilölistan (onOpen). */
+  function renderPlayers(el, state, myUserId, onOpen) {
     el.innerHTML = '';
     const bankOn = state.variant && state.variant.bank;
+    const chip = (cls, html) => {
+      const c = document.createElement('div');
+      c.className = 'mpPlayerChip' + cls;
+      c.innerHTML = html;
+      if (onOpen) { c.classList.add('clickable'); c.addEventListener('click', onOpen); }
+      el.appendChild(c);
+    };
     state.players.forEach((p, i) => {
-      const chip = document.createElement('div');
-      chip.className = 'mpPlayerChip' + (i === state.current && state.status === 'playing' ? ' cur' : '') +
-        (p.connected === false ? ' disconnected' : '');
       const bankTag = bankOn && (p.bank || 0) > 0 ? ' 💰' + p.bank : '';
-      chip.innerHTML = `<span class="pdot" style="background:${p.color}"></span>${esc(p.username)}${bankTag}` +
-        (p.userId === state.hostId ? ' 👑' : '') +
-        (p.userId === myUserId ? ' (sinä)' : '');
-      el.appendChild(chip);
+      chip((i === state.current && state.status === 'playing' ? ' cur' : '') + (p.connected === false ? ' disconnected' : ''),
+        `<span class="pdot" style="background:${p.color}"></span>${esc(p.username)}${bankTag}` +
+        (state.local ? '' : (p.userId === state.hostId && !p.guest ? ' 👑' : '') + seatNote(p, myUserId)));
     });
+    (state.spectators || []).forEach((s) => {
+      chip(' spectator', `👁 ${esc(s.username)}` + (s.userId === myUserId ? ' (sinä)' : ''));
+    });
+  }
+
+  /* Henkilölista: pelaajat, katsojat ja (isännälle) estetyt. Isäntä näkee
+     joka rivillä toiminnot; muut pelkän listan. onAction(action, person). */
+  function renderPeople(el, state, myUserId, onAction) {
+    el.innerHTML = '';
+    const amIHost = state.hostId === myUserId;
+    const playing = state.status !== 'open';
+    const section = (title, people, rowFor) => {
+      if (!people.length) return;
+      const h = document.createElement('div');
+      h.className = 'peopleHead';
+      h.textContent = title;
+      el.appendChild(h);
+      people.forEach((p) => {
+        const { label, note, actions } = rowFor(p);
+        const row = document.createElement('div');
+        row.className = 'peopleRow';
+        const who = document.createElement('div');
+        who.className = 'peopleWho';
+        who.innerHTML = label;
+        if (note) { const n = document.createElement('div'); n.className = 'peopleNote'; n.textContent = note; who.appendChild(n); }
+        row.appendChild(who);
+        const acts = document.createElement('div');
+        acts.className = 'peopleActs';
+        {
+          actions.forEach(([action, text, danger]) => {
+            const b = document.createElement('button');
+            b.textContent = text;
+            if (danger) b.className = 'danger';
+            b.addEventListener('click', () => onAction(action, p));
+            acts.appendChild(b);
+          });
+        }
+        row.appendChild(acts);
+        el.appendChild(row);
+      });
+    };
+    /* Toiminnot: isäntä kaikille muille tileille; vieraan voi poistaa sen
+       tuoja tai isäntä. */
+    const hostOn = (p) => amIHost && p.userId !== myUserId;
+    const ownerName = (p) => (state.players.find((pp) => pp.userId === p.userId && !pp.guest) || {}).username;
+    const me = (p) => (p.userId === myUserId ? ' (sinä)' : '');
+    section('Pelaajat', state.players, (p) => ({
+      label: `<span class="pdot" style="background:${p.color}"></span>${esc(p.username)}${p.userId === state.hostId && !p.guest ? ' 👑' : ''}${p.guest ? '' : me(p)}`,
+      note: [p.guest ? (p.userId === myUserId ? 'tällä laitteella' : `vieras · laite: ${ownerName(p) || "?"}`) : '',
+        p.connected === false ? 'poissa' : ''].filter(Boolean).join(' · '),
+      actions: p.guest
+        ? (amIHost || p.userId === myUserId ? [['removeGuest', 'Poista', true]] : [])
+        : (hostOn(p) ? [['kick', 'Pois pelistä', true], ['block', 'Estä', true]] : []),
+    }));
+    section('Odottaa pääsyä', state.pendingGuests || [], (g) => ({
+      label: `<span class="pdot" style="background:${g.color}"></span>${esc(g.username)}`,
+      note: g.userId === myUserId ? 'tällä laitteella · isäntä päättää' : `laite: ${ownerName(g) || "?"}`,
+      actions: [
+        ...(amIHost ? [['admitGuest', 'Päästä peliin']] : []),
+        ...(amIHost || g.userId === myUserId ? [['removeGuest', amIHost && g.userId !== myUserId ? 'Hylkää' : 'Peru', true]] : []),
+      ],
+    }));
+    section('Katsojat', state.spectators || [], (s) => ({
+      label: `👁 ${esc(s.username)}${me(s)}`,
+      note: s.admitted ? 'pääsee seuraavaan peliin' : s.benched ? 'poistettu pelistä' : '',
+      actions: hostOn(s) ? [
+        s.admitted ? ['unadmit', 'Peru pääsy'] : ['admit', playing ? 'Seuraavaan peliin' : 'Päästä peliin'],
+        ['block', 'Estä', true],
+      ] : [],
+    }));
+    if (amIHost) {
+      section('Estetyt', state.blocked || [], (b) => ({
+        label: `⛔ ${esc(b.username)}`, note: '', actions: [['unblock', 'Poista esto']],
+      }));
+    }
   }
 
   function renderTable(state, myUserId, diceValues, onPick, devUpper, hideUsed, onToggleHideUsed, ownCols, onToggleOwnCols) {
@@ -63,25 +147,23 @@ window.MpUI = (function () {
     const hasRolled = state.rollsUsed > 0;
     const B = S_.upperBase(six);
     const sgn = (x) => (x > 0 ? '+' : '') + x;
-    /* Yksinpelissä "piilota käytetyt" piilottaa VUOROSSA olevan pelaajan
-       täyteen merkityt rivit (se on tallennettu kyseisen pelaajan omaan
-       kenttään, koska laite kiertää pelaajalta toiselle). Moninpelissä tämä
-       on jokaisen OMA paikallinen asetus (ei sidottu vuoroon), joten
-       järkevin vastine on piilottaa rivit jotka MINÄ (katsoja) olen jo
-       täyttänyt kokonaan — sama siisti lopputulos, sovellettuna siihen
-       kuka asetuksen oikeasti näkee. Sama periaate "vain omat sarakkeet"
-       (👤/ownCols) -tilassa: yksinpelissä se näyttää vain VUOROSSA olevan
-       pelaajan sarakkeet, moninpelissä vain KATSOJAN omat. */
-    const myPlayer = state.players.find((p) => p.userId === myUserId);
+    /* "Piilota käytetyt" (🙈) ja "vain omat sarakkeet" (👤) ovat tämän
+       laitteen paikallisia asetuksia, ja ne koskevat laitteen omaa paikkaa:
+       vuorossa olevaa, jos se on tämän laitteen (offline aina, verkossa
+       myös vieras), muuten tilin omaa. Laitteella pelaava näkee siis aina
+       sen pelaajan rivit, jonka vuoro on. */
+    const curSeat = state.players[state.current];
+    const myPlayer = (curSeat && curSeat.userId === myUserId && state.status === 'playing')
+      ? curSeat : state.players.find((p) => p.userId === myUserId && !p.guest);
     const hideUsedNow = hideUsed && !!myPlayer;
     const ownMode = ownCols && !!myPlayer;
     const rowHidden = (cat) => hideUsedNow && myPlayer.scs.every((sc) => sc[cat.id] !== undefined);
 
     /* litistetty lista: yksi entry per pelaaja (tai kaksi jos tuplasarake) —
-       ownMode-tilassa vain katsojan oma(t) sarake(et). */
+       ownMode-tilassa vain oman paikan sarake(et). */
     const entries = [];
     state.players.forEach((p, pi) => {
-      if (ownMode && p.userId !== myUserId) return;
+      if (ownMode && p.seatId !== myPlayer.seatId) return;
       p.scs.forEach((sc, ci) => entries.push({ p, pi, sc, ci }));
     });
     const bankTagFor = (p) => state.variant.bank && (p.bank || 0) > 0 ? ` <span class="devTag pos">💰${p.bank}</span>` : '';
@@ -116,7 +198,7 @@ window.MpUI = (function () {
       const v = e.sc[cat.id];
       if (v !== undefined) {
         const disp = devMode ? sgn(v - B * cat.n) : (v === 0 ? '—' : v);
-        const fade = hideUsedNow && e.p.userId === myUserId ? ' fadeUsed' : '';
+        const fade = hideUsedNow && e.p.seatId === myPlayer.seatId ? ' fadeUsed' : '';
         return `<td class="filled ${v === 0 && !devMode ? 'zero' : ''}${fade}">${disp}</td>`;
       } else if (e.pi === state.current && state.status === 'playing' && isMyTurn && hasRolled) {
         const pot = S_.scoreCat(cat.id, diceValues);
@@ -179,7 +261,7 @@ window.MpUI = (function () {
          — muuten "kuinka paljon johdan/hävitän" -tieto katoaisi kokonaan. */
       h += `<tr class="section"><th>Kaikki pelaajat</th>${entries.map(() => '<td></td>').join('')}</tr>`;
       state.players.forEach((p) => {
-        h += `<tr class="allTot"><td><span class="pdot" style="background:${p.color}"></span>${esc(p.username)}</td><td colspan="${entries.length}"><b>${S_.playerTotal(p, six)}</b>${p.userId === state.players[state.current]?.userId && state.status === 'playing' ? ' · vuorossa' : ''}</td></tr>`;
+        h += `<tr class="allTot"><td><span class="pdot" style="background:${p.color}"></span>${esc(p.username)}</td><td colspan="${entries.length}"><b>${S_.playerTotal(p, six)}</b>${p.seatId === state.players[state.current]?.seatId && state.status === 'playing' ? ' · vuorossa' : ''}</td></tr>`;
       });
     }
     h += '</tbody>';
@@ -256,13 +338,14 @@ window.MpUI = (function () {
     const badge = document.getElementById('turnBadge');
     const isMyTurn = state.status === 'playing' && state.players[state.current] && state.players[state.current].userId === myUserId;
     const bank = isMyTurn && state.bankAvailable;
+    const watching = !state.players.some((p) => p.userId === myUserId);
     /* Sama tarkistus kuin yksinpelin updateControls (js/ui.js): nappi ei saa
        näyttää "valmiilta" kesken paikallisen heiton/latauksen animaation,
        vaikka palvelimen tila (vuoro, heittojen määrä) jo sallisi seuraavan
        heiton — muuten klikkaus ei tekisi mitään ja ulkoasu valehtelisi. */
     const busy = window.Dice3D && (window.Dice3D.isRolling() || window.Dice3D.isCharging());
     rollBtn.disabled = !isMyTurn || busy || (state.rollsUsed >= 3 && !bank);
-    rollBtn.textContent = busy ? '…' :
+    rollBtn.textContent = watching ? 'KATSOT' : busy ? '…' :
       state.rollsUsed === 0 ? 'HEITÄ NOPAT' :
       state.rollsUsed >= 3 ? (bank ? `PANKKIHEITTO 💰${state.players[state.current].bank}` : 'VALITSE RIVI') :
       'HEITÄ UUDELLEEN';
@@ -275,13 +358,17 @@ window.MpUI = (function () {
     if (state.status === 'finished') {
       badge.textContent = 'Peli päättyi';
     } else if (state.players[state.current]) {
-      badge.textContent = isMyTurn ? 'Sinun vuorosi' : esc(state.players[state.current].username) + ' vuorossa';
+      const cur = state.players[state.current];
+      badge.textContent = state.local ? cur.username + ' vuorossa'
+        : isMyTurn && !cur.guest ? 'Sinun vuorosi'
+        : isMyTurn ? cur.username + ' vuorossa · tällä laitteella'
+        : cur.username + ' vuorossa';
     } else {
       badge.textContent = '–';
     }
   }
 
-  function renderRoomList(el, rooms, myUserId, onJoin, onDelete, onForfeit) {
+  function renderRoomList(el, rooms, myUserId, onJoin, onDelete, onForfeit, onWatch) {
     el.innerHTML = '';
     if (!rooms.length) {
       el.innerHTML = '<div class="mpEmpty">Ei avoimia pelejä juuri nyt — luo oma huone yllä.</div>';
@@ -293,13 +380,15 @@ window.MpUI = (function () {
       const full = r.playerCount >= r.maxPlayers;
       const amIIn = Array.isArray(r.playerIds) && r.playerIds.includes(myUserId);
       const amIHost = r.hostId === myUserId;
+      const blocked = Array.isArray(r.blockedIds) && r.blockedIds.includes(myUserId);
+      const benched = Array.isArray(r.benched) && r.benched.includes(myUserId);
       const statusText = r.status === 'open' ? 'odottaa' : r.status === 'playing' ? 'käynnissä' : 'päättynyt';
       const badges = variantBadges(r.variant || {});
       const badgeHtml = badges.length ? `<div class="meta">${badges.join(' · ')}</div>` : '';
       row.innerHTML = `
         <div>
           <div class="name">${esc(r.name)}</div>
-          <div class="meta">${esc(r.hostUsername)} · ${r.playerCount}/${r.maxPlayers} pelaajaa · ${statusText}</div>
+          <div class="meta">${esc(r.hostUsername)} · ${r.playerCount}/${r.maxPlayers} pelaajaa${r.spectatorCount ? ' · 👁 ' + r.spectatorCount : ''} · ${statusText}</div>
           ${badgeHtml}
         </div>
       `;
@@ -307,18 +396,31 @@ window.MpUI = (function () {
       actions.style.display = 'flex';
       actions.style.gap = '6px';
       const btn = document.createElement('button');
+      /* Huoneeseen pääsee aina. Pelaajaksi itse vain ennen ensimmäistä peliä
+         ja jos tilaa on; muuten "katsojana" on päällä ja lukittu, ja isäntä
+         päästää peliin henkilölistasta. */
+      const canPlay = r.status === 'open' && !r.played && !full && !benched;
+      let watchBox = null;
       if (amIIn) {
         // Olen jo mukana tässä huoneessa (esim. toisella laitteella/välilehdellä) —
         // liity aina suoraan takaisin riippumatta huoneen tilasta.
         btn.textContent = 'Jatka';
-      } else if (r.status !== 'open') {
-        btn.textContent = 'Kesken'; btn.disabled = true;
-      } else if (full) {
-        btn.textContent = 'Täynnä'; btn.disabled = true;
+        btn.addEventListener('click', () => onJoin(r.id));
+      } else if (blocked) {
+        btn.textContent = 'Estetty'; btn.disabled = true;
       } else {
         btn.textContent = 'Liity';
+        const lab = document.createElement('label');
+        lab.className = 'mpWatchBox';
+        lab.title = canPlay ? 'Liity katsomaan, ei pelaamaan' : 'Isäntä päästää pelaajat peliin';
+        watchBox = document.createElement('input');
+        watchBox.type = 'checkbox';
+        watchBox.checked = !canPlay;
+        watchBox.disabled = !canPlay;
+        lab.append(watchBox, ' katsojana');
+        actions.appendChild(lab);
+        btn.addEventListener('click', () => (watchBox.checked ? onWatch : onJoin)(r.id));
       }
-      if (!btn.disabled) btn.addEventListener('click', () => onJoin(r.id));
       actions.appendChild(btn);
       /* Kesken olevasta omasta pelistä poistutaan vain tästä, erikseen
          varmistettuna — huoneen ✕ vie aulaan mutta pitää paikan. */
@@ -327,7 +429,10 @@ window.MpUI = (function () {
         quitBtn.textContent = 'Luovuta';
         quitBtn.title = 'Poistu pelistä pysyvästi';
         quitBtn.style.background = '#3a2015';
-        confirmTap(quitBtn, 'Varmasti?', () => onForfeit(r.id));
+        quitBtn.addEventListener('click', () => dialog({
+          title: 'Luovuta peli?', text: 'Poistut pelistä pysyvästi, ja pisteesi lähtevät. Peli jatkuu muilla.',
+          okText: 'Luovuta', danger: true, onOk: () => onForfeit(r.id),
+        }));
         actions.appendChild(quitBtn);
       }
       if (amIHost && onDelete) {
@@ -335,7 +440,10 @@ window.MpUI = (function () {
         delBtn.textContent = '🗑';
         delBtn.title = 'Poista huone';
         delBtn.style.background = '#3a2015';
-        confirmTap(delBtn, 'Poista?', () => onDelete(r.id));
+        delBtn.addEventListener('click', () => dialog({
+          title: 'Poista huone?', text: `”${r.name}” poistuu kaikilta, myös kesken olevan pelin pelaajilta.`,
+          okText: 'Poista', danger: true, onOk: () => onDelete(r.id),
+        }));
         actions.appendChild(delBtn);
       }
       row.appendChild(actions);
@@ -367,5 +475,5 @@ window.MpUI = (function () {
     });
   }
 
-  return { renderPlayers, renderTable, renderQuickPicks, updateControls, renderRoomList, renderHistory, confirmTap };
+  return { renderPlayers, renderTable, renderQuickPicks, updateControls, renderRoomList, renderHistory, renderPeople, dialog };
 })();

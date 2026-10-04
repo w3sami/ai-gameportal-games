@@ -105,7 +105,6 @@
   }
   .switch.on{background:var(--felt)}
   .switch.on::after{left:25px;background:var(--gold-bright)}
-  #motionStatus{color:var(--dim);font-size:.78rem;margin-top:10px;min-height:1em}
   #controls{
     display:flex;align-items:center;gap:10px;padding:10px 12px;
     background:linear-gradient(180deg,var(--bg2),var(--bg));
@@ -174,18 +173,6 @@
   }
   #undoBtn.show{display:block}
   #undoBtn:active{transform:translateY(1px)}
-  #newBtn{
-    padding:11px 14px;font-size:1.1rem;border-radius:12px;cursor:pointer;
-    background:#2b2015;color:var(--dim);border:1px solid var(--wood-light);
-    box-shadow:0 2px 0 #120d08;white-space:nowrap;
-  }
-  #newBtn:active{transform:translateY(1px)}
-  #newBtn.confirm{color:#241a08;background:var(--gold);border-color:var(--gold-bright);font-weight:700;font-size:.85rem}
-  #cancelStart{
-    display:none;margin-top:12px;background:none;border:none;cursor:pointer;
-    color:var(--dim);font-size:.9rem;text-decoration:underline;
-  }
-  #cancelStart.show{display:inline-block}
   /* yläpalkin pelaajakohtaiset näkymänapit */
   .hdrBtns{display:flex;gap:5px}
   .hdrBtn{
@@ -227,6 +214,12 @@
     animation:popUp 1.4s ease-out forwards;z-index:50;font-size:2rem;
   }
   @keyframes popUp{0%{opacity:0;transform:translateY(10px) scale(.6)}15%{opacity:1;transform:translateY(0) scale(1.15)}30%{transform:scale(1)}100%{opacity:0;transform:translateY(-70px)}}
+  /* tila: verkossa / tällä laitteella (offline) — kummankin sivun yläreunassa */
+  .modeTabs{display:flex;gap:6px;margin:-8px 0 16px;padding:4px;border-radius:14px;background:rgba(0,0,0,.35)}
+  .modeTab{flex:1;text-align:center;padding:9px 6px;border-radius:10px;font-size:.9rem;font-weight:700;
+    color:var(--dim);text-decoration:none;border:1px solid transparent}
+  .modeTab:hover{color:var(--text)}
+  .modeTab.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);pointer-events:none}
   /* overlays */
   .overlay{
     position:fixed;inset:0;background:rgba(12,9,6,.9);z-index:100;
@@ -243,16 +236,6 @@
   .panel h1{font-size:2.4rem;letter-spacing:.12em;color:var(--gold-bright);margin-bottom:2px;text-shadow:0 0 18px rgba(224,169,61,.5)}
   .panel .sub{color:var(--dim);font-size:.85rem;margin-bottom:20px}
   .panel label{display:block;color:var(--dim);font-size:.8rem;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.08em}
-  .segs{display:flex;gap:8px;justify-content:center}
-  .segs button{
-    flex:1;padding:10px 0;font-size:1.1rem;font-weight:700;border-radius:10px;cursor:pointer;
-    background:#171009;color:var(--dim);border:1px solid var(--wood);
-  }
-  .segs button.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright)}
-  #nameInputs input{
-    width:100%;margin-top:8px;padding:10px 12px;border-radius:10px;font-size:1rem;
-    background:#120d08;color:var(--text);border:1px solid var(--wood);
-  }
   .swatches{display:flex;gap:9px;margin:8px 0 4px;justify-content:center}
   .sw{
     width:28px;height:28px;border-radius:50%;cursor:pointer;
@@ -277,7 +260,6 @@
     font-size:1rem;cursor:pointer;
   }
   #closeWin:active{background:var(--wood)}
-  #resumeBtn.show{display:block !important}
   #winnerName{font-size:2.2rem;font-weight:900;color:var(--gold-bright);margin:10px 0 4px}
   #winnerScore{color:var(--ok);font-size:1.2rem;font-weight:700;margin-bottom:8px}
   #finalList{margin:14px 0;color:var(--dim);font-size:.95rem;line-height:1.7}
@@ -304,4 +286,8 @@
   #lbWrap .lbScore{font-weight:800;color:var(--gold-bright);font-variant-numeric:tabular-nums}
   #lbWrap .lbMeta{display:flex;flex-wrap:wrap;gap:4px 8px;margin:3px 0 0 2.3em;font-size:.72rem;color:var(--dim)}
   #lbWrap .lbTag{border:1px solid var(--wood-light);border-radius:6px;padding:0 5px;margin-right:3px}
+  #lbWrap button.lbFilter{font:inherit;color:inherit;background:none;cursor:pointer;line-height:inherit}
+  #lbWrap button.lbFilter:hover{border-color:var(--gold);color:var(--text)}
+  #lbWrap .lbFilter.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);font-weight:700}
+  #lbWrap .lbFilters{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:-2px 0 8px;font-size:.72rem}
   #lbWrap .lbEmpty{color:var(--dim);font-size:.85rem;text-align:center;padding:8px}
