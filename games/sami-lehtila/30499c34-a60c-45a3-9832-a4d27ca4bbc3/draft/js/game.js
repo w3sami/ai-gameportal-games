@@ -1160,6 +1160,16 @@ function toggleGear() {
   sfx.gear();
 }
 
+/* Ponnistus on oma nappinsa (X), ei ylös-tikun sivuvaikutus: ahtaassa
+   paikassa ja pienellä painovoimalla pomppu jokaisessa lähdössä häiritsee.
+   Pyyntö kulutetaan seuraavassa `update`-askeleessa: alustalla se on lähtö,
+   ilmassa se ei tee mitään eikä jää odottamaan seuraavaa laskua. */
+let hopReq = false;
+function hop() {
+  if (state !== PLAY || dead) return;
+  hopReq = true;
+}
+
 /* Töötti kuuluu 150 pikselin päähän. Jos odottava asiakas kuulee sen, hän
    säikähtää ja kipittää alustan toiseen laitaan. */
 function honk() {
@@ -1237,6 +1247,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyK' || e.code === 'Pause') { togglePause(); return; }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyH') { honk(); return; }
   if (e.code === 'Space' || e.code === 'KeyG') { e.preventDefault(); toggleGear(); }
+  if (e.code === 'KeyX') { hop(); return; }
 });
 addEventListener('keyup', e => { KEY[e.code] = false; });
 
@@ -1273,7 +1284,8 @@ const gamepad = createGamepad({
        voi olla kaksi asiaa — ja sille jäi A, joka on aina ollut sen oma. */
     restart: ['LB'],
     next:  ['RB'],
-    horn:  ['B', 'X'],
+    horn:  ['B'],
+    hop:   ['X'],
     menu:  ['Start'],
     select: ['Back'],
     start: ['Start'],
@@ -1384,6 +1396,7 @@ function padInput() {
     return;
   }
   if (gamepad.pressed('horn')) { honk(); return; }
+  if (gamepad.pressed('hop')) { hop(); return; }
   /* `fullFired` on tämän ruudun koko ruudun ele: sen laukaissut toinen
      liipasin ei saa kääntää telinettä, ja ensimmäisen kääntö on jo peruttu. */
   if (gamepad.pressed('gear') && !fullFired) {
@@ -2095,6 +2108,8 @@ function updateEnter(dt) {
 
 /* ---------------------------------------------------------------- päivitys */
 function update(dt) {
+  const hopNow = hopReq;                     // X-napin ponnistus, ks. hop()
+  hopReq = false;
   runT += dt;
   if (msgT > 0) msgT -= dt;
   if (titleT > 0) titleT -= dt;
@@ -2164,7 +2179,8 @@ function update(dt) {
        joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
     if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
     const wantsUp = raw.y < -0.2 && fuel > 0;
-    if (wantsUp && ++taxi.upHold >= LEAVE_HOLD) leavePad();
+    if (hopNow && fuel > 0) leavePad(true);
+    else if (wantsUp && ++taxi.upHold >= LEAVE_HOLD) leavePad(false);
     else {
       if (!wantsUp) taxi.upHold = 0;
       /* Tikku alas laskee taksin maahan, ylös nostaa ilmaan: sama liike
@@ -2247,7 +2263,7 @@ function move(dt) {
  *
  * Liikkuvalla alustalla tämä ei yksin riitä: 10 px on nousevalta alustalta
  * reilu kymmenesosa sekuntia. Siksi carryOff sen lisäksi. */
-function leavePad() {
+function leavePad(withHop) {
   const p = taxi.landed;
   /* Kesken vajoamisen lähtevä vie asiakkaan mukanaan: keikka jää kyytiin ja
      maksetaan seuraavalla laskulla samalle alustalle. Ilman tätä odotuslippu
@@ -2260,10 +2276,9 @@ function leavePad() {
      lohkoissa ja Highrisen ylärivissä on sellaisia — ja tarkistamaton nosto
      työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
      oikein. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
-  /* Ponnistus: teline suoristuu ja työntää taksin irti pinnasta, ja vetäytyy
-     heti perään sisään. Sami 23.9.2026: *"ylös lähtiessä telineet pompauttaa
-     meidät ylös ja sitten vetäytyy heti takasin ja ohjattavuus on jo heti
-     käytössä."*
+  /* Ponnistus (vain X-napista, `withHop`): teline suoristuu ja työntää taksin
+     irti pinnasta, ja vetäytyy heti perään sisään, joten ohjattavuus on
+     käytössä heti. Ylös-tikulla lähtö on pelkkä nosto ilman vauhtia.
 
      **Ponnistus on animaatio eikä hyppäys.** Ensimmäinen versio suoristi jalat
      yhdessä ruudussa, ja Sami: *"liian nopea, pitää mennä useampi frame kun
@@ -2292,7 +2307,7 @@ function leavePad() {
   taxi.y = y0 - P.bounceLift;
   if (!fits()) taxi.y = y0;
 
-  if (P.hopRate > 0) {
+  if (withHop && P.hopRate > 0) {
     /* Jalat suoristuvat vaikka tilaa olisi vain sen verran: se palauttaa
        taksin seisomakorkeuteen, joka on varmasti mahtunut — sieltä on
        laskeuduttu — ja jättää telineen ulos siltä varalta että taksi vajoaa
