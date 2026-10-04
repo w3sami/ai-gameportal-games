@@ -4,7 +4,7 @@
    cuttings and covered tunnels below the streets, with trains running both ways; and a gate that rides on a train.
    A js/city.js plugin (CITY_PLUGINS): the city keeps its buildings off the lines, skips the blocks an open cutting runs
    through (lawn either side instead) and digs the ground out under the cuttings and tunnels.
-   Course file, in city: metro: { lines: [{ id, color, pts, w, speed, every, cars, tracks, pier, pierPhase }] }
+   Course file, in city: metro: { lines: [{ id, color, pts, w, speed, every, cars, tracks, pier, pierPhase }], groves }
      pts      [[x, z, h, 'T'?], ...]: a smooth curve through the points; h is the track bed's height above the streets,
               straight between points (eased over METRO_EASE m): on a viaduct over METRO_EMB m (piers every `pier` m,
               counted from pierPhase m along; none on another line's deck or on a road, nor right on the course line
@@ -16,10 +16,14 @@
      tracks   [{ off, dir, phase, every, endHall }]: off m right of the way the points run, dir 1 that way and -1 back;
               phase (m) shifts its trains along; every: this track's own gap between trains; endHall: its trains end in the
               first station hall they come to (they go in and aren't seen again)
+     groves   [[x0, z0, x1, z1], ...]: trees in the empty lots inside these rectangles (where the corridor has cleared
+              the buildings away), off the streets, buildings, roads and lines, and clear of the course line: well below
+              it (METRO_GROVE m) or off to its side
      speed, every, cars    the trains' speed (m/s), the gap from one train's front to the next (m), cars a train.
               Trains run from end to end of the line and start again from the first end; they're always running (the
               run's own clock), so the ends belong out in the haze or down a tunnel
-   Gate (a point's 7th value, GATE_TYPES in js/sim.js): "train", options { line, track, lo, hi, lock, r, wait, acc }.
+   Gate (a point's 7th value, GATE_TYPES in js/sim.js): "train", options { line, track, lo, hi, lock, r, wait, acc,
+   delay }.
    The point is placed over that track (design.py), where it runs straight along the course line; the hoop (radius r m,
    default METRO_HOOP of a hoop's) rides on the middle of a train there, as high over the rail as the point is: on the
    first train ahead of you, along the line through the point, that is between lo and hi m past the point (lo negative:
@@ -27,8 +31,8 @@
    as long as the train is still ahead of you, so a hoop on a train running away from you is a chase; fly through it
    wherever it has got to. Miss it, and it's the next train's; crash, and it picks its train afresh from where you start
    again (metroUnlock). With wait, the hoop has a train of its own instead: standing with its middle wait m past the
-   point (along the line) until you pass the gate before, then pulling away at acc m/s² up to the line's speed; crash,
-   and it's back where it stood, leaving again as you start.
+   point (along the line) until you pass the gate before (and delay s more), then pulling away at acc m/s² up to the
+   line's speed; crash, and it's back where it stood, leaving again as you start.
    Respawning there puts you over the track (the trains pass under). Everything is a crash: decks, piers, cutting walls,
    tunnel roofs ('metro') and the trains ('train').
    Sim part (no DOM): METRO, metroTick(dt), metroReset(), metroStep(dt, P, next) (the clock, then which train each gate's
@@ -46,6 +50,7 @@ const METRO_CAR = { len: 17, gap: 1.2, hw: 1.45, h: 3.6 };    // a car: length, 
 const METRO_CELL = 60;                                        // grid of line samples, for the plugin's lookups
 const METRO_HOOP = 0.55;                                      // a train's hoop, as a share of a hoop's size: smaller, told apart
 const METRO_HALL = 17;                                        // a station hall's roof over the bed (m); it reaches 3 m past the deck
+const METRO_GROVE = 9;                                        // a grove's tree tops stay this far under the course line (m), near it
 let METRO_DIG = 0;                                            // reach of the dug ground past the walls (set from the terrain's cell)
 
 function metroTick(dt) { METRO.T += dt; }
@@ -133,8 +138,7 @@ function metroTracks(L) {
 function metroFront(tr, j) {
   const H = tr.held;
   if (H) {
-    if (H.t0 == null) return H.q0;
-    const t = METRO.T - H.t0, ta = tr.v / H.acc;
+    const t = H.t0 == null ? 0 : Math.max(0, METRO.T - H.t0), ta = tr.v / H.acc;
     return H.q0 + (t < ta ? 0.5 * H.acc * t * t : 0.5 * tr.v * ta + tr.v * (t - ta));
   }
   const q = (METRO.T * tr.v + j * tr.every + tr.phase) % tr.loop; return q < 0 ? q + tr.loop : q;
@@ -199,10 +203,29 @@ CITY_PLUGINS.push({
       if (L.kind[i] !== 'cut') continue;
       for (const sd of [-1, 1]) if (rt() < 0.85) ctx.tree(L.X[i] - L.TZ[i] * off * sd, L.Z[i] + L.TX[i] * off * sd, 8 + rt() * 5, 2.8 + rt() * 1.2);
     }
+    for (const r of (CITY.C.metro && CITY.C.metro.groves) || []) metroGrove(ctx, r);
     metroGates();
   },
   kit: { build(K, group) { metroDraw(K, group); } },
 });
+
+// trees in a grove's empty lots: inside a block (off the streets), off its buildings, and where they can't be in the way
+function metroGrove(ctx, [x0, z0, x1, z1]) {
+  const G = ctx.G, B = CITY.C.block, inner = B - CITY.C.street, { UX, UZ, VX, VZ } = CITY.axes, rt = mulberry32(7121);
+  const near = CITY.bld.filter((b) => b.x > Math.min(x0, x1) - 80 && b.x < Math.max(x0, x1) + 80 && b.z > Math.min(z0, z1) - 80 && b.z < Math.max(z0, z1) + 80);
+  const blocks = CITY.blocks.filter((b) => b.x > Math.min(x0, x1) - B && b.x < Math.max(x0, x1) + B && b.z > Math.min(z0, z1) - B && b.z < Math.max(z0, z1) + B);
+  for (let x = Math.min(x0, x1); x < Math.max(x0, x1); x += 13) for (let z = Math.min(z0, z1); z < Math.max(z0, z1); z += 13) {
+    if (rt() > 0.55) continue;
+    const tx = x + (rt() - 0.5) * 9, tz = z + (rt() - 0.5) * 9, h = 7 + rt() * 5, r = 2.6 + rt() * 1.4;
+    const inLot = blocks.some((b) => { const dx = tx - b.x, dz = tz - b.z; return Math.abs(dx * UX + dz * UZ) < inner / 2 - r - 1 && Math.abs(dx * VX + dz * VZ) < inner / 2 - r - 1; });
+    if (!inLot || ctx.offLimits(tx, tz, r)) continue;
+    if (near.some((b) => { const dx = tx - b.x, dz = tz - b.z, [hu, hv] = b.tiers[0]; return Math.abs(dx * UX + dz * UZ) < hu + r + 2 && Math.abs(dx * VX + dz * VZ) < hv + r + 2; })) continue;
+    const ln = cityLineNear(tx, tz);
+    if (ln.d < ln.s.width + 25 && G + h > ln.s.y - METRO_GROVE) continue;   // near the line: only well under it
+    CITY.trees.push({ x: tx, z: tz, h, r, c: rt() });
+    shoreBox('tree', tx, tz, 1, 0, r * 0.75, r * 0.75, G + h * 0.35, G + h);
+  }
+}
 
 // the line's boxes: deck and parapets, piers; embankment; cutting and tunnel walls, tunnel roof
 function metroBoxes(L, G) {
@@ -298,7 +321,7 @@ function metroGates() {
                 on: false, a: 1e6, j: null, pos: new THREE.Vector3() };
     if (o.wait != null) {                                    // its own train, standing until let go
       const sm = best * L.step + o.wait * g.sgn, q0 = (tr.dir > 0 ? sm : L.len - sm) + tr.tlen / 2;
-      g.tr = tr = Object.assign({}, tr, { N: 1, every: 1e9, loop: 1e12, phase: 0, until: null, held: { q0, acc: o.acc || 3, t0: null } });
+      g.tr = tr = Object.assign({}, tr, { N: 1, every: 1e9, loop: 1e12, phase: 0, until: null, held: { q0, acc: o.acc || 3, delay: o.delay || 0, t0: null } });
       L.tracks.push(tr);
       g.held = true;
     }
@@ -321,7 +344,7 @@ function metroStep(dt, P, next) {
     };
     const keep = g.j != null && g.i === next && (g.lock == null || ap >= g.lo - g.lock) ? at(g.j) : null;
     if (g.held) {                                            // its own train: let go once the gate before is passed
-      if (tr.held.t0 == null && next >= g.i) tr.held.t0 = METRO.T;
+      if (tr.held.t0 == null && next >= g.i) tr.held.t0 = METRO.T + tr.held.delay;
       g.j = at(0) != null ? 0 : null;
     } else if (keep == null || keep < ap - 3) {              // (kept until you're past it: the crossing is scored first)
       let a = 1e6, pick = null;
