@@ -1160,7 +1160,7 @@ function toggleGear() {
   sfx.gear();
 }
 
-/* Ponnistus on oma nappinsa (X), ei ylös-tikun sivuvaikutus: ahtaassa
+/* Ponnistus on oma nappinsa (näppäin X, ohjaimen B), ei ylös-tikun sivuvaikutus: ahtaassa
    paikassa ja pienellä painovoimalla pomppu jokaisessa lähdössä häiritsee.
    Pyyntö kulutetaan seuraavassa `update`-askeleessa: alustalla se on lähtö,
    ilmassa se ei tee mitään eikä jää odottamaan seuraavaa laskua. */
@@ -1284,8 +1284,8 @@ const gamepad = createGamepad({
        voi olla kaksi asiaa — ja sille jäi A, joka on aina ollut sen oma. */
     restart: ['LB'],
     next:  ['RB'],
-    horn:  ['B'],
-    hop:   ['X'],
+    horn:  ['X'],
+    hop:   ['B'],
     menu:  ['Start'],
     select: ['Back'],
     start: ['Start'],
@@ -2108,7 +2108,7 @@ function updateEnter(dt) {
 
 /* ---------------------------------------------------------------- päivitys */
 function update(dt) {
-  const hopNow = hopReq;                     // X-napin ponnistus, ks. hop()
+  const hopNow = hopReq;                     // ponnistusnappi, ks. hop()
   hopReq = false;
   runT += dt;
   if (msgT > 0) msgT -= dt;
@@ -2276,7 +2276,7 @@ function leavePad(withHop) {
      lohkoissa ja Highrisen ylärivissä on sellaisia — ja tarkistamaton nosto
      työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
      oikein. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
-  /* Ponnistus (vain X-napista, `withHop`): teline suoristuu ja työntää taksin
+  /* Ponnistus (vain ponnistusnapista, `withHop`): teline suoristuu ja työntää taksin
      irti pinnasta, ja vetäytyy heti perään sisään, joten ohjattavuus on
      käytössä heti. Ylös-tikulla lähtö on pelkkä nosto ilman vauhtia.
 
