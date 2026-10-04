@@ -105,37 +105,43 @@ window.JatsiPortal = (function () {
 
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-  /* Tag-suodatin: yksi tagirivi, jossa jokainen tagi on aina valittavissa.
-     Noppamäärä ja tuplasarake valitsevat kentän (eri kenttiä ei voi
-     järjestää yhteen); muut tagit suodattavat kentän rivejä selaimessa,
-     koska palvelimen top() ei suodata datalla — siksi haetaan kentän kaikki
-     rivit (enintään 100 × 2 kt). Eri tagit rajaavat yhdessä, saman ryhmän
-     tagit (offline/verkossa) tarkoittavat "kumpi tahansa". Sija lasketaan
-     suodatetun listan sisällä. Rivin tagin napautus valitsee sen. */
-  const FILTER_TAGS = ['heittopankki', 'ravistus', 'offline', 'verkossa'];
-  const TAG_GROUP = { offline: 'mode', verkossa: 'mode' };
-  const sel = { six: false, tupla: false, tags: new Set() };
-  let cache = { level: null, entries: [], reason: null };
+  /* Tag-suodatin: yksi tagirivi, jossa jokainen tagi on aina valittavissa,
+     kuinka monta tahansa kerralla. Tagit ovat ryhmissä: saman ryhmän valitut
+     tarkoittavat "mikä tahansa näistä" ja eri ryhmät rajaavat yhdessä;
+     ryhmä ilman valintoja ei rajaa. Noppamäärä ja sarakkeet ovat taulun
+     kenttiä, joten niiden valinnat ratkaisevat mitkä kentät haetaan
+     (enintään 4); muut suodattavat haettuja rivejä selaimessa, koska
+     palvelimen top() ei suodata datalla — siksi kentästä haetaan kaikki
+     rivit (enintään 100 × 2 kt). Sija lasketaan näytetyn listan sisällä.
+     Rivin tagin napautus valitsee sen. */
+  const TAGS = ['5 noppaa', '6 noppaa', 'yksi sarake', 'tuplasarake', 'heittopankki', 'ravistus', 'offline', 'verkossa'];
+  const TAG_GROUP = {
+    '5 noppaa': 'dice', '6 noppaa': 'dice', 'yksi sarake': 'cols', tuplasarake: 'cols',
+    offline: 'mode', verkossa: 'mode',
+  };
+  const sel = new Set();
+  const cache = new Map(); // kenttä -> { entries, reason }
 
+  /* Rivin tagit suodatusta varten: myös "yksi sarake", jota rivillä ei näytetä. */
+  function matchTags(d) {
+    const t = variantTags(d);
+    if (!(d && d.v && d.v.tupla)) t.push('yksi sarake');
+    return t;
+  }
   function matches(entry) {
-    const t = variantTags(entry.data);
+    const t = matchTags(entry.data);
     const groups = {};
-    sel.tags.forEach((f) => { const g = TAG_GROUP[f] || f; (groups[g] = groups[g] || []).push(f); });
+    sel.forEach((f) => { const g = TAG_GROUP[f] || f; (groups[g] = groups[g] || []).push(f); });
     return Object.values(groups).every((any) => any.some((f) => t.includes(f)));
   }
-
-  function toggleTag(tag) {
-    if (tag === '5 noppaa') sel.six = false;
-    else if (tag === '6 noppaa') sel.six = true;
-    else if (tag === 'tuplasarake') sel.tupla = !sel.tupla;
-    else if (sel.tags.has(tag)) sel.tags.delete(tag);
-    else sel.tags.add(tag);
-  }
-  function isOn(tag) {
-    if (tag === '5 noppaa') return !sel.six;
-    if (tag === '6 noppaa') return sel.six;
-    if (tag === 'tuplasarake') return sel.tupla;
-    return sel.tags.has(tag);
+  function levelsToFetch() {
+    const six = ['5 noppaa', '6 noppaa'].filter((t) => sel.has(t));
+    const cols = ['yksi sarake', 'tuplasarake'].filter((t) => sel.has(t));
+    const out = [];
+    (six.length ? six : ['5 noppaa', '6 noppaa']).forEach((d) =>
+      (cols.length ? cols : ['yksi sarake', 'tuplasarake']).forEach((c) =>
+        out.push(levelFor({ sixDice: d === '6 noppaa', twoCol: c === 'tuplasarake' }))));
+    return out;
   }
 
   /* Piirtää taulun wrap-elementtiin: tagirivi ja lista, joka rivillä
@@ -144,19 +150,23 @@ window.JatsiPortal = (function () {
   async function render(wrap, highlightId, fetch = true) {
     const m = await lb();
     if (!m) { wrap.style.display = 'none'; return; }
-    const level = levelFor({ sixDice: sel.six, twoCol: sel.tupla });
-    if (fetch || cache.level !== level) {
+    const levels = levelsToFetch();
+    await Promise.all(levels.map(async (level) => {
+      if (!fetch && cache.has(level)) return;
       const { entries, reason } = await m.top({ board: BOARD, level, limit: 100 });
-      cache = { level, entries, reason };
-    }
+      cache.set(level, { entries, reason });
+    }));
+    const got = levels.map((l) => cache.get(l));
+    const entries = got.flatMap((g) => g.entries).sort((x, y) => y.score - x.score);
+    const reason = got.some((g) => g.reason) && !entries.length ? 'error' : null;
     const redraw = () => render(wrap, highlightId, false);
-    const pick = (tag) => { toggleTag(tag); redraw(); };
+    const pick = (tag) => { if (sel.has(tag)) sel.delete(tag); else sel.add(tag); redraw(); };
     wrap.style.display = '';
     wrap.innerHTML = '';
     wrap.appendChild(el('div', 'lbHead', 'Tulostaulu'));
     const bar = el('div', 'lbTabs');
-    ['5 noppaa', '6 noppaa', 'tuplasarake', ...FILTER_TAGS].forEach((t) => {
-      const b = el('button', 'lbTab' + (isOn(t) ? ' on' : ''), t);
+    TAGS.forEach((t) => {
+      const b = el('button', 'lbTab' + (sel.has(t) ? ' on' : ''), t);
       b.type = 'button';
       b.addEventListener('click', () => pick(t));
       bar.appendChild(b);
@@ -164,7 +174,6 @@ window.JatsiPortal = (function () {
     wrap.appendChild(bar);
     const list = el('ol', 'lbList');
     wrap.appendChild(list);
-    const { entries, reason } = cache;
     if (!entries.length) {
       list.appendChild(el('li', 'lbEmpty', reason ? 'Tulostaulua ei saatu haettua.' : 'Ei vielä tuloksia näillä säännöillä.'));
       return;
@@ -184,7 +193,7 @@ window.JatsiPortal = (function () {
       const meta = el('div', 'lbMeta');
       const tags = el('span', 'lbTags');
       variantTags(e.data).forEach((t) => {
-        const b = el('button', 'lbTag lbFilter' + (isOn(t) ? ' on' : ''), t);
+        const b = el('button', 'lbTag lbFilter' + (sel.has(t) ? ' on' : ''), t);
         b.type = 'button';
         b.addEventListener('click', () => pick(t));
         tags.appendChild(b);
@@ -197,10 +206,12 @@ window.JatsiPortal = (function () {
     });
   }
 
-  /* Pelin lopussa taulu avautuu pelin omalle kentälle. */
+  /* Pelin lopussa taulu avautuu pelin omilla säännöillä: noppamäärä ja
+     sarakkeet valitaan pelin mukaan, muut valinnat säilyvät. */
   function openOn(wrap, variant, highlightId) {
-    sel.six = !!variant.sixDice;
-    sel.tupla = !!variant.twoCol;
+    ['5 noppaa', '6 noppaa', 'yksi sarake', 'tuplasarake'].forEach((t) => sel.delete(t));
+    sel.add(variant.sixDice ? '6 noppaa' : '5 noppaa');
+    sel.add(variant.twoCol ? 'tuplasarake' : 'yksi sarake');
     return render(wrap, highlightId);
   }
 
