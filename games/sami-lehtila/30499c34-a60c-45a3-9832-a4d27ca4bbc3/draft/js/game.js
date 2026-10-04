@@ -30,7 +30,7 @@
  * kielen, gate-test.html on luukun oma säätösivu.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
-import { createGamepad } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
+import { createGamepad, createControls } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
 import { portal, onPortal, setPortal }
   from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
 /* Saako debug tällä sivulla olla auki lainkaan. Omassa osoitteessaan peli on
@@ -1143,7 +1143,6 @@ function burst(x, y, color, n, speed, gravity) {
 }
 
 /* ------------------------------------------------------------------ syöte */
-const KEY = Object.create(null);
 
 function toLogical(clientX, clientY) {
   const r = canvas.getBoundingClientRect();
@@ -1223,8 +1222,6 @@ addEventListener('keydown', e => {
     }
     return;
   }
-  KEY[e.code] = true;
-
   if (!card.classList.contains('hidden')) {
     const click = sel => {
       const b = card.querySelector(sel);
@@ -1245,11 +1242,10 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyF') { toggleFullscreen(); return; }
   if (e.code === 'KeyP') { togglePanel(); return; }
   if (e.code === 'KeyK' || e.code === 'Pause') { togglePause(); return; }
-  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyH') { honk(); return; }
-  if (e.code === 'Space' || e.code === 'KeyG') { e.preventDefault(); toggleGear(); }
-  if (e.code === 'KeyX') { hop(); return; }
+  /* Lennon näppäimet ovat pelaajan mäppäämiä (`controls`). Välilyönti ei
+     silti saa vierittää sivua, mihin tahansa se on mäpätty. */
+  if (e.code === 'Space') e.preventDefault();
 });
-addEventListener('keyup', e => { KEY[e.code] = false; });
 
 const stick = createJoystick({
   target: canvas,
@@ -1262,21 +1258,17 @@ const stick = createJoystick({
 stickReady = true;
 stick.gain = P.stick;
 
-/* Ohjain. keys: false, koska peli lukee näppäimistön jo itse — plugin lukisi
-   sen toiseen kertaan ja teline kääntyisi kahdesti yhdestä välilyönnistä.
-   Sauvalle ei anneta gainia: kosketussauvan herkkyyskerroin on siellä siksi
-   että peukalon matka on lyhyt, eikä oikea sauva tarvitse sitä.
+/* Ohjain. keys: false, koska näppäimistön lukee `controls`. Sauvalle ei
+   anneta gainia: kosketussauvan herkkyyskerroin on siellä siksi että peukalon
+   matka on lyhyt, eikä oikea sauva tarvitse sitä.
 
-   Napit ovat eri asioita sen mukaan näkyykö kortti. Kortti ja peli eivät ole
-   koskaan yhtä aikaa esillä, joten sama nappi saa olla kummassakin eri asia. */
+   Tässä ovat vain kiinteät napit: valikot, kortti, tauko ja kentänvaihto.
+   Lennon napit ovat pelaajan mäppäämiä, ks. `controls` alla. Napit ovat eri
+   asioita sen mukaan näkyykö kortti. Kortti ja peli eivät ole koskaan yhtä
+   aikaa esillä, joten sama nappi saa olla kummassakin eri asia. */
 const gamepad = createGamepad({
   keys: false,
   actions: {
-    /* Teline on A ja **kumpi tahansa liipasin**. Molemmat liipasimet yhtä
-       aikaa on koko ruutu, ei teline — ks. `padFullscreen`, joka peruu
-       telineen jos ele alkoi siitä. Sami 23.9.2026: *"kumpi tahansa
-       liipasin voi olla, tai siis molemmat, kunhan eri aikaa."* */
-    gear:  ['A', 'LT', 'RT'],
     /* Olkapäät ovat kentänvaihto: vasen aloittaa nykyisen kentän alusta
        kolmella elämällä, oikea siirtyy seuraavaan ja viimeisestä ensimmäiseen.
        Molemmat tekevät saman kuin säätöpaneelin kenttänappi hiirellä. Sami
@@ -1284,8 +1276,6 @@ const gamepad = createGamepad({
        voi olla kaksi asiaa — ja sille jäi A, joka on aina ollut sen oma. */
     restart: ['LB'],
     next:  ['RB'],
-    horn:  ['X'],
-    hop:   ['B'],
     menu:  ['Start'],
     select: ['Back'],
     start: ['Start'],
@@ -1301,6 +1291,45 @@ const gamepad = createGamepad({
     right: ['Right'],
   },
 });
+
+/* Lennon syötteet, jotka pelaaja voi mäpätä itse asetusten Ohjaimet-ikkunasta
+   (gamepad-pluginin `createControls`). Tässä ovat oletukset; pelaajan omat
+   profiilit ovat hänen selaimessaan. Suunnat ovat analogisia: näppäin on heti
+   täysi ja sauva sellaisenaan, kuten ennen mäppäystä.
+
+   Teline on A ja **kumpi tahansa liipasin**. Molemmat liipasimet yhtä aikaa on
+   koko ruutu, ei teline — ks. `padFullscreen`, joka peruu telineen jos ele
+   alkoi siitä. Sami 23.9.2026: *"kumpi tahansa liipasin voi olla, tai siis
+   molemmat, kunhan eri aikaa."* */
+const controls = createControls({
+  id: 'space-taxi',
+  pad: gamepad,
+  lang: LANG,
+  inputs: [
+    { id: 'left',  label: { fi: 'Vasen', en: 'Left' },  type: 'analog', keys: ['ArrowLeft', 'KeyA'],  pad: ['LS-Left', 'Left'] },
+    { id: 'right', label: { fi: 'Oikea', en: 'Right' }, type: 'analog', keys: ['ArrowRight', 'KeyD'], pad: ['LS-Right', 'Right'] },
+    { id: 'up',    label: { fi: 'Ylös', en: 'Up' },     type: 'analog', keys: ['ArrowUp', 'KeyW'],    pad: ['LS-Up', 'Up'] },
+    { id: 'down',  label: { fi: 'Alas', en: 'Down' },   type: 'analog', keys: ['ArrowDown', 'KeyS'],  pad: ['LS-Down', 'Down'] },
+    { id: 'gear',  label: { fi: 'Teline', en: 'Gear' }, type: 'digital', keys: ['Space', 'KeyG'], pad: ['A', 'LT', 'RT'] },
+    { id: 'hop',   label: { fi: 'Ponnistus', en: 'Hop' }, type: 'digital', keys: ['KeyX'], pad: ['B'] },
+    { id: 'horn',  label: { fi: 'Töötti', en: 'Horn' }, type: 'digital', keys: ['ShiftLeft', 'ShiftRight', 'KeyH'], pad: ['X'] },
+  ],
+});
+
+/* Lento ei kuule mitään kortin, valikon tai tauon aikana. Vaihto kuuroksi
+   ja takaisin tehdään vain reunalla: kuurouden päättyessä jokainen syöte
+   odottaa että sen nappi nousee, joten kortin välilyönti ei käännä telinettä
+   heti lennon alussa. */
+let controlsMuted = false;
+function muteControls(on) {
+  if (on === controlsMuted) return;
+  controlsMuted = on;
+  controls.mute(on);
+}
+
+function openControls() {
+  controls.open({ device: gamepad.connected ? 'pad' : 'keys' });
+}
 
 /* Kerran per ruutu, ennen kuin mitään kysytään: pressed on tämän ja edellisen
    kutsun erotus. Kutsutaan myös korttiruuduissa, jotta vuoron saa käyntiin
@@ -1340,6 +1369,10 @@ function padFullscreen() {
 
 function padInput() {
   gamepad.poll();
+  muteControls(!card.classList.contains('hidden') || menuOpen() || paused);
+  controls.poll();
+  /* Mäppäysikkuna lukee ohjainta itse; sen B ei saa sulkea valikkoa alta. */
+  if (controls.isOpen()) return;
   padFullscreen();
 
   if (menuOpen()) { padMenu(); return; }
@@ -1395,11 +1428,11 @@ function padInput() {
     startLevel((levelIndex + 1) % LEVELS.length);   // viimeisestä ensimmäiseen
     return;
   }
-  if (gamepad.pressed('horn')) { honk(); return; }
-  if (gamepad.pressed('hop')) { hop(); return; }
+  if (controls.pressed('horn')) { honk(); return; }
+  if (controls.pressed('hop')) { hop(); return; }
   /* `fullFired` on tämän ruudun koko ruudun ele: sen laukaissut toinen
      liipasin ei saa kääntää telinettä, ja ensimmäisen kääntö on jo peruttu. */
-  if (gamepad.pressed('gear') && !fullFired) {
+  if (controls.pressed('gear') && !fullFired) {
     /* Liipasimesta tullut painallus merkitään muistiin: siitä voi vielä tulla
        koko ruudun ele, jos toinen liipasin painuu heti perään. */
     if (state === PLAY && !dead && (gamepad.held('LT') || gamepad.held('RT'))) {
@@ -1496,14 +1529,11 @@ function padMenu() {
 }
 
 function inputVector() {
-  const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
-  const ky = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
+  /* Näppäimistö ja ohjain tulevat mäppäyksen läpi, vektori on jo <= 1. */
+  const c = controls.vector('left', 'right', 'up', 'down');
   let v;
-  if (kx || ky) {
-    const l = Math.hypot(kx, ky) || 1;
-    v = { x: kx / l, y: ky / l };
-  } else if (gamepad.x || gamepad.y) {
-    v = { x: gamepad.x, y: gamepad.y };       // plugin lupaa jo vektorin <= 1
+  if (c.x || c.y) {
+    v = c;
   } else if (stick.active) {
     let x = stick.x * stick.gain, y = stick.y * stick.gain;
     const l = Math.hypot(x, y);
@@ -4041,6 +4071,9 @@ function buildMenu() {
     mpick(LANG === 'fi', 'suomi', () => { applyLang('fi'); setPortal('lang', 'fi'); buildMenu(); }),
     mpick(LANG === 'en', 'english', () => { applyLang('en'); setPortal('lang', 'en'); buildMenu(); })));
 
+  box.append(mrow(t('set.controls'),
+    mpick(false, t('set.controlsOpen'), openControls)));
+
   box.append(mrow(t('set.screen'),
     mpick(!fsElement(), t('set.window'), () => { if (fsElement()) toggleFullscreen(); }),
     mpick(!!fsElement(), t('set.full'), () => { if (!fsElement()) toggleFullscreen(); })));
@@ -4096,7 +4129,6 @@ function openMenu(byPad) {
   menuAt.r = 0; menuAt.c = 0;
   buildMenu();
   menuNode().style.display = 'flex';
-  for (const k of Object.keys(KEY)) KEY[k] = false;   // pohjaan jäänyt näppäin ei jää päälle
   menuPaused = (state === PLAY || state === ENTER) && !paused;
   if (menuPaused) setPaused(true);
 }
@@ -4247,6 +4279,7 @@ function restoreDev() {
 function applyLang(code) {
   if (code === LANG) return;
   setLang(code);
+  controls.setLang(code);
   if (state === MENU) showCard(menuCard(), 0, null);
   if (!panelEl.classList.contains('hidden')) buildPanel();
 }
