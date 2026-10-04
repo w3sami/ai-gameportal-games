@@ -2,12 +2,11 @@
 /* ============================================================
    mp-settings.js — pelaajakohtaiset NÄYTTÖ/käyttöasetukset moninpelissä.
    Nämä ovat puhtaasti paikallisia (localStorage, ei jaeta huoneen
-   kanssa eikä palvelimelle) — sama periaate kuin yksinpelin
-   settingsOverlay (ks. js/game-logic.js / js/ui.js), mutta ilman
-   sääntövariantteja (tuplasarake/6 noppaa/pankki/heittotapa ovat
-   huonekohtaisia, valitaan huoneen luonnissa — ks. mp-main.js).
+   kanssa eikä palvelimelle). Sääntövariantit (tuplasarake/6 noppaa/
+   pankki/heittotapa) eivät ole täällä: ne ovat huonekohtaisia ja
+   valitaan huoneen luonnissa — ks. mp-main.js.
 
-   Portattu tarkasti yksinpelin vastineista:
+   Asetukset:
    - nudge (tälli): Dice3D.configure({nudge}) + kanvas-napautus kesken
      OMAN heiton (ks. mp-game.js:n canvasWrap-pointerdown).
    - sound: UI.setSoundEnabled (clack/chime-äänet).
