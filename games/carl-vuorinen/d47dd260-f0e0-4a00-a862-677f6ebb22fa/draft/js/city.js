@@ -12,7 +12,9 @@
      rings: [towers, mid, flats, houses]   distances from the centre out to which each kind of block stands
      tower: [min, max]           tower heights: max at the centre, min at rings[0] (and random either way); a block
                                  holds one big tower, two, or four slimmer ones
-     landmarks: [{ x, z, h }]    the skyline's own supertalls, h m tall with a spire, each on its block (and its podium)
+     landmarks: [{ x, z, h }]    the skyline's own supertalls, h m tall with a spire, each on its block (and its podium);
+                pad: true for a flat roof with a helipad instead of the spire (a hoop can sit over it), standing as
+                given, not cut back from the line (the course keeps its own clearance round it)
      mid, flats, houses: [min, max]   heights for those rings (taller nearer the centre)
      near, middle, far           detail by distance from the course line (m): full (gardens, trees, chimneys) out to
                                  near, plainer to middle, rows of rooftops only to far; nothing beyond (the inner
@@ -262,11 +264,11 @@ function buildCity() {
   for (const lm of C.landmarks || []) {                      // the supertalls: centred on their blocks, cut back from the line
     const i = Math.floor(((lm.x - cx) * UX + (lm.z - cz) * UZ) / B), j = Math.floor(((lm.x - cx) * VX + (lm.z - cz) * VZ) / B);
     const [x0, z0] = at(cx, cz, (i + 0.5) * B, (j + 0.5) * B), hw = lm.w || inner / 2 - 8;
-    const F = fit(x0, z0, hw, hw, G + lm.h * 1.25, 28);
+    const F = lm.pad ? (offLimits(x0, z0, hw) ? null : { x: x0, z: z0, hu: hw, hv: hw }) : fit(x0, z0, hw, hw, G + lm.h * 1.25, 28);
     if (!F) continue;
     taken.add(i + ',' + j);
     const H = lm.h, tiers = [[F.hu, F.hv, G + H * 0.5], [F.hu * 0.84, F.hv * 0.84, G + H * 0.75], [F.hu * 0.66, F.hv * 0.66, G + H * 0.9], [F.hu * 0.5, F.hv * 0.5, G + H]];
-    add({ k: 'tower', x: F.x, z: F.z, y0: G, tiers, st: 1, c: Math.floor(frand() * 6), crown: 3, cap: H * 0.22, seed: Math.floor(frand() * 999), landmark: true });
+    add({ k: 'tower', x: F.x, z: F.z, y0: G, tiers, st: 1, c: Math.floor(frand() * 6), crown: lm.pad ? 4 : 3, cap: lm.pad ? 0 : H * 0.22, seed: Math.floor(frand() * 999), landmark: true });
   }
   for (let j = -nB; j < nB; j++) for (let i = -nB; i < nB; i++) {
     const [bx, bz] = at(cx, cz, (i + 0.5) * B, (j + 0.5) * B);
@@ -485,7 +487,7 @@ function createCityKit() {
     '#e3a48c', '#6e747b', '#b5654a', '#f2e6c8', '#9fb7c9', '#c9c06a', '#8a5a44', '#d7d2c4'].map(C3);
   const ROOF = ['#7a3b2e', '#4a4b50', '#6a4a37', '#5d3a33', '#2f3236', '#a14f34', '#3f5a4c', '#6b6f73'].map(C3);
   const FAR = ['#cbbfa8', '#b9b4aa', '#d6ccb6', '#a99f92', '#c7a68c', '#bfc4c6', '#d9d0bd', '#9e8c7c'].map(C3);
-  const FLATROOF = C3('#6e6c69'), ROOFBOX = C3('#9a9792'), TRUNK = C3('#5b4633'), MAST = C3('#c9c9c4');
+  const FLATROOF = C3('#6e6c69'), ROOFBOX = C3('#9a9792'), TRUNK = C3('#5b4633'), MAST = C3('#c9c9c4'), PAD_MARK = C3('#e8e6df');
   const TREE = ['#4f7a3a', '#5d8a40', '#6b8f3f', '#45703a'].map(C3);
   const URBAN = C3('#6a6966'), ASPHALT = C3('#4b4d51'), WALK = C3('#9c9a95'), PLAZA = C3('#a29f97'), LAWN = C3('#7a9a52'), YARD = C3('#86a05a'), LOT = C3('#8c8b86');
   const DECK = C3('#6a6c70'), DECKSIDE = C3('#a8a59d'), BARRIER = C3('#c4c1b8'), PIER = C3('#a39f96');
@@ -610,6 +612,11 @@ function createCityKit() {
         plainBox(b.x, b.z, CITY.axes.UX, CITY.axes.UZ, hu * 0.5, hv * 0.5, top, top + b.cap * 0.25, col);
         plainBox(b.x, b.z, CITY.axes.UX, CITY.axes.UZ, hu * 0.25, hv * 0.25, top + b.cap * 0.25, top + b.cap * 0.4, col);
         plainBox(b.x, b.z, 1, 0, 0.5, 0.5, top + b.cap * 0.4, top + b.cap, MAST);
+      } else if (b.crown === 4) {                              // a helipad: a raised deck with a pale H on it
+        const { UX, UZ } = CITY.axes, d = Math.min(hu, hv) * 0.72, w = d * 0.11, y = top + 0.6;
+        plainBox(b.x, b.z, UX, UZ, d, d, top, y, ROOFBOX);
+        for (const s of [-1, 1]) plainBox(b.x + UX * s * d * 0.32, b.z + UZ * s * d * 0.32, UX, UZ, w, d * 0.48, y, y + 0.08, PAD_MARK);
+        plainBox(b.x, b.z, UX, UZ, d * 0.32, w, y, y + 0.08, PAD_MARK);
       }
       return;
     }
