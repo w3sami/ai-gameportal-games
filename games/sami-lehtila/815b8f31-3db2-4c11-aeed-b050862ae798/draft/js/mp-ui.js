@@ -515,7 +515,7 @@ window.MpUI = (function () {
         const quitBtn = document.createElement('button');
         quitBtn.textContent = 'Luovuta';
         quitBtn.title = 'Poistu pelistä pysyvästi';
-        quitBtn.style.background = '#3a2015';
+        quitBtn.className = 'dangerBtn';
         quitBtn.addEventListener('click', () => dialog({
           title: 'Luovuta peli?', text: 'Poistut pelistä pysyvästi, ja pisteesi lähtevät. Peli jatkuu muilla.',
           okText: 'Luovuta', danger: true, onOk: () => onForfeit(r.id),
@@ -526,7 +526,7 @@ window.MpUI = (function () {
         const delBtn = document.createElement('button');
         delBtn.textContent = '🗑';
         delBtn.title = 'Poista huone';
-        delBtn.style.background = '#3a2015';
+        delBtn.className = 'dangerBtn';
         delBtn.addEventListener('click', () => dialog({
           title: 'Poista huone?', text: `”${r.name}” poistuu kaikilta, myös kesken olevan pelin pelaajilta.`,
           okText: 'Poista', danger: true, onOk: () => onDelete(r.id),
