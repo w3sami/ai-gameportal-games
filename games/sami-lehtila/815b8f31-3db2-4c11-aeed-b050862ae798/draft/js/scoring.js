@@ -88,29 +88,20 @@
       case 'yatzy': for(let v=1;v<=6;v++) if(c[v]>=5) return 50; return 0;
       case 'yatzy6': for(let v=1;v<=6;v++) if(c[v]===6) return 100; return 0;
       case 'straight6': return [1,2,3,4,5,6].every(v=>c[v]>=1) ? 21 : 0;
+      /* Ryhmät ovat aina eri silmälukuja: neljä tai kuusi samaa ei ole kaksi
+         tai kolme paria, eikä kuusi samaa ole 2× kolme samaa tai iso mökki.
+         Samat nopat käyvät vain "N samaa" -luokkiin ja Yatzyyn. */
       case 'threepairs': {
-        const pr=[];
-        for(let v=6;v>=1;v--){
-          if(c[v]>=6) pr.push(v,v,v);      /* kuusi samaa = kolme paria */
-          else if(c[v]>=4) pr.push(v,v);   /* neljä samaa = kaksi paria */
-          else if(c[v]>=2) pr.push(v);
-        }
+        const pr=[]; for(let v=6;v>=1;v--) if(c[v]>=2) pr.push(v);
         return pr.length>=3 ? (pr[0]+pr[1]+pr[2])*2 : 0;
       }
       case 'twotriples': {
-        const tr=[];
-        for(let v=6;v>=1;v--){
-          if(c[v]>=6) tr.push(v,v);       /* kuusi samaa = kaksi kolmoislukua */
-          else if(c[v]>=3) tr.push(v);
-        }
+        const tr=[]; for(let v=6;v>=1;v--) if(c[v]>=3) tr.push(v);
         return tr.length>=2 ? (tr[0]+tr[1])*3 : 0;
       }
       case 'bighouse': {
         for(let f=6;f>=1;f--){
-          if(c[f]>=4){
-            if(c[f]>=6) return f*6;       /* 6 samaa käy 4+2:na */
-            for(let p=6;p>=1;p--) if(p!==f && c[p]>=2) return f*4+p*2;
-          }
+          if(c[f]>=4) for(let p=6;p>=1;p--) if(p!==f && c[p]>=2) return f*4+p*2;
         }
         return 0;
       }
