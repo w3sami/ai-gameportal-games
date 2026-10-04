@@ -114,6 +114,22 @@
       input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') startOffline(); });
       row.append(dot, input);
       if (setup.players.length > 1) {
+        [['↑', -1, i === 0], ['↓', 1, i === setup.players.length - 1]].forEach(([t, d, off]) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'mpOrderBtn';
+          b.textContent = t;
+          b.disabled = off;
+          b.title = d < 0 ? 'Aiemmaksi' : 'Myöhemmäksi';
+          b.addEventListener('click', () => {
+            const ps = setup.players;
+            [ps[i], ps[i + d]] = [ps[i + d], ps[i]];
+            saveSetup(); renderOfflineSetup();
+          });
+          row.appendChild(b);
+        });
+      }
+      if (setup.players.length > 1) {
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'offRemove';
@@ -125,6 +141,8 @@
       list.appendChild(row);
     });
     document.getElementById('offAddPlayer').style.display = setup.players.length < window.RoomRules.MAX_PLAYERS ? '' : 'none';
+    document.getElementById('offShuffle').style.display = setup.players.length > 1 ? '' : 'none';
+    document.getElementById('offShuffle').textContent = setup.players.length > 2 ? '🎲 Arvo järjestys' : '🎲 Arvo aloittaja';
     const v = setup.variant || {};
     document.getElementById('offTwoCol').checked = !!v.twoCol;
     document.getElementById('offSixDice').checked = !!v.sixDice;
@@ -147,6 +165,10 @@
   }
   ['offTwoCol', 'offSixDice', 'offBank', 'offRollMode'].forEach((id) =>
     document.getElementById(id).addEventListener('change', readOfflineVariant));
+  document.getElementById('offShuffle').addEventListener('click', () => {
+    setup.players = window.MpUI.shuffled(setup.players);
+    saveSetup(); renderOfflineSetup();
+  });
   document.getElementById('offAddPlayer').addEventListener('click', () => {
     const used = new Set(setup.players.map((p) => p.color));
     setup.players.push({ name: '', color: PALETTE().find((c) => !used.has(c)) || PALETTE()[0] });
@@ -375,7 +397,9 @@
     document.getElementById('board').style.display = preGame ? 'none' : 'block';
 
     if (preGame) {
-      window.MpUI.renderPlayers(document.getElementById('mpPlayersPre'), state, me.id, openPeople);
+      window.MpUI.renderOrder(document.getElementById('mpPlayersPre'), state, me.id, (seatIds) =>
+        window.MpGame.reorder(seatIds, (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); }),
+        openPeople);
       document.getElementById('mpStartBtn').style.display = amIHost && state.players.length >= 2 ? 'block' : 'none';
       document.getElementById('mpDeleteRoomBtn').style.display = amIHost ? 'block' : 'none';
       /* Katsoja pääsee itse pelaajaksi avoimeen huoneeseen jossa on tilaa,

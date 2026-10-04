@@ -86,6 +86,19 @@
     return seat;
   }
 
+  /* Vuorojärjestys ennen peliä: seatIds on huoneen paikat uudessa
+     järjestyksessä. Kesken pelin järjestystä ei muuteta, koska vuoro
+     (room.current) on indeksi tähän listaan. */
+  function reorderSeats(room, seatIds) {
+    if (room.status !== 'open') throw new Error('Järjestystä voi muuttaa vain ennen peliä.');
+    const byId = new Map(room.players.map(p => [p.seatId, p]));
+    if (!Array.isArray(seatIds) || seatIds.length !== byId.size || new Set(seatIds).size !== byId.size ||
+        !seatIds.every(id => byId.has(id))) {
+      throw new Error('Järjestys ei vastaa huoneen pelaajia.');
+    }
+    room.players = seatIds.map(id => byId.get(id));
+  }
+
   /* Poistaa ehdon täyttävät paikat ja korjaa vuoron. Isäntyys siirtyy, jos
      isännän tilille ei jää paikkaa. Tyhjäksi jäänyt huone jää kutsujan
      hoidettavaksi (room.players.length === 0). */
@@ -296,7 +309,7 @@
   const api = {
     PALETTE, MAX_PLAYERS, ROLL_MODES,
     sanitizeVariant, diceCountFor, colsFor, emptyScs,
-    accountSeatId, accountSeat, seatsOf, nameTaken, freeColor, newSeat, dropSeats, setSeatColor,
+    accountSeatId, accountSeat, seatsOf, nameTaken, freeColor, newSeat, dropSeats, setSeatColor, reorderSeats,
     startGame, resetForRematch, currentPlayer, requireTurn, bankAvailable,
     roll, hold, resetTurn, score, rankings, publicState,
   };
