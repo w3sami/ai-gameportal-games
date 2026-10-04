@@ -66,6 +66,67 @@ window.MpUI = (function () {
     });
   }
 
+  /* Odotushuoneen vuorojärjestys: numeroitu lista; isännälle ↑↓ ja arvonta.
+     onOrder(seatIds) lähettää uuden järjestyksen. */
+  function renderOrder(el, state, myUserId, onOrder, onOpen) {
+    el.innerHTML = '';
+    const amIHost = state.hostId === myUserId;
+    const ids = state.players.map((p) => p.seatId);
+    const move = (i, d) => { const n = ids.slice(); [n[i], n[i + d]] = [n[i + d], n[i]]; onOrder(n); };
+    state.players.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'mpOrderRow';
+      const who = document.createElement('div');
+      who.className = 'mpOrderWho';
+      who.innerHTML = `<span class="mpOrderNo">${i + 1}.</span><span class="pdot" style="background:${p.color}"></span>${esc(p.username)}` +
+        (p.userId === state.hostId && !p.guest ? ' 👑' : '') + seatNote(p, myUserId);
+      if (onOpen) who.addEventListener('click', onOpen);
+      row.appendChild(who);
+      if (amIHost && state.players.length > 1) {
+        [['↑', -1, i === 0], ['↓', 1, i === ids.length - 1]].forEach(([t, d, off]) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'mpOrderBtn';
+          b.textContent = t;
+          b.disabled = off;
+          b.title = d < 0 ? 'Aiemmaksi' : 'Myöhemmäksi';
+          b.addEventListener('click', () => move(i, d));
+          row.appendChild(b);
+        });
+      }
+      el.appendChild(row);
+    });
+    (state.spectators || []).forEach((s) => {
+      const row = document.createElement('div');
+      row.className = 'mpOrderRow spectator';
+      row.innerHTML = `<div class="mpOrderWho">👁 ${esc(s.username)}${s.userId === myUserId ? ' (sinä)' : ''}</div>`;
+      if (onOpen) row.addEventListener('click', onOpen);
+      el.appendChild(row);
+    });
+    if (amIHost && state.players.length > 2) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mpShuffleBtn';
+      b.textContent = '🎲 Arvo järjestys';
+      b.addEventListener('click', () => onOrder(shuffled(ids)));
+      el.appendChild(b);
+    } else if (amIHost && state.players.length === 2) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mpShuffleBtn';
+      b.textContent = '🎲 Arvo aloittaja';
+      b.addEventListener('click', () => onOrder(shuffled(ids)));
+      el.appendChild(b);
+    }
+  }
+
+  /* Satunnainen järjestys (Fisher–Yates). */
+  function shuffled(list) {
+    const a = list.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+
   /* Henkilölista: pelaajat, katsojat ja (isännälle) estetyt. Isäntä näkee
      joka rivillä toiminnot; muut pelkän listan. onAction(action, person). */
   function renderPeople(el, state, myUserId, onAction) {
@@ -501,5 +562,5 @@ window.MpUI = (function () {
     });
   }
 
-  return { renderPlayers, renderTable, renderQuickPicks, updateControls, renderRoomList, renderHistory, renderPeople, dialog };
+  return { renderPlayers, renderTable, renderQuickPicks, updateControls, renderRoomList, renderHistory, renderPeople, renderOrder, shuffled, dialog };
 })();
