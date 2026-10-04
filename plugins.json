@@ -107,7 +107,7 @@
   },
   {
     "name": "gamepad",
-    "description": "Ohjaintuki peleille. x ja y pitävät saman lupauksen kuin joystick-plugin — -1…1 ja vektori korkeintaan 1 — joten kosketussauvan ja ohjaimen voi vaihtaa keskenään koskematta pelin fysiikkaan. Nimetyt toiminnot kattavat ohjaimen ja näppäimistön yhdellä koodipolulla, ja bridgeKeys antaa vanhalle näppäimistöpelille ohjaintuen kahdella rivillä. Mikään ei heitä: ei ohjainta tarkoittaa connected: false ja nollia. Ohjain on selaimelle näkymätön kunnes sen nappia on painettu, joten pelin kuuluu sanoa \"paina nappia\", ei \"ohjainta ei löytynyt\".",
+    "description": "Ohjaintuki peleille. x ja y pitävät saman lupauksen kuin joystick-plugin — -1…1 ja vektori korkeintaan 1. Nimetyt toiminnot kattavat ohjaimen ja näppäimistön yhdellä koodipolulla, ja bridgeKeys antaa vanhalle näppäimistöpelille ohjaintuen kahdella rivillä. createControls antaa pelaajan mäpätä pelin syötteet itse: digitaaliset, analogiset ja simuloidut analogiset (sisäänrakennettu inertia), esiasetukset ja omat profiilit näppäimistölle ja ohjaimelle, sekä mäppäysikkuna ohjaimen ja näppäimistön kuvilla. Mikään ei heitä: ei ohjainta tarkoittaa connected: false ja nollia.",
     "author": "Sami Lehtilä",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
@@ -139,13 +139,37 @@
         "sizeBytes": 23944,
         "entryFile": "index.js",
         "publishedAt": "2026-09-20T11:03:09.140Z"
+      },
+      {
+        "version": "1.1.0",
+        "files": [
+          {
+            "path": "controls.js",
+            "sizeBytes": 18848
+          },
+          {
+            "path": "index.js",
+            "sizeBytes": 17138
+          },
+          {
+            "path": "README.md",
+            "sizeBytes": 14006
+          },
+          {
+            "path": "ui.js",
+            "sizeBytes": 35556
+          }
+        ],
+        "sizeBytes": 85548,
+        "entryFile": "index.js",
+        "publishedAt": "2026-10-04T16:21:10.631Z"
       }
     ],
     "aliases": {
-      "v1": "1.0.1"
+      "v1": "1.1.0"
     },
     "createdAt": "2026-09-19T16:12:02.205Z",
-    "updatedAt": "2026-09-20T11:03:09.141Z"
+    "updatedAt": "2026-10-04T16:21:10.631Z"
   },
   {
     "name": "portal-events",
