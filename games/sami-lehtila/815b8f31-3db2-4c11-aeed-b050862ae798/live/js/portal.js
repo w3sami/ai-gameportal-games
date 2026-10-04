@@ -64,14 +64,9 @@ window.JatsiPortal = (function () {
   }
 
   /* Kenttä säännöistä: noppamäärä ja sarakkeet muuttavat pistetason niin
-     paljon, ettei niitä voi järjestää samaan listaan. Tunnukset ovat pysyviä
-     (rivit viittaavat niihin) ja SAMAT kuin server/leaderboard.js:ssä. */
-  const LEVELS = [
-    { id: '5',       title: '5 noppaa' },
-    { id: '5-tupla', title: '5 · tupla' },
-    { id: '6',       title: '6 noppaa' },
-    { id: '6-tupla', title: '6 · tupla' },
-  ];
+     paljon, ettei niitä voi järjestää samaan listaan. Tunnukset `5`,
+     `5-tupla`, `6`, `6-tupla` ovat pysyviä (rivit viittaavat niihin) ja
+     SAMAT kuin server/leaderboard.js:ssä. */
   function levelFor({ sixDice, twoCol }) {
     return (sixDice ? '6' : '5') + (twoCol ? '-tupla' : '');
   }
@@ -92,7 +87,6 @@ window.JatsiPortal = (function () {
      kaikilla kentän riveillä samat, joten niillä ei suodateta. */
   /* Varhaiset rivit kantavat nimet yksin/moninpeli; samat tagit kuin nyt. */
   const MODE_TAG = { yksin: 'offline', moninpeli: 'verkossa' };
-  const LEVEL_TAGS = new Set(['5 noppaa', '6 noppaa', 'tuplasarake']);
   function variantTags(d) {
     const v = (d && d.v) || {};
     const tags = [v.six ? '6 noppaa' : '5 noppaa'];
@@ -111,48 +105,63 @@ window.JatsiPortal = (function () {
 
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-  /* Tag-suodatin: palvelimen top() ei suodata datalla, joten haetaan kentän
-     kaikki rivit (enintään 100 × 2 kt) ja suodatetaan täällä. Rivin tagin
-     napautus lisää sen suodattimeksi, suodatinrivin napautus poistaa.
-     Valitut tagit rajaavat yhdessä (kaikki pitää löytyä), ja sija lasketaan
-     suodatetun listan sisällä. Valinta säilyy kentästä toiseen. */
-  const filters = new Set();
+  /* Tag-suodatin: yksi tagirivi, jossa jokainen tagi on aina valittavissa.
+     Noppamäärä ja tuplasarake valitsevat kentän (eri kenttiä ei voi
+     järjestää yhteen); muut tagit suodattavat kentän rivejä selaimessa,
+     koska palvelimen top() ei suodata datalla — siksi haetaan kentän kaikki
+     rivit (enintään 100 × 2 kt). Eri tagit rajaavat yhdessä, saman ryhmän
+     tagit (offline/verkossa) tarkoittavat "kumpi tahansa". Sija lasketaan
+     suodatetun listan sisällä. Rivin tagin napautus valitsee sen. */
+  const FILTER_TAGS = ['heittopankki', 'ravistus', 'offline', 'verkossa'];
+  const TAG_GROUP = { offline: 'mode', verkossa: 'mode' };
+  const sel = { six: false, tupla: false, tags: new Set() };
   let cache = { level: null, entries: [], reason: null };
 
-  /* Piirtää taulun wrap-elementtiin: kenttävalitsin, suodatin ja lista,
-     joka rivillä variantit ja pelin tulos. Nimet textContentilla — ne ovat
-     pelaajien kirjoittamia. fetch=false piirtää edellisestä hausta (suodattimen
-     vaihto ei hae uudelleen). */
-  async function render(wrap, level, highlightId, fetch = true) {
+  function matches(entry) {
+    const t = variantTags(entry.data);
+    const groups = {};
+    sel.tags.forEach((f) => { const g = TAG_GROUP[f] || f; (groups[g] = groups[g] || []).push(f); });
+    return Object.values(groups).every((any) => any.some((f) => t.includes(f)));
+  }
+
+  function toggleTag(tag) {
+    if (tag === '5 noppaa') sel.six = false;
+    else if (tag === '6 noppaa') sel.six = true;
+    else if (tag === 'tuplasarake') sel.tupla = !sel.tupla;
+    else if (sel.tags.has(tag)) sel.tags.delete(tag);
+    else sel.tags.add(tag);
+  }
+  function isOn(tag) {
+    if (tag === '5 noppaa') return !sel.six;
+    if (tag === '6 noppaa') return sel.six;
+    if (tag === 'tuplasarake') return sel.tupla;
+    return sel.tags.has(tag);
+  }
+
+  /* Piirtää taulun wrap-elementtiin: tagirivi ja lista, joka rivillä
+     variantit ja pelin tulos. Nimet textContentilla — ne ovat pelaajien
+     kirjoittamia. Haku vain kun kenttä vaihtuu tai fetch=true. */
+  async function render(wrap, highlightId, fetch = true) {
     const m = await lb();
     if (!m) { wrap.style.display = 'none'; return; }
+    const level = levelFor({ sixDice: sel.six, twoCol: sel.tupla });
     if (fetch || cache.level !== level) {
       const { entries, reason } = await m.top({ board: BOARD, level, limit: 100 });
       cache = { level, entries, reason };
     }
-    const redraw = () => render(wrap, level, highlightId, false);
+    const redraw = () => render(wrap, highlightId, false);
+    const pick = (tag) => { toggleTag(tag); redraw(); };
     wrap.style.display = '';
     wrap.innerHTML = '';
-    const tabs = el('div', 'lbTabs');
-    LEVELS.forEach((L) => {
-      const b = el('button', 'lbTab' + (L.id === level ? ' on' : ''), L.title);
-      b.type = 'button';
-      b.addEventListener('click', () => render(wrap, L.id, highlightId));
-      tabs.appendChild(b);
-    });
     wrap.appendChild(el('div', 'lbHead', 'Tulostaulu'));
-    wrap.appendChild(tabs);
-    if (filters.size) {
-      const bar = el('div', 'lbFilters');
-      filters.forEach((t) => {
-        const b = el('button', 'lbTag lbFilter on', t + ' ✕');
-        b.type = 'button';
-        b.title = 'Poista suodatin';
-        b.addEventListener('click', () => { filters.delete(t); redraw(); });
-        bar.appendChild(b);
-      });
-      wrap.appendChild(bar);
-    }
+    const bar = el('div', 'lbTabs');
+    ['5 noppaa', '6 noppaa', 'tuplasarake', ...FILTER_TAGS].forEach((t) => {
+      const b = el('button', 'lbTab' + (isOn(t) ? ' on' : ''), t);
+      b.type = 'button';
+      b.addEventListener('click', () => pick(t));
+      bar.appendChild(b);
+    });
+    wrap.appendChild(bar);
     const list = el('ol', 'lbList');
     wrap.appendChild(list);
     const { entries, reason } = cache;
@@ -160,9 +169,9 @@ window.JatsiPortal = (function () {
       list.appendChild(el('li', 'lbEmpty', reason ? 'Tulostaulua ei saatu haettua.' : 'Ei vielä tuloksia näillä säännöillä.'));
       return;
     }
-    const shown = entries.filter((e) => { const t = variantTags(e.data); return [...filters].every((f) => t.includes(f)); });
+    const shown = entries.filter(matches);
     if (!shown.length) {
-      list.appendChild(el('li', 'lbEmpty', 'Ei tuloksia näillä suodattimilla.'));
+      list.appendChild(el('li', 'lbEmpty', 'Ei tuloksia näillä valinnoilla.'));
       return;
     }
     shown.forEach((e, i) => {
@@ -175,11 +184,9 @@ window.JatsiPortal = (function () {
       const meta = el('div', 'lbMeta');
       const tags = el('span', 'lbTags');
       variantTags(e.data).forEach((t) => {
-        if (LEVEL_TAGS.has(t) || filters.has(t)) { tags.appendChild(el('span', 'lbTag', t)); return; }
-        const b = el('button', 'lbTag lbFilter', t);
+        const b = el('button', 'lbTag lbFilter' + (isOn(t) ? ' on' : ''), t);
         b.type = 'button';
-        b.title = 'Näytä vain nämä';
-        b.addEventListener('click', () => { filters.add(t); redraw(); });
+        b.addEventListener('click', () => pick(t));
         tags.appendChild(b);
       });
       meta.appendChild(tags);
@@ -188,6 +195,13 @@ window.JatsiPortal = (function () {
       li.appendChild(meta);
       list.appendChild(li);
     });
+  }
+
+  /* Pelin lopussa taulu avautuu pelin omalle kentälle. */
+  function openOn(wrap, variant, highlightId) {
+    sel.six = !!variant.sixDice;
+    sel.tupla = !!variant.twoCol;
+    return render(wrap, highlightId);
   }
 
   function sentSet() {
@@ -214,7 +228,7 @@ window.JatsiPortal = (function () {
         if (res && res.kept && !firstKept) firstKept = res.entry;
       }
     }
-    render(wrap, level, firstKept && firstKept.id);
+    openOn(wrap, variant, firstKept && firstKept.id);
   }
 
   /* Moninpeli: palvelin lähettää (kaikkien puolesta, kerran). Tämä vain
@@ -225,8 +239,8 @@ window.JatsiPortal = (function () {
     const sig = key + '|' + (highlightId || '');
     if (sig === shown) return;
     shown = sig;
-    render(wrap, levelFor(variant), highlightId);
+    openOn(wrap, variant, highlightId);
   }
 
-  return { onPortal: ON_PORTAL, wireFullscreen, toggleFullscreen, submitLocalGame, showBoard, levelFor, LEVELS };
+  return { onPortal: ON_PORTAL, wireFullscreen, toggleFullscreen, submitLocalGame, showBoard, levelFor };
 })();

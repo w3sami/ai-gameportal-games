@@ -289,5 +289,4 @@
   #lbWrap button.lbFilter{font:inherit;color:inherit;background:none;cursor:pointer;line-height:inherit}
   #lbWrap button.lbFilter:hover{border-color:var(--gold);color:var(--text)}
   #lbWrap .lbFilter.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);font-weight:700}
-  #lbWrap .lbFilters{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:-2px 0 8px;font-size:.72rem}
   #lbWrap .lbEmpty{color:var(--dim);font-size:.85rem;text-align:center;padding:8px}
