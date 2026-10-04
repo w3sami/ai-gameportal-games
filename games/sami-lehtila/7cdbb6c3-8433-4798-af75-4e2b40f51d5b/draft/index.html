@@ -97,7 +97,7 @@
       <dt>nappeja</dt><dd id="d-nbuttons" class="num">—</dd>
       <dt>akseleita</dt><dd id="d-naxes" class="num">—</dd>
       <dt>moottorit</dt><dd id="d-rumble">—</dd>
-      <dt>plugin</dt><dd id="d-plugin">gamepad v1</dd>
+      <dt>plugin</dt><dd id="d-plugin">gamepad v1 (1.1.0+)</dd>
     </dl>
   </section>
 
@@ -137,6 +137,25 @@
   <section style="grid-column: 1 / -1">
     <h2>Napit</h2>
     <div id="pads" class="pads"></div>
+  </section>
+
+  <section style="grid-column: 1 / -1">
+    <h2>Mäppäys</h2>
+    <p style="margin:0 0 8px;color:var(--muted)">
+      <code>createControls</code>-koe: neljä simuloitua suuntaa, kaksi digitaalista
+      nappia ja yksi analoginen kaasu. Avaa ikkuna, mäppää, tallenna ja katso
+      palkeista mitä peli saa. Profiilit jäävät tämän selaimen muistiin.
+    </p>
+    <p style="margin:0 0 8px;display:flex;gap:6px;flex-wrap:wrap">
+      <button id="m-open" type="button">Avaa mäppäys</button>
+      <button id="m-keys" type="button">… näppäimistö</button>
+    </p>
+    <dl id="m-values"></dl>
+    <dl style="margin-top:8px">
+      <dt>vektori</dt><dd id="m-vec" class="num">0.000, 0.000</dd>
+      <dt>profiilit</dt><dd id="m-prof">—</dd>
+      <dt>reunat</dt><dd id="m-edges" class="num">—</dd>
+    </dl>
   </section>
 
   <section>
@@ -216,7 +235,7 @@
 </div>
 
 <script type="module">
-import { createGamepad, BUTTONS }
+import { createGamepad, createControls, BUTTONS }
   from "https://plugins.game.bigbools.fi/gamepad/v1/index.js";
 import * as portalEvents
   from "https://plugins.game.bigbools.fi/portal-events/v1/index.js";
@@ -469,6 +488,62 @@ window.addEventListener("blur", () => log("fokus meni — ohjain katoaa kunnes k
 window.addEventListener("focus", () => log("fokus palasi"));
 
 requestAnimationFrame(frame);
+
+// --- mapping ----------------------------------------------------------------
+// Its own instance reading the same pad, so the page's own readings above stay
+// raw while this half shows what a game would get after the mapping.
+const controls = createControls({
+  id: "ohjainkoe",
+  pad,
+  inputs: [
+    { id: "left", label: { fi: "Vasen", en: "Left" }, type: "simulated", keys: ["ArrowLeft", "KeyA"], pad: ["LS-Left", "Left"] },
+    { id: "right", label: { fi: "Oikea", en: "Right" }, type: "simulated", keys: ["ArrowRight", "KeyD"], pad: ["LS-Right", "Right"] },
+    { id: "up", label: { fi: "Ylös", en: "Up" }, type: "simulated", keys: ["ArrowUp", "KeyW"], pad: ["LS-Up", "Up"] },
+    { id: "down", label: { fi: "Alas", en: "Down" }, type: "simulated", keys: ["ArrowDown", "KeyS"], pad: ["LS-Down", "Down"] },
+    { id: "jump", label: { fi: "Hyppy", en: "Jump" }, type: "digital", keys: ["Space"], pad: ["A"] },
+    { id: "fire", label: { fi: "Tuli", en: "Fire" }, type: "digital", keys: ["KeyX"], pad: ["X", "RB"] },
+    { id: "throttle", label: { fi: "Kaasu", en: "Throttle" }, type: "analog", keys: ["ShiftLeft"], pad: ["RT"] },
+  ],
+  presets: [
+    { id: "lefty", device: "keys", label: { fi: "Vasenkätinen", en: "Left-handed" },
+      bind: { left: ["KeyJ"], right: ["KeyL"], up: ["KeyI"], down: ["KeyK"], jump: ["ShiftLeft"], fire: ["KeyF"], throttle: ["KeyD"] } },
+    { id: "swap", device: "pad", label: { fi: "Hyppy B:ssä", en: "Jump on B" },
+      bind: { jump: ["B"], fire: ["A"] } },
+  ],
+});
+$("m-open").addEventListener("click", () => controls.open({ device: "pad" }));
+$("m-keys").addEventListener("click", () => controls.open({ device: "keys" }));
+
+const bars = new Map();
+for (const input of controls.inputs) {
+  const bar = document.createElement("div");
+  bar.className = "bar";
+  const fillEl = document.createElement("i");
+  bar.append(fillEl);
+  const dt = document.createElement("dt");
+  dt.textContent = `${input.id} (${input.type})`;
+  const dd = document.createElement("dd");
+  dd.append(bar);
+  $("m-values").append(dt, dd);
+  bars.set(input.id, fillEl);
+}
+
+let edges = 0;
+let lastEdge = "—";
+function mapFrame() {
+  controls.poll();
+  for (const [id, fillEl] of bars) {
+    fillEl.style.width = `${controls.value(id) * 100}%`;
+    if (controls.pressed(id)) { edges++; lastEdge = id; }
+  }
+  const v = controls.vector("left", "right", "up", "down");
+  $("m-vec").textContent = `${fixed(v.x)}, ${fixed(v.y)}`;
+  $("m-prof").textContent = `näppäimistö: ${controls.activeProfile("keys").label.fi ?? controls.activeProfile("keys").label}`
+    + ` · ohjain: ${controls.activeProfile("pad").label.fi ?? controls.activeProfile("pad").label}`;
+  $("m-edges").textContent = `${edges} (viimeisin ${lastEdge})`;
+  requestAnimationFrame(mapFrame);
+}
+requestAnimationFrame(mapFrame);
 </script>
 </body>
 </html>
