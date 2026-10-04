@@ -3378,7 +3378,7 @@ const SLIDERS = [
   { key: 'landVX', label: 'lasku vx max', min: 10, max: 200, step: 5 },
   { key: 'bounceFrom', label: 'pomppu alkaa x', min: 0.2, max: 0.95, step: 0.05 },
   { key: 'bounceLift', label: 'pompun nosto px', min: 2, max: 30, step: 1 },
-  { key: 'hopRate', label: 'ponnistus × telineen vauhti', min: 0, max: 3, step: 0.25 },
+  { key: 'hopRate', label: 'ponnistus × telineen vauhti', min: 0, max: 8, step: 0.25 },
   { key: 'bounceKeep', label: 'pompun jäävä vauhti', min: 0.2, max: 0.9, step: 0.02 },
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
   { key: 'sideBurn', label: 'sivusuuttimet × kulutus', min: 0, max: 1, step: 0.05 },
