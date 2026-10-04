@@ -3935,6 +3935,11 @@ let menuEl = null, menuPaused = false;
    kertoo onko valikkoa ylipäätään koskettu ohjaimella: hiirellä avattuna
    kehys ensimmäisen napin ympärillä näyttäisi siltä että jotain on valittu. */
 let menuGrid = [], menuAt = { r: 0, c: 0 }, menuPad = false;
+/* Lopeta peli kysyy napissa itsessään: ensimmäinen painallus vaihtaa tekstin
+   varmistukseksi, joka raukeaa itsestään. Vuoro päättyy kuten varikon
+   lopeta-napista, ja rahat menevät tulostaululle. */
+const QUIT_ARM_MS = 3000;
+let quitArmed = false, quitTimer = 0;
 
 const menuOpen = () => !!menuEl && menuEl.style.display !== 'none';
 const css = (node, style) => { Object.assign(node.style, style); return node; };
@@ -4040,18 +4045,49 @@ function buildMenu() {
     mpick(!fsElement(), t('set.window'), () => { if (fsElement()) toggleFullscreen(); }),
     mpick(!!fsElement(), t('set.full'), () => { if (!fsElement()) toggleFullscreen(); })));
 
-  const foot = css(el('div'), { display: 'flex', justifyContent: 'flex-end', marginTop: '6px' });
+  const foot = css(el('div'), {
+    display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px',
+  });
   const close = css(pbutton(null, t('set.close'), closeMenu), {
     font: '600 15px system-ui, sans-serif', padding: '9px 20px', borderRadius: '10px',
     cursor: 'pointer', border: '1px solid rgba(111,227,255,.5)',
     background: 'rgba(111,227,255,.14)', color: '#6fe3ff',
   });
-  menuGrid.push([close]);
-  foot.append(close);
+  /* Lopetettavaa on vain kesken kentän: valikossa, kortilla ja
+     välianimaatiossa vuoro joko ei ole käynnissä tai se päättyy jo omaa
+     reittiään. */
+  if (state === PLAY || state === ENTER) {
+    const quit = css(pbutton(null, t(quitArmed ? 'set.quitSure' : 'set.quit'), quitGame), {
+      font: '600 15px system-ui, sans-serif', padding: '9px 16px', borderRadius: '10px',
+      cursor: 'pointer', marginRight: 'auto',
+      border: quitArmed ? '1px solid #ff6b6b' : '1px solid rgba(255,107,107,.45)',
+      background: quitArmed ? 'rgba(255,107,107,.28)' : 'rgba(255,107,107,.08)',
+      color: '#ff8f8f',
+    });
+    menuGrid.push([quit, close]);
+    foot.append(quit, close);
+  } else {
+    menuGrid.push([close]);
+    foot.append(close);
+  }
   box.append(foot);
 
   menuNode().replaceChildren(box);
   menuFocus();
+}
+
+function quitGame() {
+  if (state !== PLAY && state !== ENTER) return;
+  clearTimeout(quitTimer);
+  if (!quitArmed) {
+    quitArmed = true;
+    quitTimer = setTimeout(() => { quitArmed = false; if (menuOpen()) buildMenu(); }, QUIT_ARM_MS);
+    buildMenu();
+    return;
+  }
+  quitArmed = false;
+  closeMenu();
+  gameOver(false);
 }
 
 function openMenu(byPad) {
@@ -4067,6 +4103,8 @@ function openMenu(byPad) {
 
 function closeMenu() {
   if (!menuOpen()) return;
+  clearTimeout(quitTimer);
+  quitArmed = false;
   menuPad = false;
   menuEl.style.display = 'none';
   if (menuPaused) setPaused(false);
