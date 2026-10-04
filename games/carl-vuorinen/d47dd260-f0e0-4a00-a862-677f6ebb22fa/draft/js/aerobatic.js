@@ -36,7 +36,7 @@
    the slots, the hoops for "I" and "O", the signs, the pass flash, a toast announcing each of these gates ahead of it,
    and sets broken off sent back to their start.
    ========================================================================= */
-const AERO_DEFAULTS = { ROLL_DETENT: 0, ROLL_NEAR: 0, ROLL_ON: 2.4, INV_TOL: 0.6, SLOT_W: 5.2, INV_SCALE: 2, KNIFE_SAG: 0, KNIFE_GRACE: 3.5 };
+const AERO_DEFAULTS = { ROLL_DETENT: 0, ROLL_EDGE: true, ROLL_ON: 2.4, INV_TOL: 0.6, SLOT_W: 5.2, INV_SCALE: 2, KNIFE_SAG: 0, KNIFE_GRACE: 3.5 };
 Object.assign(TUNE, AERO_DEFAULTS);
 Object.assign(TUNE_DEFAULTS, AERO_DEFAULTS);
 const TIP_GRACE = 0.25;                                      // how far a wingtip may poke past the slot's inside (m)
@@ -85,22 +85,13 @@ GATE_TYPES.I = {
 // as for extra climb) rolls on at ROLL_ON rad/s instead, round to knife edge, inverted and back, without turning on
 // the way. It counts from the attitude the plane was holding when the stick was taken, so from knife edge the stick
 // centred stays on edge; after rolling on, it counts from the nearest of those to where the roll got to, so easing off a
-// half roll doesn't roll back. ROLL_NEAR (m, the jetwing; 0: anywhere): the end of the throw rolls on only within that
-// far before an inverted hoop (or just past it); anywhere else it's the steepest bank, the hardest turn, so a thumb
-// shoved to the edge in a tight turn never rolls you over. Returns the bank to roll to (aeroStick).
-function aeroRollNear(P) {
-  if (!TUNE.ROLL_NEAR) return true;
-  for (const h of HOOPS) {
-    if (h.kind !== 'I') continue;
-    const dx = h.pos.x - P.pos.x, dy = h.pos.y - P.pos.y, dz = h.pos.z - P.pos.z;
-    if (dx * dx + dy * dy + dz * dz < TUNE.ROLL_NEAR * TUNE.ROLL_NEAR && dx * P.vdir.x + dy * P.vdir.y + dz * P.vdir.z > -40) return true;
-  }
-  return false;
-}
+// half roll doesn't roll back. ROLL_EDGE false (the jetwing): the end of the throw never rolls on, it's just the steepest
+// bank, the hardest turn, so a thumb shoved to the edge in a tight turn never rolls you over. Returns the bank to roll to
+// (aeroStick).
 function aeroBank(P, x, dt) {
   if (P.stickBase == null) { P.stickBase = P.rollHold || 0; P.rollOn = 0; }
   P.rollHold = null;
-  if (Math.abs(x) <= TUNE.OD_THRESH || (!P.rollOn && !aeroRollNear(P))) {
+  if (Math.abs(x) <= TUNE.OD_THRESH || !TUNE.ROLL_EDGE) {
     if (Math.abs(x) > TUNE.OD_THRESH) return wrapAngle(P.stickBase + Math.sign(x) * TUNE.TOUCH_BANK);
     if (P.rollOn) P.stickBase = nearDetent(P.bank);          // a roll on just eased off: count from where it got to
     P.rollOn = 0; return wrapAngle(P.stickBase + x * TUNE.TOUCH_BANK);
