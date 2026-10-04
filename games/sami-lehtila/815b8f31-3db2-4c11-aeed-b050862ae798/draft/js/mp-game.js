@@ -437,6 +437,9 @@ window.MpGame = (function () {
   function admin(action, target, cb) {
     socket.emit('room:admin', Object.assign({ roomId: currentRoomId, action }, target), (res) => cb && cb(res));
   }
+  function setSeatColor(seatId, color, cb) {
+    socket.emit('room:color', { roomId: currentRoomId, seatId, color }, (res) => cb && cb(res));
+  }
   /* Oma vieras: { action: 'add', name } tai { action: 'remove', seatId }. */
   function guest(payload, cb) {
     socket.emit('room:guest', Object.assign({ roomId: currentRoomId }, payload), (res) => cb && cb(res));
@@ -478,7 +481,7 @@ window.MpGame = (function () {
 
   return {
     connect, disconnect, onLobby, onRoomState, onRoomError, onRejoin, onDeleted, onBlocked, onNotice,
-    createRoom, joinRoom, watchRoom, admin, guest, leaveRoom, localCreate, localResume, undo, startGame, rematch, deleteRoom, scoreCategory,
+    createRoom, joinRoom, watchRoom, admin, guest, setSeatColor, leaveRoom, localCreate, localResume, undo, startGame, rematch, deleteRoom, scoreCategory,
     getMe: () => me, getRoomId: () => currentRoomId,
   };
 })();

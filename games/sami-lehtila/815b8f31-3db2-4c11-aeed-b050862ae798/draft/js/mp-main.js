@@ -291,6 +291,13 @@
   function peopleAction(action, person) {
     const done = (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); };
     const name = person.username;
+    if (action === 'color') {
+      window.MpGame.setSeatColor(person.seatId, person.color, (res) => {
+        done(res);
+        if (res.ok && !person.guest && account && person.userId === account.id) { account.color = person.color; }
+      });
+      return;
+    }
     if (action === 'removeGuest' || action === 'admitGuest') {
       const run = () => (action === 'removeGuest'
         ? window.MpGame.guest({ action: 'remove', seatId: person.seatId }, done)
@@ -358,7 +365,7 @@
     document.getElementById('leaveRoomBtn').title = state.local ? 'Takaisin aloitukseen — peli säilyy'
       : !amIPlayer ? 'Lopeta katsominen'
       : state.status === 'playing' ? 'Takaisin aulaan — paikka säilyy' : 'Poistu huoneesta';
-    document.getElementById('peopleBtn').style.display = state.local ? 'none' : '';
+
     document.getElementById('undoBtn').classList.toggle('show', !!(state.local && state.status === 'playing' && state.canUndo));
     const amIHost = state.hostId === me.id;
     const preGame = state.status === 'open';

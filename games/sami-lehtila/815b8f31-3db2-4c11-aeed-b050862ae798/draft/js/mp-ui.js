@@ -79,13 +79,14 @@ window.MpUI = (function () {
       h.textContent = title;
       el.appendChild(h);
       people.forEach((p) => {
-        const { label, note, actions } = rowFor(p);
+        const { label, note, actions, colors } = rowFor(p);
         const row = document.createElement('div');
         row.className = 'peopleRow';
         const who = document.createElement('div');
         who.className = 'peopleWho';
         who.innerHTML = label;
         if (note) { const n = document.createElement('div'); n.className = 'peopleNote'; n.textContent = note; who.appendChild(n); }
+        if (colors) who.appendChild(colorPicker(p));
         row.appendChild(who);
         const acts = document.createElement('div');
         acts.className = 'peopleActs';
@@ -107,7 +108,32 @@ window.MpUI = (function () {
     const hostOn = (p) => amIHost && p.userId !== myUserId;
     const ownerName = (p) => (state.players.find((pp) => pp.userId === p.userId && !pp.guest) || {}).username;
     const me = (p) => (p.userId === myUserId ? ' (sinä)' : '');
+    /* Oman paikan värivalitsin: toisten käyttämät värit eivät ole valittavissa. */
+    const colorPicker = (p) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'peopleSwatches';
+      const taken = new Set(state.players.filter((o) => o.seatId !== p.seatId).map((o) => o.color));
+      (window.RoomRules ? window.RoomRules.PALETTE : []).forEach((c) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'peopleSw' + (c === p.color ? ' on' : '');
+        b.style.background = c;
+        b.disabled = taken.has(c);
+        b.title = taken.has(c) ? 'Toisella pelaajalla' : 'Nopan väri';
+        if (c !== p.color && !taken.has(c)) b.addEventListener('click', () => onAction('color', Object.assign({}, p, { color: c })));
+        wrap.appendChild(b);
+      });
+      return wrap;
+    };
+    if (state.local) {
+      section('Pelaajat', state.players, (p) => ({
+        label: `<span class="pdot" style="background:${p.color}"></span>${esc(p.username)}`,
+        note: '', actions: [], colors: true,
+      }));
+      return;
+    }
     section('Pelaajat', state.players, (p) => ({
+      colors: p.userId === myUserId,
       label: `<span class="pdot" style="background:${p.color}"></span>${esc(p.username)}${p.userId === state.hostId && !p.guest ? ' 👑' : ''}${p.guest ? '' : me(p)}`,
       note: [p.guest ? (p.userId === myUserId ? 'tällä laitteella' : `vieras · laite: ${ownerName(p) || "?"}`) : '',
         p.connected === false ? 'poissa' : ''].filter(Boolean).join(' · '),
