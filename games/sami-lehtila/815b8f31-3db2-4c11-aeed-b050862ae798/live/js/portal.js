@@ -39,19 +39,6 @@ window.JatsiPortal = (function () {
       if (r && typeof r.catch === 'function') r.catch(() => {});
     } catch (e) { /* selain kieltäytyi — nappi vain ei tee mitään */ }
   }
-  /* Kosketusnäytöllä pelin aloitus vie koko näyttöön: portaalin kehys
-     tekstiensä kanssa vie pieneltä ruudulta liikaa tilaa. Pyyntö tehdään
-     napautuksen käsittelijässä, koska selain sallii sen vain käyttäjän
-     eleestä. */
-  const TOUCH = matchMedia('(pointer: coarse)').matches;
-  function fullscreenOnStart(ev) {
-    if (!TOUCH || fsElement() || !fsRequest()) return;
-    const t = ev.target.closest && ev.target.closest('.bigBtn, .mpRoomRow button:not(.dangerBtn)');
-    if (!t || t.disabled) return;
-    toggleFullscreen();
-  }
-  if (TOUCH) document.addEventListener('click', fullscreenOnStart, true);
-
   function wireFullscreen(btn) {
     if (!btn) return;
     if (!fsRequest() || document.fullscreenEnabled === false) { btn.style.display = 'none'; return; }
@@ -126,7 +113,7 @@ window.JatsiPortal = (function () {
      (enintään 4); muut suodattavat haettuja rivejä selaimessa, koska
      palvelimen top() ei suodata datalla — siksi kentästä haetaan kaikki
      rivit (enintään 100 × 2 kt). Sija lasketaan näytetyn listan sisällä.
-     Rivin tagin napautus valitsee sen. */
+     Rivin tagit ovat pelkkää tietoa; valinnat tehdään tagiriviltä. */
   const TAGS = ['5 noppaa', '6 noppaa', 'yksi sarake', 'tuplasarake', 'heittopankki', 'ravistus', 'offline', 'verkossa'];
   const TAG_GROUP = {
     '5 noppaa': 'dice', '6 noppaa': 'dice', 'yksi sarake': 'cols', tuplasarake: 'cols',
@@ -205,12 +192,7 @@ window.JatsiPortal = (function () {
       li.appendChild(top);
       const meta = el('div', 'lbMeta');
       const tags = el('span', 'lbTags');
-      variantTags(e.data).forEach((t) => {
-        const b = el('button', 'lbTag lbFilter' + (sel.has(t) ? ' on' : ''), t);
-        b.type = 'button';
-        b.addEventListener('click', () => pick(t));
-        tags.appendChild(b);
-      });
+      variantTags(e.data).forEach((t) => tags.appendChild(el('span', 'lbTag', t)));
       meta.appendChild(tags);
       const line = gameLine(e);
       if (line) meta.appendChild(el('span', 'lbGame', line));

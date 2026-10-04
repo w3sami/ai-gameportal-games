@@ -294,7 +294,13 @@
   .lbBox .lbScore{font-weight:800;color:var(--gold-bright);font-variant-numeric:tabular-nums}
   .lbBox .lbMeta{display:flex;flex-wrap:wrap;gap:4px 8px;margin:3px 0 0 2.3em;font-size:.72rem;color:var(--dim)}
   .lbBox .lbTag{border:1px solid var(--wood-light);border-radius:6px;padding:0 5px;margin-right:3px}
-  .lbBox button.lbFilter{font:inherit;color:inherit;background:none;cursor:pointer;line-height:inherit}
-  .lbBox button.lbFilter:hover{border-color:var(--gold);color:var(--text)}
-  .lbBox .lbFilter.on{background:var(--gold);color:#241a08;border-color:var(--gold-bright);font-weight:700}
+  /* Alkuruudun tulostaulu-ikkuna: lista saa tilaa, mobiilissa koko ruutu. */
+  #lbWrapStart .lbList{max-height:62vh}
+  @media (max-width:600px){
+    #lbOverlay{padding:0}
+    #lbOverlay .panel{max-width:none;height:100vh;height:100dvh;max-height:none;border-radius:0;border:none;
+      display:flex;flex-direction:column;padding:16px 14px 12px}
+    #lbWrapStart{flex:1;min-height:0;display:flex;flex-direction:column}
+    #lbWrapStart .lbList{flex:1;max-height:none;min-height:0}
+  }
   .lbBox .lbEmpty{color:var(--dim);font-size:.85rem;text-align:center;padding:8px}
