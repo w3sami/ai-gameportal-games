@@ -7,9 +7,9 @@
                 towers, js/outskirts.js towers), its floor y m above the streets, w m wide and h m tall. Lined up with
                 the street grid it has the towers' own windows (lit at night); at any other angle it's plain.
      neon: { near, max, seed }   neon signs on the facades that face the course line, within near m of it (default
-                130) and around the height it's flown at, max of them (default 240): boards with a glowing word, across
-                or stacked, a soft glow on the wall round each, never closer than NEON_GAP m to each other. Only along
-                the line, so the city it flies through looks lived in at night.
+                130), max of them (default 240): small boards with a glowing word, across or stacked, a soft glow on the
+                wall round each, mostly down at street level (NEON_LOW, NEON_HIGH), never closer than NEON_GAP m to
+                each other. Only along the line, so the city it flies through looks lived in at night.
    }
    Sim part: each skybridge is a shore box ('skybridge': a crash); the signs are flat on their walls, no boxes of their
    own. Game part: the skybridges' walls, roof and underside in the city's building meshes; the signs in two meshes of
@@ -51,7 +51,8 @@ CITY_PLUGINS.push({
 });
 
 /* ---------- neon signs ---------- */
-const NEON_GAP = 24;                                         // m between signs
+const NEON_GAP = 13;                                         // m between signs
+const NEON_LOW = 4, NEON_HIGH = 32;                          // their bottoms: this far over the street, and up to this much higher
 const NEON_ACROSS = ['HOTEL', 'BAR', 'SUSHI', 'RAMEN', 'CLUB', '24H', 'CAFE', 'KINO', 'PIZZA', 'JAZZ', 'ARCADE', 'LIVE'];
 const NEON_UP = ['HOTEL', 'BAR', 'SUSHI', 'CLUB', 'KINO', 'JAZZ', '24H', 'NOODLE'];
 const NEON_COLS = ['#ff3fb4', '#38eaff', '#ffe04a', '#7dff5c', '#ff7a3a', '#b88bff'];
@@ -96,8 +97,8 @@ function neonAtlas() {
   halo.userData.shared = true;
   return (_neonAtlas = { mat, halo, across, up });
 }
-// the signs: for each building near the line, the walls that face it, then boards on those walls at about the height
-// the line passes, in a shuffled order that favours the nearer walls; one mesh for the boards, one for the glow
+// the signs: for each building near the line, the walls that face it, then boards on those walls, low down, in a
+// shuffled order that favours the nearer walls; one mesh for the boards, one for the glow
 function neonSigns(cfg) {
   const A = neonAtlas(), G = CITY.G, { UX, UZ, VX, VZ } = CITY.axes, near = cfg.near || 130, max = cfg.max || 240;
   const rnd = mulberry32(cfg.seed || 4242), cand = [];
@@ -109,7 +110,7 @@ function neonSigns(cfg) {
       const fx = b.x + nx * ext, fz = b.z + nz * ext, L = cityLineNear(fx, fz);
       const dx = L.s.x - fx, dz = L.s.z - fz, d = Math.hypot(dx, dz);
       if (d > near || d < 10 || (dx * nx + dz * nz) / d < 0.55) continue;   // must face the line
-      cand.push({ b, nx, nz, d, y: L.s.y, half, r: rnd() * (0.4 + d / near) });   // nearer walls first, mostly
+      for (let k = 0; k < 3; k++) cand.push({ b, nx, nz, d, half, r: rnd() * (0.4 + d / near) });   // a few tries a wall, nearer walls first
     }
   }
   cand.sort((a, c) => a.r - c.r);
@@ -117,13 +118,13 @@ function neonSigns(cfg) {
   for (const c of cand) {
     if (placed.length >= max) break;
     const upright = rnd() < 0.4, cell = upright ? A.up[Math.floor(rnd() * A.up.length)] : A.across[Math.floor(rnd() * A.across.length)];
-    const h = upright ? 12 + cell[4] * 3 : 5 + rnd() * 3, w = upright ? h / 4 : h * 340 / 128;
-    let y = clamp(c.y - 6 + (rnd() - 0.5) * 34, G + 7 + h / 2, Infinity);
+    const h = upright ? 5 + cell[4] * 1.4 : 2 + rnd() * 1.4, w = upright ? h / 4 : h * 340 / 128;
+    let y = G + NEON_LOW + h / 2 + Math.pow(rnd(), 1.8) * NEON_HIGH;   // mostly at street level, shopfronts and bars
     // the tier at that height (setbacks step in): the wall is that tier's
     let y0 = c.b.y0, tier = null;
     for (const t of c.b.tiers) { if (y + h / 2 < t[2] - 1.5 && y - h / 2 > y0) { tier = t; break; } y0 = t[2]; }
     if (!tier) {                                             // too high for it: as high as the building allows
-      const t0 = c.b.tiers[0]; y = Math.min(y, t0[2] - h / 2 - 2); if (y - h / 2 < G + 6) continue; tier = t0;
+      const t0 = c.b.tiers[0]; y = Math.min(y, t0[2] - h / 2 - 1); if (y - h / 2 < G + 3) continue; tier = t0;
     }
     const ext = Math.abs(c.nx * UX + c.nz * UZ) > 0.5 ? tier[0] : tier[1], half = Math.abs(c.nx * UX + c.nz * UZ) > 0.5 ? tier[1] : tier[0];
     if (w > half * 2 - 3) continue;
