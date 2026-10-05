@@ -1,6 +1,6 @@
 {
  "v": 1,
- "stamp": 1790198209260,
+ "stamp": 1791130297413,
  "gearSide": "left",
  "global": {
   "grav": 250,
@@ -10,7 +10,7 @@
   "bounceFrom": 0.5,
   "bounceLift": 12,
   "bounceKeep": 0.62,
-  "hopRate": 1.75,
+  "hopRate": 4,
   "burn": 12,
   "sideBurn": 0.5,
   "refuel": 63,

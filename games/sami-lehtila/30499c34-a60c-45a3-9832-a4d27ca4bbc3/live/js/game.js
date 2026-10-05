@@ -30,7 +30,7 @@
  * kielen, gate-test.html on luukun oma säätösivu.
  */
 import { createJoystick } from 'https://plugins.game.bigbools.fi/joystick/v1/index.js';
-import { createGamepad } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
+import { createGamepad, createControls } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
 import { portal, onPortal, setPortal }
   from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
 /* Saako debug tällä sivulla olla auki lainkaan. Omassa osoitteessaan peli on
@@ -1143,7 +1143,6 @@ function burst(x, y, color, n, speed, gravity) {
 }
 
 /* ------------------------------------------------------------------ syöte */
-const KEY = Object.create(null);
 
 function toLogical(clientX, clientY) {
   const r = canvas.getBoundingClientRect();
@@ -1158,6 +1157,16 @@ function toggleGear() {
   if (state !== PLAY || dead) return;
   taxi.gearWant = !taxi.gearWant;
   sfx.gear();
+}
+
+/* Ponnistus on oma nappinsa (näppäin X, ohjaimen B), ei ylös-tikun sivuvaikutus: ahtaassa
+   paikassa ja pienellä painovoimalla pomppu jokaisessa lähdössä häiritsee.
+   Pyyntö kulutetaan seuraavassa `update`-askeleessa: alustalla se on lähtö,
+   ilmassa se ei tee mitään eikä jää odottamaan seuraavaa laskua. */
+let hopReq = false;
+function hop() {
+  if (state !== PLAY || dead) return;
+  hopReq = true;
 }
 
 /* Töötti kuuluu 150 pikselin päähän. Jos odottava asiakas kuulee sen, hän
@@ -1213,8 +1222,6 @@ addEventListener('keydown', e => {
     }
     return;
   }
-  KEY[e.code] = true;
-
   if (!card.classList.contains('hidden')) {
     const click = sel => {
       const b = card.querySelector(sel);
@@ -1235,10 +1242,10 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyF') { toggleFullscreen(); return; }
   if (e.code === 'KeyP') { togglePanel(); return; }
   if (e.code === 'KeyK' || e.code === 'Pause') { togglePause(); return; }
-  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyH') { honk(); return; }
-  if (e.code === 'Space' || e.code === 'KeyG') { e.preventDefault(); toggleGear(); }
+  /* Lennon näppäimet ovat pelaajan mäppäämiä (`controls`). Välilyönti ei
+     silti saa vierittää sivua, mihin tahansa se on mäpätty. */
+  if (e.code === 'Space') e.preventDefault();
 });
-addEventListener('keyup', e => { KEY[e.code] = false; });
 
 const stick = createJoystick({
   target: canvas,
@@ -1251,21 +1258,17 @@ const stick = createJoystick({
 stickReady = true;
 stick.gain = P.stick;
 
-/* Ohjain. keys: false, koska peli lukee näppäimistön jo itse — plugin lukisi
-   sen toiseen kertaan ja teline kääntyisi kahdesti yhdestä välilyönnistä.
-   Sauvalle ei anneta gainia: kosketussauvan herkkyyskerroin on siellä siksi
-   että peukalon matka on lyhyt, eikä oikea sauva tarvitse sitä.
+/* Ohjain. keys: false, koska näppäimistön lukee `controls`. Sauvalle ei
+   anneta gainia: kosketussauvan herkkyyskerroin on siellä siksi että peukalon
+   matka on lyhyt, eikä oikea sauva tarvitse sitä.
 
-   Napit ovat eri asioita sen mukaan näkyykö kortti. Kortti ja peli eivät ole
-   koskaan yhtä aikaa esillä, joten sama nappi saa olla kummassakin eri asia. */
+   Tässä ovat vain kiinteät napit: valikot, kortti, tauko ja kentänvaihto.
+   Lennon napit ovat pelaajan mäppäämiä, ks. `controls` alla. Napit ovat eri
+   asioita sen mukaan näkyykö kortti. Kortti ja peli eivät ole koskaan yhtä
+   aikaa esillä, joten sama nappi saa olla kummassakin eri asia. */
 const gamepad = createGamepad({
   keys: false,
   actions: {
-    /* Teline on A ja **kumpi tahansa liipasin**. Molemmat liipasimet yhtä
-       aikaa on koko ruutu, ei teline — ks. `padFullscreen`, joka peruu
-       telineen jos ele alkoi siitä. Sami 23.9.2026: *"kumpi tahansa
-       liipasin voi olla, tai siis molemmat, kunhan eri aikaa."* */
-    gear:  ['A', 'LT', 'RT'],
     /* Olkapäät ovat kentänvaihto: vasen aloittaa nykyisen kentän alusta
        kolmella elämällä, oikea siirtyy seuraavaan ja viimeisestä ensimmäiseen.
        Molemmat tekevät saman kuin säätöpaneelin kenttänappi hiirellä. Sami
@@ -1273,7 +1276,6 @@ const gamepad = createGamepad({
        voi olla kaksi asiaa — ja sille jäi A, joka on aina ollut sen oma. */
     restart: ['LB'],
     next:  ['RB'],
-    horn:  ['B', 'X'],
     menu:  ['Start'],
     select: ['Back'],
     start: ['Start'],
@@ -1289,6 +1291,45 @@ const gamepad = createGamepad({
     right: ['Right'],
   },
 });
+
+/* Lennon syötteet, jotka pelaaja voi mäpätä itse asetusten Ohjaimet-ikkunasta
+   (gamepad-pluginin `createControls`). Tässä ovat oletukset; pelaajan omat
+   profiilit ovat hänen selaimessaan. Suunnat ovat analogisia: näppäin on heti
+   täysi ja sauva sellaisenaan, kuten ennen mäppäystä.
+
+   Teline on A ja **kumpi tahansa liipasin**. Molemmat liipasimet yhtä aikaa on
+   koko ruutu, ei teline — ks. `padFullscreen`, joka peruu telineen jos ele
+   alkoi siitä. Sami 23.9.2026: *"kumpi tahansa liipasin voi olla, tai siis
+   molemmat, kunhan eri aikaa."* */
+const controls = createControls({
+  id: 'space-taxi',
+  pad: gamepad,
+  lang: LANG,
+  inputs: [
+    { id: 'left',  label: { fi: 'Vasen', en: 'Left' },  type: 'analog', keys: ['ArrowLeft', 'KeyA'],  pad: ['LS-Left', 'Left'] },
+    { id: 'right', label: { fi: 'Oikea', en: 'Right' }, type: 'analog', keys: ['ArrowRight', 'KeyD'], pad: ['LS-Right', 'Right'] },
+    { id: 'up',    label: { fi: 'Ylös', en: 'Up' },     type: 'analog', keys: ['ArrowUp', 'KeyW'],    pad: ['LS-Up', 'Up'] },
+    { id: 'down',  label: { fi: 'Alas', en: 'Down' },   type: 'analog', keys: ['ArrowDown', 'KeyS'],  pad: ['LS-Down', 'Down'] },
+    { id: 'gear',  label: { fi: 'Teline', en: 'Gear' }, type: 'digital', keys: ['Space', 'KeyG'], pad: ['A', 'LT', 'RT'] },
+    { id: 'hop',   label: { fi: 'Ponnistus', en: 'Hop' }, type: 'digital', keys: ['KeyX'], pad: ['B'] },
+    { id: 'horn',  label: { fi: 'Töötti', en: 'Horn' }, type: 'digital', keys: ['ShiftLeft', 'ShiftRight', 'KeyH'], pad: ['X'] },
+  ],
+});
+
+/* Lento ei kuule mitään kortin, valikon tai tauon aikana. Vaihto kuuroksi
+   ja takaisin tehdään vain reunalla: kuurouden päättyessä jokainen syöte
+   odottaa että sen nappi nousee, joten kortin välilyönti ei käännä telinettä
+   heti lennon alussa. */
+let controlsMuted = false;
+function muteControls(on) {
+  if (on === controlsMuted) return;
+  controlsMuted = on;
+  controls.mute(on);
+}
+
+function openControls() {
+  controls.open({ device: gamepad.connected ? 'pad' : 'keys' });
+}
 
 /* Kerran per ruutu, ennen kuin mitään kysytään: pressed on tämän ja edellisen
    kutsun erotus. Kutsutaan myös korttiruuduissa, jotta vuoron saa käyntiin
@@ -1328,6 +1369,10 @@ function padFullscreen() {
 
 function padInput() {
   gamepad.poll();
+  muteControls(!card.classList.contains('hidden') || menuOpen() || paused);
+  controls.poll();
+  /* Mäppäysikkuna lukee ohjainta itse; sen B ei saa sulkea valikkoa alta. */
+  if (controls.isOpen()) return;
   padFullscreen();
 
   if (menuOpen()) { padMenu(); return; }
@@ -1383,10 +1428,11 @@ function padInput() {
     startLevel((levelIndex + 1) % LEVELS.length);   // viimeisestä ensimmäiseen
     return;
   }
-  if (gamepad.pressed('horn')) { honk(); return; }
+  if (controls.pressed('horn')) { honk(); return; }
+  if (controls.pressed('hop')) { hop(); return; }
   /* `fullFired` on tämän ruudun koko ruudun ele: sen laukaissut toinen
      liipasin ei saa kääntää telinettä, ja ensimmäisen kääntö on jo peruttu. */
-  if (gamepad.pressed('gear') && !fullFired) {
+  if (controls.pressed('gear') && !fullFired) {
     /* Liipasimesta tullut painallus merkitään muistiin: siitä voi vielä tulla
        koko ruudun ele, jos toinen liipasin painuu heti perään. */
     if (state === PLAY && !dead && (gamepad.held('LT') || gamepad.held('RT'))) {
@@ -1483,14 +1529,11 @@ function padMenu() {
 }
 
 function inputVector() {
-  const kx = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
-  const ky = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
+  /* Näppäimistö ja ohjain tulevat mäppäyksen läpi, vektori on jo <= 1. */
+  const c = controls.vector('left', 'right', 'up', 'down');
   let v;
-  if (kx || ky) {
-    const l = Math.hypot(kx, ky) || 1;
-    v = { x: kx / l, y: ky / l };
-  } else if (gamepad.x || gamepad.y) {
-    v = { x: gamepad.x, y: gamepad.y };       // plugin lupaa jo vektorin <= 1
+  if (c.x || c.y) {
+    v = c;
   } else if (stick.active) {
     let x = stick.x * stick.gain, y = stick.y * stick.gain;
     const l = Math.hypot(x, y);
@@ -2095,6 +2138,8 @@ function updateEnter(dt) {
 
 /* ---------------------------------------------------------------- päivitys */
 function update(dt) {
+  const hopNow = hopReq;                     // ponnistusnappi, ks. hop()
+  hopReq = false;
   runT += dt;
   if (msgT > 0) msgT -= dt;
   if (titleT > 0) titleT -= dt;
@@ -2164,7 +2209,8 @@ function update(dt) {
        joten peli päättää sen itse niin kuin millä tahansa muulla alustalla. */
     if (fuel <= 0.5 && (!taxi.landed.fuel || !canBuyFuel())) { crash(); return; }
     const wantsUp = raw.y < -0.2 && fuel > 0;
-    if (wantsUp && ++taxi.upHold >= LEAVE_HOLD) leavePad();
+    if (hopNow && fuel > 0) leavePad(true);
+    else if (wantsUp && ++taxi.upHold >= LEAVE_HOLD) leavePad(false);
     else {
       if (!wantsUp) taxi.upHold = 0;
       /* Tikku alas laskee taksin maahan, ylös nostaa ilmaan: sama liike
@@ -2247,7 +2293,7 @@ function move(dt) {
  *
  * Liikkuvalla alustalla tämä ei yksin riitä: 10 px on nousevalta alustalta
  * reilu kymmenesosa sekuntia. Siksi carryOff sen lisäksi. */
-function leavePad() {
+function leavePad(withHop) {
   const p = taxi.landed;
   /* Kesken vajoamisen lähtevä vie asiakkaan mukanaan: keikka jää kyytiin ja
      maksetaan seuraavalla laskulla samalle alustalle. Ilman tätä odotuslippu
@@ -2260,10 +2306,9 @@ function leavePad() {
      lohkoissa ja Highrisen ylärivissä on sellaisia — ja tarkistamaton nosto
      työntäisi taksin seinän sisään juuri silloin kun pelaaja teki kaiken
      oikein. Jätetty alusta ei ole este, se on se josta juuri noustiin. */
-  /* Ponnistus: teline suoristuu ja työntää taksin irti pinnasta, ja vetäytyy
-     heti perään sisään. Sami 23.9.2026: *"ylös lähtiessä telineet pompauttaa
-     meidät ylös ja sitten vetäytyy heti takasin ja ohjattavuus on jo heti
-     käytössä."*
+  /* Ponnistus (vain ponnistusnapista, `withHop`): teline suoristuu ja työntää taksin
+     irti pinnasta, ja vetäytyy heti perään sisään, joten ohjattavuus on
+     käytössä heti. Ylös-tikulla lähtö on pelkkä nosto ilman vauhtia.
 
      **Ponnistus on animaatio eikä hyppäys.** Ensimmäinen versio suoristi jalat
      yhdessä ruudussa, ja Sami: *"liian nopea, pitää mennä useampi frame kun
@@ -2292,7 +2337,7 @@ function leavePad() {
   taxi.y = y0 - P.bounceLift;
   if (!fits()) taxi.y = y0;
 
-  if (P.hopRate > 0) {
+  if (withHop && P.hopRate > 0) {
     /* Jalat suoristuvat vaikka tilaa olisi vain sen verran: se palauttaa
        taksin seisomakorkeuteen, joka on varmasti mahtunut — sieltä on
        laskeuduttu — ja jättää telineen ulos siltä varalta että taksi vajoaa
@@ -2836,16 +2881,19 @@ function drawTaxi(v) {
   ctx.translate(t2.x, t2.y);
   if (ts !== 1) ctx.scale(ts, ts);
 
-  const flame = (dx, dy, rot, len) => {
+  /* `cut` piilottaa liekin tyven: piirretään vain se osa joka alkaa `cut`
+     pikselin päästä, ja se osa tulee suuttimen suulle. */
+  const flame = (dx, dy, rot, len, cut = 0) => {
     ctx.save();
-    ctx.translate(dx, dy); ctx.rotate(rot);
+    ctx.translate(dx, dy); ctx.rotate(rot); ctx.translate(0, -cut);
     const g = ctx.createLinearGradient(0, 0, 0, len);
     g.addColorStop(0, 'rgba(255,240,180,.95)');
     g.addColorStop(0.5, 'rgba(255,150,60,.7)');
     g.addColorStop(1, 'rgba(255,60,60,0)');
     ctx.fillStyle = g;
+    const w = 6 * (1 - cut / len);
     ctx.beginPath();
-    ctx.moveTo(-6, 0); ctx.lineTo(6, 0); ctx.lineTo(0, len);
+    ctx.moveTo(-w, cut); ctx.lineTo(w, cut); ctx.lineTo(0, len);
     ctx.closePath(); ctx.fill();
     ctx.restore();
   };
@@ -2853,9 +2901,19 @@ function drawTaxi(v) {
   if (v.y < -0.05) { const l = 26 * -v.y * j(); flame(-14, TH / 2, 0, l); flame(14, TH / 2, 0, l); }
   if (v.y > 0.05) flame(0, -TH / 2, Math.PI, 18 * v.y * j());
   /* Sivuliekki on hieman pidempi kuin pystyliekki: se tulee kapeammasta
-     suuttimesta, ja lyhyenä se hukkui rungon viereen. Sami 23.9.2026. */
-  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, -Math.PI / 2, 26 * v.x * j());
-  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, Math.PI / 2, 26 * -v.x * j());
+     suuttimesta, ja lyhyenä se hukkui rungon viereen. Sami 23.9.2026.
+     Se näyttää samalta kuin kattoliekki: katolla kyltti peittää liekin
+     vaalean tyven, joten näkyviin jää punaisempi ja suipompi häntä. Sivulla
+     sama saadaan piirtämällä kolmanneksen pidempi liekki ja jättämällä sen
+     ensimmäinen kolmannes pois — jäljelle jäävän tyven leveys on suuttimen
+     korkeus. Sami 24.9.2026: *"liekki voisi olla samanlainen kuin ylhäällä,
+     eli paljon punaisempi."* */
+  /* Kulmat: `flame` piirtää +y:n suuntaan, ja rotate(+π/2) vie sen vasemmalle,
+     −π/2 oikealle. Ne olivat ristissä 24.9.2026 asti, ja liekki osoitti
+     suuttimesta rungon sisään — rungon alta näkyi vain suuttimen hehku. */
+  const SIDE_L = 23;                        // 40 % pois 39:stä, kattoliekin kokoiseksi. Sami 24.9.2026.
+  if (v.x > 0.05) flame(-(TW / 2 + NOZ), 0, Math.PI / 2, SIDE_L * v.x * j(), SIDE_L * v.x / 3);
+  if (v.x < -0.05) flame(TW / 2 + NOZ, 0, -Math.PI / 2, SIDE_L * -v.x * j(), SIDE_L * -v.x / 3);
 
   /* Sivusuuttimet. Ne ovat olleet aina liekissä muttei rungossa — Sami
      23.9.2026: *"sivuthrustereiden puuttuminen on häirinnyt aina, molemmissa
@@ -3350,7 +3408,7 @@ const SLIDERS = [
   { key: 'landVX', label: 'lasku vx max', min: 10, max: 200, step: 5 },
   { key: 'bounceFrom', label: 'pomppu alkaa x', min: 0.2, max: 0.95, step: 0.05 },
   { key: 'bounceLift', label: 'pompun nosto px', min: 2, max: 30, step: 1 },
-  { key: 'hopRate', label: 'ponnistus × telineen vauhti', min: 0, max: 3, step: 0.25 },
+  { key: 'hopRate', label: 'ponnistus × telineen vauhti', min: 0, max: 8, step: 0.25 },
   { key: 'bounceKeep', label: 'pompun jäävä vauhti', min: 0.2, max: 0.9, step: 0.02 },
   { key: 'burn', label: 'kulutus / s', min: 0, max: 40, step: 1 },
   { key: 'sideBurn', label: 'sivusuuttimet × kulutus', min: 0, max: 1, step: 0.05 },
@@ -3907,6 +3965,11 @@ let menuEl = null, menuPaused = false;
    kertoo onko valikkoa ylipäätään koskettu ohjaimella: hiirellä avattuna
    kehys ensimmäisen napin ympärillä näyttäisi siltä että jotain on valittu. */
 let menuGrid = [], menuAt = { r: 0, c: 0 }, menuPad = false;
+/* Lopeta peli kysyy napissa itsessään: ensimmäinen painallus vaihtaa tekstin
+   varmistukseksi, joka raukeaa itsestään. Vuoro päättyy kuten varikon
+   lopeta-napista, ja rahat menevät tulostaululle. */
+const QUIT_ARM_MS = 3000;
+let quitArmed = false, quitTimer = 0;
 
 const menuOpen = () => !!menuEl && menuEl.style.display !== 'none';
 const css = (node, style) => { Object.assign(node.style, style); return node; };
@@ -4008,22 +4071,56 @@ function buildMenu() {
     mpick(LANG === 'fi', 'suomi', () => { applyLang('fi'); setPortal('lang', 'fi'); buildMenu(); }),
     mpick(LANG === 'en', 'english', () => { applyLang('en'); setPortal('lang', 'en'); buildMenu(); })));
 
+  box.append(mrow(t('set.controls'),
+    mpick(false, t('set.controlsOpen'), openControls)));
+
   box.append(mrow(t('set.screen'),
     mpick(!fsElement(), t('set.window'), () => { if (fsElement()) toggleFullscreen(); }),
     mpick(!!fsElement(), t('set.full'), () => { if (!fsElement()) toggleFullscreen(); })));
 
-  const foot = css(el('div'), { display: 'flex', justifyContent: 'flex-end', marginTop: '6px' });
+  const foot = css(el('div'), {
+    display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px',
+  });
   const close = css(pbutton(null, t('set.close'), closeMenu), {
     font: '600 15px system-ui, sans-serif', padding: '9px 20px', borderRadius: '10px',
     cursor: 'pointer', border: '1px solid rgba(111,227,255,.5)',
     background: 'rgba(111,227,255,.14)', color: '#6fe3ff',
   });
-  menuGrid.push([close]);
-  foot.append(close);
+  /* Lopetettavaa on vain kesken kentän: valikossa, kortilla ja
+     välianimaatiossa vuoro joko ei ole käynnissä tai se päättyy jo omaa
+     reittiään. */
+  if (state === PLAY || state === ENTER) {
+    const quit = css(pbutton(null, t(quitArmed ? 'set.quitSure' : 'set.quit'), quitGame), {
+      font: '600 15px system-ui, sans-serif', padding: '9px 16px', borderRadius: '10px',
+      cursor: 'pointer', marginRight: 'auto',
+      border: quitArmed ? '1px solid #ff6b6b' : '1px solid rgba(255,107,107,.45)',
+      background: quitArmed ? 'rgba(255,107,107,.28)' : 'rgba(255,107,107,.08)',
+      color: '#ff8f8f',
+    });
+    menuGrid.push([quit, close]);
+    foot.append(quit, close);
+  } else {
+    menuGrid.push([close]);
+    foot.append(close);
+  }
   box.append(foot);
 
   menuNode().replaceChildren(box);
   menuFocus();
+}
+
+function quitGame() {
+  if (state !== PLAY && state !== ENTER) return;
+  clearTimeout(quitTimer);
+  if (!quitArmed) {
+    quitArmed = true;
+    quitTimer = setTimeout(() => { quitArmed = false; if (menuOpen()) buildMenu(); }, QUIT_ARM_MS);
+    buildMenu();
+    return;
+  }
+  quitArmed = false;
+  closeMenu();
+  gameOver(false);
 }
 
 function openMenu(byPad) {
@@ -4032,13 +4129,14 @@ function openMenu(byPad) {
   menuAt.r = 0; menuAt.c = 0;
   buildMenu();
   menuNode().style.display = 'flex';
-  for (const k of Object.keys(KEY)) KEY[k] = false;   // pohjaan jäänyt näppäin ei jää päälle
   menuPaused = (state === PLAY || state === ENTER) && !paused;
   if (menuPaused) setPaused(true);
 }
 
 function closeMenu() {
   if (!menuOpen()) return;
+  clearTimeout(quitTimer);
+  quitArmed = false;
   menuPad = false;
   menuEl.style.display = 'none';
   if (menuPaused) setPaused(false);
@@ -4181,6 +4279,7 @@ function restoreDev() {
 function applyLang(code) {
   if (code === LANG) return;
   setLang(code);
+  controls.setLang(code);
   if (state === MENU) showCard(menuCard(), 0, null);
   if (!panelEl.classList.contains('hidden')) buildPanel();
 }
