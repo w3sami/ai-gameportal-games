@@ -18,7 +18,7 @@
               first station hall they come to (they go in and aren't seen again)
      groves   [[x0, z0, x1, z1], ...]: trees in the empty lots inside these rectangles (where the corridor has cleared
               the buildings away), off the streets, buildings, roads and lines, and clear of the course line: well below
-              it (METRO_GROVE m) or off to its side
+              it (METRO_GROVE m) and not right under it, or off to its side
      speed, every, cars    the trains' speed (m/s), the gap from one train's front to the next (m), cars a train.
               Trains run from end to end of the line and start again from the first end; they're always running (the
               run's own clock), so the ends belong out in the haze or down a tunnel
@@ -221,6 +221,7 @@ function metroGrove(ctx, [x0, z0, x1, z1]) {
     if (!inLot || ctx.offLimits(tx, tz, r)) continue;
     if (near.some((b) => { const dx = tx - b.x, dz = tz - b.z, [hu, hv] = b.tiers[0]; return Math.abs(dx * UX + dz * UZ) < hu + r + 2 && Math.abs(dx * VX + dz * VZ) < hv + r + 2; })) continue;
     const ln = cityLineNear(tx, tz);
+    if (ln.d < METRO_GROVE + 3) continue;                    // none right under the line, where it would be in the way of the view
     if (ln.d < ln.s.width + 25 && G + h > ln.s.y - METRO_GROVE) continue;   // near the line: only well under it
     CITY.trees.push({ x: tx, z: tz, h, r, c: rt() });
     shoreBox('tree', tx, tz, 1, 0, r * 0.75, r * 0.75, G + h * 0.35, G + h);
@@ -445,6 +446,8 @@ function metroDraw(K, group) {
       }
       if (tun) {
         K.quad(M, A(-METRO_CUT, ya + METRO_ROOF), B(-METRO_CUT, yb + METRO_ROOF), B(METRO_CUT, yb + METRO_ROOF), A(METRO_CUT, ya + METRO_ROOF), TUNC, [0, -1, 0]);
+        // and its top, at street level: the blocks round an open cutting are left out, so without it you'd see in from above
+        K.quad(M, A(-METRO_CUT - 1, G + 0.12), B(-METRO_CUT - 1, G + 0.12), B(METRO_CUT + 1, G + 0.12), A(METRO_CUT + 1, G + 0.12), LAWN, [0, 1, 0]);
         if (i % 4 === 0) for (const sd of [-1, 1]) lamps.push([L.X[i] + nax * sd * (METRO_CUT - 0.05), ya + METRO_ROOF - 3, L.Z[i] + naz * sd * (METRO_CUT - 0.05), -nax * sd, -naz * sd, 1.6, 0.35]);
       }
       // a portal: the headwall over the mouth, both faces, up to the parapet
