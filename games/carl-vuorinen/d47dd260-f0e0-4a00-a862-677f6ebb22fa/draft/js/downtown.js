@@ -11,6 +11,9 @@
                 wall round each, mostly down at street level (NEON_LOW, NEON_HIGH), never closer than NEON_GAP m to
                 each other. Only along the line, so the city it flies through looks lived in at night.
    }
+   A supertall with a helipad (js/city.js landmarks, pad: true) gets its lights: a string of white lamps round the edge
+   of its roof, green ones round the pad, floodlights on the H, and red aviation lights blinking on the corners of
+   every setback.
    Sim part: each skybridge is a shore box ('skybridge': a crash); the signs are flat on their walls, no boxes of their
    own. Game part: the skybridges' walls, roof and underside in the city's building meshes; the signs in two meshes of
    their own (the boards, words from one canvas atlas, and their glow).
@@ -32,6 +35,7 @@ CITY_PLUGINS.push({
   kit: {
     build(K, group) {
       if (CITY.C && CITY.C.neon) group.add(neonSigns(CITY.C.neon));
+      for (const b of CITY.bld) if (b.landmark && b.crown === 4) group.add(roofLights(b));
       if (!DOWNTOWN.bridges.length) return;
       const M = K.M, GLASS = K.C3('#4f5d69'), FRAME = K.C3('#8d9196'), { UX, UZ } = CITY.axes;
       for (const b of DOWNTOWN.bridges) {
@@ -152,5 +156,42 @@ function neonSigns(cfg) {
   hgeo.computeBoundingSphere();
   grp.add(new THREE.Mesh(hgeo, A.halo), new THREE.Mesh(geo, A.mat));
   grp.userData.neon = DOWNTOWN.neon = placed.length;
+  return grp;
+}
+
+/* ---------- the helipad tower's lights ---------- */
+// glowing points (the neon signs' soft glow as their sprite), sized in metres so they read from far off; the red ones
+// blink, a second on and a second off, by fading their material before each draw
+const _lightMats = {};
+function roofLights(b) {
+  const halo = neonAtlas().halo.map, { UX, UZ, VX, VZ } = CITY.axes, grp = new THREE.Group();
+  const P = (u, v, y) => [b.x + UX * u + VX * v, y, b.z + UZ * u + VZ * v];
+  const points = (list, size, blink) => {
+    const pos = [], col = [], c = new THREE.Color();
+    for (const [p, hex] of list) { pos.push(...p); c.set(hex); col.push(c.r, c.g, c.b); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const key = size + (blink ? 'b' : '');                     // one material each, kept from course to course
+    const m = _lightMats[key] || (_lightMats[key] = new THREE.PointsMaterial({ map: halo, size, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.userData.shared = true;
+    const pts = new THREE.Points(g, m);
+    if (blink) pts.onBeforeRender = () => { m.opacity = 0.15 + 0.85 * (Math.floor(performance.now() / 1000) % 2); };
+    return pts;
+  };
+  const edge = (hu, hv, y, step, hex) => {                   // lamps along a rectangle's edge, about step m apart
+    const out = [];
+    for (const [a, c, len] of [[[-1, -1], [1, -1], hu], [[1, -1], [1, 1], hv], [[1, 1], [-1, 1], hu], [[-1, 1], [-1, -1], hv]]) {
+      const n = Math.max(1, Math.round(len * 2 / step));
+      for (let i = 0; i < n; i++) { const t = i / n; out.push([P((a[0] + (c[0] - a[0]) * t) * hu, (a[1] + (c[1] - a[1]) * t) * hv, y), hex]); }
+    }
+    return out;
+  };
+  const [hu, hv, top] = b.tiers[b.tiers.length - 1], d = Math.min(hu, hv) * 0.72;
+  grp.add(points(edge(hu + 0.2, hv + 0.2, top + 0.9, 4, '#fff1d6'), 4.5));                 // the roof's edge
+  grp.add(points(edge(d + 0.3, d + 0.3, top + 0.9, 3.5, '#5dff7a'), 3.6));                 // round the pad
+  grp.add(points([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [P(u * d * 0.6, v * d * 0.6, top + 2), '#fff8e8']), 9));   // on the H
+  const red = [];
+  for (const [tu, tv, y1] of b.tiers) for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) red.push([P(u * tu, v * tv, y1 + 1), '#ff2a1a']);
+  grp.add(points(red, 9, true));
   return grp;
 }
