@@ -7,9 +7,10 @@
                 towers, js/outskirts.js towers), its floor y m above the streets, w m wide and h m tall. Lined up with
                 the street grid it has the towers' own windows (lit at night); at any other angle it's plain.
      neon: { near, max, seed }   neon signs on the facades that face the course line, within near m of it (default
-                130), max of them (default 240): small boards with a glowing word, across or stacked, a soft glow on the
-                wall round each, mostly down at street level (NEON_LOW, NEON_HIGH), never closer than NEON_GAP m to
-                each other. Only along the line, so the city it flies through looks lived in at night.
+                130), max of them (default 240): small boards with a glowing word, across or stacked, its letters and
+                border in two different tube colours (NEON_PAIRS_*), a soft glow on the wall round each, mostly down
+                at street level (NEON_LOW, NEON_HIGH), never closer than NEON_GAP m to each other. Only along the line,
+                so the city it flies through looks lived in at night.
    }
    A supertall with a helipad (js/city.js landmarks, pad: true) gets its lights: a string of white lamps round the edge
    of its roof, green ones round the pad, floodlights on the H, and red aviation lights blinking on the corners of
@@ -59,7 +60,12 @@ const NEON_GAP = 13;                                         // m between signs
 const NEON_LOW = 4, NEON_HIGH = 32;                          // their bottoms: this far over the street, and up to this much higher
 const NEON_ACROSS = ['HOTEL', 'BAR', 'SUSHI', 'RAMEN', 'CLUB', '24H', 'CAFE', 'KINO', 'PIZZA', 'JAZZ', 'ARCADE', 'LIVE'];
 const NEON_UP = ['HOTEL', 'BAR', 'SUSHI', 'CLUB', 'KINO', 'JAZZ', '24H', 'NOODLE'];
-const NEON_COLS = ['#ff3fb4', '#38eaff', '#ffe04a', '#7dff5c', '#ff7a3a', '#b88bff'];
+// neon tube colours, and each word's pair of them: [its letters, its border]
+const NEON = { pink: '#ff3fb4', cyan: '#38eaff', yellow: '#ffe04a', orange: '#ff7a3a', red: '#ff2b2b', white: '#f2f4ff' };
+const NEON_PAIRS_ACROSS = [['red', 'white'], ['white', 'pink'], ['cyan', 'red'], ['yellow', 'cyan'], ['pink', 'cyan'], ['white', 'red'],
+  ['orange', 'white'], ['red', 'yellow'], ['cyan', 'white'], ['yellow', 'red'], ['pink', 'white'], ['white', 'cyan']];
+const NEON_PAIRS_UP = [['white', 'pink'], ['red', 'cyan'], ['yellow', 'red'], ['cyan', 'white'], ['pink', 'yellow'], ['orange', 'cyan'],
+  ['white', 'orange'], ['red', 'white']];
 let _neonAtlas = null;
 // one 1024 x 1024 canvas: 12 words across (3 columns of 4 rows, 340 x 128) on the top half, 8 stacked (128 x 512) below
 function neonAtlas() {
@@ -72,21 +78,21 @@ function neonAtlas() {
   };
   const glow = (text, x, y, col) => {                        // a tube: a wide glow, then the bright core
     g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 22; g.fillText(text, x, y);
-    g.shadowBlur = 6; g.fillStyle = '#fff7fb'; g.globalAlpha = 0.55; g.fillText(text, x, y); g.globalAlpha = 1;
+    g.shadowBlur = 6; g.fillStyle = '#fff7fb'; g.globalAlpha = 0.3; g.fillText(text, x, y); g.globalAlpha = 1;
   };
   g.textAlign = 'center'; g.textBaseline = 'middle';
   NEON_ACROSS.forEach((w, i) => {
-    const x = (i % 3) * 340, y = Math.floor(i / 3) * 128, col = NEON_COLS[i % NEON_COLS.length];
-    panel(x, y, 340, 128, col);
-    g.font = `bold ${w.length > 5 ? 58 : 72}px sans-serif`; glow(w, x + 170, y + 66, col);
-    across.push([x / 1024, 1 - (y + 128) / 1024, (x + 340) / 1024, 1 - y / 1024, 0, col]);
+    const x = (i % 3) * 340, y = Math.floor(i / 3) * 128, [tc, bc] = NEON_PAIRS_ACROSS[i % NEON_PAIRS_ACROSS.length].map((k) => NEON[k]);
+    panel(x, y, 340, 128, bc);
+    g.font = `bold ${w.length > 5 ? 58 : 72}px sans-serif`; glow(w, x + 170, y + 66, tc);
+    across.push([x / 1024, 1 - (y + 128) / 1024, (x + 340) / 1024, 1 - y / 1024, 0, tc]);
   });
   NEON_UP.forEach((w, i) => {
-    const x = i * 128, y = 512, col = NEON_COLS[(i + 3) % NEON_COLS.length], n = w.length, step = Math.min(84, 440 / n);
-    panel(x, y, 128, 512, col);
+    const x = i * 128, y = 512, [tc, bc] = NEON_PAIRS_UP[i % NEON_PAIRS_UP.length].map((k) => NEON[k]), n = w.length, step = Math.min(84, 440 / n);
+    panel(x, y, 128, 512, bc);
     g.font = `bold ${Math.round(step * 0.86)}px sans-serif`;
-    for (let k = 0; k < n; k++) glow(w[k], x + 64, y + 256 + (k - (n - 1) / 2) * step, col);
-    up.push([x / 1024, 1 - (y + 512) / 1024, (x + 128) / 1024, 1 - y / 1024, n, col]);
+    for (let k = 0; k < n; k++) glow(w[k], x + 64, y + 256 + (k - (n - 1) / 2) * step, tc);
+    up.push([x / 1024, 1 - (y + 512) / 1024, (x + 128) / 1024, 1 - y / 1024, n, tc]);
   });
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = 4;
