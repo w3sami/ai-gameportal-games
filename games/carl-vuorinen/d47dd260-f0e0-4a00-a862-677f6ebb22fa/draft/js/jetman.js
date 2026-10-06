@@ -5,7 +5,7 @@
    about 1.6 m across, swept, with turned-down tips, and two small jet turbines slung under it, one each side.
    Light colours so it reads against the dark of a dusk city: a white suit with orange panels, an orange helmet with
    a white stripe and a dark visor; a white wing with an orange leading edge, chevron and tips, dark pinstripes and a
-   carbon trailing edge; silver turbines with orange intakes; red and green wingtip lights and a white strobe.
+   carbon trailing edge; silver turbines with orange intakes; a white strobe.
    The exhaust lights up with the jets' spool (P.tuck, see js/jetwing.js), so replays and ghosts show it too: a hot
    ring at each nozzle and a short flickering plume behind it.
    Nose (head) along -Z; wingtips at about ±0.82 m.
@@ -25,9 +25,9 @@ function makeJetwingModel(scene, shading) {
     leg: A.region(8, 424, 252, 504, 0, 0.45, 0, 1),         // a tube's own length (from its first end), b round it
     arm: A.region(260, 424, 380, 504, 0, 0.3, 0, 1),
     eng: A.region(388, 424, 504, 504, 0, 0.36, 0, 1),
-    red: A.solid(176, 400, '#ff3326'), green: A.solid(200, 400, '#36ff6a'), strobe: A.solid(224, 400, '#ffffff'),
+    strobe: A.solid(224, 400, '#ffffff'),
   };
-  const M = AF.createModel(), body = M.part(), glass = M.part({ mat: 'glass' }), lamp = M.part({ glow: 1 }), flash = M.part({ glow: 2 });
+  const M = AF.createModel(), body = M.part(), glass = M.part({ mat: 'glass' }), flash = M.part({ glow: 2 });
 
   /* ---- pilot: torso, helmet, arms along the sides, legs together ---- */
   AF.loft(M, body, [
@@ -74,9 +74,7 @@ function makeJetwingModel(scene, shading) {
     AF.tube(M, body, new V3(x, y, z1 - 0.1), new V3(x, y, z1), 0.066, 0.05, { region: R.soot, seg: 12 });
     ENG.push(new V3(x, y, z1));
   }
-  // lights: red on the left tip, green on the right, a white strobe on the back of the harness
-  AF.ellipsoid(M, lamp, new V3(-0.816, WING_Y - 0.1, -0.02), new V3(0.022, 0.02, 0.035), { region: R.red, seg: 6, rings: 3 });
-  AF.ellipsoid(M, lamp, new V3(0.816, WING_Y - 0.1, -0.02), new V3(0.022, 0.02, 0.035), { region: R.green, seg: 6, rings: 3 });
+  // light: a white strobe on the back of the harness
   AF.ellipsoid(M, flash, new V3(0, WING_Y + 0.07, 0.18), new V3(0.025, 0.02, 0.03), { region: R.strobe, seg: 6, rings: 3 });
 
   /* ---- livery ---- */
