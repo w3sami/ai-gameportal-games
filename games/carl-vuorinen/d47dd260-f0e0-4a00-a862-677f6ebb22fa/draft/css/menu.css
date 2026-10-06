@@ -30,8 +30,22 @@
 .level-title { display: grid; gap: 0.15rem; font-size: 1.35rem; line-height: 1.1; }
 .level-title small { font: 700 0.85rem/1.2 var(--font); color: var(--ink-soft); letter-spacing: 0; }
 #btn-start:disabled { opacity: 0.55; cursor: default; }
-/* while a level loads, the old course's texts fade until the new ones arrive */
-body.is-loading .menu-levels .course, body.is-loading .menu-levels .lead, body.is-loading .menu-levels .controls { opacity: 0.35; }
+/* Loading: before the first course is in (the theme list is still empty) and while a picked level loads
+   (body.is-loading from js/game.js; js/boot.js adds #level-loading). The old course's texts keep their space but hide,
+   so the panel doesn't jump twice. The spinner turns by transform only, which browsers can animate off the main thread,
+   so it should keep turning while the level builds (that part blocks JS). */
+#level-loading, #theme-pick:empty { display: none; align-items: center; gap: 0.6rem; margin: 0.2rem 0 0.5rem; font-size: 0.95rem; font-weight: 700; color: var(--ink-soft); }
+#theme-pick:empty::after { content: "Loading\2026"; }
+#level-loading::before, #theme-pick:empty::before {
+  content: ""; flex: none; width: 1.1rem; height: 1.1rem; border-radius: 50%; box-sizing: border-box;
+  border: 3px solid var(--panel-edge); border-top-color: var(--route); will-change: transform; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #level-loading::before, #theme-pick:empty::before { animation-duration: 2.4s; } }
+#theme-pick:empty, body.is-loading #level-loading { display: flex; }
+body.is-loading #start-course { display: none; }
+body.is-loading .menu-levels .lead, body.is-loading .menu-levels .controls,
+body.is-loading #start-best, body.is-loading #ghost-btns, body.is-loading #btn-board { visibility: hidden; }
 /* short landscape phones: the level view drops the title so Start fits without scrolling */
 @media (max-height: 460px) {
   #start[data-view="levels"] h1, #start[data-view="levels"] .route { display: none; }
