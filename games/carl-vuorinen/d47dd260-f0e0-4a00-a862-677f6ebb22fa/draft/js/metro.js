@@ -11,7 +11,8 @@
               where it runs under the deck), an embankment below that, on the ground at 0, in a cutting below 0. 'T'
               covers the stretch to the next point: a tunnel, its ceiling METRO_ROOF m over the bed (h must be at least
               that far below 0 there); 'H' a station hall over the viaduct to the next point, METRO_HALL m high over the
-              bed, open at both ends (solid: you fly over it)
+              bed, open at both ends (solid: you fly over it), with a railed walkway along each side, stairs down to the
+              street at each end of them, and the metro sign (a blue M on a white disc) on both sides
      w        viaduct width (m, default METRO.w); color: the trains' stripe
      tracks   [{ off, dir, phase, every, endHall }]: off m right of the way the points run, dir 1 that way and -1 back;
               phase (m) shifts its trains along; every: this track's own gap between trains; endHall: its trains end in the
@@ -50,6 +51,8 @@ const METRO_CAR = { len: 17, gap: 1.2, hw: 1.45, h: 3.6 };    // a car: length, 
 const METRO_CELL = 60;                                        // grid of line samples, for the plugin's lookups
 const METRO_HOOP = 0.55;                                      // a train's hoop, as a share of a hoop's size: smaller, told apart
 const METRO_HALL = 17;                                        // a station hall's roof over the bed (m); it reaches 3 m past the deck
+const METRO_WALK = 3;                                         // the walkway along a hall's side, and its stairs: width (m)
+const METRO_STAIR = 1.5;                                      // the stairs' run for each metre they come down
 const METRO_GROVE = 9;                                        // a grove's tree tops stay this far under the course line (m), near it
 let METRO_DIG = 0;                                            // reach of the dug ground past the walls (set from the terrain's cell)
 
@@ -85,6 +88,7 @@ function metroBuildLine(spec, G) {
     let j = i; while (j < n - 1 && L.hall[j + 1]) j++;
     L.halls.push({ s0: i * step, s1: (j + 1) * step });
   }
+  L.station = new Uint8Array(n);                             // a hall, or where its stairs come down (kept clear of buildings)
   const k = Math.max(1, Math.round(METRO_EASE / 2 / step));   // ease the gradient changes (a moving average)
   for (let i = 0; i < n; i++) {
     let sum = 0, c = 0;
@@ -94,6 +98,10 @@ function metroBuildLine(spec, G) {
   for (let i = 0; i < n; i++) {
     const h = L.Hb[i];
     if (!L.kind[i]) L.kind[i] = h > METRO_EMB ? 'via' : h > 0.25 ? 'emb' : h > -0.25 ? 'grade' : 'cut';
+  }
+  for (const hl of L.halls) {
+    const reach = (L.Hb[Math.round(hl.s0 / step)] + 2) * METRO_STAIR + 6;
+    for (let i = 0; i < n; i++) if (i * step > hl.s0 - reach && i * step < hl.s1 + reach) L.station[i] = 1;
   }
   return L;
 }
@@ -181,7 +189,7 @@ CITY_PLUGINS.push({
     if (!METRO.lines.length) return false;
     const q = metroNear(x, z);
     if (!q.L) return false;
-    const k = q.L.kind[q.i], half = k === 'cut' || k === 'tun' ? METRO_CUT + METRO_DIG : q.L.w / 2;
+    const k = q.L.kind[q.i], half = k === 'cut' || k === 'tun' ? METRO_CUT + METRO_DIG : q.L.station[q.i] ? q.L.w / 2 + 3 + METRO_WALK : q.L.w / 2;
     return q.d < half + rd + 6;
   },
   skipBlock(blk) {                                           // a block an open cutting runs through: lawn instead (drawn here)
@@ -236,7 +244,19 @@ function metroBoxes(L, G) {
     const k = L.kind[i], hb = (L.Hb[i] + L.Hb[i + 1]) / 2, x = (L.X[i] + L.X[i + 1]) / 2, z = (L.Z[i] + L.Z[i + 1]) / 2;
     const dx = L.X[i + 1] - L.X[i], dz = L.Z[i + 1] - L.Z[i], l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l;
     const s = i * L.step;
-    if (L.hall[i]) shoreBox('metro', x, z, ux, uz, l / 2 + 0.3, half + 3, G + hb - METRO_DECK, G + hb + METRO_HALL + 0.5);
+    if (L.hall[i]) {
+      shoreBox('metro', x, z, ux, uz, l / 2 + 0.3, half + 3, G + hb - METRO_DECK, G + hb + METRO_HALL + 0.5);
+      for (const sd of [-1, 1]) {                            // the walkways along its sides
+        const o = sd * (half + 3 + METRO_WALK / 2);
+        shoreBox('metro', x - uz * o, z + ux * o, ux, uz, l / 2 + 0.3, METRO_WALK / 2, G + hb - 0.6, G + hb + 1.6);
+      }
+      for (const end of [i, i + 1]) if (metroHallEnd(L, i, end)) for (const st of metroStairs(L, end, end === i ? -1 : 1)) {
+        for (let k2 = 0; k2 < 3; k2++) {                     // each flight as three boxes, stepping down with it
+          const a = k2 / 3, b = (k2 + 1) / 3, f = (a + b) / 2 * st.run, top = st.y0 - (st.y0 - G) * a;
+          shoreBox('metro', st.x + st.fx * f, st.z + st.fz * f, st.fx, st.fz, st.run / 6 + 0.2, METRO_WALK / 2, G - 1, top + 1.1);
+        }
+      }
+    }
     else if (k === 'via' || k === 'emb') shoreBox('metro', x, z, ux, uz, l / 2 + 0.3, half, k === 'via' ? G + hb - METRO_DECK : G - 1, G + hb + METRO_PARAPET);
     else if (k === 'grade') shoreBox('metro', x, z, ux, uz, l / 2 + 0.3, half, G - 1, G + 0.4);
     else {                                                   // cutting or tunnel: the walls (solid out over the dug slope)
@@ -256,6 +276,18 @@ function metroBoxes(L, G) {
     L.piers.push({ x: px, z: pz, ux: L.TX[i], uz: L.TZ[i], top: G + L.Hb[i] - METRO_DECK });
     shoreBox('metro', px, pz, L.TX[i], L.TZ[i], 1.3, 1.3, G - 1, G + L.Hb[i] - METRO_DECK);
   }
+}
+// does a hall's run of segments start (end === i) or stop (end === i + 1) there?
+const metroHallEnd = (L, i, end) => (end === i ? (i === 0 || !L.hall[i - 1]) : (end >= L.n - 1 || !L.hall[end]));
+// the two flights of stairs down from a hall's end (sample j, dir -1 at its start, 1 at its end): where each starts at
+// the top (the walkway's end, middle of its width), which way it runs down (fx, fz) and how far
+function metroStairs(L, j, dir) {
+  const G = L.G, y0 = G + L.Hb[j] + 0.1, run = (y0 - G) * METRO_STAIR, fx = L.TX[j] * dir, fz = L.TZ[j] * dir, out = [];
+  for (const sd of [-1, 1]) {
+    const o = sd * (L.w / 2 + 3 + METRO_WALK / 2);
+    out.push({ x: L.X[j] - L.TZ[j] * o, z: L.Z[j] + L.TX[j] * o, y0, run, fx, fz, sd });
+  }
+  return out;
 }
 function metroOnDeck(L, x, z) {                              // within line L's footprint (plus a little)?
   for (let i = 0; i < L.n; i += 2) { const dx = L.X[i] - x, dz = L.Z[i] - z; if (dx * dx + dz * dz < (L.w / 2 + 4) ** 2) return true; }
@@ -397,7 +429,8 @@ function metroDraw(K, group) {
   const CONC = C3('#b9b4aa'), CONC_D = C3('#8f8a82'), UNDER = C3('#d8d2c6'), BED = C3('#5d564f'), BALLAST = C3('#6e665c');
   const RAIL = C3('#a7a9ab'), WALL = C3('#a29d94'), TUNW = C3('#262422'), TUNC = C3('#1f1e1c'), LAWN = C3('#5f7d45');
   const HALL = C3('#7d8a93'), HALL_D = C3('#16181a');
-  const lamps = [];                                          // tunnel lamps and portal lights: unlit quads (below)
+  const WALKC = { walk: C3('#9c978f'), edge: C3('#76726c'), rail: C3('#4f5458') };
+  const lamps = [], signs = [];                              // tunnel lamps and portal lights: unlit quads (below); the metro signs
   for (const L of METRO.lines) {
     const half = L.w / 2;
     // across: the mean of the neighbours' directions, so the pieces join up
@@ -430,7 +463,7 @@ function metroDraw(K, group) {
           K.quad(M, A(e2, ya + METRO_PARAPET), B(e2, yb + METRO_PARAPET), B(e, yb + METRO_PARAPET), A(e, ya + METRO_PARAPET), CONC, [0, 1, 0]);
         }
         if (k === 'via') K.quad(M, A(-half, ya - METRO_DECK), B(-half, yb - METRO_DECK), B(half, yb - METRO_DECK), A(half, ya - METRO_DECK), UNDER, [0, -1, 0]);
-        if (L.hall[i]) metroHall(K, L, i, A, B, ya, yb, nrm, lamps, HALL, HALL_D);
+        if (L.hall[i]) metroHall(K, L, i, A, B, ya, yb, nrm, lamps, HALL, HALL_D, signs, WALKC);
         continue;
       }
       // cutting or tunnel: the walls, a parapet and lawn along the top of an open cutting; a ceiling inside a tunnel
@@ -485,13 +518,23 @@ function metroDraw(K, group) {
     mat.userData.noSun = true;
     group.add(new THREE.Mesh(g, mat));
   }
+  metroSigns(group, signs);
 }
 
 // a station hall over the viaduct, segment i: walls and roof 3 m out past the deck, a row of lit windows along each
 // wall, and at each end a face round the opening the trains run through, dark inside (the trains that end there go in
 // and aren't drawn past it)
-function metroHall(K, L, i, A, B, ya, yb, nrm, lamps, HALL, DARK) {
-  const M = K.M, hw = L.w / 2 + 3, y0a = ya - METRO_DECK, y0b = yb - METRO_DECK, top = METRO_HALL;
+function metroHall(K, L, i, A, B, ya, yb, nrm, lamps, HALL, DARK, signs, cols) {
+  const M = K.M, hw = L.w / 2 + 3, y0a = ya - METRO_DECK, y0b = yb - METRO_DECK, top = METRO_HALL, wk = hw + METRO_WALK;
+  for (const sd of [-1, 1]) {                                // the walkway: floor, its edge and underside, a railing
+    const [nx, nz] = nrm(i), e = sd * hw, f = sd * wk, n = [nx * sd, 0, nz * sd];
+    K.quad(M, A(e, ya + 0.1), B(e, yb + 0.1), B(f, yb + 0.1), A(f, ya + 0.1), cols.walk, [0, 1, 0]);
+    K.quad(M, A(f, ya - 0.5), B(f, yb - 0.5), B(f, yb + 0.1), A(f, ya + 0.1), cols.edge, n);
+    K.quad(M, A(e, ya - 0.5), B(e, yb - 0.5), B(f, yb - 0.5), A(f, ya - 0.5), cols.edge, [0, -1, 0]);
+    K.quad(M, A(f - sd * 0.05, ya + 0.1), B(f - sd * 0.05, yb + 0.1), B(f - sd * 0.05, yb + 1.15), A(f - sd * 0.05, ya + 1.15), cols.rail, n);
+    K.quad(M, A(f - sd * 0.05, ya + 1.15), B(f - sd * 0.05, yb + 1.15), B(f - sd * 0.05, yb + 0.1), A(f - sd * 0.05, ya + 0.1), cols.rail, [-n[0], 0, -n[2]]);
+    if (i % 2 === 0) lamps.push([L.X[i] + nx * (e + sd * 0.06), ya + 2.8, L.Z[i] + nz * (e + sd * 0.06), nx * sd, nz * sd, 0.7, 0.25]);   // its lights
+  }
   for (const sd of [-1, 1]) {
     const e = sd * hw, [nx, nz] = nrm(i);
     K.quad(M, A(e, y0a), B(e, y0b), B(e, yb + top), A(e, ya + top), HALL, [nx * sd, 0, nz * sd]);
@@ -500,9 +543,13 @@ function metroHall(K, L, i, A, B, ya, yb, nrm, lamps, HALL, DARK) {
   K.quad(M, A(-hw, ya + top), B(-hw, yb + top), B(hw, yb + top), A(hw, ya + top), HALL, [0, 1, 0]);
   K.quad(M, A(-hw, y0a), B(-hw, y0b), B(hw, y0b), A(hw, y0a), HALL, [0, -1, 0]);
   for (const end of [i, i + 1]) {                            // the ends: where the run of hall segments starts or stops
-    const inHall = end === i ? (i === 0 || !L.hall[i - 1]) : (end >= L.n - 1 || !L.hall[end]);
-    if (!inHall) continue;
+    if (!metroHallEnd(L, i, end)) continue;
     const dir = end === i ? -1 : 1, x = L.X[end], z = L.Z[end], y = L.G + L.Hb[end], [nx, nz] = nrm(end), tx = nz, tz = -nx;
+    for (const sd of [-1, 1]) {                              // the metro sign, high on each side wall, 7 m in from the end
+      const o = sd * (hw + 0.07);
+      signs.push([x + nx * o - tx * dir * 7, y + 12, z + nz * o - tz * dir * 7, nx * sd, nz * sd]);
+    }
+    for (const st of metroStairs(L, end, dir)) metroStairFlight(K, st, cols);
     const P = (o, yy, f) => [x + nx * o + tx * f, yy, z + nz * o + tz * f], n = [tx * dir, 0, tz * dir], op = hw - 3.5, oh = 7;
     K.quad(M, P(-hw, y - METRO_DECK, 0), P(-op, y - METRO_DECK, 0), P(-op, y + top, 0), P(-hw, y + top, 0), HALL, n);
     K.quad(M, P(op, y - METRO_DECK, 0), P(hw, y - METRO_DECK, 0), P(hw, y + top, 0), P(op, y + top, 0), HALL, n);
@@ -511,6 +558,53 @@ function metroHall(K, L, i, A, B, ya, yb, nrm, lamps, HALL, DARK) {
     K.quad(M, P(-op, y, -dir * 1.5), P(op, y, -dir * 1.5), P(op, y + oh, -dir * 1.5), P(-op, y + oh, -dir * 1.5), DARK, n);   // inside: dark
     for (let o = -op + 1.2; o <= op - 1.1; o += 2.4) lamps.push([x + nx * o + tx * dir * 0.08, y + oh + 0.7, z + nz * o + tz * dir * 0.08, tx * dir, tz * dir, 1, 0.3]);
   }
+}
+
+// a flight of stairs from the walkway's end down to the street: treads and risers, the sides, and a handrail each side
+function metroStairFlight(K, st, cols) {
+  const M = K.M, G = st.y0 - st.run / METRO_STAIR, n = Math.max(2, Math.round((st.y0 - G) / 0.45)), w = METRO_WALK / 2;
+  const sx = -st.fz, sz = st.fx;                             // across the flight
+  const P = (f, o, y) => [st.x + st.fx * f + sx * o, y, st.z + st.fz * f + sz * o];
+  const dy = (st.y0 - G) / n, df = st.run / n;
+  M.at(st.x + st.fx * st.run / 2, st.z + st.fz * st.run / 2);
+  for (let k = 0; k < n; k++) {
+    const y = st.y0 - k * dy, f0 = k * df, f1 = f0 + df;
+    K.quad(M, P(f0, -w, y), P(f0, w, y), P(f1, w, y), P(f1, -w, y), cols.walk, [0, 1, 0]);                       // tread
+    K.quad(M, P(f1, -w, y), P(f1, w, y), P(f1, w, y - dy), P(f1, -w, y - dy), cols.edge, [st.fx, 0, st.fz]);     // riser
+  }
+  for (const sd of [-1, 1]) {                                // the sides, down to the street, and the handrail
+    const o = sd * w, nn = [sx * sd, 0, sz * sd];
+    K.quad(M, P(0, o, st.y0), P(0, o, st.y0 - 0.8), P(st.run, o, G - 0.1), P(st.run, o, G + dy), cols.edge, nn);
+    K.quad(M, P(0, o, st.y0 + 1), P(st.run, o, G + 1), P(st.run, o, G + 0.95), P(0, o, st.y0 + 0.95), cols.rail, nn);
+  }
+}
+// the metro signs: a white disc with a blue M on it, lit (unlit by the scene's light); each [x, y, z, nx, nz] (facing)
+function metroSigns(group, signs) {
+  if (!signs.length) return;
+  const R = 1.4, pos = [], col = [], W = [0.97, 0.97, 0.95], Bl = [0.12, 0.3, 0.75];
+  const strokes = [[-0.82, -0.66, -0.58, 0.66], [0.58, -0.66, 0.82, 0.66]];   // the M's stems: x0, y0, x1, y1
+  const diag = [[-0.7, 0.66, 0, -0.18], [0.7, 0.66, 0, -0.18]];              // and its two strokes to the middle
+  for (const [x, y, z, nx, nz] of signs) {
+    const rx = nz, rz = -nx, at = (u, v, d) => [x + rx * u + nx * d, y + v, z + rz * u + nz * d];
+    const tri = (a, b, c, cl) => { for (const p of [a, b, c]) { pos.push(...p); col.push(...cl); } };
+    for (let k = 0; k < 28; k++) {                            // the disc
+      const a0 = (k / 28) * Math.PI * 2, a1 = ((k + 1) / 28) * Math.PI * 2;
+      tri(at(0, 0, 0), at(Math.cos(a1) * R, Math.sin(a1) * R, 0), at(Math.cos(a0) * R, Math.sin(a0) * R, 0), W);
+    }
+    const quad = (a, b, c, d) => { tri(a, b, c, Bl); tri(a, c, d, Bl); };
+    for (const [u0, v0, u1, v1] of strokes) quad(at(u0, v0, 0.03), at(u0, v1, 0.03), at(u1, v1, 0.03), at(u1, v0, 0.03));
+    for (const [u0, v0, u1, v1] of diag) {                    // a stroke 0.24 m wide from (u0, v0) to (u1, v1)
+      const l = Math.hypot(u1 - u0, v1 - v0), pu = -(v1 - v0) / l * 0.12, pv = (u1 - u0) / l * 0.12;
+      quad(at(u0 + pu, v0 + pv, 0.03), at(u0 - pu, v0 - pv, 0.03), at(u1 - pu, v1 - pv, 0.03), at(u1 + pu, v1 + pv, 0.03));
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeBoundingSphere();
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  mat.userData.noSun = true;
+  group.add(new THREE.Mesh(g, mat));
 }
 
 /* ---------- game part: the trains, and the hoops riding on them ---------- */
