@@ -1213,7 +1213,7 @@ function renderBest() {
 }
 
 /* ---------- start menu: themes, then levels (js/menu.js) ---------- */
-const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit', sailplane: 'Sailplane', biplane: 'Biplane', jetwing: 'Jetwing' };
+const VEHICLE_NAME = { prop: 'Stunt plane', jet: 'Fighter jet', racer: 'Race plane', wingsuit: 'Wingsuit', sailplane: 'Sailplane', biplane: 'Biplane', jetwing: 'Jetpack' };
 // Loads run one at a time; picking again while one loads just retargets it, and the last pick wins.
 let switching = null, wantCourse = null;
 function switchCourse(entry) {
