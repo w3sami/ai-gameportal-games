@@ -18,8 +18,14 @@
   const own = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !k.startsWith('_')));   // skip _doc notes
   let base = null;
   const vehicles = {};
+  // the level view's loading line, shown in place of the course texts while body.is-loading (css/menu.css)
+  const courseLine = document.getElementById('start-course');
+  if (courseLine) courseLine.insertAdjacentHTML('beforebegin', '<p id="level-loading">Loading\u2026</p>');
+  // building a course blocks the main thread, so wait for a frame first or the loading state never gets drawn
+  const painted = () => new Promise((done) => { if (document.hidden) done(); else requestAnimationFrame(() => setTimeout(done, 0)); });
   // fetch everything first, then swap tuning and rebuild in one go, so a failed load leaves the current course intact
   async function loadCourse(entry) {
+    await painted();
     const v = entry.vehicle || 'prop';
     if (!base) base = own(await getJSON('config/flight.json').catch(() => ({})));   // missing file: defaults stay
     if (!(v in vehicles)) vehicles[v] = v === 'prop' ? {} : own(await getJSON(`config/${v}.json`));
