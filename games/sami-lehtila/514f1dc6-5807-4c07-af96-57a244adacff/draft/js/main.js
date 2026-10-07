@@ -26,7 +26,7 @@ scene.background = tex.sky;
 scene.fog = new THREE.Fog('#dfeaf7', 70, 190);
 scene.add(new THREE.HemisphereLight('#eaf3ff', '#8aa0c0', 1.15));
 const sun = new THREE.DirectionalLight('#fff4e0', 1.3);
-sun.position.set(-40, 30, -20);
+sun.position.set(-30, 40, 35);
 scene.add(sun);
 
 const camera = new THREE.PerspectiveCamera(T.camera.fov, 1, 0.5, 260);
@@ -40,8 +40,8 @@ resize();
 
 // far mountains ride along with the camera, past the fog
 const mountains = new THREE.Mesh(new THREE.PlaneGeometry(600, 150),
-  new THREE.MeshBasicMaterial({ map: tex.mountains, transparent: true, fog: false, depthWrite: false }));
-mountains.renderOrder = -1;
+  new THREE.MeshBasicMaterial({ map: tex.mountains, alphaTest: 0.5, fog: false, depthWrite: false, depthTest: false }));
+mountains.renderOrder = -1;   // drawn first, so the slope always covers it
 scene.add(mountains);
 
 const W = buildWorld(scene, tex);
