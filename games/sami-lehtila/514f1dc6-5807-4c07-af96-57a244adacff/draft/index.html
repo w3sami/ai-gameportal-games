@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Downhill</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <div id="hud-left">
+    <div id="score">0</div>
+    <div id="run"></div>
+  </div>
+  <div id="hud-right">
+    <div id="stars">★ 0/0</div>
+    <div id="time">0:00,0</div>
+    <div id="speed">0 km/h</div>
+  </div>
+  <div id="pops"></div>
+</div>
+
+<div id="touch" hidden>
+  <div class="cluster left">
+    <button data-in="left">◀</button>
+    <button data-in="right">▶</button>
+  </div>
+  <div class="cluster right">
+    <button data-in="up">▲</button>
+    <button data-in="down">▼</button>
+    <button data-in="jump" class="jump">HYPPY</button>
+  </div>
+</div>
+
+<div id="card" class="card"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
