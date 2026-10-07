@@ -8,7 +8,7 @@ const DEFAULTS = {
   brake: 9,                  // m/s² slowdown while holding back on the ground
   landPitch: 0.8,            // radians off upright a landing still survives
   landYaw: 0.8,              // radians off forward (or backward) a landing survives
-  hardLanding: 16,           // m/s into the slope that is a crash however straight
+  hardLanding: 28,           // m/s into the slope that is a crash however straight
   bouncePower: 10,           // m/s up from a tree top
   balloonPower: 12,
   awningPower: 13,

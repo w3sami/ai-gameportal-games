@@ -29,7 +29,7 @@ export function createPhysics(T, W, ev) {
       heading: 0, mode: 'ground', tilt: 0, lean: 0, crouch: 0,
       trickYaw: 0, trickPitch: 0, spinV: 0, flipV: 0, airT: 0, bounces: [], hovered: 0,
       switchStance: false, charge: 0, jumpHeld: false,
-      grind: null, crashT: 0, invuln: 0, bounceGrace: 0,
+      grind: null, railCooldown: null, crashT: 0, invuln: 0, bounceGrace: 0,
       run: { pts: 0, parts: [] },
       finished: false,
     });
@@ -44,8 +44,9 @@ export function createPhysics(T, W, ev) {
   function stepGround(dt, inp) {
     const g = G();
     const e = 0.25;
-    const gx = (heightAt(s.x + e, s.z) - heightAt(s.x - e, s.z)) / (2 * e);
-    const gz = (heightAt(s.x, s.z + e) - heightAt(s.x, s.z - e)) / (2 * e);
+    let gx = (heightAt(s.x + e, s.z) - heightAt(s.x - e, s.z)) / (2 * e);
+    let gz = (heightAt(s.x, s.z + e) - heightAt(s.x, s.z - e)) / (2 * e);
+    if (Math.abs(gx) > 2 || Math.abs(gz) > 2) { gx = clamp(gx, -2, 2); gz = clamp(gz, -2, 2); }
     const k = T.gravity / (1 + gx * gx + gz * gz);
     s.vx -= gx * k * dt;
     s.vz -= gz * k * dt;
@@ -63,7 +64,7 @@ export function createPhysics(T, W, ev) {
     const drag = g.drag * (inp.up > 0.3 ? T.tuckDrag : 1);
     f -= (g.friction * T.gravity + drag * f * f) * dt;
     if (braking) f -= T.brake * (s.finished ? 1 : inp.down) * dt;
-    f = clamp(f, 0, g.maxSpeed);
+    f = clamp(f, -6, g.maxSpeed);   // slow enough on an uphill ramp, slide back down it
     s.vx = f * dx + l * rx;
     s.vz = f * dz + l * rz;
 
@@ -86,9 +87,18 @@ export function createPhysics(T, W, ev) {
     }
     s.jumpHeld = inp.jump;
 
-    const nx = s.x + s.vx * dt, nz = s.z + s.vz * dt;
-    const h = heightAt(nx, nz);
-    if (h - s.y > T.step) return wallHit();
+    let nx = s.x + s.vx * dt, nz = s.z + s.vz * dt;
+    let h = heightAt(nx, nz);
+    if (h - s.y > T.step) {
+      // into a wall: slide along it if one axis is free, crash only if fast
+      const okX = heightAt(nx, s.z) - s.y <= T.step, okZ = heightAt(s.x, nz) - s.y <= T.step;
+      const into = okX && !okZ ? Math.abs(s.vz) : okZ && !okX ? Math.abs(s.vx) : speed();
+      if (into > 4) return wallHit();
+      if (okX && !okZ) { s.vz = 0; nz = s.z; }
+      else if (okZ && !okX) { s.vx = 0; nx = s.x; }
+      else { s.vx *= -0.3; s.vz *= -0.3; return; }
+      h = heightAt(nx, nz);
+    }
     const yAir = s.y + s.vy * dt - 0.5 * T.gravity * dt * dt;
     s.x = nx; s.z = nz;
     if (yAir > h + 0.01) {
@@ -145,7 +155,7 @@ export function createPhysics(T, W, ev) {
       // flew into a wall: hold position across it and keep the vertical motion,
       // so a rider still rising goes over the edge instead of through it
       s.y = Math.max(ny, heightAt(s.x, s.z));
-      if (s.y <= heightAt(s.x, s.z)) { s.y = heightAt(s.x, s.z); return land(); }
+      if (s.y <= heightAt(s.x, s.z)) { s.y = heightAt(s.x, s.z); s.vx *= -0.2; s.vz *= -0.2; return land(); }
       if (!s.bonk) ev('bonk', { x: s.x, y: s.y, z: s.z });
       s.bonk = true;
       return;
@@ -169,7 +179,8 @@ export function createPhysics(T, W, ev) {
     let slopeVy = 0;
     if (sp > 0.1) {
       const ux = s.vx / sp, uz = s.vz / sp;
-      slopeVy = (heightAt(s.x + ux * e, s.z + uz * e) - heightAt(s.x - ux * e, s.z - uz * e)) / (2 * e) * sp;
+      // clamped: across a roof edge the difference is a wall, not a slope
+      slopeVy = clamp((heightAt(s.x + ux * e, s.z + uz * e) - heightAt(s.x - ux * e, s.z - uz * e)) / (2 * e), -0.6, 0.6) * sp;
     }
     const impact = slopeVy - s.vy;
     if (!upright || !facing) return crash(upright ? 'Sivuttain!' : 'Pää edellä!');
@@ -218,6 +229,7 @@ export function createPhysics(T, W, ev) {
 
   function tryRail(nx, ny, nz, py) {
     for (const rl of W.rails) {
+      if (s.railCooldown && s.railCooldown.rl === rl && s.railCooldown.t > 0) continue;
       const ex = rl.bx - rl.ax, ez = rl.bz - rl.az;
       const L2 = ex * ex + ez * ez;
       const t = clamp(((nx - rl.ax) * ex + (nz - rl.az) * ez) / L2, 0, 1);
@@ -264,10 +276,11 @@ export function createPhysics(T, W, ev) {
       const name = rl.kind === 'ridge' ? 'Harjagrindi' : 'Kaidegrindi';
       addPart(name + ' ' + gr.time.toFixed(1).replace('.', ',') + ' s', Math.round(T.points.grindSecond * gr.time));
       s.grind = null;
+      s.railCooldown = { rl, t: 0.5 };
       takeOff();
       s.vy += vyAdd;
-      s.vx += -Math.cos(s.heading) * side * 3;
-      s.vz += Math.sin(s.heading) * side * 3;
+      s.vx += Math.cos(s.heading) * side * 3;
+      s.vz += -Math.sin(s.heading) * side * 3;
       s.y += 0.05;
     };
     if (gr.t <= 0 || gr.t >= 1) return leave(1.5);
@@ -303,6 +316,7 @@ export function createPhysics(T, W, ev) {
   function crash(why) {
     if (s.mode === 'crash') return;
     s.mode = 'crash';
+    s.lastCrash = why;
     s.crashT = 0;
     s.grind = null;
     s.run = { pts: 0, parts: [] };
@@ -410,6 +424,7 @@ export function createPhysics(T, W, ev) {
   function step(dt, inp) {
     s.invuln = Math.max(0, s.invuln - dt);
     s.bounceGrace = Math.max(0, s.bounceGrace - dt);
+    if (s.railCooldown) s.railCooldown.t -= dt;
     if (s.mode === 'ground') stepGround(dt, inp);
     else if (s.mode === 'air') stepAir(dt, inp);
     else if (s.mode === 'grind') stepGrind(dt, inp);
