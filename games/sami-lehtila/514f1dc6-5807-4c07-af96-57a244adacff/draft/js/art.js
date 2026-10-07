@@ -362,7 +362,7 @@ function snow() {
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
   // groomed corduroy across the slope
   for (let y = 0; y < H; y += 8) {
-    g.fillStyle = 'rgba(150,175,215,0.16)'; g.fillRect(0, y, W, 3);
+    g.fillStyle = 'rgba(140,165,210,0.28)'; g.fillRect(0, y, W, 3);
   }
   const r = rng(5);
   for (let i = 0; i < 900; i++) {
