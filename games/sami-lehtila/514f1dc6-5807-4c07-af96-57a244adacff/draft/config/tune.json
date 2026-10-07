@@ -1,0 +1,17 @@
+{
+  "gravity": 13,
+  "step": 0.55,
+  "tuckDrag": 0.5,
+  "brake": 9,
+  "landPitch": 0.8,
+  "landYaw": 0.8,
+  "hardLanding": 16,
+  "bouncePower": 10,
+  "balloonPower": 12,
+  "awningPower": 13,
+  "railFriction": 1.2,
+  "camera": { "dist": 10, "height": 7, "lookAhead": 7, "fov": 55, "turn": 0.35 },
+  "skis":  { "maxSpeed": 32, "drag": 0.0042, "friction": 0.03, "turnRate": 2.0, "grip": 7, "spinRate": 9, "flipRate": 8, "hover": 0,    "jump": 5.4 },
+  "board": { "maxSpeed": 28, "drag": 0.0055, "friction": 0.04, "turnRate": 2.4, "grip": 6, "spinRate": 13,  "flipRate": 8, "hover": 0.55, "jump": 5.8 },
+  "points": { "flip": 500, "spin180": 120, "airSecond": 100, "bounce": 250, "grindSecond": 400, "star": 1000, "break": 100 }
+}

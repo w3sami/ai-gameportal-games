@@ -1,0 +1,45 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #a9cdf2; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fff; user-select: none; -webkit-user-select: none; touch-action: none; }
+#app, #app canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 2px 4px rgba(0,30,70,.55); }
+#hud-left { position: absolute; left: 16px; top: 12px; }
+#hud-right { position: absolute; right: 16px; top: 12px; text-align: right; font-weight: 700; font-size: 20px; line-height: 1.35; }
+#score { font-size: 40px; font-weight: 800; letter-spacing: .02em; }
+#run { font-size: 18px; font-weight: 700; color: #ffe066; min-height: 24px; }
+#stars { color: #ffe066; }
+#speed { font-size: 15px; opacity: .85; }
+
+#pops { position: absolute; left: 0; right: 0; top: 22%; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pop { font-size: 28px; font-weight: 800; animation: pop 1.6s ease-out forwards; text-align: center; padding: 0 16px; }
+.pop.big { font-size: 34px; color: #ffe066; }
+.pop.bad { color: #ff6b6b; }
+.pop.star { color: #ffd43b; }
+@keyframes pop { 0% { transform: scale(.6); opacity: 0; } 12% { transform: scale(1.1); opacity: 1; } 25% { transform: scale(1); } 75% { opacity: 1; } 100% { transform: translateY(-40px); opacity: 0; } }
+
+.card { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto;
+  background: rgba(16, 40, 80, .82); backdrop-filter: blur(6px); border-radius: 18px; padding: 24px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.35); pointer-events: auto; }
+.card[hidden] { display: none; }
+.card h1 { margin: 0 0 4px; font-size: 44px; letter-spacing: .03em; }
+.card h2 { margin: 0 0 12px; font-size: 26px; }
+.card p { margin: 6px 0; opacity: .9; }
+.gear { display: flex; gap: 12px; margin: 16px 0; }
+.gear button { flex: 1; }
+button { font: inherit; color: #fff; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); border-radius: 12px; padding: 12px; cursor: pointer; }
+button:hover, button:focus-visible { background: rgba(255,255,255,.22); outline: none; }
+button.sel { border-color: #ffe066; background: rgba(255,224,102,.2); }
+button.go { width: 100%; font-size: 22px; font-weight: 800; background: #f08a24; border-color: #f08a24; margin-top: 8px; }
+.gear b { display: block; font-size: 20px; }
+.gear small { display: block; opacity: .85; margin-top: 4px; }
+.keys { font-size: 14px; opacity: .8; line-height: 1.6; margin-top: 14px; }
+.keys kbd { background: rgba(255,255,255,.18); border-radius: 4px; padding: 1px 6px; font-family: inherit; }
+.results { font-size: 20px; line-height: 1.7; margin: 8px 0 12px; }
+.results b { color: #ffe066; }
+
+#touch { position: fixed; inset: auto 0 0 0; height: 0; pointer-events: none; }
+#touch .cluster { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); display: flex; gap: 10px; pointer-events: auto; }
+#touch .left { left: 16px; }
+#touch .right { right: 16px; }
+#touch button { width: 64px; height: 64px; border-radius: 50%; font-size: 22px; padding: 0; background: rgba(16,40,80,.35); touch-action: none; }
+#touch button.jump { width: 84px; height: 84px; font-size: 15px; font-weight: 800; background: rgba(240,138,36,.6); }
+#touch button.on { background: rgba(255,255,255,.45); }
