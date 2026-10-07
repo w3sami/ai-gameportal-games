@@ -5,7 +5,7 @@
   "brake": 9,
   "landPitch": 0.8,
   "landYaw": 0.8,
-  "hardLanding": 16,
+  "hardLanding": 28,
   "bouncePower": 10,
   "balloonPower": 12,
   "awningPower": 13,
