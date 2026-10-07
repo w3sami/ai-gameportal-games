@@ -483,5 +483,26 @@
     "sizeBytes": 1749040,
     "createdAt": "2026-09-30T14:23:37.257Z",
     "updatedAt": "2026-10-01T18:46:35.533Z"
+  },
+  {
+    "id": "514f1dc6-5807-4c07-af96-57a244adacff",
+    "slug": "downhill",
+    "title": "Downhill",
+    "description": "Action-laskettelu: hypyt, grindit, voltit ja tähdet. Prototyyppi.",
+    "descriptions": {},
+    "author": "Sami Lehtilä",
+    "tags": [
+      "3d",
+      "sports",
+      "prototype"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 170,
+    "createdAt": "2026-10-07T20:24:44.492Z",
+    "updatedAt": "2026-10-07T20:24:44.518Z"
   }
 ]
