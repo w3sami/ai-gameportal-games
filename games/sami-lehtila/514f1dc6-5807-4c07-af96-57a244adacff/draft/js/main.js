@@ -263,4 +263,4 @@ showMenu();
 requestAnimationFrame(frame);
 
 // for the developer console; drive(s) may return an input to steer by script
-window.downhill = { physics, W, T, scene, camera, start, drive: null };
+window.downhill = { physics, W, T, scene, camera, start, drive: null, ground: groundAt };

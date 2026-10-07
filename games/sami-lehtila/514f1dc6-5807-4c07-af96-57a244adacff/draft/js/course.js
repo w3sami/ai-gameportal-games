@@ -30,8 +30,8 @@ export const COURSE = {
   halfWidth: 24,
   finishZ: -625,
   profile: [
-    [40, 0.22], [130, 0.26], [150, 0.12], [30, 0.06],
-    [45, 0.02], [130, 0.28], [80, 0.32], [80, 0.04],
+    [40, 0.22], [130, 0.26], [150, 0.12], [30, 0.1],
+    [45, 0.07], [130, 0.28], [80, 0.32], [80, 0.04],
   ],
   items: [
     { type: 'forest', from: -20, to: -700, every: 5 },
@@ -90,15 +90,15 @@ export const COURSE = {
     { type: 'dog', x: 10, z: -385, range: 5 },
 
     // Balloons: kick up onto one, bounce on to the next.
-    { type: 'kicker', x: -6, z: -404, w: 5, len: 7, h: 2.0 },
-    { type: 'balloon', x: -6, z: -424, y: 7, r: 3 },
-    { type: 'star', x: -6, z: -424, y: 12 },
-    { type: 'kicker', x: 8, z: -436, w: 5, len: 8, h: 2.4 },
-    { type: 'balloon', x: 8, z: -456, y: 9, r: 3.5 },
-    { type: 'balloon', x: -2, z: -488, y: 10, r: 3 },
-    { type: 'star', x: -2, z: -488, y: 15 },
-    { type: 'table', x: 13, z: -470 },
-    { type: 'table', x: -14, z: -442 },
+    { type: 'kicker', x: -6, z: -404, w: 5, len: 10, h: 3.2 },
+    { type: 'balloon', x: -6, z: -416, y: 6.5, r: 3 },
+    { type: 'balloon', x: -6, z: -436, y: 12, r: 3 },
+    { type: 'star', x: -6, z: -436, y: 18 },
+    { type: 'kicker', x: 7, z: -452, w: 5, len: 9, h: 3.0 },
+    { type: 'balloon', x: 7, z: -466, y: 7, r: 3 },
+    { type: 'star', x: 7, z: -466, y: 13 },
+    { type: 'table', x: 13, z: -440 },
+    { type: 'table', x: -14, z: -470 },
     { type: 'tree', x: 16, z: -500, h: 9 },
     { type: 'tree', x: -15, z: -510, h: 8 },
 
