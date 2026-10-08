@@ -1,5 +1,5 @@
 {
-  "gravity": 13,
+  "gravity": 19,
   "step": 0.55,
   "tuckDrag": 0.35,
   "tuckFriction": 0.5,
@@ -15,9 +15,9 @@
   "poleEvery": 0.45,
   "checkpointSlope": 14,
   "checkpointRun": 12,
-  "spinResponse": 8,
-  "levelPitch": 1,
-  "levelYaw": 0,
+  "spinResponse": 30,
+  "levelPitch": 2.007128639793479,
+  "levelYaw": 1.5707963267948966,
   "levelRate": 2.5,
   "landPitch": 0.8,
   "headFirst": 2.2,
@@ -40,8 +40,44 @@
   "awningPower": 13,
   "awningKeep": 0.45,
   "railFriction": 1.2,
-  "camera": { "dist": 10, "height": 7, "lookAhead": 7, "fov": 55, "turn": 0.35, "pullBack": 0.45, "rise": 0.2 },
-  "skis": { "maxSpeed": 32, "drag": 0.0042, "friction": 0.03, "turnRate": 2, "grip": 7, "spinRate": 9, "flipRate": 8, "hover": 0, "jump": 5.4 },
-  "board": { "maxSpeed": 28, "drag": 0.0055, "friction": 0.04, "turnRate": 2.4, "grip": 6, "spinRate": 13, "flipRate": 8, "hover": 0.55, "jump": 5.8 },
-  "points": { "flip": 500, "spin180": 120, "airSecond": 100, "bounce": 250, "grindSecond": 400, "star": 1000, "break": 100 }
+  "camera": {
+    "dist": 10,
+    "height": 7,
+    "lookAhead": 7,
+    "fov": 55,
+    "turn": 0.35,
+    "pullBack": 0.45,
+    "rise": 0.2
+  },
+  "skis": {
+    "maxSpeed": 32,
+    "drag": 0.0042,
+    "friction": 0.03,
+    "turnRate": 2,
+    "grip": 7,
+    "spinRate": 9,
+    "flipRate": 8,
+    "hover": 0,
+    "jump": 5.4
+  },
+  "board": {
+    "maxSpeed": 28,
+    "drag": 0.0055,
+    "friction": 0.04,
+    "turnRate": 2.4,
+    "grip": 6,
+    "spinRate": 13,
+    "flipRate": 8,
+    "hover": 0.55,
+    "jump": 5.8
+  },
+  "points": {
+    "flip": 500,
+    "spin180": 120,
+    "airSecond": 100,
+    "bounce": 250,
+    "grindSecond": 400,
+    "star": 1000,
+    "break": 100
+  }
 }
