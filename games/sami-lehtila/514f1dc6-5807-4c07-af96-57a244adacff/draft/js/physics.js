@@ -39,7 +39,7 @@ export function createPhysics(T, W, ev) {
       switchStance: false, charge: 0, jumpHeld: false,
       grind: null, railCooldown: null, crashT: 0, invuln: 0, bounceGrace: 0,
       run: { pts: 0, parts: [] },
-      stun: 0, stunMax: 1, stunK: 0,
+      stun: 0, stunMax: 1, stunK: 0, flipHeld: false, flipLock: false,
       finished: false,
     });
   }
@@ -163,6 +163,9 @@ export function createPhysics(T, W, ev) {
   }
 
   function takeOff() {
+    // forward or back already held as the rider leaves the snow, too slow for
+    // a real jump: no flip until that stick comes back to the middle
+    s.flipLock = s.flipHeld && speed() < T.flipHoldSpeed;
     s.mode = 'air';
     s.trickYaw = 0; s.trickPitch = 0; s.spinV = 0; s.flipV = 0;
     s.airT = 0; s.hovered = 0; s.bounces = [];
@@ -172,7 +175,9 @@ export function createPhysics(T, W, ev) {
 
   function stepAir(dt, inp) {
     const g = G();
-    const spinIn = -inp.x, flipIn = inp.down - inp.up;
+    let flipIn = inp.down - inp.up;
+    if (s.flipLock) { if (Math.abs(flipIn) < 0.2) s.flipLock = false; else flipIn = 0; }
+    const spinIn = -inp.x;
     s.spinV += (spinIn * g.spinRate - s.spinV) * Math.min(1, dt * T.spinResponse);
     s.flipV += (flipIn * g.flipRate - s.flipV) * Math.min(1, dt * T.spinResponse);
     s.trickYaw += s.spinV * dt;
@@ -559,6 +564,7 @@ export function createPhysics(T, W, ev) {
     s.invuln = Math.max(0, s.invuln - dt);
     s.bounceGrace = Math.max(0, s.bounceGrace - dt);
     if (s.railCooldown) s.railCooldown.t -= dt;
+    if (s.mode !== 'air') s.flipHeld = Math.abs(inp.down - inp.up) > 0.2;
     s.pushAnim = Math.max(0, s.pushAnim - dt);
     if (!(s.mode === 'crash' && s.crash.kind === 'snowball')) s.fade = Math.max(0, s.fade - dt * 1.5);
     if (s.mode === 'ready') return stepReady(dt, inp);

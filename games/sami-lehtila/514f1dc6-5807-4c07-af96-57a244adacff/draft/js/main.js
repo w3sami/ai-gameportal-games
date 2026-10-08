@@ -50,7 +50,7 @@ const W = buildWorld(scene, tex, T);
 const rider = buildRider(scene, tex);
 const fx = buildFx(scene, tex);
 const trails = buildTrails(scene);
-const rings = buildRings(scene, T, W.placeOnGround);
+const rings = buildRings(scene, T, tex, W.placeOnGround);
 let shake = 0;           // camera shake left, metres
 const pops = document.getElementById('pops');
 
