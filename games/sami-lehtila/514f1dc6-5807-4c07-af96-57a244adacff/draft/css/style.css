@@ -6,6 +6,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #a9cdf2; fon
 #hud-left { position: absolute; left: 16px; top: 12px; }
 #hud-right { position: absolute; right: 16px; top: 12px; text-align: right; font-weight: 700; font-size: 20px; line-height: 1.35; }
 #score { font-size: 40px; font-weight: 800; letter-spacing: .02em; }
+#score.neg { color: #ff8a8a; }
+#drain { font-size: 13px; font-weight: 700; opacity: .75; margin-top: -4px; }
 #run { font-size: 18px; font-weight: 700; color: #ffe066; min-height: 24px; }
 #stars { color: #ffe066; }
 #speed { font-size: 15px; opacity: .85; }
@@ -24,6 +26,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #a9cdf2; fon
 .card h2 { margin: 0 0 12px; font-size: 26px; }
 .card p { margin: 6px 0; opacity: .9; }
 .gear { display: flex; gap: 12px; margin: 16px 0; }
+.gear.mode { margin-top: -4px; }
+.gear.mode b { font-size: 17px; }
 .gear button { flex: 1; }
 button { font: inherit; color: #fff; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); border-radius: 12px; padding: 12px; cursor: pointer; }
 button:hover, button:focus-visible { background: rgba(255,255,255,.22); outline: none; }
