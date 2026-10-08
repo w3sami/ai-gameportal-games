@@ -140,9 +140,9 @@ const KEYS_HELP = `<div class="keys">
   <kbd>▲</kbd> kyykky vauhtiin, ilmassa etuvoltti ·
   <kbd>▼</kbd> jarru, ilmassa takavoltti ·
   <kbd>välilyönti</kbd> pohjassa kyykkyyn, irti hyppyyn ·
-  <kbd>1</kbd>/<kbd>2</kbd> sukset/lauta · <kbd>Enter</kbd> aloita · <kbd>Esc</kbd> tauko
+  <kbd>1</kbd>/<kbd>2</kbd> sukset/lauta · <kbd>Enter</kbd> aloita · <kbd>Esc</kbd> tauko · <kbd>F</kbd> koko ruutu
   <br>Ohjaimella: sauva tai ristiohjain, <kbd>A</kbd> hyppy, <kbd>Start</kbd> tauko,
-  <kbd>Back</kbd> alusta, <kbd>Y</kbd> ohjainasetukset
+  <kbd>Back</kbd> alusta, <kbd>Y</kbd> ohjainasetukset, <kbd>RS</kbd> koko ruutu
 </div>`;
 
 function showMenu() {
@@ -220,9 +220,24 @@ addEventListener('keydown', (e) => {
   } else if (state === 'paused' && e.code === 'Enter') resume();
 });
 
+// Fullscreen needs a user gesture: the button, F, or a real controller press.
+// Safari on iPhone has no fullscreen for pages, so the button hides there.
+const fsButton = document.getElementById('fs');
+fsButton.hidden = !document.fullscreenEnabled;
+function toggleFullscreen() {
+  if (!document.fullscreenEnabled) return;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+}
+fsButton.addEventListener('click', () => { toggleFullscreen(); fsButton.blur(); });
+document.addEventListener('fullscreenchange', () => {
+  fsButton.textContent = document.fullscreenElement ? '🗗' : '⛶';
+});
+
 // Menu keys from the mapped inputs, so a controller can drive the cards.
 function menuInput() {
   if (input.isOpen()) return;
+  if (input.pressed('fullscreen')) toggleFullscreen();
   if (input.pressed('controls') && state !== 'run') return remap();
   if (state === 'run') {
     if (input.pressed('menu')) showPause();

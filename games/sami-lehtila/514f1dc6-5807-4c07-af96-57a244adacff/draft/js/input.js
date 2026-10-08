@@ -30,12 +30,14 @@ export function createInput() {
         keys: ['Escape'], pad: ['Start'] },
       { id: 'controls', label: L('Ohjainasetukset', 'Controls'), type: 'digital',
         keys: ['KeyC'], pad: ['Y'] },
+      { id: 'fullscreen', label: L('Koko ruutu', 'Fullscreen'), type: 'digital',
+        keys: ['KeyF'], pad: ['RS'] },
     ],
   });
 
   const touch = { left: false, right: false, up: false, down: false, jump: false };
   const pad = document.getElementById('touch');
-  if (matchMedia('(pointer: coarse)').matches) pad.hidden = false;
+  if (matchMedia('(pointer: coarse)').matches) { pad.hidden = false; document.body.classList.add('touch'); }
   for (const b of pad.querySelectorAll('[data-in]')) {
     const name = b.dataset.in;
     const set = (v) => (e) => { e.preventDefault(); touch[name] = v; b.classList.toggle('on', v); };

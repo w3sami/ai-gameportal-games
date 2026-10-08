@@ -61,3 +61,8 @@ button.go { width: 100%; font-size: 22px; font-weight: 800; background: #f08a24;
 #tuning input[type=range] { width: 100%; margin: 0; }
 #tuning input[type=number] { width: 64px; background: #0e1830; color: #fff; border: 1px solid #2c3f66; border-radius: 4px; font: inherit; padding: 1px 3px; }
 #tuning .tn-def { padding: 0; width: 22px; }
+
+#fs { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: 44px; height: 44px; padding: 0; font-size: 22px; line-height: 1;
+  background: rgba(16, 40, 80, .45); border-radius: 10px; z-index: 40; }
+#fs[hidden] { display: none; }
+body.touch #fs { bottom: calc(110px + env(safe-area-inset-bottom)); }
