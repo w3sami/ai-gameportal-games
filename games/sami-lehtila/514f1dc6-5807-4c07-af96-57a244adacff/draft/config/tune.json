@@ -22,7 +22,7 @@
   "landPitch": 0.8,
   "headFirst": 2.2,
   "landYaw": 0.8,
-  "sidewaysKeep": 0.55,
+  "sidewaysKeep": 0.8,
   "hardLoss": 0.02,
   "buryTime": 1.8,
   "ragdollTime": 1.6,
