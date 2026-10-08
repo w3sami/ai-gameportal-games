@@ -251,26 +251,6 @@ function balloon(seed) {
 
 // ---- pickups and signs -----------------------------------------------------
 
-function star() {
-  const W = 128, H = 128;
-  const [c, g] = canvas(W, H);
-  const glow = g.createRadialGradient(64, 64, 10, 64, 64, 62);
-  glow.addColorStop(0, 'rgba(255,240,150,0.9)'); glow.addColorStop(1, 'rgba(255,240,150,0)');
-  g.fillStyle = glow; g.fillRect(0, 0, W, H);
-  g.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const rr = i % 2 ? 20 : 46, a = -Math.PI / 2 + (i * Math.PI) / 5;
-    g.lineTo(64 + Math.cos(a) * rr, 66 + Math.sin(a) * rr);
-  }
-  g.closePath();
-  const f = g.createLinearGradient(0, 20, 0, 110);
-  f.addColorStop(0, '#fff3a0'); f.addColorStop(1, '#f5b700');
-  g.fillStyle = f; g.fill();
-  g.lineWidth = 5; g.strokeStyle = '#c98a00'; g.stroke();
-  blob(g, 54, 46, 7, 4, 'rgba(255,255,255,0.8)');
-  return c;
-}
-
 function finish() {
   const W = 1024, H = 256;
   const [c, g] = canvas(W, H);
@@ -477,7 +457,6 @@ export function textures() {
   T.balloon = [1, 2, 3].map((s) => texture(balloon(s * 3)));
   T.table = texture(table());
   T.snowman = texture(snowman());
-  T.star = texture(star());
   T.finish = texture(finish());
   T.sign = (text) => texture(sign(text));
   T.wall = (color) => texture(wall(color));
