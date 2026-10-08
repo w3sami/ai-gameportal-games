@@ -360,15 +360,31 @@ export function buildWorld(scene, T) {
     }
 
     if (it.awning) {
-      // striped awning on the uphill face, sloping down and out toward the rider
-      const out = 2.2, y0 = 2.7, y1 = 2.2, aw = it.w - 1;
-      const geo = quad([[-aw / 2, y0, it.d / 2], [aw / 2, y0, it.d / 2], [aw / 2, y1, it.d / 2 + out], [-aw / 2, y1, it.d / 2 + out]]);
-      h.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: T.awning, side: THREE.DoubleSide })));
-      W.bouncers.push({
-        kind: 'awning', x: it.x, z: it.z + it.d / 2 + out / 2,
-        x0: it.x - aw / 2, x1: it.x + aw / 2, z0: it.z + it.d / 2, z1: it.z + it.d / 2 + out,
-        y: floor + (y0 + y1) / 2, r: 0,
-      });
+      // striped awning sloping down and out from a wall. 'left' / 'right' sit
+      // on that side wall at its uphill end and throw the rider across onto
+      // the ridge; true sits on the uphill face.
+      const out = 2.2;
+      const mat = new THREE.MeshLambertMaterial({ map: T.awning, side: THREE.DoubleSide });
+      if (it.awning === 'left' || it.awning === 'right') {
+        // low and long, so a kicker in front reaches it at any sensible speed
+        const sx = it.awning === 'right' ? 1 : -1, len = 7, y0 = 2.1, y1 = 1.6;
+        const zA = it.d / 2, zB = it.d / 2 - len, xW = sx * it.w / 2, xO = sx * (it.w / 2 + out);
+        h.add(new THREE.Mesh(quad([[xW, y0, zA], [xW, y0, zB], [xO, y1, zB], [xO, y1, zA]]), mat));
+        W.bouncers.push({
+          kind: 'awning', x: it.x + (xW + xO) / 2, z: it.z + (zA + zB) / 2,
+          x0: it.x + Math.min(xW, xO), x1: it.x + Math.max(xW, xO), z0: it.z + zB, z1: it.z + zA,
+          y: floor + (y0 + y1) / 2, r: 0,
+          aimX: it.x, aimY: ridgeY + 0.3,
+        });
+      } else {
+        const aw = it.w - 1, y0 = 2.7, y1 = 2.2;
+        h.add(new THREE.Mesh(quad([[-aw / 2, y0, it.d / 2], [aw / 2, y0, it.d / 2], [aw / 2, y1, it.d / 2 + out], [-aw / 2, y1, it.d / 2 + out]]), mat));
+        W.bouncers.push({
+          kind: 'awning', x: it.x, z: it.z + it.d / 2 + out / 2,
+          x0: it.x - aw / 2, x1: it.x + aw / 2, z0: it.z + it.d / 2, z1: it.z + it.d / 2 + out,
+          y: floor + (y0 + y1) / 2, r: 0,
+        });
+      }
     }
     if (it.sign) {
       const s = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: T.sign(it.sign) }));
