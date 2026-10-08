@@ -201,7 +201,7 @@ const input = createInput();
 
 // developer's tuning panel; its pause (and the portal's) freezes the run in place
 let frozen = false;
-createTuning(T, { onPause: (on) => { frozen = on ?? !frozen; last = performance.now(); } });
+createTuning(T, { onPause: (on) => { frozen = on ?? !frozen; last = performance.now(); }, rider: () => physics.s });
 
 // The press that starts or resumes a run must not also be its first jump.
 let jumpLock = false;

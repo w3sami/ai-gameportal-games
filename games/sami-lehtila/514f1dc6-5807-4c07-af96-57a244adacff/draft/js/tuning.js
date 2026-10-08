@@ -90,9 +90,74 @@ function set(o, path, v) {
   ks.reduce((a, k) => a[k], o)[last] = v;
 }
 
-export function createTuning(T, { onPause } = {}) {
+const TAU = Math.PI * 2;
+const wrap = (a) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
+const COL = { ok: '#3ecf6e', ragdoll: '#f0a030', bury: '#e5484d', skid: '#f0a030', ring: 'rgba(255,255,255,.15)' };
+const RESULT = { ok: 'pystyssä', skid: 'liuku', ragdoll: 'ragdoll', bury: 'pää edellä' };
+
+// Two dials for the landing limits. Angles are measured from straight up
+// (pitch, seen from the side, forward to the right) or straight ahead (yaw,
+// seen from above), clockwise on screen. The needle is the rider now; the
+// dashed one is the last landing and what it led to.
+function drawDials(g, T, s) {
+  const W = g.canvas.width, H = g.canvas.height, R = H * 0.36;
+  g.clearRect(0, 0, W, H);
+  const sector = (cx, cy, a0, a1, col) => {
+    g.beginPath(); g.moveTo(cx, cy);
+    g.arc(cx, cy, R, -Math.PI / 2 + a0, -Math.PI / 2 + a1);
+    g.closePath(); g.fillStyle = col; g.fill();
+  };
+  const needle = (cx, cy, a, len, col, dash, both) => {
+    const x = Math.sin(a), y = -Math.cos(a);
+    g.save(); g.setLineDash(dash ? [4, 4] : []); g.strokeStyle = col; g.lineWidth = dash ? 2 : 3;
+    g.beginPath(); g.moveTo(cx - (both ? x * len : 0), cy - (both ? y * len : 0)); g.lineTo(cx + x * len, cy + y * len); g.stroke();
+    g.restore();
+    g.fillStyle = col; g.beginPath(); g.arc(cx + x * len, cy + y * len, dash ? 3 : 5, 0, TAU); g.fill();
+  };
+  const label = (x, y, text, col = '#d6e4ff', align = 'center') => {
+    g.fillStyle = col; g.font = '11px ui-monospace, monospace'; g.textAlign = align; g.fillText(text, x, y);
+  };
+  const deg = (a) => Math.round((a * 180) / Math.PI) + '°';
+  const air = s && s.mode === 'air';
+
+  // pitch
+  const lp = Math.min(T.landPitch, Math.PI), hf = Math.max(lp, Math.min(T.headFirst, Math.PI));
+  let cx = W * 0.25, cy = H * 0.5;
+  g.fillStyle = COL.ring; g.beginPath(); g.arc(cx, cy, R + 3, 0, TAU); g.fill();
+  sector(cx, cy, -Math.PI, -hf, COL.bury); sector(cx, cy, hf, Math.PI, COL.bury);
+  sector(cx, cy, -hf, -lp, COL.ragdoll); sector(cx, cy, lp, hf, COL.ragdoll);
+  sector(cx, cy, -lp, lp, COL.ok);
+  if (s?.lastLand) needle(cx, cy, -s.lastLand.pitch, R * 0.95, '#fff', true);
+  const pitch = s ? wrap(s.trickPitch) : 0;
+  needle(cx, cy, -pitch, R * 0.8, air ? '#fff' : 'rgba(255,255,255,.4)', false);
+  label(cx, 12, 'kallistus (sivulta)');
+  label(cx + R + 4, cy + 4, 'eteen', '#9fb4d8', 'left');
+  label(cx, H - 4, air ? deg(-pitch) : '–');
+
+  // yaw
+  const ly = Math.min(T.landYaw, Math.PI / 2);
+  cx = W * 0.75;
+  g.fillStyle = COL.ring; g.beginPath(); g.arc(cx, cy, R + 3, 0, TAU); g.fill();
+  sector(cx, cy, -Math.PI, Math.PI, COL.skid);
+  sector(cx, cy, -ly, ly, COL.ok);
+  sector(cx, cy, Math.PI - ly, Math.PI + ly, COL.ok);
+  if (s?.lastLand) needle(cx, cy, -s.lastLand.yaw, R * 0.95, '#fff', true, true);
+  const yaw = s ? wrap(s.trickYaw) : 0;
+  needle(cx, cy, -yaw, R * 0.8, air ? '#fff' : 'rgba(255,255,255,.4)', false, true);
+  label(cx, 12, 'kierto (ylhäältä)');
+  label(cx, H - 4, air ? deg(-yaw) : '–');
+
+  if (s?.lastLand) label(W / 2, H - 18, 'viimeisin: ' + RESULT[s.lastLand.result], COL[s.lastLand.result]);
+}
+
+export function createTuning(T, { onPause, rider } = {}) {
   const allowed = () => !portal.embedded || portal.canWrite;
-  let el = null, dirty = false, open = false;
+  let el = null, dirty = false, open = false, dials = null;
+
+  (function tick() {
+    if (open && dials?.group.open) drawDials(dials.g, T, rider?.());
+    requestAnimationFrame(tick);
+  })();
 
   function build() {
     el = document.createElement('div');
@@ -104,6 +169,13 @@ export function createTuning(T, { onPause } = {}) {
       const d = document.createElement('details');
       d.open = gi === 0;
       d.innerHTML = `<summary>${title}</summary>`;
+      if (gi === 0) {
+        const c = document.createElement('canvas');
+        c.className = 'tn-dials';
+        c.width = 320; c.height = 150;
+        d.appendChild(c);
+        dials = { c, g: c.getContext('2d'), group: d };
+      }
       for (const [path, label, min, max, step] of rows) {
         const row = document.createElement('label');
         row.className = 'tn-row';

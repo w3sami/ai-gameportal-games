@@ -32,7 +32,7 @@ export function createPhysics(T, W, ev) {
   function reset(z = 4) {
     Object.assign(s, {
       x: 0, z, y: heightAt(0, z), vx: 0, vy: 0, vz: 0,
-      heading: 0, mode: 'ready', readyLock: false, started: false, fade: 0, poleT: 0, pushAnim: 0, crash: null, tilt: 0, lean: 0, crouch: 0,
+      heading: 0, mode: 'ready', readyLock: false, started: false, fade: 0, poleT: 0, pushAnim: 0, crash: null, lastLand: null, tilt: 0, lean: 0, crouch: 0,
       trickYaw: 0, trickPitch: 0, spinV: 0, flipV: 0, airT: 0, bounces: [], hovered: 0,
       switchStance: false, charge: 0, jumpHeld: false,
       grind: null, railCooldown: null, crashT: 0, invuln: 0, bounceGrace: 0,
@@ -223,7 +223,9 @@ export function createPhysics(T, W, ev) {
       slopeVy = clamp((heightAt(s.x + ux * e, s.z + uz * e) - heightAt(s.x - ux * e, s.z - uz * e)) / (2 * e), -0.6, 0.6) * sp;
     }
     const impact = slopeVy - s.vy;
-    if (!upright) return crash(Math.abs(pe) > T.headFirst ? 'bury' : 'ragdoll');
+    // kept for the tuning panel's dials
+    s.lastLand = { pitch: pe, yaw: ye, result: !upright ? (Math.abs(pe) > T.headFirst ? 'bury' : 'ragdoll') : facing ? 'ok' : 'skid' };
+    if (!upright) return crash(s.lastLand.result);
 
     if (Math.abs(ye) > Math.PI / 2) s.switchStance = !s.switchStance;
     if (sp > 1) s.heading = Math.atan2(-s.vx, -s.vz);
