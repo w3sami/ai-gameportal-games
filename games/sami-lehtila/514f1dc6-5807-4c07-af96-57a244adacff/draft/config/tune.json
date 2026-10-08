@@ -84,5 +84,12 @@
     "grindSecond": 400,
     "star": 1000,
     "break": 100
-  }
+  },
+  "flipHoldSpeed": 15,
+  "landStunFrom": 9,
+  "landStunTime": 1.2,
+  "landStunSteer": 0.75,
+  "ringOpacity": 0.45,
+  "ringSize": 1,
+  "ringTime": 1.1
 }
