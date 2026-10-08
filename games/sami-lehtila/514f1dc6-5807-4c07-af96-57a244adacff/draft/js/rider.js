@@ -96,6 +96,16 @@ export function buildRider(scene, T) {
   }
   inner.add(board);
 
+  // crash props: the heap a head-first fall leaves, and the snowball
+  const snowMat = new THREE.MeshLambertMaterial({ color: '#f4f8ff', flatShading: true });
+  const mound = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), snowMat);
+  mound.visible = false;
+  scene.add(mound);
+  const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), snowMat);
+  ball.visible = false;
+  scene.add(ball);
+  const rollAxis = new THREE.Vector3();
+
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ map: T.shadow, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }));
   scene.add(shadow);
@@ -115,40 +125,89 @@ export function buildRider(scene, T) {
   setGear('skis');
 
   let tumble = 0;
-  /** s: the physics state from physics.js; place: (mesh, x, z) puts a mesh on the ground. */
+  /** s: the physics state from physics.js; place: (mesh, x, z, lift) puts a mesh on the ground. */
   function update(s, dt, place, groundY) {
     root.position.set(s.x, s.y, s.z);
     root.rotation.y = s.heading;
     root.rotation.x = s.tilt;
     root.rotation.z = s.lean;
     const sw = s.switchStance ? Math.PI : 0;
-    trick.rotation.y = s.trickYaw + sw + (s.mode === 'grind' ? Math.PI / 2 : 0);
-    trick.rotation.x = s.trickPitch;
-    trick.rotation.z = 0;
-    if (s.mode === 'crash') {
-      tumble += dt * 9 * Math.max(0.2, 1 - s.crashT);
-      trick.rotation.x = Math.sin(tumble) * 1.2;
-      trick.rotation.z = tumble;
-    } else tumble = 0;
+    trick.rotation.set(s.trickPitch, s.trickYaw + sw + (s.mode === 'grind' ? Math.PI / 2 : 0), 0);
+    root.scale.setScalar(1);
+    mound.visible = false;
+    ball.visible = false;
+    legs.rotation.set(0, 0, 0);
+    upper.rotation.z = 0;
 
     // crouch: hips drop while charging a jump or tucking
     const c = s.crouch;
     upper.position.y = 0.86 - c * 0.28;
     upper.rotation.x = -0.15 - c * 0.5;
     legs.scale.y = 1 - c * 0.3;
-    legs.position.y = 0;
     const armOut = s.mode === 'air' ? 1.2 : 0.35 + c * 0.3;
     arms[0].rotation.z = -armOut; arms[1].rotation.z = armOut;
     arms[0].rotation.x = arms[1].rotation.x = s.mode === 'air' ? 0 : -0.5;
+    if (s.pushAnim > 0) {
+      // pole push: arms reach forward and sweep back
+      const p = 1 - s.pushAnim / 0.4;
+      arms[0].rotation.x = arms[1].rotation.x = -1.4 + p * 2.2;
+      arms[0].rotation.z = -0.2; arms[1].rotation.z = 0.2;
+      upper.rotation.x = -0.6 + p * 0.3;
+    }
 
-    const flash = s.invuln > 0 && Math.floor(s.invuln * 12) % 2 === 0;
+    let shadowOn = true;
+    const k = s.crash;
+    if (s.mode === 'crash' && k.kind === 'bury') {
+      // head first into the snow: upside down, sunk, legs and skis out
+      root.position.y = s.y - k.depth;
+      root.rotation.set(0.15, s.heading, 0.12);
+      trick.rotation.set(Math.PI, 0, 0);
+      const kick = k.t < 1.3 ? Math.sin(k.t * 16) * 0.25 : 0;
+      legs.rotation.set(kick, 0, kick * 0.5);
+      arms[0].rotation.z = -0.3; arms[1].rotation.z = 0.3;
+      const grow = Math.min(1, k.t * 8);
+      mound.visible = true;
+      place(mound, s.x, s.z, -0.05);
+      mound.scale.set(k.mound * grow, k.mound * 0.5 * grow, k.mound * grow);
+      shadowOn = false;
+    } else if (s.mode === 'crash' && k.kind === 'ragdoll') {
+      tumble += dt * 10 * Math.max(0.25, 1 - k.t / 1.6);
+      trick.rotation.set(Math.sin(tumble * 0.9) * 1.6, tumble * 0.4, tumble);
+      flail(k.t);
+    } else if (s.mode === 'crash' && k.kind === 'snowball') {
+      ball.visible = true;
+      ball.scale.setScalar(k.r);
+      ball.position.set(s.x, s.y + k.r * 0.85, s.z);
+      const sp = Math.hypot(s.vx, s.vz);
+      if (sp > 0.1) {
+        rollAxis.set(-s.vz, 0, s.vx).normalize();
+        ball.rotateOnWorldAxis(rollAxis, -(sp * dt) / k.r);
+      }
+      // the rider rolls with the ball, hips at its centre: skis and arms poke
+      // out until it grows over them
+      root.position.set(s.x, ball.position.y - HIP, s.z);
+      root.rotation.set(0, 0, 0);
+      trick.quaternion.copy(ball.quaternion);
+      flail(k.t);
+    } else tumble = 0;
+
+    const flash = s.invuln > 0 && s.mode !== 'ready' && Math.floor(s.invuln * 12) % 2 === 0;
     root.visible = !flash;
 
     const above = Math.max(0, s.y - groundY);
-    const k = 1 / (1 + above * 0.15);
+    const sk = 1 / (1 + above * 0.15);
+    shadow.visible = shadowOn;
     place(shadow, s.x, s.z, 0.04);
-    shadow.scale.setScalar(k);
-    shadow.material.opacity = k;
+    shadow.scale.setScalar(sk * (k && k.kind === 'snowball' ? k.r * 1.6 : 1));
+    shadow.material.opacity = sk;
+  }
+
+  // limbs thrown about while tumbling
+  function flail(t) {
+    arms[0].rotation.set(Math.sin(t * 13) * 1.5, 0, -1.2 + Math.sin(t * 9) * 0.8);
+    arms[1].rotation.set(Math.cos(t * 11) * 1.5, 0, 1.2 + Math.cos(t * 10) * 0.8);
+    legs.rotation.set(Math.sin(t * 8) * 0.5, 0, Math.cos(t * 7) * 0.3);
+    upper.rotation.z = Math.sin(t * 6) * 0.4;
   }
 
   return { root, setGear, update, get gear() { return gear; } };

@@ -262,7 +262,7 @@ export function buildWorld(scene, T) {
       const w = it.r * 2.3, h = w * 1.5;
       // the envelope is the top two thirds of the picture; centre it on y
       const m = billboard(T.balloon[Math.floor(r() * T.balloon.length)], w, h, it.x, g + it.y - h * 0.68, it.z);
-      const b = { x: it.x, z: it.z, y: g + it.y, r: it.r, kind: 'balloon', power: null, mesh: m, y0: g + it.y, off: h * 0.68, phase: r() * 6 };
+      const b = { x: it.x, z: it.z, y: g + it.y, r: it.r, kind: 'balloon', power: null, mesh: m, y0: g + it.y, off: h * 0.68, h, phase: r() * 6, wobble: 0 };
       W.bouncers.push(b);
       W.movers.push({ kind: 'balloon', b });
       W.shadow(it.x, it.z, it.r * 1.6);
@@ -414,7 +414,12 @@ export function buildWorld(scene, T) {
         o.mesh.position.y = o.base + (near ? Math.abs(Math.sin(t * 9 + o.phase)) * 0.25 : 0);
       } else if (mv.kind === 'balloon') {
         const b = mv.b;
-        b.y = b.y0 + Math.sin(t * 0.7 + b.phase) * 0.5;
+        // a bounce sets wobble to 1: the envelope squashes, dips and springs back
+        b.wobble = (b.wobble || 0) * Math.exp(-2.5 * dt);
+        const w = b.wobble * Math.cos((1 - b.wobble) * 40);
+        b.y = b.y0 + Math.sin(t * 0.7 + b.phase) * 0.5 - b.wobble * 0.8;
+        b.mesh.userData.sx = 1 + 0.18 * w;
+        b.mesh.scale.y = b.h * (1 - 0.18 * w);
         b.mesh.position.y = b.y - b.off;
       }
     }
@@ -429,7 +434,7 @@ export function buildWorld(scene, T) {
     for (const m of W.billboards) {
       if (!m.visible) continue;
       m.rotation.y = Math.atan2(cam.position.x - m.position.x, cam.position.z - m.position.z);
-      m.scale.x = m.userData.w * (m.userData.flip ?? 1) * (m.userData.spin ?? 1);
+      m.scale.x = m.userData.w * (m.userData.flip ?? 1) * (m.userData.spin ?? 1) * (m.userData.sx ?? 1);
     }
   };
 
