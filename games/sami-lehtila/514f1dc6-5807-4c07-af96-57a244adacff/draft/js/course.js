@@ -46,8 +46,8 @@ export const COURSE = {
     { type: 'checkpoint', x: 0, z: -72 },
     { type: 'checkpoint', x: 11, z: -163 },
     { type: 'checkpoint', x: -10, z: -268 },
-    { type: 'checkpoint', x: 0, z: -336 },
-    { type: 'checkpoint', x: -6, z: -388 },
+    { type: 'checkpoint', x: 0, z: -330 },
+    { type: 'checkpoint', x: -6, z: -382 },
     { type: 'checkpoint', x: 0, z: -515 },
 
     // Warm-up: one kicker, a low rail, things to knock over.
