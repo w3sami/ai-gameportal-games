@@ -86,7 +86,7 @@ export function buildWorld(scene, T) {
     }
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
       const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
-      idx.push(a, c, b, b, c, d);
+      idx.push(a, b, c, b, d, c);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -234,7 +234,7 @@ export function buildWorld(scene, T) {
       }
       for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
         const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
-        idx.push(a, c, b, b, c, d);
+        idx.push(a, b, c, b, d, c);
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
