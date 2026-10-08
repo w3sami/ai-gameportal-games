@@ -201,7 +201,7 @@ const input = createInput();
 
 // developer's tuning panel; its pause (and the portal's) freezes the run in place
 let frozen = false;
-createTuning(T, { onPause: (on) => { frozen = on ?? !frozen; last = performance.now(); }, rider: () => physics.s });
+const tuning = createTuning(T, { onPause: (on) => { frozen = on ?? !frozen; last = performance.now(); }, rider: () => physics.s });
 
 // The press that starts or resumes a run must not also be its first jump.
 let jumpLock = false;
@@ -224,6 +224,12 @@ addEventListener('keydown', (e) => {
 // Safari on iPhone has no fullscreen for pages, so the button hides there.
 const fsButton = document.getElementById('fs');
 fsButton.hidden = !document.fullscreenEnabled;
+// corner brackets pointing out (enter) or in (leave); drawn, since no font has them all
+const FS_ICON = {
+  enter: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
+  leave: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>',
+};
+fsButton.innerHTML = FS_ICON.enter;
 function toggleFullscreen() {
   if (!document.fullscreenEnabled) return;
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -231,7 +237,7 @@ function toggleFullscreen() {
 }
 fsButton.addEventListener('click', () => { toggleFullscreen(); fsButton.blur(); });
 document.addEventListener('fullscreenchange', () => {
-  fsButton.textContent = document.fullscreenElement ? '🗗' : '⛶';
+  fsButton.innerHTML = document.fullscreenElement ? FS_ICON.leave : FS_ICON.enter;
 });
 
 // Menu keys from the mapped inputs, so a controller can drive the cards.
@@ -319,6 +325,7 @@ function frame(now) {
   camYaw += (want - camYaw) * Math.min(1, dt * 1.5);
   placeCamera(Math.min(1, dt * 8));
   W.faceCamera(camera);
+  W.showCheckpoints(tuning.open);
   void C;
 
   hud();
