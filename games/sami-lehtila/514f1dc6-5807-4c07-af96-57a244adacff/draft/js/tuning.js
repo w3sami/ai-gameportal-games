@@ -52,6 +52,7 @@ const GROUPS = [
   ['Ilma ja temput', [
     ['gravity', 'Painovoima (m/s²)', 4, 30, 0.5],
     ['spinResponse', 'Pyörimisen reagointi (1/s)', 1, 30, 0.5],
+    ['flipHoldSpeed', 'Volttilukko: pohjassa ponnistettu ei voltita alle (m/s)', 0, 40, 0.5],
     ['levelPitch', 'Volttiapu: ikkuna (±°)', 0, 115, 1, DEG],
     ['levelYaw', 'Pyörähdysapu: ikkuna (±°)', 0, 90, 1, DEG],
     ['levelRate', 'Avun nopeus (°/s)', 0, 600, 5, DEG],
@@ -82,6 +83,9 @@ const GROUPS = [
     ['starReach', 'Tähden keräysetäisyys (m)', 0.5, 6, 0.1],
     ['snowSpray', 'Lumipöly ×', 0, 8, 0.1],
     ['sprayStraight', 'Lumipöly suoraan (osuus poikittaisesta)', 0, 1, 0.05],
+    ['ringOpacity', 'Isku-rengas: läpinäkyvyys (0 = näkymätön)', 0, 1, 0.05],
+    ['ringSize', 'Isku-rengas: koko ×', 0.2, 3, 0.05],
+    ['ringTime', 'Isku-rengas: kesto (s)', 0.2, 3, 0.05],
     ['trailFrom', 'Vana alkaa (m/s)', 0, 40, 0.5],
     ['trailFull', 'Vana täysillä (m/s)', 1, 50, 0.5],
   ]],
