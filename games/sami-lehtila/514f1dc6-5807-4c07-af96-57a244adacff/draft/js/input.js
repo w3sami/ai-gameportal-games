@@ -1,28 +1,39 @@
-// Keyboard and touch into one input state:
+// Keyboard, controller and touch into one input state:
 //   x     -1 left … 1 right       up / down  0 … 1       jump  held
-// Edge-triggered menu keys go to onKey(code).
+//
+// Keyboard and controller go through the gamepad plugin's createControls, so
+// the player can remap both from the menu (open()). Touch buttons are added
+// on top. poll() once per frame; read() as often as the physics steps.
 
-const KEYS = {
-  left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'],
-  up: ['ArrowUp', 'KeyW'], down: ['ArrowDown', 'KeyS'],
-  jump: ['Space'],
-};
+import { createControls } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
 
-export function createInput(onKey) {
-  const held = new Set();
-  const touch = { left: false, right: false, up: false, down: false, jump: false };
+const L = (fi, en) => ({ fi, en });
 
-  addEventListener('keydown', (e) => {
-    if (Object.values(KEYS).flat().includes(e.code)) e.preventDefault();
-    if (!e.repeat) onKey(e.code);
-    held.add(e.code);
+export function createInput() {
+  const controls = createControls({
+    id: 'downhill',
+    lang: 'fi',
+    inputs: [
+      { id: 'left', label: L('Vasen / pyörähdys', 'Left / spin'), type: 'analog',
+        keys: ['ArrowLeft', 'KeyA'], pad: ['LS-Left', 'Left'] },
+      { id: 'right', label: L('Oikea / pyörähdys', 'Right / spin'), type: 'analog',
+        keys: ['ArrowRight', 'KeyD'], pad: ['LS-Right', 'Right'] },
+      { id: 'up', label: L('Kyykky / etuvoltti', 'Tuck / front flip'), type: 'analog',
+        keys: ['ArrowUp', 'KeyW'], pad: ['LS-Up', 'Up'] },
+      { id: 'down', label: L('Jarru / takavoltti', 'Brake / back flip'), type: 'analog',
+        keys: ['ArrowDown', 'KeyS'], pad: ['LS-Down', 'Down'] },
+      { id: 'jump', label: L('Hyppy', 'Jump'), type: 'digital',
+        keys: ['Space'], pad: ['A', 'RT'] },
+      { id: 'restart', label: L('Alusta', 'Restart'), type: 'digital',
+        keys: ['KeyR'], pad: ['Back'] },
+      { id: 'menu', label: L('Tauko / valikko', 'Pause / menu'), type: 'digital',
+        keys: ['Escape'], pad: ['Start'] },
+      { id: 'controls', label: L('Ohjainasetukset', 'Controls'), type: 'digital',
+        keys: ['KeyC'], pad: ['Y'] },
+    ],
   });
-  addEventListener('keyup', (e) => held.delete(e.code));
-  addEventListener('blur', () => held.clear());
 
-  const on = (name) => touch[name] || KEYS[name].some((k) => held.has(k));
-
-  // touch buttons: each one sets its flag while a finger is on it
+  const touch = { left: false, right: false, up: false, down: false, jump: false };
   const pad = document.getElementById('touch');
   if (matchMedia('(pointer: coarse)').matches) pad.hidden = false;
   for (const b of pad.querySelectorAll('[data-in]')) {
@@ -34,14 +45,28 @@ export function createInput(onKey) {
     b.addEventListener('pointerleave', set(false));
   }
 
+  // keep arrows and space from scrolling the page around the game
+  addEventListener('keydown', (e) => {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
+  });
+
+  const v = (id) => (controls.isOpen() ? 0 : controls.value(id));
+  const t = (name) => (touch[name] ? 1 : 0);
+
   return {
+    poll(dt) { controls.poll(dt); },
     read() {
       return {
-        x: (on('right') ? 1 : 0) - (on('left') ? 1 : 0),
-        up: on('up') ? 1 : 0,
-        down: on('down') ? 1 : 0,
-        jump: on('jump'),
+        x: Math.max(-1, Math.min(1, v('right') + t('right') - v('left') - t('left'))),
+        up: Math.min(1, v('up') + t('up')),
+        down: Math.min(1, v('down') + t('down')),
+        jump: (!controls.isOpen() && controls.held('jump')) || touch.jump,
       };
     },
+    /** Edge of a named input this frame, for menus. */
+    pressed(id) { return !controls.isOpen() && controls.pressed(id); },
+    isOpen: () => controls.isOpen(),
+    open(onClose) { return controls.open({ onClose }); },
+    get connected() { return controls.pad.connected; },
   };
 }

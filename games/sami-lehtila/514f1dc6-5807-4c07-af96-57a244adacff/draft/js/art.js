@@ -362,11 +362,11 @@ function snow() {
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
   // groomed corduroy across the slope
   for (let y = 0; y < H; y += 8) {
-    g.fillStyle = 'rgba(140,165,210,0.28)'; g.fillRect(0, y, W, 3);
+    g.fillStyle = 'rgba(140,165,210,0.13)'; g.fillRect(0, y, W, 3);
   }
   const r = rng(5);
   for (let i = 0; i < 900; i++) {
-    g.fillStyle = r() < 0.6 ? 'rgba(140,165,210,0.22)' : 'rgba(255,255,255,0.9)';
+    g.fillStyle = r() < 0.6 ? 'rgba(140,165,210,0.14)' : 'rgba(255,255,255,0.9)';
     const s = 1 + r() * 2.5;
     g.fillRect(r() * W, r() * H, s, s);
   }
