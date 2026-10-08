@@ -230,8 +230,11 @@ export function createPhysics(T, W, ev) {
     s.lastLand = { pitch: pe, yaw: ye, result: !upright ? (Math.abs(pe) > T.headFirst ? 'bury' : 'ragdoll') : facing ? 'ok' : 'skid' };
     if (!upright) return crash(s.lastLand.result);
 
-    if (Math.abs(ye) > Math.PI / 2) s.switchStance = !s.switchStance;
-    if (sp > 1) s.heading = Math.atan2(-s.vx, -s.vz);
+    // the rider keeps facing the way they came down: landing angled is an
+    // instant turn, as the edges' grip swings the speed round to the heading
+    let off = ye;
+    if (Math.abs(ye) > Math.PI / 2) { s.switchStance = !s.switchStance; off = wrap(ye - Math.PI); }
+    s.heading += off;
     // hard or sideways: skid it out, no fall
     let loss = 1 - Math.min(0.4, Math.max(0, impact - 4) * T.hardLoss);
     if (!facing) loss *= T.sidewaysKeep;
