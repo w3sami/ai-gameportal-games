@@ -36,6 +36,9 @@ export const DEFAULTS = {
   landYaw: 0.8,              // radians off forward or backward before a landing skids
   sidewaysKeep: 0.55,        // speed kept by a sideways landing
   hardLoss: 0.02,            // speed lost per m/s of impact above 4 m/s (at most 40 %)
+  slamImpact: 20,            // m/s into the slope beyond which even an upright landing slams in
+  slamMound: 1,              // size of the heap a slam throws up
+  slamTime: 1.6,             // s stuck in the heap before the fade
   buryTime: 1.8,             // s stuck head first in the snow
   ragdollTime: 1.6,          // s tumbling before standing up
   snowballSpeed: 13,         // m/s above which a tumble rolls up into a snowball
@@ -47,6 +50,7 @@ export const DEFAULTS = {
   starSize: 2.0,             // m across
   starReach: 2.6,            // m from the rider's middle that collects a star
   snowSpray: 2.5,            // snow spray multiplier
+  sprayStraight: 0.1,        // share of the spray running straight; fully sideways is all of it
   trailFrom: 10,             // m/s where the ski / board trail starts to show
   trailFull: 26,             // m/s where it is at full strength
 

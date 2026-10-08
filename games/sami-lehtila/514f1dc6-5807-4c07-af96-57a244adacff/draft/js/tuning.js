@@ -36,6 +36,9 @@ const GROUPS = [
     ['landYaw', 'Sivuttain-raja (±°)', 5, 90, 1, DEG],
     ['sidewaysKeep', 'Sivuttain alastulo: vauhtia jää', 0.1, 1, 0.05],
     ['hardLoss', 'Kova alastulo: jarru per m/s', 0, 0.06, 0.002],
+    ['slamImpact', 'Liian kova alastulo: kumpu kun isku yli (m/s)', 5, 50, 0.5],
+    ['slamMound', 'Liian kova alastulo: kummun koko ×', 0.2, 4, 0.1],
+    ['slamTime', 'Liian kova alastulo: kummussa (s)', 0.3, 5, 0.1],
     ['buryTime', 'Lumessa pää edellä (s)', 0.5, 5, 0.1],
     ['ragdollTime', 'Ragdollin kesto (s)', 0.5, 5, 0.1],
     ['snowballSpeed', 'Lumipallo kun vauhti yli (m/s)', 3, 40, 0.5],
@@ -75,6 +78,7 @@ const GROUPS = [
     ['starSize', 'Tähden koko (m)', 0.5, 5, 0.1],
     ['starReach', 'Tähden keräysetäisyys (m)', 0.5, 6, 0.1],
     ['snowSpray', 'Lumipöly ×', 0, 8, 0.1],
+    ['sprayStraight', 'Lumipöly suoraan (osuus poikittaisesta)', 0, 1, 0.05],
     ['trailFrom', 'Vana alkaa (m/s)', 0, 40, 0.5],
     ['trailFull', 'Vana täysillä (m/s)', 1, 50, 0.5],
   ]],
@@ -105,8 +109,8 @@ function set(o, path, v) {
 
 const TAU = Math.PI * 2;
 const wrap = (a) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
-const COL = { ok: '#3ecf6e', ragdoll: '#f0a030', bury: '#e5484d', skid: '#f0a030', ring: 'rgba(255,255,255,.15)' };
-const RESULT = { ok: 'pystyssä', skid: 'liuku', ragdoll: 'ragdoll', bury: 'pää edellä' };
+const COL = { ok: '#3ecf6e', ragdoll: '#f0a030', bury: '#e5484d', skid: '#f0a030', slam: '#e5484d', ring: 'rgba(255,255,255,.15)' };
+const RESULT = { ok: 'pystyssä', skid: 'liuku', ragdoll: 'ragdoll', bury: 'pää edellä', slam: 'liian kova' };
 
 // Two dials for the landing limits. Angles are measured from straight up
 // (pitch, seen from the side, forward to the right) or straight ahead (yaw,
