@@ -64,10 +64,11 @@ export function createPhysics(T, W, ev) {
     s.heading -= steer * g.turnRate * (1 + 2 / (1 + sp)) * dt;
     const dx = dirX(), dz = dirZ(), rx = -dz, rz = dx;
     let f = s.vx * dx + s.vz * dz, l = s.vx * rx + s.vz * rz;
+    // how far across the travel the skis point: 0 straight, 1 fully sideways
+    const across = sp > 0.5 ? 1 - Math.abs(f) / Math.hypot(f, l) : 0;
     const braking = s.finished || inp.down > 0.3;
     const nl = l * Math.exp(-(braking ? g.grip * 0.6 : g.grip) * dt);
     f += Math.abs(l - nl) * T.carveKeep;
-    const skid = Math.abs(l - nl) / dt;
     l = nl;
     const tuck = inp.up > 0.3 && !s.finished;
     const drag = g.drag * (tuck ? T.tuckDrag : 1);
@@ -90,7 +91,9 @@ export function createPhysics(T, W, ev) {
     const slopeF = gx * dx + gz * dz;
     s.tilt += (Math.atan(slopeF) - s.tilt) * Math.min(1, dt * 10);
 
-    const spray = Math.min(1.5, skid / 40 + (braking ? 0.5 : 0) + Math.max(0, sp - 8) / 30) * Math.min(1, sp / 10);
+    // snow off the edges: sprayStraight of it running straight, all of it
+    // fully sideways, more when braking; scaled by speed
+    const spray = (T.sprayStraight + (1 - T.sprayStraight) * across + (braking ? 0.5 : 0)) * Math.min(1, sp / 15);
     if (spray > 0.02) ev('spray', { x: s.x, y: s.y, z: s.z, amount: spray });
 
     // jump: hold to crouch, release to pop
@@ -229,6 +232,7 @@ export function createPhysics(T, W, ev) {
     // kept for the tuning panel's dials
     s.lastLand = { pitch: pe, yaw: ye, result: !upright ? (Math.abs(pe) > T.headFirst ? 'bury' : 'ragdoll') : facing ? 'ok' : 'skid' };
     if (!upright) return crash(s.lastLand.result);
+    if (impact > T.slamImpact) { s.lastLand.result = 'slam'; return crash('slam', sp, impact); }
 
     // the rider keeps facing the way they came down: landing angled is an
     // instant turn, as the edges' grip swings the speed round to the heading
@@ -363,17 +367,23 @@ export function createPhysics(T, W, ev) {
     return want;
   }
 
-  /** kind: 'bury' | 'ragdoll'; a ragdoll fast enough becomes a snowball. */
-  function crash(kind, sp = speed()) {
+  /** kind: 'bury' | 'ragdoll' | 'slam'; a ragdoll fast enough becomes a snowball. */
+  function crash(kind, sp = speed(), impact = 0) {
     if (s.mode === 'crash') return;
     if (kind === 'ragdoll' && sp > T.snowballSpeed) kind = 'snowball';
     s.mode = 'crash';
     s.lastCrash = kind;
     // head first: the faster, the bigger the heap and the less of the rider
     // shows; at full speed only legs and skis stick out of its top
-    const mound = 0.6 + Math.min(sp, 30) * 0.045;
+    let mound = 0.6 + Math.min(sp, 30) * 0.045;
+    // a slam sinks the rider, limbs every which way, by how far past the
+    // limit the impact went, in a heap of its own size
+    const over = Math.max(0, impact - T.slamImpact);
+    if (kind === 'slam') mound = T.slamMound * (0.7 + Math.min(over, 25) * 0.06);
     s.crash = {
-      kind, t: 0, sp, r: 0.4, mound,
+      kind, t: 0, sp, r: 0.4, mound, mx: s.x, mz: s.z,
+      sink: Math.min(1.3, 0.35 + over * 0.05),
+      pose: Array.from({ length: 8 }, () => Math.random() * 2 - 1),
       // how far the upside-down rider sinks: hips at the heap's top when fast,
       // 0.6 m above it when slow
       depth: 0.9 - mound * 0.5 - 0.6 * (1 - Math.min(sp, 25) / 25),
@@ -392,7 +402,13 @@ export function createPhysics(T, W, ev) {
   function stepCrash(dt) {
     const c = s.crash;
     c.t += dt;
-    if (c.kind === 'bury') {
+    if (c.kind === 'slam') {
+      // stuck in the heap until the fade
+      const k = Math.exp(-10 * dt);
+      s.vx *= k; s.vz *= k;
+      s.y = heightAt(s.x, s.z); s.vy = 0;
+      fadeOut(c.t, T.slamTime);
+    } else if (c.kind === 'bury') {
       const k = Math.exp(-10 * dt);
       s.vx *= k; s.vz *= k;
       moveCrash(dt);

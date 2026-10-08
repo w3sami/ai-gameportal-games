@@ -184,6 +184,20 @@ export function buildRider(scene, T) {
       place(mound, s.x, s.z, -0.05);
       mound.scale.set(k.mound * grow, k.mound * 0.5 * grow, k.mound * grow);
       shadowOn = false;
+    } else if (s.mode === 'crash' && k.kind === 'slam') {
+      // punched into the heap in a random ragdoll pose, and left there
+      const grow = Math.min(1, k.t * 8);
+      mound.visible = true;
+      place(mound, k.mx, k.mz, -0.05);
+      mound.scale.set(k.mound * grow, k.mound * 0.5 * grow, k.mound * grow);
+      const p = k.pose;
+      root.position.y = s.y - k.sink;
+      trick.rotation.set(p[0] * 1.4, p[1] * Math.PI, p[2] * 1.2);
+      arms[0].rotation.set(p[3] * 2, 0, -1 + p[4]);
+      arms[1].rotation.set(p[5] * 2, 0, 1 + p[6]);
+      legs.rotation.set(p[7] * 0.8, 0, p[4] * 0.4);
+      upper.rotation.z = p[6] * 0.5;
+      shadowOn = false;
     } else if (s.mode === 'crash' && k.kind === 'ragdoll') {
       tumble += dt * 10 * Math.max(0.25, 1 - k.t / 1.6);
       trick.rotation.set(Math.sin(tumble * 0.9) * 1.6, tumble * 0.4, tumble);
