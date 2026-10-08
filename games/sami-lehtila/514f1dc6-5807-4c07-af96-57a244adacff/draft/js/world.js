@@ -154,6 +154,23 @@ export function buildWorld(scene, T, tune) {
   // ---- items ----------------------------------------------------------------
 
   const lipMat = new THREE.MeshLambertMaterial({ color: '#f08a24' });
+
+  // low-poly star: a thick five-pointed slab with bevelled, faceted edges,
+  // one metre across before tune.starSize scales it
+  const starGeo = (() => {
+    const sh = new THREE.Shape();
+    for (let i = 0; i < 10; i++) {
+      const rr = i % 2 ? 0.21 : 0.5, a = Math.PI / 2 + (i * Math.PI) / 5;
+      const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+      if (i === 0) sh.moveTo(px, py); else sh.lineTo(px, py);
+    }
+    sh.closePath();
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 0.12, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.05, bevelSegments: 1, curveSegments: 1 });
+    g.center();
+    return g;
+  })();
+  const starMat = new THREE.MeshLambertMaterial({ color: '#ffc928', emissive: '#a86a00', emissiveIntensity: 0.6, flatShading: true });
+  const glowMat = new THREE.SpriteMaterial({ map: T.sparkle, color: '#ffe680', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.4 });
   const sparkleMat = new THREE.SpriteMaterial({ map: T.sparkle, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   const cpMat = new THREE.MeshBasicMaterial({ color: '#2f7cf6', side: THREE.DoubleSide });
   const railMat = new THREE.MeshLambertMaterial({ color: '#c9ced6' });
@@ -198,7 +215,13 @@ export function buildWorld(scene, T, tune) {
 
     star(it) {
       const y = groundAt(it.x, it.z) + it.y;
-      const m = billboard(T.star, tune.starSize, tune.starSize, it.x, y - tune.starSize / 2, it.z);
+      const m = new THREE.Group();
+      m.add(new THREE.Mesh(starGeo, starMat));
+      const glow = new THREE.Sprite(glowMat);
+      glow.scale.setScalar(1.6);
+      m.add(glow);
+      m.position.set(it.x, y, it.z);
+      group.add(m);
       W.stars.push({ x: it.x, y, z: it.z, mesh: m, taken: false, phase: r() * 6 });
       W.starCount++;
     },
@@ -510,11 +533,9 @@ export function buildWorld(scene, T, tune) {
     }
     for (const s of W.stars) {
       if (s.taken) continue;
-      const size = tune.starSize;
-      s.mesh.userData.w = size;
-      s.mesh.scale.y = size;
-      s.mesh.position.y = s.y - size / 2 + Math.sin(t * 2 + s.phase) * 0.15;
-      s.mesh.userData.spin = Math.cos(t * 3 + s.phase);
+      s.mesh.scale.setScalar(tune.starSize);
+      s.mesh.position.y = s.y + Math.sin(t * 2 + s.phase) * 0.15;
+      s.mesh.rotation.y = t * 2.2 + s.phase;
     }
     for (const o of W.breakables) {
       for (const sp of o.glints) {
@@ -525,11 +546,17 @@ export function buildWorld(scene, T, tune) {
     }
   };
 
+  // Billboards stand parallel to the screen, all turned by the camera's own
+  // heading. Pointing each at the camera instead skews the ones off to the
+  // sides: a car crossing the road would look as if it were turning.
+  const look = new THREE.Vector3();
   W.faceCamera = (cam) => {
+    cam.getWorldDirection(look);
+    const yaw = Math.atan2(-look.x, -look.z);
     for (const m of W.billboards) {
       if (!m.visible) continue;
-      m.rotation.y = Math.atan2(cam.position.x - m.position.x, cam.position.z - m.position.z);
-      m.scale.x = m.userData.w * (m.userData.flip ?? 1) * (m.userData.spin ?? 1) * (m.userData.sx ?? 1);
+      m.rotation.y = yaw;
+      m.scale.x = m.userData.w * (m.userData.flip ?? 1) * (m.userData.sx ?? 1);
     }
   };
 
