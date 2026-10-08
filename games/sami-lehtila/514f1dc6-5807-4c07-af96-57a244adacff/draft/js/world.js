@@ -24,6 +24,8 @@ export function buildWorld(scene, T) {
     billboards: [], movers: [], breakables: [],
     starCount: 0,
     finishZ: COURSE.finishZ,
+    checkpoints: [{ x: 0, z: 4 }],   // the start, then course checkpoints downhill
+    checkpointMarkers: [],
   };
   const r = rng(2026);
   const group = new THREE.Group();
@@ -152,6 +154,7 @@ export function buildWorld(scene, T) {
   // ---- items ----------------------------------------------------------------
 
   const lipMat = new THREE.MeshLambertMaterial({ color: '#f08a24' });
+  const cpMat = new THREE.MeshBasicMaterial({ color: '#2f7cf6', side: THREE.DoubleSide });
   const railMat = new THREE.MeshLambertMaterial({ color: '#c9ced6' });
   const postMat = new THREE.MeshLambertMaterial({ color: '#555b66' });
 
@@ -224,8 +227,10 @@ export function buildWorld(scene, T) {
     },
 
     road(it) {
-      const hw = it.width / 2;
-      const x0 = -48, x1 = 48, nx = 24, nz = 4;
+      // the road runs between two tunnel mouths dug into the banks; cars come
+      // out of one and disappear into the other
+      const hw = it.width / 2, P = it.tunnel ?? 28;
+      const x0 = -P - 1, x1 = P + 1, nx = 24, nz = 4;
       const pos = [], uv = [], idx = [];
       for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
         const x = x0 + ((x1 - x0) * i) / nx, z = it.z + hw - (it.width * j) / nz;
@@ -242,16 +247,34 @@ export function buildWorld(scene, T) {
       g.setIndex(idx);
       g.computeVertexNormals();
       group.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: T.asphalt })));
+
+      const faceW = it.width + 4, faceH = 7.5, depth = 10;
+      const concrete = new THREE.MeshLambertMaterial({ color: '#8f959e' });
+      const capMat = new THREE.MeshLambertMaterial({ color: '#f2f6fd' });
+      const faceMat = new THREE.MeshLambertMaterial({ map: T.tunnel });
+      for (const sx of [-1, 1]) {
+        const gy = groundAt(sx * P, it.z);
+        const block = new THREE.Mesh(new THREE.BoxGeometry(depth, faceH + 1, faceW), concrete);
+        block.position.set(sx * (P + depth / 2), gy + (faceH + 1) / 2 - 1, it.z);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(depth + 0.4, 0.5, faceW + 0.4), capMat);
+        cap.position.set(sx * (P + depth / 2), gy + faceH + 0.2, it.z);
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(faceW, faceH), faceMat);
+        face.rotation.y = -sx * Math.PI / 2;
+        face.position.set(sx * (P - 0.02), gy + faceH / 2 - 0.3, it.z);
+        group.add(block, cap, face);
+      }
+
+      const loop = P + 25;           // cars drive this far into the hill before coming round again
       for (const lane of it.lanes) {
         const z = it.z + lane.offset;
-        let x = -60 + r() * 30;
-        while (x < 60) {
+        let x = -loop + r() * 30;
+        while (x < loop) {
           const m = billboard(T.car[Math.floor(r() * T.car.length)], 4.2, 2.1, x, groundAt(x, z), z);
           m.userData.w *= lane.dir;
           const sh = W.shadow(x, z, 3.2);
-          const o = { x, z, r: 1.0, top: 1.6, kind: 'car', mesh: m, len: 1.4 };
+          const o = { x, z, r: 1.0, top: 1.6, kind: 'car', mesh: m, len: 1.4, hidden: false };
           W.obstacles.push(o);
-          W.movers.push({ kind: 'car', o, sh, dir: lane.dir, speed: lane.speed * (0.9 + r() * 0.2) });
+          W.movers.push({ kind: 'car', o, sh, dir: lane.dir, speed: lane.speed * (0.9 + r() * 0.2), tunnel: P, loop });
           x += 22 + r() * 26;
         }
       }
@@ -266,6 +289,17 @@ export function buildWorld(scene, T) {
       W.bouncers.push(b);
       W.movers.push({ kind: 'balloon', b });
       W.shadow(it.x, it.z, it.r * 1.6);
+    },
+
+    checkpoint(it) {
+      W.checkpoints.push({ x: it.x, z: it.z });
+      // a blue flag only the tuning panel shows
+      const g = groundAt(it.x, it.z);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4), cpMat);
+      pole.position.set(it.x, g + 1.2, it.z);
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.55), cpMat);
+      flag.position.set(it.x + 0.45, g + 2.1, it.z);
+      for (const m of [pole, flag]) { m.visible = false; group.add(m); W.checkpointMarkers.push(m); }
     },
 
     finish(it) {
@@ -394,6 +428,8 @@ export function buildWorld(scene, T) {
   }
 
   for (const it of COURSE.items) add[it.type]?.(it);
+  W.checkpoints.sort((a, b) => b.z - a.z);
+  W.showCheckpoints = (on) => { for (const m of W.checkpointMarkers) m.visible = on; };
 
   // ---- per frame ------------------------------------------------------------
 
@@ -402,10 +438,14 @@ export function buildWorld(scene, T) {
       if (mv.kind === 'car') {
         const o = mv.o;
         o.x += mv.dir * mv.speed * dt;
-        if (o.x > 64) o.x -= 128;
-        if (o.x < -64) o.x += 128;
-        o.mesh.position.set(o.x, groundAt(o.x, o.z), o.z);
-        mv.sh.position.x = o.x; mv.sh.position.y = groundAt(o.x, o.z) + 0.05;
+        if (o.x > mv.loop) o.x -= 2 * mv.loop;
+        if (o.x < -mv.loop) o.x += 2 * mv.loop;
+        // inside the hill: out of sight and out of the way
+        o.hidden = Math.abs(o.x) > mv.tunnel + 2.5;
+        o.mesh.visible = mv.sh.visible = !o.hidden;
+        const gy = groundAt(Math.max(-mv.tunnel, Math.min(mv.tunnel, o.x)), o.z);
+        o.mesh.position.set(o.x, gy, o.z);
+        mv.sh.position.x = o.x; mv.sh.position.y = gy + 0.05;
       } else if (mv.kind === 'dog') {
         const o = mv.o;
         mv.wait -= dt;
