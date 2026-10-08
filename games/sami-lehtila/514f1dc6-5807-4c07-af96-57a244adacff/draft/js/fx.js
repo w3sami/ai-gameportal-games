@@ -52,6 +52,41 @@ export function buildFx(scene, T) {
   return fx;
 }
 
+/**
+ * Impact rings: a soft ring of snow spreading on the ground where a hard
+ * landing hit. place(mesh, x, z, lift) puts a mesh flat on the surface.
+ */
+export function buildRings(scene, T, place) {
+  // blue-grey like a shadowed dent, since white would vanish on the snow
+  const geo = new THREE.RingGeometry(0.6, 1, 48).rotateX(-Math.PI / 2);
+  const pool = Array.from({ length: 4 }, () => {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      color: '#7f98c0', transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3,
+    }));
+    m.visible = false;
+    scene.add(m);
+    return { m, t: 1, size: 1 };
+  });
+  let next = 0;
+  return {
+    spawn(x, z, k) {
+      const r = pool[next]; next = (next + 1) % pool.length;
+      place(r.m, x, z, 0.05);
+      r.t = 0; r.size = 1.5 + k * 3.5; r.m.visible = true;
+    },
+    update(dt) {
+      for (const r of pool) {
+        if (!r.m.visible) continue;
+        r.t += dt / 0.9;
+        if (r.t >= 1) { r.m.visible = false; continue; }
+        const e = 1 - Math.pow(1 - r.t, 3);
+        r.m.scale.setScalar(0.3 + e * r.size);
+        r.m.material.opacity = 0.75 * (1 - r.t);
+      }
+    },
+  };
+}
+
 /** Floating texts in the HUD layer. */
 export function popup(host, text, cls = '') {
   const el = document.createElement('div');
