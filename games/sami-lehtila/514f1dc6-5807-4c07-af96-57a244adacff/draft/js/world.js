@@ -154,6 +154,7 @@ export function buildWorld(scene, T, tune) {
   // ---- items ----------------------------------------------------------------
 
   const lipMat = new THREE.MeshLambertMaterial({ color: '#f08a24' });
+  const sparkleMat = new THREE.SpriteMaterial({ map: T.sparkle, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   const cpMat = new THREE.MeshBasicMaterial({ color: '#2f7cf6', side: THREE.DoubleSide });
   const railMat = new THREE.MeshLambertMaterial({ color: '#c9ced6' });
   const postMat = new THREE.MeshLambertMaterial({ color: '#555b66' });
@@ -197,7 +198,7 @@ export function buildWorld(scene, T, tune) {
 
     star(it) {
       const y = groundAt(it.x, it.z) + it.y;
-      const m = billboard(T.star, 1.4, 1.4, it.x, y - 0.7, it.z);
+      const m = billboard(T.star, tune.starSize, tune.starSize, it.x, y - tune.starSize / 2, it.z);
       W.stars.push({ x: it.x, y, z: it.z, mesh: m, taken: false, phase: r() * 6 });
       W.starCount++;
     },
@@ -324,7 +325,16 @@ export function buildWorld(scene, T, tune) {
     const g = groundAt(it.x, it.z);
     const m = billboard(tex, w, h, it.x, g, it.z);
     const sh = W.shadow(it.x, it.z, w);
-    const o = { x: it.x, z: it.z, r: w * 0.4, top: h, kind: 'break', what, mesh: m, sh, alive: true };
+    // brand new and glinting: a few twinkles around it until it breaks
+    const glints = [];
+    for (let k = 0; k < 3; k++) {
+      const sp = new THREE.Sprite(sparkleMat);
+      sp.position.set(it.x + (r() - 0.5) * w * 0.8, g + h * (0.25 + r() * 0.7), it.z + 0.3);
+      sp.userData = { phase: r() * 10, rate: 1.6 + r() * 1.4, size: 0.35 + r() * 0.3 };
+      group.add(sp);
+      glints.push(sp);
+    }
+    const o = { x: it.x, z: it.z, r: w * 0.4, top: h, kind: 'break', what, mesh: m, sh, glints, alive: true };
     W.obstacles.push(o);
     W.breakables.push(o);
   }
@@ -500,8 +510,18 @@ export function buildWorld(scene, T, tune) {
     }
     for (const s of W.stars) {
       if (s.taken) continue;
-      s.mesh.position.y = s.y - 0.7 + Math.sin(t * 2 + s.phase) * 0.15;
+      const size = tune.starSize;
+      s.mesh.userData.w = size;
+      s.mesh.scale.y = size;
+      s.mesh.position.y = s.y - size / 2 + Math.sin(t * 2 + s.phase) * 0.15;
       s.mesh.userData.spin = Math.cos(t * 3 + s.phase);
+    }
+    for (const o of W.breakables) {
+      for (const sp of o.glints) {
+        sp.visible = o.alive;
+        const u = sp.userData;
+        sp.scale.setScalar(u.size * Math.pow(Math.max(0, Math.sin(t * u.rate + u.phase)), 8) + 0.001);
+      }
     }
   };
 

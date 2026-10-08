@@ -7,29 +7,33 @@
 // the game's own page, where portal.canWrite is true; elsewhere "Kopioi"
 // puts the JSON on the clipboard.
 //
-// Each row is [path in T, label, min, max, step]. The range is what the
-// slider allows, not what the value may be: tune.json can hold anything.
+// Each row is [path in T, label, min, max, step, scale?]. The range is what
+// the slider allows, not what the value may be: tune.json can hold anything.
+// Angles are stored in radians and shown in degrees: scale DEG converts, and
+// min, max and step are then in degrees.
 
 import { portal, onPortal, savePortalFile } from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
 import { DEFAULTS } from './tune.js';
+
+const DEG = 180 / Math.PI;
 
 const GEAR_ROWS = [
   ['maxSpeed', 'Huippunopeus (m/s)', 10, 50, 0.5],
   ['drag', 'Ilmanvastus', 0, 0.015, 0.0002],
   ['friction', 'Lumen kitka', 0, 0.15, 0.005],
-  ['turnRate', 'Kääntyminen (rad/s)', 0.5, 5, 0.05],
+  ['turnRate', 'Kääntyminen (°/s)', 30, 300, 1, DEG],
   ['grip', 'Pito (sivuluiston vaimennus)', 1, 20, 0.5],
   ['jump', 'Hypyn voima (m/s)', 1, 12, 0.1],
-  ['spinRate', 'Pyörähdysnopeus (rad/s)', 2, 25, 0.5],
-  ['flipRate', 'Volttinopeus (rad/s)', 2, 20, 0.5],
+  ['spinRate', 'Pyörähdysnopeus (°/s)', 100, 1500, 10, DEG],
+  ['flipRate', 'Volttinopeus (°/s)', 100, 1200, 10, DEG],
   ['hover', 'Leijunta pyöriessä (0–1)', 0, 1, 0.05],
 ];
 
 const GROUPS = [
   ['Alastulo ja kaatuminen', [
-    ['landPitch', 'Sallittu kallistus alastulossa (rad)', 0.2, 2.2, 0.05],
-    ['headFirst', 'Pää edellä -raja (rad)', 1.2, 3.14, 0.05],
-    ['landYaw', 'Sivuttain-raja (rad)', 0.1, 1.57, 0.05],
+    ['landPitch', 'Sallittu kallistus alastulossa (±°)', 10, 125, 1, DEG],
+    ['headFirst', 'Pää edellä -raja (±°)', 70, 180, 1, DEG],
+    ['landYaw', 'Sivuttain-raja (±°)', 5, 90, 1, DEG],
     ['sidewaysKeep', 'Sivuttain alastulo: vauhtia jää', 0.1, 1, 0.05],
     ['hardLoss', 'Kova alastulo: jarru per m/s', 0, 0.06, 0.002],
     ['buryTime', 'Lumessa pää edellä (s)', 0.5, 5, 0.1],
@@ -42,9 +46,9 @@ const GROUPS = [
   ['Ilma ja temput', [
     ['gravity', 'Painovoima (m/s²)', 4, 30, 0.5],
     ['spinResponse', 'Pyörimisen reagointi (1/s)', 1, 30, 0.5],
-    ['levelPitch', 'Volttiapu: ikkuna (rad)', 0, 2, 0.05],
-    ['levelYaw', 'Pyörähdysapu: ikkuna (rad)', 0, 1.57, 0.05],
-    ['levelRate', 'Avun nopeus (rad/s)', 0, 10, 0.1],
+    ['levelPitch', 'Volttiapu: ikkuna (±°)', 0, 115, 1, DEG],
+    ['levelYaw', 'Pyörähdysapu: ikkuna (±°)', 0, 90, 1, DEG],
+    ['levelRate', 'Avun nopeus (°/s)', 0, 600, 5, DEG],
   ]],
   ['Sukset', GEAR_ROWS.map(([k, ...r]) => ['skis.' + k, ...r])],
   ['Lauta', GEAR_ROWS.map(([k, ...r]) => ['board.' + k, ...r])],
@@ -67,6 +71,13 @@ const GROUPS = [
     ['checkpointSlope', 'Checkpoint: minimikulma (°), loivempaan ramppi', 0, 30, 0.5],
     ['checkpointRun', 'Checkpoint: rampin pituus (m)', 4, 25, 0.5],
   ]],
+  ['Tähdet ja efektit', [
+    ['starSize', 'Tähden koko (m)', 0.5, 5, 0.1],
+    ['starReach', 'Tähden keräysetäisyys (m)', 0.5, 6, 0.1],
+    ['snowSpray', 'Lumipöly ×', 0, 8, 0.1],
+    ['trailFrom', 'Vana alkaa (m/s)', 0, 40, 0.5],
+    ['trailFull', 'Vana täysillä (m/s)', 1, 50, 0.5],
+  ]],
   ['Pompput ja kaiteet', [
     ['bouncePower', 'Latvapomppu (m/s)', 2, 25, 0.5],
     ['balloonPower', 'Pallopomppu (m/s)', 2, 25, 0.5],
@@ -79,7 +90,7 @@ const GROUPS = [
     ['camera.height', 'Korkeus (m)', 1, 25, 0.5],
     ['camera.lookAhead', 'Katse edelle (m)', 0, 25, 0.5],
     ['camera.fov', 'Näkökenttä (°)', 30, 100, 1],
-    ['camera.turn', 'Kääntyy mukana (rad)', 0, 1.2, 0.05],
+    ['camera.turn', 'Kääntyy mukana (±°)', 0, 70, 1, DEG],
     ['camera.pullBack', 'Vetäytyy per m korkeutta', 0, 2, 0.05],
     ['camera.rise', 'Nousee per m korkeutta', 0, 2, 0.05],
   ]],
@@ -178,7 +189,7 @@ export function createTuning(T, { onPause, rider } = {}) {
         d.appendChild(c);
         dials = { c, g: c.getContext('2d'), group: d };
       }
-      for (const [path, label, min, max, step] of rows) {
+      for (const [path, label, min, max, step, scale = 1] of rows) {
         const row = document.createElement('label');
         row.className = 'tn-row';
         row.innerHTML = `<span class="tn-l">${label}</span>
@@ -186,10 +197,10 @@ export function createTuning(T, { onPause, rider } = {}) {
           <input type="number" step="${step}">
           <button class="tn-def" title="Oletus">↺</button>`;
         const [range, num] = row.querySelectorAll('input');
-        const show = () => { const v = get(T, path); range.value = v; num.value = +(+v).toFixed(5); };
+        const show = () => { const v = get(T, path) * scale; range.value = v; num.value = +v.toFixed(scale === 1 ? 5 : 1); };
         const put = (v) => { if (!Number.isFinite(v)) return; set(T, path, v); show(); markDirty(); };
-        range.addEventListener('input', () => put(+range.value));
-        num.addEventListener('change', () => put(+num.value));
+        range.addEventListener('input', () => put(+range.value / scale));
+        num.addEventListener('change', () => put(+num.value / scale));
         row.querySelector('.tn-def').addEventListener('click', (e) => { e.preventDefault(); put(get(DEFAULTS, path)); });
         row.show = show;
         show();

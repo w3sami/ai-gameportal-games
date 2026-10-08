@@ -43,6 +43,13 @@ export const DEFAULTS = {
   snowballGrow: 1.6,         // m/s the snowball's radius grows
   snowballTime: 1.8,         // s from the fall to standing up again; the last 0.6 s fade
 
+  // stars and effects
+  starSize: 2.0,             // m across
+  starReach: 2.6,            // m from the rider's middle that collects a star
+  snowSpray: 2.5,            // snow spray multiplier
+  trailFrom: 10,             // m/s where the ski / board trail starts to show
+  trailFull: 26,             // m/s where it is at full strength
+
   // bouncers and rails
   bouncePower: 10,           // m/s up from a tree top
   balloonPower: 12,
