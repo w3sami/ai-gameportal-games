@@ -43,3 +43,7 @@ button.go { width: 100%; font-size: 22px; font-weight: 800; background: #f08a24;
 #touch button { width: 64px; height: 64px; border-radius: 50%; font-size: 22px; padding: 0; background: rgba(16,40,80,.35); touch-action: none; }
 #touch button.jump { width: 84px; height: 84px; font-size: 15px; font-weight: 800; background: rgba(240,138,36,.6); }
 #touch button.on { background: rgba(255,255,255,.45); }
+
+#hint { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: 26px; font-weight: 800; animation: hint 1.2s ease-in-out infinite alternate; }
+@keyframes hint { from { opacity: .55; transform: scale(.97); } to { opacity: 1; transform: scale(1.03); } }
+#fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; }
