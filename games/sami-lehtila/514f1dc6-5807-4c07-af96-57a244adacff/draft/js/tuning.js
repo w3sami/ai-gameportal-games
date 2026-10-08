@@ -82,6 +82,16 @@ const GROUPS = [
     ['trailFrom', 'Vana alkaa (m/s)', 0, 40, 0.5],
     ['trailFull', 'Vana täysillä (m/s)', 1, 50, 0.5],
   ]],
+  ['Pisteet', [
+    ['scoreDrain', 'Pisteet valuvat (/s)', 0, 300, 5],
+    ['points.flip', 'Voltti', 0, 3000, 50],
+    ['points.spin180', 'Pyörähdys per 180°', 0, 1000, 10],
+    ['points.airSecond', 'Ilma-aika per s (yli 1,2 s)', 0, 1000, 10],
+    ['points.bounce', 'Pomppu (latva, pallo, markiisi)', 0, 2000, 25],
+    ['points.grindSecond', 'Grindi per s', 0, 2000, 25],
+    ['points.star', 'Tähti', 0, 5000, 50],
+    ['points.break', 'Rikottava', 0, 1000, 10],
+  ]],
   ['Pompput ja kaiteet', [
     ['bouncePower', 'Latvapomppu (m/s)', 2, 25, 0.5],
     ['balloonPower', 'Pallopomppu (m/s)', 2, 25, 0.5],

@@ -64,6 +64,7 @@ export const DEFAULTS = {
   camera: { dist: 10, height: 7, lookAhead: 7, fov: 55, turn: 0.35, pullBack: 0.45, rise: 0.2 },  // pullBack, rise: extra per metre the rider is above ground
   skis: { maxSpeed: 32, drag: 0.0042, friction: 0.03, turnRate: 2.0, grip: 7, spinRate: 9, flipRate: 8, hover: 0, jump: 5.4 },
   board: { maxSpeed: 28, drag: 0.0055, friction: 0.04, turnRate: 2.4, grip: 6, spinRate: 13, flipRate: 8, hover: 0.55, jump: 5.8 },
+  scoreDrain: 40,            // points lost per second from the first push to the finish
   points: { flip: 500, spin180: 120, airSecond: 100, bounce: 250, grindSecond: 400, star: 1000, break: 100 },
 };
 
