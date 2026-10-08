@@ -408,6 +408,18 @@ function sparkle() {
   return c;
 }
 
+function ring() {
+  // a soft band: clear middle, peak three quarters out, clear rim
+  const [c, g] = canvas(128, 128);
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 63);
+  gr.addColorStop(0, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.45, 'rgba(255,255,255,0.15)');
+  gr.addColorStop(0.75, 'rgba(255,255,255,1)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  return c;
+}
+
 function shadow() {
   const [c, g] = canvas(64, 64);
   const gr = g.createRadialGradient(32, 32, 2, 32, 32, 31);
@@ -475,6 +487,7 @@ export function textures() {
   T.snow = texture(snow(), true);
   T.tunnel = texture(tunnel());
   T.sparkle = texture(sparkle());
+  T.ring = texture(ring());
   T.shadow = texture(shadow());
   T.flake = texture(flake());
   T.sky = texture(sky());
