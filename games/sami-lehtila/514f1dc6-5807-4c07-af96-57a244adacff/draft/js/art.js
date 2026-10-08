@@ -374,6 +374,30 @@ function snow() {
   return c;
 }
 
+function tunnel() {
+  const W = 512, H = 256;
+  const [c, g] = canvas(W, H);
+  g.fillStyle = '#9ea4ad'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 2;
+  for (let y = 0; y < H; y += 32) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+    for (let x = (y / 32) % 2 ? 0 : 32; x < W; x += 64) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 32); g.stroke(); }
+  }
+  // the opening: 3/4 of the width, 3/5 of the height, rounded top
+  const ow = W * 0.75, oh = H * 0.6, ox = (W - ow) / 2, oy = H - oh;
+  roundRect(g, ox - 10, oy - 10, ow + 20, oh + 10, [90, 90, 0, 0], '#7d838c');
+  const dark = g.createLinearGradient(0, oy, 0, H);
+  dark.addColorStop(0, '#05070a'); dark.addColorStop(1, '#1c2027');
+  roundRect(g, ox, oy, ow, oh, [80, 80, 0, 0], dark);
+  // hazard stripes along the arch foot
+  for (let x = ox - 10; x < ox + ow + 10; x += 20) {
+    g.fillStyle = Math.floor((x - ox) / 20) % 2 ? '#f2c230' : '#222';
+    g.fillRect(x, oy - 22, 20, 8);
+  }
+  roundRect(g, 0, 0, W, 14, 4, '#eef3fb');
+  return c;
+}
+
 function shadow() {
   const [c, g] = canvas(64, 64);
   const gr = g.createRadialGradient(32, 32, 2, 32, 32, 31);
@@ -439,6 +463,7 @@ export function textures() {
   T.awning = texture(awning());
   T.asphalt = texture(asphalt(), true);
   T.snow = texture(snow(), true);
+  T.tunnel = texture(tunnel());
   T.shadow = texture(shadow());
   T.flake = texture(flake());
   T.sky = texture(sky());

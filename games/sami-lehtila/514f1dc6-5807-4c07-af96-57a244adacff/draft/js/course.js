@@ -23,9 +23,14 @@
 //   table | snowman { x, z }           breakables
 //   crowd    { x, z, n, spread }       standing people
 //   dog      { x, z, range }           wanders within range of its spot
-//   road     { z, width, lanes: [{ offset, dir, speed }] }   z is the centre
+//   road     { z, width, lanes: [{ offset, dir, speed }], tunnel? }
+//                                     z is the centre; tunnel is the x of
+//                                     the tunnel mouths either side (28)
 //   balloon  { x, z, y, r }            y is the centre of the envelope
 //   forest   { from, to, every }       random spruces along both banks
+//   checkpoint { x, z }                invisible; a crash returns the rider to
+//                                     the last one passed. Put them at the top
+//                                     of a steep stretch with a clear run ahead.
 //   finish   { z }                     the banner
 
 export const COURSE = {
@@ -37,6 +42,13 @@ export const COURSE = {
   ],
   items: [
     { type: 'forest', from: -20, to: -700, every: 5 },
+
+    { type: 'checkpoint', x: 0, z: -72 },
+    { type: 'checkpoint', x: 11, z: -163 },
+    { type: 'checkpoint', x: -10, z: -268 },
+    { type: 'checkpoint', x: 0, z: -336 },
+    { type: 'checkpoint', x: -6, z: -388 },
+    { type: 'checkpoint', x: 0, z: -515 },
 
     // Warm-up: one kicker, a low rail, things to knock over.
     { type: 'kicker', x: 0, z: -32, w: 6, len: 6, h: 1.0 },
