@@ -295,6 +295,7 @@ export function buildWorld(scene, T, tune) {
         while (x < loop) {
           const m = billboard(T.car[Math.floor(r() * T.car.length)], 4.2, 2.1, x, groundAt(x, z), z);
           m.userData.w *= lane.dir;
+          m.userData.yaw = 0;      // along the road, whichever way the camera turns
           const sh = W.shadow(x, z, 3.2);
           const o = { x, z, r: 1.0, top: 1.6, kind: 'car', mesh: m, len: 1.4, hidden: false };
           W.obstacles.push(o);
@@ -547,15 +548,15 @@ export function buildWorld(scene, T, tune) {
   };
 
   // Billboards stand parallel to the screen, all turned by the camera's own
-  // heading. Pointing each at the camera instead skews the ones off to the
-  // sides: a car crossing the road would look as if it were turning.
+  // heading; pointing each at the camera instead skews the ones off to the
+  // sides. One with userData.yaw keeps that heading: cars stay along the road.
   const look = new THREE.Vector3();
   W.faceCamera = (cam) => {
     cam.getWorldDirection(look);
     const yaw = Math.atan2(-look.x, -look.z);
     for (const m of W.billboards) {
       if (!m.visible) continue;
-      m.rotation.y = yaw;
+      m.rotation.y = m.userData.yaw ?? yaw;
       m.scale.x = m.userData.w * (m.userData.flip ?? 1) * (m.userData.sx ?? 1);
     }
   };
