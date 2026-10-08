@@ -224,5 +224,13 @@ export function buildRider(scene, T) {
     upper.rotation.z = Math.sin(t * 6) * 0.4;
   }
 
-  return { root, setGear, update, get gear() { return gear; } };
+  // where the trail leaves from: each ski's tail, or the board's
+  const TAILS = { skis: [new THREE.Vector3(-0.13, 0.03, 0.6), new THREE.Vector3(0.13, 0.03, 0.6)], board: [new THREE.Vector3(0, 0.04, 0.55)] };
+  function tails() {
+    const holder = gear === 'board' ? board : skis;
+    holder.updateWorldMatrix(true, false);
+    return TAILS[gear].map((v) => holder.localToWorld(v.clone()));
+  }
+
+  return { root, setGear, update, tails, get gear() { return gear; } };
 }

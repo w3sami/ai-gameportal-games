@@ -19,7 +19,7 @@
 // landing; a crash throws them away. Everything the game shows is reported
 // through ev(type, data).
 
-import { heightAt, groundAt, surfaceAt, HALF_WIDTH, placeStartRamp, clearStartRamp, startRamp } from './terrain.js';
+import { heightAt, groundAt, surfaceAt, HALF_WIDTH, placeStartRamp } from './terrain.js';
 
 const TAU = Math.PI * 2;
 const wrap = (a) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
@@ -90,7 +90,8 @@ export function createPhysics(T, W, ev) {
     const slopeF = gx * dx + gz * dz;
     s.tilt += (Math.atan(slopeF) - s.tilt) * Math.min(1, dt * 10);
 
-    if (skid > 3 || braking) ev('spray', { x: s.x, y: s.y, z: s.z, amount: Math.min(1, skid / 40 + (braking ? 0.5 : 0)) * Math.min(1, sp / 10) });
+    const spray = Math.min(1.5, skid / 40 + (braking ? 0.5 : 0) + Math.max(0, sp - 8) / 30) * Math.min(1, sp / 10);
+    if (spray > 0.02) ev('spray', { x: s.x, y: s.y, z: s.z, amount: spray });
 
     // jump: hold to crouch, release to pop
     if (inp.jump && !s.finished) s.charge = Math.min(T.chargeTime, s.charge + dt);
@@ -447,8 +448,8 @@ export function createPhysics(T, W, ev) {
   function collide() {
     for (const st of W.stars) {
       if (st.taken) continue;
-      if (Math.abs(st.z - s.z) > 2) continue;
-      if (Math.hypot(st.x - s.x, st.y - (s.y + 0.9), st.z - s.z) < 1.5) {
+      if (Math.abs(st.z - s.z) > T.starReach + 0.5) continue;
+      if (Math.hypot(st.x - s.x, st.y - (s.y + 0.9), st.z - s.z) < T.starReach) {
         st.taken = true; st.mesh.visible = false;
         ev('star', { x: st.x, y: st.y, z: st.z });
       }
@@ -539,9 +540,6 @@ export function createPhysics(T, W, ev) {
     else if (s.mode === 'grind') stepGrind(dt, inp);
     else if (s.mode === 'crash') stepCrash(dt);
     if (s.mode !== 'crash') collide();
-    // the start ramp goes once the rider is well past it, or down
-    const r = startRamp().ramp;
-    if (r && (s.mode === 'crash' || s.z < r.z - r.L - 15)) clearStartRamp();
     if (s.mode !== 'crash') {
       while (s.checkpoint + 1 < W.checkpoints.length && s.z < W.checkpoints[s.checkpoint + 1].z) s.checkpoint++;
     }

@@ -94,10 +94,11 @@ export const KICKER_TAPER = 1.2;
 
 // Start ramp: when the rider stands up at a checkpoint (or the start) whose
 // slope below is gentler than tune.checkpointSlope, a snow ramp appears under
-// them for that one start: a run-in falling at exactly that angle for
-// checkpointRun metres (shorter if it would stand taller than RAMP_MAX_H) and
-// a one-metre top. Nobody rides into it from behind, so its back is steep.
-// There is at most one; physics places and clears it, world.js draws it.
+// them: a run-in falling at exactly that angle for checkpointRun metres
+// (shorter if it would stand taller than RAMP_MAX_H) and a one-metre top.
+// Nobody rides into it from behind, so its back is steep. There is at most
+// one, and it stays until the next start moves it; physics places it,
+// world.js draws it.
 const RAMP_MAX_RUN = 25, RAMP_MAX_H = 3.5, RAMP_HALF = 2.5;
 let ramp = null, rampVersion = 0;
 
