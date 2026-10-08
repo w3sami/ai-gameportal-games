@@ -56,6 +56,8 @@ const pops = document.getElementById('pops');
 
 let state = 'menu';            // menu | run | done
 let gear = localStorage.getItem('downhill.gear') || 'skis';
+// game mode: 'free' or 'clock' (points drain at tune.scoreDrain per second)
+let mode = localStorage.getItem('downhill.mode') || 'free';
 let score = 0, stars = 0, time = 0, crashes = 0;
 let doneT = 0;
 
@@ -120,9 +122,28 @@ function gearButtons() {
     `<button data-gear="${k}" class="${k === gear ? 'sel' : ''}"><b>${name}</b><small>${desc}</small></button>`).join('') + '</div>';
 }
 
+const MODE_TEXT = {
+  free: ['Vapaa lasku', 'Pisteet eivät vähene'],
+  clock: ['Kello käy', 'Pisteet valuvat koko ajan: vauhti vai temput?'],
+};
+
+function modeButtons() {
+  return '<div class="gear mode">' + Object.entries(MODE_TEXT).map(([k, [name, desc]]) =>
+    `<button data-mode="${k}" class="${k === mode ? 'sel' : ''}"><b>${name}</b><small>${desc}</small></button>`).join('') + '</div>';
+}
+
+function setMode(m) {
+  mode = m;
+  try { localStorage.setItem('downhill.mode', m); } catch {}
+  for (const b of card.querySelectorAll('[data-mode]')) b.classList.toggle('sel', b.dataset.mode === m);
+}
+
 function wireCard() {
   for (const b of card.querySelectorAll('[data-gear]')) {
     b.onclick = () => { setGear(b.dataset.gear); };
+  }
+  for (const b of card.querySelectorAll('[data-mode]')) {
+    b.onclick = () => { setMode(b.dataset.mode); };
   }
   card.querySelector('.go').onclick = start;
   const r = card.querySelector('.remap');
@@ -142,8 +163,8 @@ const KEYS_HELP = `<div class="keys">
   <kbd>▲</kbd> kyykky vauhtiin, ilmassa etuvoltti ·
   <kbd>▼</kbd> jarru, ilmassa takavoltti ·
   <kbd>välilyönti</kbd> pohjassa kyykkyyn, irti hyppyyn ·
-  <kbd>1</kbd>/<kbd>2</kbd> sukset/lauta · <kbd>Enter</kbd> aloita · <kbd>Esc</kbd> tauko · <kbd>F</kbd> koko ruutu
-  <br>Ohjaimella: sauva tai ristiohjain, <kbd>A</kbd> hyppy, <kbd>Start</kbd> tauko,
+  <kbd>1</kbd>/<kbd>2</kbd> sukset/lauta · <kbd>M</kbd> pelimuoto · <kbd>Enter</kbd> aloita · <kbd>Esc</kbd> tauko · <kbd>F</kbd> koko ruutu
+  <br>Ohjaimella: sauva tai ristiohjain (valikossa ◀▶ väline, ▲▼ pelimuoto), <kbd>A</kbd> hyppy, <kbd>Start</kbd> tauko,
   <kbd>Back</kbd> alusta, <kbd>Y</kbd> ohjainasetukset, <kbd>RS</kbd> koko ruutu
 </div>`;
 
@@ -152,6 +173,7 @@ function showMenu() {
   card.innerHTML = `<h1>Downhill</h1>
     <p>Vuorta alas. Hyppää, grindaa harjoja, pomppaa latvoista ja kerää tähdet.</p>
     ${gearButtons()}
+    ${modeButtons()}
     <button class="go">Laske!</button>
     <button class="remap">Ohjaimet</button>
     ${KEYS_HELP}`;
@@ -188,11 +210,13 @@ function showResults() {
   const t = fmtTime(time);
   card.innerHTML = `<h2>Maalissa!</h2>
     <div class="results">
-      Pisteet <b>${score}</b><br>
+      Pisteet <b>${Math.round(score)}</b><br>
       Tähdet <b>${stars}/${W.starCount}</b><br>
-      Aika <b>${t}</b> · kaatumisia <b>${crashes}</b>
+      Aika <b>${t}</b> · kaatumisia <b>${crashes}</b><br>
+      <small>${MODE_TEXT[mode][0]}</small>
     </div>
     ${gearButtons()}
+    ${modeButtons()}
     <button class="go">Uudestaan</button>
     <button class="remap">Ohjaimet</button>`;
   card.hidden = false;
@@ -218,6 +242,7 @@ addEventListener('keydown', (e) => {
   if (state === 'menu' || state === 'results') {
     if (e.code === 'Digit1') setGear('skis');
     if (e.code === 'Digit2') setGear('board');
+    if (e.code === 'KeyM') setMode(mode === 'free' ? 'clock' : 'free');
     if (e.code === 'Enter') start();
   } else if (state === 'paused' && e.code === 'Enter') resume();
 });
@@ -255,6 +280,8 @@ function menuInput() {
     else if (input.pressed('restart')) start();
   } else if (state === 'menu' || state === 'results') {
     if (input.pressed('left')) setGear('skis');
+    if (input.pressed('up')) setMode('free');
+    if (input.pressed('down')) setMode('clock');
     if (input.pressed('right')) setGear('board');
     if (input.pressed('jump') || input.pressed('menu')) start();
   }
@@ -311,7 +338,11 @@ function frame(now) {
     acc += dt;
     const inp = state === 'run' ? (window.downhill.drive?.(physics.s) ?? readInput()) : idle;
     while (acc >= DT) { physics.step(DT, inp); acc -= DT; }
-    if (state === 'run' && physics.s.started) time += dt;
+    if (state === 'run' && physics.s.started) {
+      time += dt;
+      // the clock eats points: speed against tricks
+      if (mode === 'clock') score -= T.scoreDrain * dt;
+    }
     if (state === 'done') {
       doneT += dt;
       if (doneT > 1.6 && card.hidden) { showResults(); state = 'results'; }
@@ -346,10 +377,12 @@ function fmtTime(t) {
 }
 
 const $ = (id) => document.getElementById(id);
-const el = { score: $('score'), run: $('run'), stars: $('stars'), time: $('time'), speed: $('speed'), fade: $('fade'), hint: $('hint') };
+const el = { drain: $('drain'), score: $('score'), run: $('run'), stars: $('stars'), time: $('time'), speed: $('speed'), fade: $('fade'), hint: $('hint') };
 function hud() {
   const s = physics.s;
-  el.score.textContent = score;
+  el.score.textContent = Math.round(score);
+  el.score.classList.toggle('neg', score < 0);
+  el.drain.textContent = mode === 'clock' && T.scoreDrain > 0 ? '−' + Math.round(T.scoreDrain) + '/s' : '';
   el.run.textContent = s.run.parts.length ? s.run.parts.join(' + ') + '  ' + s.run.pts : '';
   el.fade.style.opacity = s.fade;
   el.hint.hidden = !(state === 'run' && s.mode === 'ready');
