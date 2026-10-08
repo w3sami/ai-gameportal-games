@@ -19,7 +19,7 @@
 // landing; a crash throws them away. Everything the game shows is reported
 // through ev(type, data).
 
-import { heightAt, groundAt, surfaceAt, HALF_WIDTH } from './terrain.js';
+import { heightAt, groundAt, surfaceAt, HALF_WIDTH, placeStartRamp, clearStartRamp, startRamp } from './terrain.js';
 
 const TAU = Math.PI * 2;
 const wrap = (a) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
@@ -31,6 +31,7 @@ export function createPhysics(T, W, ev) {
   const G = () => T[gear];
 
   function reset(z = 4) {
+    placeStartRamp(0, z);
     Object.assign(s, {
       x: 0, z, y: heightAt(0, z), vx: 0, vy: 0, vz: 0,
       heading: 0, mode: 'ready', readyLock: false, started: false, fade: 0, poleT: 0, pushAnim: 0, crash: null, lastLand: null, checkpoint: 0, tilt: 0, lean: 0, crouch: 0,
@@ -427,6 +428,7 @@ export function createPhysics(T, W, ev) {
   function respawn() {
     const cp = W.checkpoints[s.checkpoint] || { x: 0, z: 4 };
     s.x = cp.x; s.z = cp.z;
+    placeStartRamp(s.x, s.z);
     s.y = heightAt(s.x, s.z);
     s.vx = s.vy = s.vz = 0;
     s.heading = 0; s.tilt = 0; s.lean = 0;
@@ -537,6 +539,9 @@ export function createPhysics(T, W, ev) {
     else if (s.mode === 'grind') stepGrind(dt, inp);
     else if (s.mode === 'crash') stepCrash(dt);
     if (s.mode !== 'crash') collide();
+    // the start ramp goes once the rider is well past it, or down
+    const r = startRamp().ramp;
+    if (r && (s.mode === 'crash' || s.z < r.z - r.L - 15)) clearStartRamp();
     if (s.mode !== 'crash') {
       while (s.checkpoint + 1 < W.checkpoints.length && s.z < W.checkpoints[s.checkpoint + 1].z) s.checkpoint++;
     }

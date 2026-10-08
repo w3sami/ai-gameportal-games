@@ -12,7 +12,7 @@ import { createInput } from './input.js';
 import { createTuning } from './tuning.js';
 
 const T = await loadTune();
-buildTerrain();
+buildTerrain(T);
 
 // ---- renderer and scene ---------------------------------------------------------
 
@@ -45,7 +45,7 @@ const mountains = new THREE.Mesh(new THREE.PlaneGeometry(600, 150),
 mountains.renderOrder = -1;   // drawn first, so the slope always covers it
 scene.add(mountains);
 
-const W = buildWorld(scene, tex);
+const W = buildWorld(scene, tex, T);
 const rider = buildRider(scene, tex);
 const fx = buildFx(scene, tex);
 const pops = document.getElementById('pops');
