@@ -13,6 +13,8 @@
   "poleBelow": 8,
   "polePush": 1.6,
   "poleEvery": 0.45,
+  "checkpointSlope": 14,
+  "checkpointRun": 12,
   "spinResponse": 8,
   "levelPitch": 1,
   "levelYaw": 0.6,
