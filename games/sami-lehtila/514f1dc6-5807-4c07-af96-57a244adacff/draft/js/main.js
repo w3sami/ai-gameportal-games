@@ -7,7 +7,7 @@ import { textures } from './art.js';
 import { buildWorld } from './world.js';
 import { buildRider } from './rider.js';
 import { createPhysics } from './physics.js';
-import { buildFx, popup } from './fx.js';
+import { buildFx, buildRings, popup } from './fx.js';
 import { buildTrails } from './trail.js';
 import { createInput } from './input.js';
 import { createTuning } from './tuning.js';
@@ -50,6 +50,8 @@ const W = buildWorld(scene, tex, T);
 const rider = buildRider(scene, tex);
 const fx = buildFx(scene, tex);
 const trails = buildTrails(scene);
+const rings = buildRings(scene, T, W.placeOnGround);
+let shake = 0;           // camera shake left, metres
 const pops = document.getElementById('pops');
 
 // ---- game state -----------------------------------------------------------------
@@ -67,7 +69,10 @@ function onEvent(type, d) {
   switch (type) {
     case 'spray': fx.spray(d.x, d.y, d.z, d.amount * T.snowSpray); break;
     case 'sparks': fx.sparks(d.x, d.y, d.z); break;
-    case 'land': if (d.impact > 3) fx.burst(d.x, d.y, d.z, Math.min(160, d.impact * 4 * T.snowSpray), [1, 1, 1], 2 + d.impact * 0.3); break;
+    case 'land':
+      if (d.impact > 3) fx.burst(d.x, d.y, d.z, Math.min(160, d.impact * 4 * T.snowSpray), [1, 1, 1], 2 + d.impact * 0.3);
+      if (d.stun > 0) { rings.spawn(d.x, d.z, d.stun); shake = Math.max(shake, 0.08 + d.stun * 0.3); }
+      break;
     case 'score':
       score += d.pts;
       popup(pops, d.parts.join(' + '), 'big');
@@ -317,6 +322,10 @@ function placeCamera(k) {
   const look = new THREE.Vector3(s.x - bx * C.lookAhead, camFocus + 0.5, s.z - bz * C.lookAhead);
   camLook.lerp(look, k);
   camera.lookAt(camLook);
+  if (shake > 0.001) {
+    camera.position.x += (Math.random() - 0.5) * shake;
+    camera.position.y += (Math.random() - 0.5) * shake;
+  }
   mountains.position.set(camera.position.x - bx * 200, camera.position.y - 10, camera.position.z - bz * 200);
   mountains.rotation.y = camYaw;
 }
@@ -352,6 +361,8 @@ function frame(now) {
   const s = physics.s;
   W.update(dt, clock, s);
   fx.update(dt);
+  rings.update(dt);
+  shake *= Math.exp(-8 * dt);
   rider.update(s, dt, W.placeOnGround, heightAt(s.x, s.z));
   {
     const sp = Math.hypot(s.vx, s.vz);
@@ -399,4 +410,4 @@ showMenu();
 requestAnimationFrame(frame);
 
 // for the developer console; drive(s) may return an input to steer by script
-window.downhill = { physics, W, T, scene, camera, start, drive: null, ground: groundAt };
+window.downhill = { physics, W, T, scene, camera, start, rings, drive: null, ground: groundAt };

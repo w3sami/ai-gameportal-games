@@ -39,6 +39,7 @@ export function createPhysics(T, W, ev) {
       switchStance: false, charge: 0, jumpHeld: false,
       grind: null, railCooldown: null, crashT: 0, invuln: 0, bounceGrace: 0,
       run: { pts: 0, parts: [] },
+      stun: 0, stunMax: 1, stunK: 0,
       finished: false,
     });
   }
@@ -60,7 +61,11 @@ export function createPhysics(T, W, ev) {
     s.vz -= gz * k * dt;
 
     const sp = speed();
-    const steer = s.finished ? 0 : inp.x;
+    // after a hard landing the legs are still soaking it up: steering is
+    // sticky and the rider stays low, both easing off over landStunTime
+    const stunF = s.stun > 0 ? (s.stun / s.stunMax) * s.stunK : 0;
+    if (s.stun > 0) s.stun -= dt;
+    const steer = s.finished ? 0 : inp.x * (1 - stunF * T.landStunSteer);
     s.heading -= steer * g.turnRate * (1 + 2 / (1 + sp)) * dt;
     const dx = dirX(), dz = dirZ(), rx = -dz, rz = dx;
     let f = s.vx * dx + s.vz * dz, l = s.vx * rx + s.vz * rz;
@@ -86,7 +91,7 @@ export function createPhysics(T, W, ev) {
     s.vx = f * dx + l * rx;
     s.vz = f * dz + l * rz;
 
-    s.crouch += ((inp.up > 0.3 ? 0.6 : 0) + (inp.jump ? 1 : 0) * 0.7 - s.crouch) * Math.min(1, dt * 10);
+    s.crouch += (Math.max(stunF, (inp.up > 0.3 ? 0.6 : 0) + (inp.jump ? 1 : 0) * 0.7) - s.crouch) * Math.min(1, dt * 10);
     s.lean += (steer * Math.min(1, sp / 12) * 0.45 - s.lean) * Math.min(1, dt * 8);
     const slopeF = gx * dx + gz * dz;
     s.tilt += (Math.atan(slopeF) - s.tilt) * Math.min(1, dt * 10);
@@ -261,7 +266,10 @@ export function createPhysics(T, W, ev) {
     if (s.airT > 1.2) addPart('Ilmaa ' + s.airT.toFixed(1).replace('.', ',') + ' s', Math.round(P.airSecond * s.airT));
     s.mode = 'ground';
     s.trickYaw = 0; s.trickPitch = 0;
-    ev('land', { impact, x: s.x, y: s.y, z: s.z });
+    // how hard, from landStunFrom (nothing) to slamImpact (everything)
+    const stun = clamp((impact - T.landStunFrom) / Math.max(0.1, T.slamImpact - T.landStunFrom), 0, 1);
+    if (stun > 0) { s.stun = s.stunMax = T.landStunTime * stun; s.stunK = stun; }
+    ev('land', { impact, stun, x: s.x, y: s.y, z: s.z });
     bank();
   }
 
