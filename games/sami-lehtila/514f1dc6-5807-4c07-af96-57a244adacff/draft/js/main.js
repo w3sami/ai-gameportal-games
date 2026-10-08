@@ -8,6 +8,7 @@ import { buildWorld } from './world.js';
 import { buildRider } from './rider.js';
 import { createPhysics } from './physics.js';
 import { buildFx, popup } from './fx.js';
+import { buildTrails } from './trail.js';
 import { createInput } from './input.js';
 import { createTuning } from './tuning.js';
 
@@ -48,6 +49,7 @@ scene.add(mountains);
 const W = buildWorld(scene, tex, T);
 const rider = buildRider(scene, tex);
 const fx = buildFx(scene, tex);
+const trails = buildTrails(scene);
 const pops = document.getElementById('pops');
 
 // ---- game state -----------------------------------------------------------------
@@ -61,9 +63,9 @@ const physics = createPhysics(T, W, onEvent);
 
 function onEvent(type, d) {
   switch (type) {
-    case 'spray': fx.spray(d.x, d.y, d.z, d.amount); break;
+    case 'spray': fx.spray(d.x, d.y, d.z, d.amount * T.snowSpray); break;
     case 'sparks': fx.sparks(d.x, d.y, d.z); break;
-    case 'land': if (d.impact > 6) fx.burst(d.x, d.y, d.z, Math.min(40, d.impact * 3)); break;
+    case 'land': if (d.impact > 3) fx.burst(d.x, d.y, d.z, Math.min(160, d.impact * 4 * T.snowSpray), [1, 1, 1], 2 + d.impact * 0.3); break;
     case 'score':
       score += d.pts;
       popup(pops, d.parts.join(' + '), 'big');
@@ -320,6 +322,11 @@ function frame(now) {
   W.update(dt, clock, s);
   fx.update(dt);
   rider.update(s, dt, W.placeOnGround, heightAt(s.x, s.z));
+  {
+    const sp = Math.hypot(s.vx, s.vz);
+    const a = s.mode === 'crash' || s.mode === 'ready' ? 0 : Math.max(0, Math.min(1, (sp - T.trailFrom) / Math.max(0.1, T.trailFull - T.trailFrom)));
+    trails.update(rider.tails(), a, gear === 'board' ? 0.3 : 0.11);
+  }
   if (camera.fov !== T.camera.fov) { camera.fov = T.camera.fov; camera.updateProjectionMatrix(); }
   const { want, C } = cameraTarget();
   camYaw += (want - camYaw) * Math.min(1, dt * 1.5);

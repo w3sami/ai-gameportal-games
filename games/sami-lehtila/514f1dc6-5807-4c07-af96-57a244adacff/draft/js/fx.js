@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 
-const MAX = 600;
+const MAX = 3000;
 
 export function buildFx(scene, T) {
   const pos = new Float32Array(MAX * 3), col = new Float32Array(MAX * 3);
@@ -11,7 +11,7 @@ export function buildFx(scene, T) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   const pts = new THREE.Points(geo, new THREE.PointsMaterial({
-    size: 0.35, map: T.flake, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true,
+    size: 0.45, map: T.flake, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true,
   }));
   pts.frustumCulled = false;
   scene.add(pts);
