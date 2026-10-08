@@ -6,8 +6,9 @@
 //   air     ballistic; left/right spins, up/down flips
 //   grind   locked to a rail until its end, a jump, or too little speed
 //   crash   one of three: 'bury' (head first into the snow), 'ragdoll'
-//           (tumbling), or 'snowball' (a fast ragdoll rolls up into a ball,
-//           the screen fades and the rider stands up where it stopped)
+//           (tumbling), or 'snowball' (a fast ragdoll rolls up into a ball).
+//           Each plays out, the screen fades, and the rider stands at the
+//           last checkpoint passed (W.checkpoints), ready to push off.
 //   ready   standing still; the jump button pushes off with the poles
 //
 // Only a landing off upright crashes. Upright but sideways, or hard, only
@@ -32,7 +33,7 @@ export function createPhysics(T, W, ev) {
   function reset(z = 4) {
     Object.assign(s, {
       x: 0, z, y: heightAt(0, z), vx: 0, vy: 0, vz: 0,
-      heading: 0, mode: 'ready', readyLock: false, started: false, fade: 0, poleT: 0, pushAnim: 0, crash: null, lastLand: null, tilt: 0, lean: 0, crouch: 0,
+      heading: 0, mode: 'ready', readyLock: false, started: false, fade: 0, poleT: 0, pushAnim: 0, crash: null, lastLand: null, checkpoint: 0, tilt: 0, lean: 0, crouch: 0,
       trickYaw: 0, trickPitch: 0, spinV: 0, flipV: 0, airT: 0, bounces: [], hovered: 0,
       switchStance: false, charge: 0, jumpHeld: false,
       grind: null, railCooldown: null, crashT: 0, invuln: 0, bounceGrace: 0,
@@ -391,7 +392,7 @@ export function createPhysics(T, W, ev) {
       s.vx *= k; s.vz *= k;
       moveCrash(dt);
       s.y = heightAt(s.x, s.z); s.vy = 0;
-      if (c.t > T.buryTime) recover();
+      fadeOut(c.t, T.buryTime);
     } else if (c.kind === 'ragdoll') {
       const k = Math.exp(-2.2 * dt);
       s.vx *= k; s.vz *= k;
@@ -400,7 +401,7 @@ export function createPhysics(T, W, ev) {
       s.y += s.vy * dt;
       const h = heightAt(s.x, s.z);
       if (s.y <= h) { s.y = h; s.vy = s.vy < -2 ? -s.vy * 0.35 : 0; }
-      if (c.t > T.ragdollTime) recover();
+      fadeOut(c.t, T.ragdollTime);
     } else {
       // snowball: rolls down the fall line growing, then the screen fades
       const e = 0.3;
@@ -412,43 +413,31 @@ export function createPhysics(T, W, ev) {
       moveCrash(dt);
       s.y = heightAt(s.x, s.z);
       c.r = Math.min(T.snowballMax, 0.4 + c.t * T.snowballGrow);
-      // the last 0.6 s fade to black
-      s.fade = clamp((c.t - (T.snowballTime - 0.6)) / 0.5, 0, 1);
-      if (c.t > T.snowballTime) respawn();
+      fadeOut(c.t, T.snowballTime);
     }
   }
 
-  function recover() {
-    s.mode = 'ground';
-    s.crash = null;
-    s.trickYaw = 0; s.trickPitch = 0; s.crouch = 0;
-    const sp = speed();
-    s.heading = freeHeading(sp > 2 && s.vz < 0 ? Math.atan2(-s.vx, -s.vz) : 0);
-    s.vx = dirX() * sp; s.vz = dirZ() * sp;
-    s.invuln = 1.5;
-    s.switchStance = false;
+  // The last 0.6 s of a crash fade to black; then back to the checkpoint.
+  function fadeOut(t, total) {
+    s.fade = clamp((t - (total - 0.6)) / 0.5, 0, 1);
+    if (t > total) respawn();
   }
 
-  // Stand up where the snowball stopped: on plain snow, inside the course,
-  // clear of anything, and push off again from there.
+  // Stand at the last checkpoint passed, facing downhill, ready to push off.
   function respawn() {
-    s.x = clamp(s.x, -HALF_WIDTH + 4, HALF_WIDTH - 4);
-    for (let k = 0; k < 30; k++) {
-      const blocked = surfaceAt(s.x, s.z) ||
-        W.obstacles.some((o) => o.alive !== false && Math.abs(o.z - s.z) < 3 && Math.abs(o.x - s.x) < (o.len || 0) + o.r + 1.5);
-      if (!blocked) break;
-      s.z -= 2;
-    }
+    const cp = W.checkpoints[s.checkpoint] || { x: 0, z: 4 };
+    s.x = cp.x; s.z = cp.z;
     s.y = heightAt(s.x, s.z);
     s.vx = s.vy = s.vz = 0;
-    s.heading = 0;
+    s.heading = 0; s.tilt = 0; s.lean = 0;
     s.crash = null;
     s.trickYaw = 0; s.trickPitch = 0; s.crouch = 0;
     s.switchStance = false;
     s.mode = 'ready';
     s.jumpHeld = false;
-    s.readyLock = true;
+    s.readyLock = true;     // a button already down must come up before it pushes
     s.invuln = 1.5;
+    ev('respawn', { checkpoint: s.checkpoint });
   }
 
   // ---- things in the way --------------------------------------------------------
@@ -487,7 +476,7 @@ export function createPhysics(T, W, ev) {
 
     if (s.invuln > 0) return;
     for (const o of W.obstacles) {
-      if (o.alive === false) continue;
+      if (o.alive === false || o.hidden) continue;
       const reach = o.r + 0.35 + (o.len || 0);
       if (Math.abs(o.z - s.z) > reach || Math.abs(o.x - s.x) > reach + 1) continue;
       let d;
@@ -548,6 +537,9 @@ export function createPhysics(T, W, ev) {
     else if (s.mode === 'grind') stepGrind(dt, inp);
     else if (s.mode === 'crash') stepCrash(dt);
     if (s.mode !== 'crash') collide();
+    if (s.mode !== 'crash') {
+      while (s.checkpoint + 1 < W.checkpoints.length && s.z < W.checkpoints[s.checkpoint + 1].z) s.checkpoint++;
+    }
     if (!s.finished && s.z < W.finishZ) { s.finished = true; ev('finish', {}); }
   }
 
