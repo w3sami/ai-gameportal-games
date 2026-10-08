@@ -70,8 +70,7 @@ function onEvent(type, d) {
       break;
     case 'crash':
       crashes++;
-      popup(pops, d.why, 'bad');
-      fx.burst(d.x, d.y, d.z, 40);
+      fx.burst(d.x, d.y, d.z, d.kind === 'bury' ? 30 + d.sp * 3 : 40, [1, 1, 1], d.kind === 'bury' ? 3 + d.sp * 0.25 : 4);
       break;
     case 'star':
       stars++; score += T.points.star;
@@ -85,6 +84,7 @@ function onEvent(type, d) {
       fx.shards(d.o.x, groundAt(d.o.x, d.o.z), d.o.z, cols);
       break;
     }
+    case 'push': fx.burst(d.x, d.y, d.z, 14, [1, 1, 1], 2.5); break;
     case 'bounce': popup(pops, d.name + '!'); fx.burst(d.x, d.y, d.z, 16); break;
     case 'grindStart': popup(pops, 'Grindi!'); break;
     case 'finish': state = 'done'; doneT = 0; break;
@@ -248,14 +248,18 @@ function snapCamera() {
   camYaw = want;
   placeCamera(1);
 }
+let camFocus = 0;
 function placeCamera(k) {
   const { s, C } = cameraTarget();
   const bx = Math.sin(camYaw), bz = Math.cos(camYaw);
-  const ground = Math.max(groundAt(s.x, s.z), s.mode === 'crash' ? s.y : Math.min(s.y, groundAt(s.x, s.z) + 6));
-  const tx = s.x + bx * C.dist, tz = s.z + bz * C.dist;
-  const ty = Math.max(ground + C.height, heightAt(tx, tz) + 2.5);
+  // follow the rider's height all the way up, and back off the higher they are
+  const above = Math.max(0, s.y - groundAt(s.x, s.z));
+  camFocus = k >= 1 ? s.y : camFocus + (s.y - camFocus) * Math.min(1, k * 1.5);
+  const dist = C.dist + above * C.pullBack, height = C.height + above * C.rise;
+  const tx = s.x + bx * dist, tz = s.z + bz * dist;
+  const ty = Math.max(camFocus + height, heightAt(tx, tz) + 2.5);
   camera.position.lerp(new THREE.Vector3(tx, ty, tz), k);
-  const look = new THREE.Vector3(s.x - bx * C.lookAhead, ground + 0.5, s.z - bz * C.lookAhead);
+  const look = new THREE.Vector3(s.x - bx * C.lookAhead, camFocus + 0.5, s.z - bz * C.lookAhead);
   camLook.lerp(look, k);
   camera.lookAt(camLook);
   mountains.position.set(camera.position.x - bx * 200, camera.position.y - 10, camera.position.z - bz * 200);
@@ -279,7 +283,7 @@ function frame(now) {
     acc += dt;
     const inp = state === 'run' ? (window.downhill.drive?.(physics.s) ?? readInput()) : idle;
     while (acc >= DT) { physics.step(DT, inp); acc -= DT; }
-    if (state === 'run') time += dt;
+    if (state === 'run' && physics.s.started) time += dt;
     if (state === 'done') {
       doneT += dt;
       if (doneT > 1.6 && card.hidden) { showResults(); state = 'results'; }
@@ -307,11 +311,13 @@ function fmtTime(t) {
 }
 
 const $ = (id) => document.getElementById(id);
-const el = { score: $('score'), run: $('run'), stars: $('stars'), time: $('time'), speed: $('speed') };
+const el = { score: $('score'), run: $('run'), stars: $('stars'), time: $('time'), speed: $('speed'), fade: $('fade'), hint: $('hint') };
 function hud() {
   const s = physics.s;
   el.score.textContent = score;
   el.run.textContent = s.run.parts.length ? s.run.parts.join(' + ') + '  ' + s.run.pts : '';
+  el.fade.style.opacity = s.fade;
+  el.hint.hidden = !(state === 'run' && s.mode === 'ready');
   el.stars.textContent = '★ ' + stars + '/' + W.starCount;
   el.time.textContent = fmtTime(time);
   el.speed.textContent = Math.round(physics.speed() * 3.6) + ' km/h';

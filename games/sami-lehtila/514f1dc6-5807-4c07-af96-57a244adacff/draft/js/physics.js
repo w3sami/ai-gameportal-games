@@ -5,14 +5,20 @@
 //           faster than gravity pulls (a kicker lip, a crest, a roof edge)
 //   air     ballistic; left/right spins, up/down flips
 //   grind   locked to a rail until its end, a jump, or too little speed
-//   crash   tumbling to a stop, then back up
+//   crash   one of three: 'bury' (head first into the snow), 'ragdoll'
+//           (tumbling), or 'snowball' (a fast ragdoll rolls up into a ball,
+//           the screen fades and the rider stands up where it stopped)
+//   ready   standing still; the jump button pushes off with the poles
+//
+// Only a landing off upright crashes. Upright but sideways, or hard, only
+// costs speed: these are pro riders.
 //
 // Heading 0 faces downhill (-z); positive heading turns left.
 // Trick points gather in s.run during air and grind and are banked on a clean
 // landing; a crash throws them away. Everything the game shows is reported
 // through ev(type, data).
 
-import { heightAt, groundAt, surfaceAt } from './terrain.js';
+import { heightAt, groundAt, surfaceAt, HALF_WIDTH } from './terrain.js';
 
 const TAU = Math.PI * 2;
 const wrap = (a) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
@@ -25,8 +31,8 @@ export function createPhysics(T, W, ev) {
 
   function reset(z = 4) {
     Object.assign(s, {
-      x: 0, z, y: heightAt(0, z), vx: 0, vy: 0, vz: -7,
-      heading: 0, mode: 'ground', tilt: 0, lean: 0, crouch: 0,
+      x: 0, z, y: heightAt(0, z), vx: 0, vy: 0, vz: 0,
+      heading: 0, mode: 'ready', readyLock: false, started: false, fade: 0, poleT: 0, pushAnim: 0, crash: null, tilt: 0, lean: 0, crouch: 0,
       trickYaw: 0, trickPitch: 0, spinV: 0, flipV: 0, airT: 0, bounces: [], hovered: 0,
       switchStance: false, charge: 0, jumpHeld: false,
       grind: null, railCooldown: null, crashT: 0, invuln: 0, bounceGrace: 0,
@@ -61,8 +67,17 @@ export function createPhysics(T, W, ev) {
     f += Math.abs(l - nl) * 0.55;
     const skid = Math.abs(l - nl) / dt;
     l = nl;
-    const drag = g.drag * (inp.up > 0.3 ? T.tuckDrag : 1);
-    f -= (g.friction * T.gravity + drag * f * f) * dt;
+    const tuck = inp.up > 0.3 && !s.finished;
+    const drag = g.drag * (tuck ? T.tuckDrag : 1);
+    f -= (g.friction * (tuck ? T.tuckFriction : 1) * T.gravity + drag * f * f) * dt;
+    if (tuck) {
+      f += T.tuckPush * inp.up * dt;
+      // slow enough to need it: push with the poles every so often
+      if (sp < T.poleBelow) {
+        s.poleT += dt;
+        if (s.poleT > 0.45) { s.poleT = 0; f += T.polePush; s.pushAnim = 0.35; }
+      } else s.poleT = 0.4;
+    } else s.poleT = 0.4;
     if (braking) f -= T.brake * (s.finished ? 1 : inp.down) * dt;
     f = clamp(f, -6, g.maxSpeed);   // slow enough on an uphill ramp, slide back down it
     s.vx = f * dx + l * rx;
@@ -78,6 +93,7 @@ export function createPhysics(T, W, ev) {
     // jump: hold to crouch, release to pop
     if (inp.jump && !s.finished) s.charge = Math.min(0.35, s.charge + dt);
     if (!inp.jump && s.jumpHeld && !s.finished) {
+      if (sp < T.pushBelow && !surfaceAt(s.x, s.z)) { s.jumpHeld = false; s.charge = 0; return pushOff(); }
       s.vy += g.jump * (0.65 + 0.35 * (s.charge / 0.35));
       s.charge = 0;
       s.jumpHeld = false;
@@ -109,6 +125,30 @@ export function createPhysics(T, W, ev) {
       s.vy = (h - s.y) / dt;
       s.y = h;
     }
+  }
+
+  // Poles in, a shove and a little hop: from standing still or from crawling.
+  function pushOff() {
+    const sp = speed();
+    const add = Math.max(0, T.pushSpeed - sp);
+    s.vx += dirX() * add; s.vz += dirZ() * add;
+    s.vy += T.pushHop;
+    s.pushAnim = 0.4;
+    s.started = true;
+    takeOff();
+    s.y += 0.02;
+    ev('push', { x: s.x, y: s.y, z: s.z });
+  }
+
+  function stepReady(dt, inp) {
+    s.y = heightAt(s.x, s.z);
+    s.vx = s.vz = s.vy = 0;
+    s.crouch += ((inp.jump ? 0.7 : 0) - s.crouch) * Math.min(1, dt * 10);
+    s.tilt += (0 - s.tilt) * Math.min(1, dt * 10);
+    // a button already down when standing up must come up before it counts
+    if (s.readyLock) { if (!inp.jump) s.readyLock = false; return; }
+    if (!inp.jump && s.jumpHeld) { s.jumpHeld = false; s.mode = 'ground'; return pushOff(); }
+    s.jumpHeld = inp.jump;
   }
 
   function takeOff() {
@@ -183,12 +223,14 @@ export function createPhysics(T, W, ev) {
       slopeVy = clamp((heightAt(s.x + ux * e, s.z + uz * e) - heightAt(s.x - ux * e, s.z - uz * e)) / (2 * e), -0.6, 0.6) * sp;
     }
     const impact = slopeVy - s.vy;
-    if (!upright || !facing) return crash(upright ? 'Sivuttain!' : 'Pää edellä!');
-    if (impact > T.hardLanding) return crash('Liian kova alastulo!');
+    if (!upright) return crash(Math.abs(pe) > T.headFirst ? 'bury' : 'ragdoll');
 
     if (Math.abs(ye) > Math.PI / 2) s.switchStance = !s.switchStance;
     if (sp > 1) s.heading = Math.atan2(-s.vx, -s.vz);
-    const loss = 1 - Math.min(0.35, Math.max(0, impact - 4) * 0.02);
+    // hard or sideways: skid it out, no fall
+    let loss = 1 - Math.min(0.4, Math.max(0, impact - 4) * 0.02);
+    if (!facing) loss *= 0.55;
+    if (!facing || impact > 10) ev('spray', { x: s.x, y: s.y, z: s.z, amount: 1 });
     s.vx *= loss; s.vz *= loss;
     s.vy = slopeVy;
 
@@ -297,7 +339,7 @@ export function createPhysics(T, W, ev) {
     if (sp > 0.1) { s.x -= (s.vx / sp) * 0.4; s.z -= (s.vz / sp) * 0.4; }
     s.vx *= -0.25; s.vz *= -0.25;
     if (sp < 4) { s.y = heightAt(s.x, s.z); return; }
-    crash('Seinään!');
+    crash('ragdoll', sp);
   }
 
   // A heading near the wanted one that is not straight into a wall.
@@ -313,36 +355,97 @@ export function createPhysics(T, W, ev) {
     return want;
   }
 
-  function crash(why) {
+  /** kind: 'bury' | 'ragdoll'; a ragdoll fast enough becomes a snowball. */
+  function crash(kind, sp = speed()) {
     if (s.mode === 'crash') return;
+    if (kind === 'ragdoll' && sp > T.snowballSpeed) kind = 'snowball';
     s.mode = 'crash';
-    s.lastCrash = why;
-    s.crashT = 0;
+    s.lastCrash = kind;
+    // head first: the faster, the bigger the heap and the less of the rider
+    // shows; at full speed only legs and skis stick out of its top
+    const mound = 0.6 + Math.min(sp, 30) * 0.045;
+    s.crash = {
+      kind, t: 0, sp, r: 0.4, mound,
+      // how far the upside-down rider sinks: hips at the heap's top when fast,
+      // 0.6 m above it when slow
+      depth: 0.9 - mound * 0.5 - 0.6 * (1 - Math.min(sp, 25) / 25),
+    };
     s.grind = null;
     s.run = { pts: 0, parts: [] };
-    ev('crash', { why, x: s.x, y: s.y, z: s.z });
+    ev('crash', { kind, x: s.x, y: s.y, z: s.z, sp });
+  }
+
+  function moveCrash(dt) {
+    const nx = s.x + s.vx * dt, nz = s.z + s.vz * dt;
+    if (heightAt(nx, nz) - s.y < T.step) { s.x = nx; s.z = nz; }
+    else { s.vx *= -0.3; s.vz *= -0.3; }
   }
 
   function stepCrash(dt) {
-    s.crashT += dt;
-    const k = Math.exp(-2.2 * dt);
-    s.vx *= k; s.vz *= k;
-    const nx = s.x + s.vx * dt, nz = s.z + s.vz * dt;
-    const h = heightAt(nx, nz);
-    if (h - s.y < T.step) { s.x = nx; s.z = nz; }
-    s.vy -= T.gravity * dt;
-    s.y = Math.max(heightAt(s.x, s.z), s.y + s.vy * dt);
-    if (s.y <= heightAt(s.x, s.z) + 0.01) s.vy = 0;
-    if (s.crashT > 1.5) {
-      s.mode = 'ground';
-      s.trickYaw = 0; s.trickPitch = 0; s.crouch = 0;
-      const sp = speed();
-      s.heading = freeHeading(sp > 2 && s.vz < 0 ? Math.atan2(-s.vx, -s.vz) : 0);
-      const keep = Math.max(3, sp);
-      s.vx = dirX() * keep; s.vz = dirZ() * keep;
-      s.invuln = 1.5;
-      s.switchStance = false;
+    const c = s.crash;
+    c.t += dt;
+    if (c.kind === 'bury') {
+      const k = Math.exp(-10 * dt);
+      s.vx *= k; s.vz *= k;
+      moveCrash(dt);
+      s.y = heightAt(s.x, s.z); s.vy = 0;
+      if (c.t > 1.8) recover();
+    } else if (c.kind === 'ragdoll') {
+      const k = Math.exp(-2.2 * dt);
+      s.vx *= k; s.vz *= k;
+      moveCrash(dt);
+      s.vy -= T.gravity * dt;
+      s.y += s.vy * dt;
+      const h = heightAt(s.x, s.z);
+      if (s.y <= h) { s.y = h; s.vy = s.vy < -2 ? -s.vy * 0.35 : 0; }
+      if (c.t > 1.6) recover();
+    } else {
+      // snowball: rolls down the fall line growing, then the screen fades
+      const e = 0.3;
+      const gx = clamp((heightAt(s.x + e, s.z) - heightAt(s.x - e, s.z)) / (2 * e), -1, 1);
+      const gz = clamp((heightAt(s.x, s.z + e) - heightAt(s.x, s.z - e)) / (2 * e), -1, 1);
+      s.vx -= gx * T.gravity * 0.8 * dt; s.vz -= gz * T.gravity * 0.8 * dt;
+      const k = Math.exp(-0.3 * dt);
+      s.vx *= k; s.vz *= k;
+      moveCrash(dt);
+      s.y = heightAt(s.x, s.z);
+      c.r = Math.min(2.4, 0.4 + c.t * 1.6);
+      s.fade = clamp((c.t - 1.2) / 0.5, 0, 1);
+      if (c.t > 1.8) respawn();
     }
+  }
+
+  function recover() {
+    s.mode = 'ground';
+    s.crash = null;
+    s.trickYaw = 0; s.trickPitch = 0; s.crouch = 0;
+    const sp = speed();
+    s.heading = freeHeading(sp > 2 && s.vz < 0 ? Math.atan2(-s.vx, -s.vz) : 0);
+    s.vx = dirX() * sp; s.vz = dirZ() * sp;
+    s.invuln = 1.5;
+    s.switchStance = false;
+  }
+
+  // Stand up where the snowball stopped: on plain snow, inside the course,
+  // clear of anything, and push off again from there.
+  function respawn() {
+    s.x = clamp(s.x, -HALF_WIDTH + 4, HALF_WIDTH - 4);
+    for (let k = 0; k < 30; k++) {
+      const blocked = surfaceAt(s.x, s.z) ||
+        W.obstacles.some((o) => o.alive !== false && Math.abs(o.z - s.z) < 3 && Math.abs(o.x - s.x) < (o.len || 0) + o.r + 1.5);
+      if (!blocked) break;
+      s.z -= 2;
+    }
+    s.y = heightAt(s.x, s.z);
+    s.vx = s.vy = s.vz = 0;
+    s.heading = 0;
+    s.crash = null;
+    s.trickYaw = 0; s.trickPitch = 0; s.crouch = 0;
+    s.switchStance = false;
+    s.mode = 'ready';
+    s.jumpHeld = false;
+    s.readyLock = true;
+    s.invuln = 1.5;
   }
 
   // ---- things in the way --------------------------------------------------------
@@ -400,11 +503,12 @@ export function createPhysics(T, W, ev) {
         if (s.bounceGrace > 0 || oAbove > o.top) continue;
         // the crown narrows toward the top; the trunk is all there is below a metre
         const crown = oAbove < 1 ? 0.35 : o.r * (1 - oAbove / o.top);
-        if (d < crown + 0.2) { s.vx *= 0.2; s.vz *= 0.2; crash('Puuhun!'); return; }
+        if (d < crown + 0.2) { const sp = speed(); s.vx *= 0.2; s.vz *= 0.2; crash('ragdoll', sp); return; }
       } else {
         if (oAbove > o.top) continue;
-        s.vx *= 0.3; s.vz *= 0.3;
-        crash(o.kind === 'car' ? 'Auto!' : o.kind === 'dog' ? 'Hauva!' : 'Väistä!');
+        const sp = speed();
+        s.vx *= 0.5; s.vz *= 0.5;
+        crash('ragdoll', sp);
         return;
       }
     }
@@ -414,6 +518,7 @@ export function createPhysics(T, W, ev) {
     s.vy = Math.max(power, -s.vy * 0.6);
     s.bounceGrace = 0.4;
     if (b.kind === 'awning') { s.vx *= 0.5; s.vz *= 0.35; }
+    b.wobble = 1;
     s.run.parts.push(name);
     s.run.pts += T.points.bounce;
     ev('bounce', { name, x: s.x, y: s.y, z: s.z });
@@ -425,6 +530,9 @@ export function createPhysics(T, W, ev) {
     s.invuln = Math.max(0, s.invuln - dt);
     s.bounceGrace = Math.max(0, s.bounceGrace - dt);
     if (s.railCooldown) s.railCooldown.t -= dt;
+    s.pushAnim = Math.max(0, s.pushAnim - dt);
+    if (!(s.mode === 'crash' && s.crash.kind === 'snowball')) s.fade = Math.max(0, s.fade - dt * 1.5);
+    if (s.mode === 'ready') return stepReady(dt, inp);
     if (s.mode === 'ground') stepGround(dt, inp);
     else if (s.mode === 'air') stepAir(dt, inp);
     else if (s.mode === 'grind') stepGrind(dt, inp);
