@@ -398,6 +398,16 @@ function tunnel() {
   return c;
 }
 
+function sparkle() {
+  const [c, g] = canvas(64, 64);
+  const glow = g.createRadialGradient(32, 32, 0, 32, 32, 30);
+  glow.addColorStop(0, 'rgba(255,255,240,1)'); glow.addColorStop(0.2, 'rgba(255,250,200,0.5)'); glow.addColorStop(1, 'rgba(255,250,200,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#fff';
+  g.beginPath(); g.moveTo(32, 0); g.lineTo(35, 29); g.lineTo(64, 32); g.lineTo(35, 35); g.lineTo(32, 64); g.lineTo(29, 35); g.lineTo(0, 32); g.lineTo(29, 29); g.closePath(); g.fill();
+  return c;
+}
+
 function shadow() {
   const [c, g] = canvas(64, 64);
   const gr = g.createRadialGradient(32, 32, 2, 32, 32, 31);
@@ -464,6 +474,7 @@ export function textures() {
   T.asphalt = texture(asphalt(), true);
   T.snow = texture(snow(), true);
   T.tunnel = texture(tunnel());
+  T.sparkle = texture(sparkle());
   T.shadow = texture(shadow());
   T.flake = texture(flake());
   T.sky = texture(sky());
