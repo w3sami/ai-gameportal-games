@@ -9,6 +9,7 @@ import { buildRider } from './rider.js';
 import { createPhysics } from './physics.js';
 import { buildFx, popup } from './fx.js';
 import { createInput } from './input.js';
+import { createTuning } from './tuning.js';
 
 const T = await loadTune();
 buildTerrain();
@@ -198,6 +199,10 @@ function showResults() {
 
 const input = createInput();
 
+// developer's tuning panel; its pause (and the portal's) freezes the run in place
+let frozen = false;
+createTuning(T, { onPause: (on) => { frozen = on ?? !frozen; last = performance.now(); } });
+
 // The press that starts or resumes a run must not also be its first jump.
 let jumpLock = false;
 function readInput() {
@@ -279,7 +284,7 @@ function frame(now) {
   input.poll(dt);
   menuInput();
 
-  if (state === 'run' || state === 'done') {
+  if ((state === 'run' || state === 'done') && !frozen) {
     acc += dt;
     const inp = state === 'run' ? (window.downhill.drive?.(physics.s) ?? readInput()) : idle;
     while (acc >= DT) { physics.step(DT, inp); acc -= DT; }
@@ -294,6 +299,7 @@ function frame(now) {
   W.update(dt, clock, s);
   fx.update(dt);
   rider.update(s, dt, W.placeOnGround, heightAt(s.x, s.z));
+  if (camera.fov !== T.camera.fov) { camera.fov = T.camera.fov; camera.updateProjectionMatrix(); }
   const { want, C } = cameraTarget();
   camYaw += (want - camYaw) * Math.min(1, dt * 1.5);
   placeCamera(Math.min(1, dt * 8));
@@ -318,6 +324,7 @@ function hud() {
   el.run.textContent = s.run.parts.length ? s.run.parts.join(' + ') + '  ' + s.run.pts : '';
   el.fade.style.opacity = s.fade;
   el.hint.hidden = !(state === 'run' && s.mode === 'ready');
+  el.hint.textContent = gear === 'board' ? 'Hyppy: potkaise vauhtia!' : 'Hyppy: sauvavauhtia!';
   el.stars.textContent = '★ ' + stars + '/' + W.starCount;
   el.time.textContent = fmtTime(time);
   el.speed.textContent = Math.round(physics.speed() * 3.6) + ' km/h';

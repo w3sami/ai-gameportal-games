@@ -64,7 +64,7 @@ export function createPhysics(T, W, ev) {
     let f = s.vx * dx + s.vz * dz, l = s.vx * rx + s.vz * rz;
     const braking = s.finished || inp.down > 0.3;
     const nl = l * Math.exp(-(braking ? g.grip * 0.6 : g.grip) * dt);
-    f += Math.abs(l - nl) * 0.55;
+    f += Math.abs(l - nl) * T.carveKeep;
     const skid = Math.abs(l - nl) / dt;
     l = nl;
     const tuck = inp.up > 0.3 && !s.finished;
@@ -75,9 +75,9 @@ export function createPhysics(T, W, ev) {
       // slow enough to need it: push with the poles every so often
       if (sp < T.poleBelow) {
         s.poleT += dt;
-        if (s.poleT > 0.45) { s.poleT = 0; f += T.polePush; s.pushAnim = 0.35; }
-      } else s.poleT = 0.4;
-    } else s.poleT = 0.4;
+        if (s.poleT > T.poleEvery) { s.poleT = 0; f += T.polePush; s.pushAnim = 0.35; }
+      } else s.poleT = T.poleEvery * 0.9;
+    } else s.poleT = T.poleEvery * 0.9;
     if (braking) f -= T.brake * (s.finished ? 1 : inp.down) * dt;
     f = clamp(f, -6, g.maxSpeed);   // slow enough on an uphill ramp, slide back down it
     s.vx = f * dx + l * rx;
@@ -91,10 +91,10 @@ export function createPhysics(T, W, ev) {
     if (skid > 3 || braking) ev('spray', { x: s.x, y: s.y, z: s.z, amount: Math.min(1, skid / 40 + (braking ? 0.5 : 0)) * Math.min(1, sp / 10) });
 
     // jump: hold to crouch, release to pop
-    if (inp.jump && !s.finished) s.charge = Math.min(0.35, s.charge + dt);
+    if (inp.jump && !s.finished) s.charge = Math.min(T.chargeTime, s.charge + dt);
     if (!inp.jump && s.jumpHeld && !s.finished) {
       if (sp < T.pushBelow && !surfaceAt(s.x, s.z)) { s.jumpHeld = false; s.charge = 0; return pushOff(); }
-      s.vy += g.jump * (0.65 + 0.35 * (s.charge / 0.35));
+      s.vy += g.jump * (0.65 + 0.35 * (s.charge / T.chargeTime));
       s.charge = 0;
       s.jumpHeld = false;
       takeOff();
@@ -162,18 +162,18 @@ export function createPhysics(T, W, ev) {
   function stepAir(dt, inp) {
     const g = G();
     const spinIn = -inp.x, flipIn = inp.down - inp.up;
-    s.spinV += (spinIn * g.spinRate - s.spinV) * Math.min(1, dt * 8);
-    s.flipV += (flipIn * g.flipRate - s.flipV) * Math.min(1, dt * 8);
+    s.spinV += (spinIn * g.spinRate - s.spinV) * Math.min(1, dt * T.spinResponse);
+    s.flipV += (flipIn * g.flipRate - s.flipV) * Math.min(1, dt * T.spinResponse);
     s.trickYaw += s.spinV * dt;
     s.trickPitch += s.flipV * dt;
     // with the stick released, ease toward the nearest landable angle
     if (Math.abs(flipIn) < 0.2) {
       const err = wrap(s.trickPitch);
-      if (Math.abs(err) < 1.0) s.trickPitch -= Math.sign(err) * Math.min(Math.abs(err), 2.5 * dt);
+      if (Math.abs(err) < T.levelPitch) s.trickPitch -= Math.sign(err) * Math.min(Math.abs(err), T.levelRate * dt);
     }
     if (Math.abs(spinIn) < 0.2) {
       const err = wrap(s.trickYaw * 2) / 2;
-      if (Math.abs(err) < 0.6) s.trickYaw -= Math.sign(err) * Math.min(Math.abs(err), 2.5 * dt);
+      if (Math.abs(err) < T.levelYaw) s.trickYaw -= Math.sign(err) * Math.min(Math.abs(err), T.levelRate * dt);
     }
     s.crouch += ((Math.abs(flipIn) > 0.2 ? 0.8 : 0.2) - s.crouch) * Math.min(1, dt * 8);
     s.lean *= Math.exp(-4 * dt);
@@ -228,8 +228,8 @@ export function createPhysics(T, W, ev) {
     if (Math.abs(ye) > Math.PI / 2) s.switchStance = !s.switchStance;
     if (sp > 1) s.heading = Math.atan2(-s.vx, -s.vz);
     // hard or sideways: skid it out, no fall
-    let loss = 1 - Math.min(0.4, Math.max(0, impact - 4) * 0.02);
-    if (!facing) loss *= 0.55;
+    let loss = 1 - Math.min(0.4, Math.max(0, impact - 4) * T.hardLoss);
+    if (!facing) loss *= T.sidewaysKeep;
     if (!facing || impact > 10) ev('spray', { x: s.x, y: s.y, z: s.z, amount: 1 });
     s.vx *= loss; s.vz *= loss;
     s.vy = slopeVy;
@@ -389,7 +389,7 @@ export function createPhysics(T, W, ev) {
       s.vx *= k; s.vz *= k;
       moveCrash(dt);
       s.y = heightAt(s.x, s.z); s.vy = 0;
-      if (c.t > 1.8) recover();
+      if (c.t > T.buryTime) recover();
     } else if (c.kind === 'ragdoll') {
       const k = Math.exp(-2.2 * dt);
       s.vx *= k; s.vz *= k;
@@ -398,7 +398,7 @@ export function createPhysics(T, W, ev) {
       s.y += s.vy * dt;
       const h = heightAt(s.x, s.z);
       if (s.y <= h) { s.y = h; s.vy = s.vy < -2 ? -s.vy * 0.35 : 0; }
-      if (c.t > 1.6) recover();
+      if (c.t > T.ragdollTime) recover();
     } else {
       // snowball: rolls down the fall line growing, then the screen fades
       const e = 0.3;
@@ -409,9 +409,10 @@ export function createPhysics(T, W, ev) {
       s.vx *= k; s.vz *= k;
       moveCrash(dt);
       s.y = heightAt(s.x, s.z);
-      c.r = Math.min(2.4, 0.4 + c.t * 1.6);
-      s.fade = clamp((c.t - 1.2) / 0.5, 0, 1);
-      if (c.t > 1.8) respawn();
+      c.r = Math.min(T.snowballMax, 0.4 + c.t * T.snowballGrow);
+      // the last 0.6 s fade to black
+      s.fade = clamp((c.t - (T.snowballTime - 0.6)) / 0.5, 0, 1);
+      if (c.t > T.snowballTime) respawn();
     }
   }
 
@@ -517,7 +518,14 @@ export function createPhysics(T, W, ev) {
   function bounce(b, power, name) {
     s.vy = Math.max(power, -s.vy * 0.6);
     s.bounceGrace = 0.4;
-    if (b.kind === 'awning') { s.vx *= 0.5; s.vz *= 0.35; }
+    if (b.kind === 'awning' && b.aimX !== undefined) {
+      // a side awning throws the rider up and across onto the ridge: the
+      // sideways speed that comes down on it at its height
+      const disc = s.vy * s.vy - 2 * T.gravity * (b.aimY - s.y);
+      const t = disc > 0 ? (s.vy + Math.sqrt(disc)) / T.gravity : s.vy / T.gravity;
+      s.vx = (b.aimX - s.x) / t;
+      s.vz *= T.awningKeep;
+    } else if (b.kind === 'awning') { s.vx *= 0.5; s.vz *= T.awningKeep; }
     b.wobble = 1;
     s.run.parts.push(name);
     s.run.pts += T.points.bounce;
