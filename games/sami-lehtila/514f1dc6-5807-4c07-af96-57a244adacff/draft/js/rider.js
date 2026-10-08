@@ -144,15 +144,29 @@ export function buildRider(scene, T) {
     upper.position.y = 0.86 - c * 0.28;
     upper.rotation.x = -0.15 - c * 0.5;
     legs.scale.y = 1 - c * 0.3;
-    const armOut = s.mode === 'air' ? 1.2 : 0.35 + c * 0.3;
-    arms[0].rotation.z = -armOut; arms[1].rotation.z = armOut;
-    arms[0].rotation.x = arms[1].rotation.x = s.mode === 'air' ? 0 : -0.5;
-    if (s.pushAnim > 0) {
-      // pole push: arms reach forward and sweep back
-      const p = 1 - s.pushAnim / 0.4;
-      arms[0].rotation.x = arms[1].rotation.x = -1.4 + p * 2.2;
-      arms[0].rotation.z = -0.2; arms[1].rotation.z = 0.2;
-      upper.rotation.x = -0.6 + p * 0.3;
+    if (gear === 'board') {
+      // A/T pose seen from behind: the body stands across the board, so the
+      // arms swing to its front and back, which is out to the screen's sides.
+      // No poles: a push is a dip and a pop.
+      let armOut = s.mode === 'air' ? 1.5 : 1.15 + c * 0.2;
+      if (s.pushAnim > 0) {
+        const p = s.pushAnim / 0.4;
+        upper.position.y -= Math.sin(p * Math.PI) * 0.25;
+        armOut += Math.sin(p * Math.PI) * 0.35;
+      }
+      arms[0].rotation.set(-armOut, 0, -0.15);
+      arms[1].rotation.set(armOut, 0, 0.15);
+    } else {
+      const armOut = s.mode === 'air' ? 1.2 : 0.35 + c * 0.3;
+      arms[0].rotation.z = -armOut; arms[1].rotation.z = armOut;
+      arms[0].rotation.x = arms[1].rotation.x = s.mode === 'air' ? 0 : -0.5;
+      if (s.pushAnim > 0) {
+        // pole push: arms reach forward and sweep back
+        const p = 1 - s.pushAnim / 0.4;
+        arms[0].rotation.x = arms[1].rotation.x = -1.4 + p * 2.2;
+        arms[0].rotation.z = -0.2; arms[1].rotation.z = 0.2;
+        upper.rotation.x = -0.6 + p * 0.3;
+      }
     }
 
     let shadowOn = true;
