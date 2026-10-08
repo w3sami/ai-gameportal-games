@@ -26,6 +26,7 @@ export const DEFAULTS = {
 
   // air
   spinResponse: 8,           // how fast spin and flip follow the stick (1/s)
+  flipHoldSpeed: 15,         // m/s under which a flip stick held through take-off waits for a release
   levelPitch: 1.0,           // radians from upright within which a released stick levels a flip
   levelYaw: 0,               // radians from straight within which a released stick squares a spin; 0 keeps an angled landing angled
   levelRate: 2.5,            // rad/s of that levelling
@@ -54,6 +55,9 @@ export const DEFAULTS = {
   starReach: 2.6,            // m from the rider's middle that collects a star
   snowSpray: 2.5,            // snow spray multiplier
   sprayStraight: 0.1,        // share of the spray running straight; fully sideways is all of it
+  ringOpacity: 0.45,         // the hard-landing ring at its start
+  ringSize: 1,               // its size multiplier
+  ringTime: 1.1,             // s it takes to spread and fade
   trailFrom: 10,             // m/s where the ski / board trail starts to show
   trailFull: 26,             // m/s where it is at full strength
 
