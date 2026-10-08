@@ -21,6 +21,8 @@ export const DEFAULTS = {
   poleBelow: 8,              // m/s under which a tuck pushes with the poles instead
   polePush: 1.6,             // m/s per pole push
   poleEvery: 0.45,           // s between pole pushes
+  checkpointSlope: 14,       // degrees; starting where the slope below is gentler puts a ramp this steep under the rider
+  checkpointRun: 12,         // m of that ramp's run-in
 
   // air
   spinResponse: 8,           // how fast spin and flip follow the stick (1/s)

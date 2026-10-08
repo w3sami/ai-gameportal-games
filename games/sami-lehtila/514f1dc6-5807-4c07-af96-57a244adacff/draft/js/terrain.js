@@ -1,8 +1,9 @@
 // The snow surface as a height function.
 //
 // groundAt is the slope itself: the course profile plus the banks at the
-// edges. heightAt adds every rideable thing that stands on it — kickers and
-// house roofs — so the rider physics asks one function where the surface is.
+// edges. heightAt adds every rideable thing that stands on it — kickers,
+// house roofs and the temporary start ramp — so the rider physics asks one
+// function where the surface is.
 // A surface that rises more than a step within one tick is a wall.
 
 import { COURSE } from './course.js';
@@ -11,11 +12,13 @@ export const HALF_WIDTH = COURSE.halfWidth;
 const SMOOTH = 8;             // metres either side over which grade changes blend
 const BUCKET = 10;            // metres of z per feature bucket
 
+let tune = null;              // live tuning values; the start ramp reads them
 let prof = null;              // base height at every metre downhill, index = -z
 let firstGrade = 0;
 const buckets = new Map();    // bucket index -> features overlapping it
 
-export function buildTerrain() {
+export function buildTerrain(T) {
+  tune = T;
   const grades = [];
   for (const [len, grade] of COURSE.profile) for (let i = 0; i < len; i++) grades.push(grade);
   firstGrade = grades[0];
@@ -59,11 +62,16 @@ export function bankAt(x) {
 
 export const groundAt = (x, z) => baseAt(z) + bankAt(x);
 
-export function heightAt(x, z) {
+/** withRamp false leaves out the start ramp: the course as built. */
+export function heightAt(x, z, withRamp = true) {
   let h = groundAt(x, z);
   const list = buckets.get(bucketOf(z));
   if (list) for (const f of list) {
     const v = f.height(x, z);
+    if (v > h) h = v;
+  }
+  if (withRamp && ramp) {
+    const v = rampHeight(ramp, x, z);
     if (v > h) h = v;
   }
   return h;
@@ -83,6 +91,46 @@ export function surfaceAt(x, z) {
 // Ramp shape: height fraction at t (0 at the foot, 1 at the lip).
 export const rampCurve = (t) => Math.pow(t, 1.6);
 export const KICKER_TAPER = 1.2;
+
+// Start ramp: when the rider stands up at a checkpoint (or the start) whose
+// slope below is gentler than tune.checkpointSlope, a snow ramp appears under
+// them for that one start: a run-in falling at exactly that angle for
+// checkpointRun metres (shorter if it would stand taller than RAMP_MAX_H) and
+// a one-metre top. Nobody rides into it from behind, so its back is steep.
+// There is at most one; physics places and clears it, world.js draws it.
+const RAMP_MAX_RUN = 25, RAMP_MAX_H = 3.5, RAMP_HALF = 2.5;
+let ramp = null, rampVersion = 0;
+
+export function placeStartRamp(x, z) {
+  const deg = tune?.checkpointSlope ?? 14, run = Math.min(RAMP_MAX_RUN, tune?.checkpointRun ?? 12);
+  const tanA = (heightAt(x, z, false) - heightAt(x, z - 10, false)) / 10;
+  const tanT = Math.tan((deg * Math.PI) / 180);
+  ramp = null;
+  if (tanT > tanA + 1e-3) {
+    const H = Math.min(RAMP_MAX_H, (tanT - tanA) * run);
+    ramp = { x, z, H, L: H / (tanT - tanA), back: H, half: RAMP_HALF, slope: (Math.atan(tanA) * 180) / Math.PI };
+  }
+  rampVersion++;
+  return ramp;
+}
+
+export function clearStartRamp() {
+  if (!ramp) return;
+  ramp = null;
+  rampVersion++;
+}
+
+export const startRamp = () => ({ ramp, version: rampVersion });
+
+function rampHeight(r, x, z) {
+  const dz = r.z - z;                                // metres downhill of the top
+  if (dz > r.L || dz < -1 - r.back) return -Infinity;
+  const ax = Math.abs(x - r.x);
+  const s = ax <= r.half ? 1 : 1 - (ax - r.half) / KICKER_TAPER;
+  if (s <= 0) return -Infinity;
+  const rel = dz >= 0 ? r.H * (1 - dz / r.L) : dz >= -1 ? r.H : r.H * (1 + (1 + dz) / r.back);
+  return groundAt(x, z) + rel * s;
+}
 
 function featureOf(it) {
   if (it.type === 'kicker') {

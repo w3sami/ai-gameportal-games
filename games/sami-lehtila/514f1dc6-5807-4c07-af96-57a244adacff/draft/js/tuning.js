@@ -64,6 +64,8 @@ const GROUPS = [
     ['poleBelow', 'Kyykky sauvoo alle (m/s)', 0, 15, 0.5],
     ['polePush', 'Sauvatyöntö (m/s)', 0, 5, 0.1],
     ['poleEvery', 'Sauvatyöntöjen väli (s)', 0.15, 1.5, 0.05],
+    ['checkpointSlope', 'Checkpoint: minimikulma (°), loivempaan ramppi', 0, 30, 0.5],
+    ['checkpointRun', 'Checkpoint: rampin pituus (m)', 4, 25, 0.5],
   ]],
   ['Pompput ja kaiteet', [
     ['bouncePower', 'Latvapomppu (m/s)', 2, 25, 0.5],

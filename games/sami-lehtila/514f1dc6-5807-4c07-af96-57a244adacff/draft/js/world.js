@@ -15,10 +15,10 @@
 
 import * as THREE from 'three';
 import { COURSE } from './course.js';
-import { HALF_WIDTH, baseAt, groundAt, heightAt, houseFloor, rampCurve, KICKER_TAPER } from './terrain.js';
+import { HALF_WIDTH, baseAt, groundAt, heightAt, houseFloor, rampCurve, KICKER_TAPER, startRamp } from './terrain.js';
 import { rng } from './art.js';
 
-export function buildWorld(scene, T) {
+export function buildWorld(scene, T, tune) {
   const W = {
     obstacles: [], bouncers: [], rails: [], stars: [],
     billboards: [], movers: [], breakables: [],
@@ -431,9 +431,28 @@ export function buildWorld(scene, T) {
   W.checkpoints.sort((a, b) => b.z - a.z);
   W.showCheckpoints = (on) => { for (const m of W.checkpointMarkers) m.visible = on; };
 
+  // the temporary start ramp, redrawn whenever terrain.js places or clears it
+  let rampVersion = -1, rampMeshes = [];
+  function drawRamp() {
+    const { ramp: r, version } = startRamp();
+    rampVersion = version;
+    for (const m of rampMeshes) { group.remove(m); m.geometry.dispose(); }
+    rampMeshes = [];
+    if (!r) return;
+    const hw = r.half + KICKER_TAPER;
+    rampMeshes.push(patch(r.x - hw, r.x + hw, r.z + 1 + r.back, r.z - r.L, 10, 16,
+      (px, pz) => heightAt(px, pz), [0.9, 0.94, 1]));
+    // the start line on the top's front edge
+    const line = new THREE.Mesh(new THREE.BoxGeometry(r.half * 2, 0.06, 0.15), lipMat);
+    line.position.set(r.x, heightAt(r.x, r.z) + 0.03, r.z);
+    group.add(line);
+    rampMeshes.push(line);
+  }
+
   // ---- per frame ------------------------------------------------------------
 
   W.update = (dt, t, rider) => {
+    if (startRamp().version !== rampVersion) drawRamp();
     for (const mv of W.movers) {
       if (mv.kind === 'car') {
         const o = mv.o;
