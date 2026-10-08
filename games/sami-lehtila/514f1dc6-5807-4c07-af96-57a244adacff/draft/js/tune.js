@@ -36,6 +36,9 @@ export const DEFAULTS = {
   landYaw: 0.8,              // radians off forward or backward before a landing skids
   sidewaysKeep: 0.55,        // speed kept by a sideways landing
   hardLoss: 0.02,            // speed lost per m/s of impact above 4 m/s (at most 40 %)
+  landStunFrom: 9,           // m/s of impact where a hard landing starts to tell: crouch, sticky steering, ring, shake
+  landStunTime: 1.2,         // s the sticky steering lasts after the hardest landing short of a slam
+  landStunSteer: 0.75,       // share of steering lost at its worst
   slamImpact: 20,            // m/s into the slope beyond which even an upright landing slams in
   slamMound: 1,              // size of the heap a slam throws up
   slamTime: 1.6,             // s stuck in the heap before the fade
