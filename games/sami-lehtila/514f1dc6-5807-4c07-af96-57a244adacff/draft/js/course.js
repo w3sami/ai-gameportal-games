@@ -14,6 +14,8 @@
 //                                     metres uphill of it to height h
 //   house    { x, z, w, d, wallH, roofH, ridge: 'z'|'x', color,
 //              awning?, sign? }        z is the centre; w across, d downhill.
+//                                     awning: 'left' | 'right' (side wall,
+//                                     throws onto the ridge) or true (front)
 //                                     A ridge along 'z' is a grind rail.
 //   tree     { x, z, h }               spruce; its top is a bouncer
 //   star     { x, z, y }               collectible
@@ -60,16 +62,16 @@ export const COURSE = {
     { type: 'tree', x: 16, z: -150, h: 8 },
     { type: 'snowman', x: 0, z: -170 },
 
-    // Village: café with an awning onto its roof, a second roof to grind.
-    { type: 'kicker', x: 4, z: -190, w: 4, len: 4, h: 0.7 },
-    { type: 'house', x: 4, z: -206, w: 8, d: 10, wallH: 3.2, roofH: 2.2, ridge: 'z',
-      color: '#e8b53c', awning: true, sign: 'KAHVILA' },
-    { type: 'table', x: -2, z: -196 },
-    { type: 'table', x: 11, z: -195 },
-    { type: 'table', x: -3, z: -199 },
-    { type: 'table', x: 12, z: -199 },
-    { type: 'crowd', x: 15, z: -205, n: 4, spread: 3 },
-    { type: 'star', x: 4, z: -212, y: 7 },
+    // Village: café with an awning on its side that throws the rider onto
+    // the ridge, a second roof to grind.
+    { type: 'kicker', x: 9.1, z: -196, w: 2.6, len: 4, h: 0.7 },
+    { type: 'house', x: 4, z: -206, w: 8, d: 14, wallH: 3.2, roofH: 2.2, ridge: 'z',
+      color: '#e8b53c', awning: 'right', sign: 'KAHVILA' },
+    { type: 'table', x: 1, z: -196 },
+    { type: 'table', x: 5, z: -195 },
+    { type: 'table', x: -2, z: -197 },
+    { type: 'crowd', x: -5, z: -205, n: 4, spread: 2 },
+    { type: 'star', x: 4, z: -210, y: 7 },
 
     { type: 'kicker', x: -10, z: -230, w: 5, len: 8, h: 2.0 },
     { type: 'house', x: -10, z: -246, w: 7, d: 12, wallH: 3, roofH: 2, ridge: 'z', color: '#b8402e' },
