@@ -66,3 +66,4 @@ button.go { width: 100%; font-size: 22px; font-weight: 800; background: #f08a24;
   background: rgba(16, 40, 80, .45); border-radius: 10px; z-index: 40; }
 #fs[hidden] { display: none; }
 body.touch #fs { bottom: calc(110px + env(safe-area-inset-bottom)); }
+#tuning .tn-dials { width: 100%; height: auto; display: block; margin: 2px 0 8px; }
