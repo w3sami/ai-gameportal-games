@@ -17,7 +17,7 @@
   "checkpointRun": 12,
   "spinResponse": 8,
   "levelPitch": 1,
-  "levelYaw": 0.6,
+  "levelYaw": 0,
   "levelRate": 2.5,
   "landPitch": 0.8,
   "headFirst": 2.2,

@@ -27,7 +27,7 @@ export const DEFAULTS = {
   // air
   spinResponse: 8,           // how fast spin and flip follow the stick (1/s)
   levelPitch: 1.0,           // radians from upright within which a released stick levels a flip
-  levelYaw: 0.6,             // radians from straight within which a released stick squares a spin
+  levelYaw: 0,               // radians from straight within which a released stick squares a spin; 0 keeps an angled landing angled
   levelRate: 2.5,            // rad/s of that levelling
 
   // landing and falling
