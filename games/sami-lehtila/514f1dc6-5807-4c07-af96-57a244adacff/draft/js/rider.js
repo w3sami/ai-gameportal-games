@@ -175,9 +175,10 @@ export function buildRider(scene, T) {
       // head first into the snow: upside down, sunk, legs and skis out
       root.position.y = s.y - k.depth;
       root.rotation.set(0.15, s.heading, 0.12);
-      trick.rotation.set(Math.PI, 0, 0);
-      const kick = k.t < 1.3 ? Math.sin(k.t * 16) * 0.25 : 0;
-      legs.rotation.set(kick, 0, kick * 0.5);
+      // the whole rider wriggles, legs and skis together, settling down;
+      // legs bending at the feet would part them from the hips
+      const wr = Math.max(0, 1 - k.t / 1.4);
+      trick.rotation.set(Math.PI + Math.sin(k.t * 14) * 0.12 * wr, 0, Math.sin(k.t * 11 + 1) * 0.15 * wr);
       arms[0].rotation.z = -0.3; arms[1].rotation.z = 0.3;
       const grow = Math.min(1, k.t * 8);
       mound.visible = true;
@@ -195,7 +196,6 @@ export function buildRider(scene, T) {
       trick.rotation.set(p[0] * 1.4, p[1] * Math.PI, p[2] * 1.2);
       arms[0].rotation.set(p[3] * 2, 0, -1 + p[4]);
       arms[1].rotation.set(p[5] * 2, 0, 1 + p[6]);
-      legs.rotation.set(p[7] * 0.8, 0, p[4] * 0.4);
       upper.rotation.z = p[6] * 0.5;
       shadowOn = false;
     } else if (s.mode === 'crash' && k.kind === 'ragdoll') {
@@ -230,11 +230,11 @@ export function buildRider(scene, T) {
     shadow.material.opacity = sk;
   }
 
-  // limbs thrown about while tumbling
+  // arms and upper body thrown about while tumbling. The legs stay put: they
+  // pivot at the feet, so bending them would part them from the hips.
   function flail(t) {
     arms[0].rotation.set(Math.sin(t * 13) * 1.5, 0, -1.2 + Math.sin(t * 9) * 0.8);
     arms[1].rotation.set(Math.cos(t * 11) * 1.5, 0, 1.2 + Math.cos(t * 10) * 0.8);
-    legs.rotation.set(Math.sin(t * 8) * 0.5, 0, Math.cos(t * 7) * 0.3);
     upper.rotation.z = Math.sin(t * 6) * 0.4;
   }
 
