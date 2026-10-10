@@ -8,12 +8,14 @@
 //   - cling pulls the whole body into the surface it holds, so a wall or a
 //     ceiling flattens it the way gravity flattens it on a floor (cling())
 //   - grip steers the node's speed along the surface towards the crawl
-//     target; how hard it can steer is friction × load, where load is the
+//     target, which always leans `slide` downhill (on a wall, straight
+//     down). How hard it can steer is friction × load, where load is the
 //     magnet's pull plus, while touching, the share of gravity and cling
-//     pressing into the surface. So a non-magnetic wall gives no grip and the slime slides
-//     off it. Grip reaches as far as the magnet does: nodes about to touch
-//     already move with the surface, which keeps the body from rolling down
-//     a wall around the few nodes that touch it.
+//     pressing into the surface. So a non-magnetic wall gives no grip and
+//     the slime slides off it. Grip reaches as far as the magnet does:
+//     nodes about to touch already move with the surface, which keeps the
+//     body from rolling down a wall around the few nodes that touch it.
+//   - all of the magnetism tires while the stick is left alone (suction)
 //
 // The stick is { x, y } in screen directions (y down), length at most 1.
 // Events go out through `on`: splat, trail, drip (see trail.js).
@@ -23,6 +25,22 @@ const CONTACT = 0.04;   // gap below which a node counts as touching
 
 export function createSlime(T, world, on) {
   let nodes = [];
+  // Suction, 0–1, multiplies all magnetism. It tires when the stick is left
+  // alone: full for tireAfter seconds, then gone over tireTime, so a slime
+  // that stops on a wall or a ceiling falls off. Any stick brings it back
+  // over suctionRecover. tireTime 0 never tires.
+  let suction = 1, idle = 0;
+
+  function breathe(dt, stick) {
+    if (T.tireTime <= 0) { suction = 1; idle = 0; return; }
+    if (Math.hypot(stick.x, stick.y) > 0.2) {
+      idle = 0;
+      suction = Math.min(1, suction + dt / Math.max(0.01, T.suctionRecover));
+    } else {
+      idle += dt;
+      if (idle > T.tireAfter) suction = Math.max(0, suction - dt / T.tireTime);
+    }
+  }
 
   function build(x, y) {
     const N = Math.max(3, Math.round(T.nodes)), R = T.radius;
@@ -105,12 +123,13 @@ export function createSlime(T, world, on) {
   }
 
   // A node's own magnetism, as a share of T.magnet: the tile's multiplier,
-  // fading out over magnetRange, and let go while the stick points away.
+  // fading out over magnetRange, let go while the stick points away, and
+  // times the suction left.
   function hold(q, stick) {
     const gap = Math.max(0, q.d - T.nodeRadius);
     if (gap >= T.magnetRange) return 0;
     const away = Math.max(0, (stick.x * q.nx + stick.y * q.ny - 0.3) / 0.7);
-    return T.tiles[q.type].magnet * (1 - gap / T.magnetRange) * (1 - T.letGo * away);
+    return suction * T.tiles[q.type].magnet * (1 - gap / T.magnetRange) * (1 - T.letGo * away);
   }
 
   // Cling: the whole body is pulled into the surface it holds on to, so that
@@ -137,6 +156,7 @@ export function createSlime(T, world, on) {
 
   function step(dt, stick) {
     if (nodes.length !== Math.max(3, Math.round(T.nodes))) { const c = centre(); build(c.x, c.y); }
+    breathe(dt, stick);
     const subs = Math.max(1, Math.round(T.substeps)), h = dt / subs;
     const r = T.nodeRadius, reach = T.magnetRange;
     for (let s = 0; s < subs; s++) {
@@ -188,7 +208,8 @@ export function createSlime(T, world, on) {
           const into = Math.max(0, -(stick.x * nx + stick.y * ny));
           want += T.wallClimb * into * (ty < 0 ? 1 : -1);
         }
-        want = Math.max(-1, Math.min(1, want)) * T.crawlSpeed;
+        // and always a little downhill: slide × the slope's share of gravity
+        want = Math.max(-1, Math.min(1, want)) * T.crawlSpeed + T.slide * ty;
         const vt = n.vx * tx + n.vy * ty;
         const most = T.friction * T.tiles[q.type].grip * n.load * h;
         const dv = Math.max(-most, Math.min(most, want - vt));
@@ -219,6 +240,7 @@ export function createSlime(T, world, on) {
   return {
     step, outline, centre, velocity, build,
     get nodes() { return nodes; },
-    reset() { build(world.start.x, world.start.y); },
+    get suction() { return suction; },
+    reset() { build(world.start.x, world.start.y); suction = 1; idle = 0; },
   };
 }
