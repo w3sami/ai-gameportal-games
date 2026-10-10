@@ -475,6 +475,11 @@ export function createSlime(T, world, emit) {
     step, outline, centre, velocity, build, place, popSpeed, capPop,
     get nodes() { return nodes; },
     get suction() { return suction; },
+    // the area as a share of the full circle's: about `pressure` at rest
+    get squeeze() {
+      const N = nodes.length;
+      return area() / ((N / 2) * T.radius * T.radius * Math.sin(TAU / N));
+    },
     get limp() { return limp; },
     set limp(v) { limp = Math.max(0, Math.min(1, v)); },
     get touching() { return nodes.some((n) => n.touch); },

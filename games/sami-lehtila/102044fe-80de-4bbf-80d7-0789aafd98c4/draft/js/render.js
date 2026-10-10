@@ -6,6 +6,7 @@
 
 const TAU = Math.PI * 2;
 const CHUNK = 16;
+const SWEAT_FROM = 0.35;   // share of energyMax below which the slime sweats
 
 export function createRenderer(canvas, world, T) {
   const g = canvas.getContext('2d');
@@ -348,6 +349,61 @@ export function createRenderer(canvas, world, T) {
     }
   }
 
+  // a glowing yellow-green orb, bobbing; taken, it grows back in place
+  function drawOrbs(game, clock) {
+    for (const o of world.orbs) {
+      if (!visible(o.x, o.y)) continue;
+      const k = game.orbIn(o);
+      const y = o.y + Math.sin(clock * 3 + o.x) * 0.12, X = sx(o.x), Y = sy(y);
+      if (k < 1) {
+        g.strokeStyle = 'rgba(220,255,120,.25)'; g.lineWidth = Math.max(1, S * 0.05);
+        g.beginPath(); g.arc(X, Y, S * 0.35, -Math.PI / 2, -Math.PI / 2 + TAU * k); g.stroke();
+        continue;
+      }
+      const r = S * (0.32 + 0.03 * Math.sin(clock * 6 + o.y));
+      g.save();
+      g.shadowColor = '#d4ff5a'; g.shadowBlur = S * 0.8;
+      const grad = g.createRadialGradient(X - r * 0.3, Y - r * 0.3, r * 0.1, X, Y, r);
+      grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.4, '#eaff8a'); grad.addColorStop(1, '#8fd61f');
+      g.fillStyle = grad;
+      g.beginPath(); g.arc(X, Y, r, 0, TAU); g.fill();
+      g.restore();
+      // a bolt
+      g.fillStyle = '#4a6b00';
+      g.beginPath();
+      g.moveTo(X + r * 0.1, Y - r * 0.6); g.lineTo(X - r * 0.3, Y + r * 0.1); g.lineTo(X, Y + r * 0.05);
+      g.lineTo(X - r * 0.1, Y + r * 0.6); g.lineTo(X + r * 0.3, Y - r * 0.1); g.lineTo(X, Y - r * 0.05);
+      g.fill();
+    }
+  }
+
+  // Energy shows on the slime itself: full, it shines; running low, the
+  // shine dulls and it sweats; past full (an orb), it glows gold.
+  const sweat = [];
+  function drawSweat(slime, game, dt) {
+    const e = game.energy / T.energyMax;
+    const c = slime.centre(), R = T.radius;
+    if (!game.dead && e < SWEAT_FROM && Math.random() < (SWEAT_FROM - e) * 14 * dt) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      sweat.push({ x: c.x + side * R * 0.55, y: c.y - R * 0.6, vx: side * (2 + Math.random() * 2), vy: -3 - Math.random() * 2, age: 0 });
+    }
+    for (let i = sweat.length - 1; i >= 0; i--) {
+      const d = sweat[i];
+      d.age += dt;
+      if (d.age > 0.6) { sweat.splice(i, 1); continue; }
+      d.vy += T.gravity * 0.6 * dt; d.x += d.vx * dt; d.y += d.vy * dt;
+      // a teardrop, its point the way it came from
+      const X = sx(d.x), Y = sy(d.y), r = S * 0.15, a = Math.atan2(d.vy, d.vx);
+      g.globalAlpha = 1 - d.age / 0.6;
+      g.fillStyle = '#e8f8ff';
+      g.beginPath();
+      g.arc(X, Y, r, a - Math.PI / 2, a + Math.PI / 2);
+      g.lineTo(X - Math.cos(a) * r * 2.6, Y - Math.sin(a) * r * 2.6);
+      g.closePath(); g.fill();
+      g.globalAlpha = 1;
+    }
+  }
+
   function drawFlags(game, col, clock) {
     for (const p of world.checkpoints) {
       if (!visible(p.x, p.y)) continue;
@@ -392,7 +448,8 @@ export function createRenderer(canvas, world, T) {
   }
 
   // `look`: { x, y } the eyes' direction; `fx`: { shrink 0–1 (1 = gone),
-  // dead (crossed eyes), wince (squeezed eyes) }
+  // dead (crossed eyes), wince (squeezed eyes), energy (share of
+  // energyMax: the shine, and a gold glow past 1), clock }
   function drawSlime(slime, col, look, blink, carried, fx) {
     const c = slime.centre(), keep = 1 - fx.shrink;
     if (keep <= 0.01) return;
@@ -420,17 +477,48 @@ export function createRenderer(canvas, world, T) {
     g.fillStyle = grad;
     const alpha = g.globalAlpha;
     g.globalAlpha = alpha * (carried.length ? 0.8 : 0.93);
+    const over = Math.max(0, Math.min(1, (fx.energy - 1) * 2));
+    if (over > 0) {
+      g.shadowColor = '#ffd43b';
+      g.shadowBlur = S * (0.5 + 0.4 * Math.sin(fx.clock * 6)) * (0.4 + over);
+    }
     g.fill();
+    g.shadowBlur = 0;
     g.globalAlpha = alpha;
     g.lineWidth = Math.max(1.5, S * 0.06);
     g.strokeStyle = col.edge;
     g.stroke();
+    if (over > 0) {
+      // past full: a gold rim, and sparkles twinkling round it
+      g.save();
+      g.shadowColor = '#ffd43b'; g.shadowBlur = S * 0.6;
+      g.strokeStyle = `rgba(255,214,70,${0.45 + 0.4 * over})`;
+      g.lineWidth = Math.max(2, S * 0.1);
+      g.stroke();
+      g.fillStyle = '#fff6c2';
+      for (let i = 0; i < 5; i++) {
+        const tw = Math.sin(fx.clock * 5 + i * 2.1);
+        if (tw < 0.3) continue;
+        const a = i * 1.257 + fx.clock * 0.6, rr = R * (1.05 + 0.15 * Math.sin(i * 3.7));
+        const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr * 0.9, k = S * 0.12 * tw * over;
+        g.beginPath();
+        g.moveTo(px, py - k); g.lineTo(px + k * 0.3, py); g.lineTo(px, py + k); g.lineTo(px - k * 0.3, py); g.closePath();
+        g.moveTo(px - k, py); g.lineTo(px, py + k * 0.3); g.lineTo(px + k, py); g.lineTo(px, py - k * 0.3); g.closePath();
+        g.fill();
+      }
+      g.restore();
+    }
 
-    // gloss
-    g.fillStyle = 'rgba(255,255,255,.35)';
+    // gloss: as bright as the energy is full, dull when it runs out
+    const shine = Math.max(0, Math.min(1, fx.energy));
+    g.fillStyle = `rgba(255,255,255,${0.08 + 0.37 * shine})`;
     g.beginPath();
     g.ellipse(cx - R * 0.35, cy - R * 0.45, R * 0.26, R * 0.13, -0.5, 0, TAU);
     g.fill();
+    if (shine > 0.9) {
+      g.fillStyle = `rgba(255,255,255,${(shine - 0.9) * 6})`;
+      g.beginPath(); g.arc(cx - R * 0.12, cy - R * 0.55, R * 0.05, 0, TAU); g.fill();
+    }
 
     // eyes, looking where the slime goes; crossed out when dead, squeezed
     // shut (> <) while burning
@@ -466,12 +554,14 @@ export function createRenderer(canvas, world, T) {
     drawFlags(game, col, clock);
     drawButtons(game);
     drawCards(game, clock);
+    drawOrbs(game, clock);
     drawMovers();
     drawDrops(trail.drops, palette(T.color));
     // dying: the slime sags for the first 60 % of respawnTime, then shrinks away
     const shrink = Math.max(0, (game.dying - 0.6) / 0.4);
-    drawSlime(slime, col, look, blink, game.carried, { shrink, dead: game.dead, wince: game.burns.length > 0 });
+    drawSlime(slime, col, look, blink, game.carried, { shrink, dead: game.dead, wince: game.burns.length > 0, energy: game.energy / T.energyMax, clock });
     drawSmoke(game, dt);
+    drawSweat(slime, game, dt);
   }
 
   addEventListener('resize', resize);
