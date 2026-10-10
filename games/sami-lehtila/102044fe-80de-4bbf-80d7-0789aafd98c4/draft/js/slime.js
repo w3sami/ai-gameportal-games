@@ -28,9 +28,11 @@
 const TAU = Math.PI * 2;
 const CONTACT = 0.04;   // gap below which a node counts as touching
 const BOUNCE_FROM = 1.5;   // landing speed below which a ball just rolls
+const POP_LOOK = 0.1;      // s of ball mode popSpeed() runs ahead
 
-export function createSlime(T, world, on) {
+export function createSlime(T, world, emit) {
   let nodes = [];
+  let on = emit;   // silenced while popSpeed() looks ahead
   // Suction, 0–1, multiplies all magnetism. It tires when the stick is left
   // alone: full for tireAfter seconds, then gone over tireTime, so a slime
   // that stops on a wall or a ceiling falls off. Any stick brings it back
@@ -280,8 +282,40 @@ export function createSlime(T, world, on) {
 
   build(world.start.x, world.start.y);
 
+  // How hard ball mode would throw the body right now: ball mode's first
+  // POP_LOOK seconds are run ahead and undone, next to the same seconds as a
+  // slime, and the answer is the largest difference in the body's speed.
+  // Gravity, surfaces and the stick act on both runs alike, so what is left
+  // is what the firmed-up springs add. A slime pressed flat (say, into a
+  // ceiling corner) has a lot stored in them.
+  function popSpeed(stick, dt) {
+    const frames = Math.max(1, Math.round(POP_LOOK / dt));
+    const run = (asBall) => {
+      const saved = save();
+      const out = [];
+      for (let f = 0; f < frames; f++) { step(dt, stick, asBall); out.push(velocity()); }
+      load(saved);
+      return out;
+    };
+    on = () => {};
+    const slime = run(false), firmed = run(true);
+    on = emit;
+    let most = 0;
+    for (let f = 0; f < frames; f++) {
+      most = Math.max(most, Math.hypot(firmed[f].x - slime[f].x, firmed[f].y - slime[f].y));
+    }
+    return most;
+  }
+
+  function save() {
+    return { nodes: structuredClone(nodes), suction, idle, ball, firm, impact: impact && { ...impact } };
+  }
+  function load(s) {
+    ({ nodes, suction, idle, ball, firm, impact } = s);
+  }
+
   return {
-    step, outline, centre, velocity, build,
+    step, outline, centre, velocity, build, popSpeed,
     get nodes() { return nodes; },
     get suction() { return suction; },
     reset() { build(world.start.x, world.start.y); suction = 1; idle = 0; },
