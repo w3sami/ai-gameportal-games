@@ -504,5 +504,25 @@
     "sizeBytes": 146677,
     "createdAt": "2026-10-07T20:24:44.492Z",
     "updatedAt": "2026-10-10T11:32:53.563Z"
+  },
+  {
+    "id": "102044fe-80de-4bbf-80d7-0789aafd98c4",
+    "slug": "lima",
+    "title": "Lima",
+    "description": "Pehmeä lima, joka kiipeää seinillä ja katossa ja jättää jälkeensä tarttuvaa vanaa. Prototyyppi.",
+    "descriptions": {},
+    "author": "Sami Lehtilä",
+    "tags": [
+      "prototyyppi",
+      "fysiikka"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 198,
+    "createdAt": "2026-10-10T15:35:56.428Z",
+    "updatedAt": "2026-10-10T15:35:56.447Z"
   }
 ]
