@@ -43,7 +43,8 @@ const GROUPS = [
     ['ballStiff', 'Jouset pallona ×', 1, 30, 0.5],
     ['ballPressure', 'Paine pallona: tavoiteala × ympyrä', 0.5, 1.5, 0.01],
     ['ballMagnet', 'Magneetti pallona ×', 0, 1, 0.05],
-    ['ballBounce', 'Pomppu: iskusta takaisin (0–1)', 0, 1.2, 0.05],
+    ['ballBounce', 'Pomppu täydellä voimalla: iskusta takaisin (0–1)', 0, 1.2, 0.05],
+    ['bounceEnergy', 'Voima kertoo pompun (0 = ei, 1 = suoraan)', 0, 1, 0.05],
     ['popTime', 'Napautus on pallo vähintään (s)', 0, 1, 0.01],
     ['popMax', 'Ponnahdus max (ruutua/s), kovempaa ei tehdä lainkaan', 1, 80, 0.5],
     ['energyMax', 'Voima max', 1, 500, 1],
@@ -158,11 +159,14 @@ export function createTuning(T, { onPause } = {}) {
   }
 
   function state(text) { const s = el?.querySelector('.tn-state'); if (s) s.textContent = text; }
-  function markDirty() { dirty = true; state('• tallentamatta'); }
+  // without the right to write, say why there is no save button and what to do instead
+  const noSave = 'tallennus vain pelin omalla sivulla (/omat/…); täällä Kopioi';
+  function markDirty() { dirty = true; state(portal.canWrite ? '• tallentamatta' : '• tallentamatta · ' + noSave); }
   function refreshHead() {
     if (!el) return;
     el.querySelector('[data-a="save"]').hidden = !portal.canWrite;
-    if (!dirty) state(portal.canWrite ? '' : 'tallennus vain pelin omalla sivulla');
+    if (dirty) markDirty();
+    else state(portal.canWrite ? '' : noSave);
   }
 
   function toggle(on = !open) {
