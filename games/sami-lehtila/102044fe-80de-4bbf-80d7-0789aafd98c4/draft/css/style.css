@@ -14,6 +14,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b3649; fon
 #energy[hidden] { display: none; }
 #energy > div { height: 100%; width: 100%; background: #6fdc4b; }
 #energy.ball > div { background: #ffd43b; }
+#energy > b { position: absolute; left: 0; top: 0; height: 3px; width: 100%; background: #ff5a3a; }
 #energy > i { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #fff; }
 #energy span { position: absolute; left: 8px; top: -1px; font: 11px/14px ui-monospace, monospace; color: #fff; text-shadow: 0 1px 2px #000; }
 
