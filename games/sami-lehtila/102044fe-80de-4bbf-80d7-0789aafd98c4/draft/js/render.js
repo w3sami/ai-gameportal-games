@@ -88,11 +88,17 @@ export function createRenderer(canvas, world, T) {
         else c.fillRect(s - t, 0, t, s);
       }
     },
-    // a frame around a plate; the plate's glow is drawn every frame
-    panel(c, s) {
-      fill(c, s, '#262030');
-      c.fillStyle = '#120d1a';
-      c.fillRect(s * 0.12, s * 0.12, s * 0.76, s * 0.76);
+    // a riveted casing; the glowing tube along its open faces is drawn
+    // every frame (drawPanels)
+    panel(c, s, x, y) {
+      fill(c, s, '#2b2631');
+      c.fillStyle = 'rgba(255,255,255,.05)'; c.fillRect(0, 0, s, s * 0.08);
+      c.fillStyle = 'rgba(0,0,0,.25)';
+      for (const f of [0.45, 0.62, 0.79]) c.fillRect(s * 0.1, s * f, s * 0.8, Math.max(1, s * 0.04));
+      c.fillStyle = '#4a4352';
+      for (const [a, b] of [[0.5, 0.5], [(x + y) & 1 ? 0.2 : 0.8, 0.5]]) {
+        c.beginPath(); c.arc(s * a, s * b, s * 0.05, 0, TAU); c.fill();
+      }
     },
     platform(c, s, x) {
       fill(c, s, '#56657a');
@@ -180,22 +186,80 @@ export function createRenderer(canvas, world, T) {
 
   // ---- moving and glowing parts -----------------------------------------------------
 
+  // A glass tube just inside each strip of open panel face. Dark it shows a
+  // faint cool line; warning, it heats up in quickening pulses; red, it
+  // burns white-hot at the core and throws a red glow into the room.
   function drawPanels(clock) {
     for (const p of world.panels) {
-      if (!visible(p.x, p.y)) continue;
-      const state = world.panel(p.e);
-      const X = sx(p.x + 0.12), Y = sy(p.y + 0.12), s = S * 0.76;
-      if (state === 'on' || (state === 'warn' && Math.floor(clock * 8) % 2 === 0)) {
-        g.save();
-        g.shadowColor = '#ff2a1f'; g.shadowBlur = S * (state === 'on' ? 0.9 : 0.4);
-        g.fillStyle = state === 'on' ? '#ff3b30' : '#b8322a';
-        g.fillRect(X, Y, s, s);
-        g.restore();
-        g.fillStyle = 'rgba(255,220,200,.45)';
-        g.fillRect(X + s * 0.15, Y + s * 0.15, s * 0.7, s * 0.12);
+      const ax = p.ny ? 1 : 0, ay = p.ny ? 0 : 1;   // along the face
+      if (!visible(p.x + ax * p.len / 2, p.y + ay * p.len / 2, p.len)) continue;
+      const { state, k } = world.turn(p.e);
+      // the tube: from 0.1 to len − 0.1 along, 0.08 to 0.36 in from the face
+      const box = (a0, a1, d0, d1) => {
+        const xs = [p.x + ax * a0 - p.nx * d0, p.x + ax * a1 - p.nx * d1];
+        const ys = [p.y + ay * a0 - p.ny * d0, p.y + ay * a1 - p.ny * d1];
+        const x0 = Math.min(...xs), y0 = Math.min(...ys);
+        return [sx(x0), sy(y0), (Math.max(...xs) - x0) * S, (Math.max(...ys) - y0) * S];
+      };
+      const [X, Y, Wt, Ht] = box(0.1, p.len - 0.1, 0.08, 0.36);
+      const r = Math.min(Wt, Ht) / 2;
+      let heat = 0;
+      if (state === 'warn') heat = k * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(clock * (10 + 30 * k))));
+      if (state === 'on') heat = 0.92 + 0.08 * Math.sin(clock * 37 + p.x * 3 + p.y);
+
+      if (state === 'on') {
+        // glow into the room
+        const [hx, hy, hw, hh] = box(0, p.len, 0, -1.4);
+        const grad = g.createLinearGradient(
+          sx(p.x + ax * 0), sy(p.y + ay * 0), sx(p.x + p.nx * 1.4), sy(p.y + p.ny * 1.4));
+        grad.addColorStop(0, `rgba(255,70,30,${0.32 * heat})`); grad.addColorStop(1, 'rgba(255,70,30,0)');
+        g.fillStyle = grad;
+        g.fillRect(hx, hy, hw, hh);
+      }
+      g.save();
+      g.fillStyle = '#0d0b12';
+      g.beginPath(); g.roundRect(X - 2, Y - 2, Wt + 4, Ht + 4, r + 2); g.fill();
+      if (heat > 0.02) {
+        g.shadowColor = '#ff3a12'; g.shadowBlur = S * 1.1 * heat;
+        // across the tube: red at the glass, white-hot in the middle
+        const across = ax ? g.createLinearGradient(0, Y, 0, Y + Ht) : g.createLinearGradient(X, 0, X + Wt, 0);
+        const core = state === 'on' ? '#fff3c4' : '#ffb347';
+        across.addColorStop(0, `rgba(200,30,10,${heat})`);
+        across.addColorStop(0.5, state === 'on' ? core : `rgba(255,140,50,${heat})`);
+        across.addColorStop(1, `rgba(200,30,10,${heat})`);
+        g.fillStyle = across;
       } else {
-        g.fillStyle = 'rgba(90,200,255,.22)';
-        g.fillRect(X, Y, s, s);
+        g.fillStyle = '#1a2a36';
+      }
+      g.beginPath(); g.roundRect(X, Y, Wt, Ht, r); g.fill();
+      g.restore();
+      // a highlight on the glass
+      g.fillStyle = heat > 0.02 ? `rgba(255,255,255,${0.25 * heat})` : 'rgba(140,210,255,.3)';
+      const [lx, ly, lw, lh] = box(0.25, p.len - 0.25, 0.13, 0.17);
+      g.fillRect(lx, ly, lw, lh);
+    }
+  }
+
+  // smoke and sparks where the slime burns
+  const puffs = [];
+  function drawSmoke(game, dt) {
+    for (const b of game.burns) {
+      if (Math.random() < 0.6) puffs.push({ x: b.x + (Math.random() - 0.5) * 0.3, y: b.y, vx: b.nx * 1.5 + (Math.random() - 0.5), vy: b.ny * 1.5 - 1.5, age: 0, life: 0.7 + Math.random() * 0.4, spark: false });
+      if (Math.random() < 0.4) puffs.push({ x: b.x, y: b.y, vx: b.nx * 5 + (Math.random() - 0.5) * 6, vy: b.ny * 5 - Math.random() * 4, age: 0, life: 0.35, spark: true });
+    }
+    for (let i = puffs.length - 1; i >= 0; i--) {
+      const f = puffs[i];
+      f.age += dt;
+      if (f.age > f.life) { puffs.splice(i, 1); continue; }
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      if (f.spark) f.vy += T.gravity * 0.5 * dt; else { f.vy -= 1.5 * dt; f.vx *= 0.97; }
+      const u = f.age / f.life;
+      if (f.spark) {
+        g.fillStyle = `rgba(255,${180 - 120 * u | 0},60,${1 - u})`;
+        g.fillRect(sx(f.x) - S * 0.04, sy(f.y) - S * 0.04, S * 0.08, S * 0.08);
+      } else {
+        g.fillStyle = `rgba(190,180,200,${0.35 * (1 - u)})`;
+        g.beginPath(); g.arc(sx(f.x), sy(f.y), S * (0.12 + 0.35 * u), 0, TAU); g.fill();
       }
     }
   }
@@ -327,12 +391,17 @@ export function createRenderer(canvas, world, T) {
     g.globalAlpha = 1;
   }
 
-  function drawSlime(slime, col, look, blink, carried) {
-    const pts = slime.outline();
-    const c = slime.centre();
-    const N = pts.length, R = T.radius * S;
+  // `look`: { x, y } the eyes' direction; `fx`: { shrink 0–1 (1 = gone),
+  // dead (crossed eyes), wince (squeezed eyes) }
+  function drawSlime(slime, col, look, blink, carried, fx) {
+    const c = slime.centre(), keep = 1 - fx.shrink;
+    if (keep <= 0.01) return;
+    const pts = slime.outline().map((p) => ({ x: c.x + (p.x - c.x) * keep, y: c.y + (p.y - c.y) * keep }));
+    const N = pts.length, R = T.radius * S * keep;
     const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
     const cx = sx(c.x), cy = sy(c.y);
+    g.save();
+    g.globalAlpha = Math.min(1, keep * 1.5);
 
     // carried cards float inside the jelly
     carried.forEach((k, i) => card(cx + (i - (carried.length - 1) / 2) * R * 0.5, cy + R * 0.4, R * 0.45, k.e.color));
@@ -349,9 +418,10 @@ export function createRenderer(canvas, world, T) {
     const grad = g.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R * 1.3);
     grad.addColorStop(0, col.light); grad.addColorStop(0.55, col.base); grad.addColorStop(1, col.dark);
     g.fillStyle = grad;
-    g.globalAlpha = carried.length ? 0.8 : 0.93;
+    const alpha = g.globalAlpha;
+    g.globalAlpha = alpha * (carried.length ? 0.8 : 0.93);
     g.fill();
-    g.globalAlpha = 1;
+    g.globalAlpha = alpha;
     g.lineWidth = Math.max(1.5, S * 0.06);
     g.strokeStyle = col.edge;
     g.stroke();
@@ -362,30 +432,46 @@ export function createRenderer(canvas, world, T) {
     g.ellipse(cx - R * 0.35, cy - R * 0.45, R * 0.26, R * 0.13, -0.5, 0, TAU);
     g.fill();
 
-    // eyes, looking where the slime goes
+    // eyes, looking where the slime goes; crossed out when dead, squeezed
+    // shut (> <) while burning
     const ey = cy - R * 0.12;
     for (const side of [-1, 1]) {
       const ex = cx + side * R * 0.3;
+      if (fx.dead || fx.wince) {
+        g.strokeStyle = '#1b1426'; g.lineWidth = Math.max(1.5, R * 0.07); g.lineCap = 'round';
+        const e = R * 0.13;
+        g.beginPath();
+        if (fx.dead) { g.moveTo(ex - e, ey - e); g.lineTo(ex + e, ey + e); g.moveTo(ex + e, ey - e); g.lineTo(ex - e, ey + e); }
+        else { g.moveTo(ex + side * e, ey - e); g.lineTo(ex - side * e, ey); g.lineTo(ex + side * e, ey + e); }
+        g.stroke();
+        continue;
+      }
       g.fillStyle = '#fff';
       g.beginPath(); g.ellipse(ex, ey, R * 0.17, R * 0.2 * (blink ? 0.12 : 1), 0, 0, TAU); g.fill();
       if (blink) continue;
       g.fillStyle = '#1b1426';
       g.beginPath(); g.arc(ex + look.x * R * 0.07, ey + look.y * R * 0.08, R * 0.085, 0, TAU); g.fill();
     }
+    g.restore();
   }
 
   function draw(slime, trail, game, look, blink, clock, dt) {
     scale();
-    if (!game.dead) follow(slime, dt);
-    const col = palette(T.color);
+    follow(slime, dt);
+    // hurt, the slime runs hot: towards red, flickering while it burns
+    const hurt = 1 - game.health, flicker = game.burns.length ? 0.15 * Math.sin(clock * 40) : 0;
+    const col = palette(T.color, Math.max(0, Math.min(1, hurt * 0.75 + flicker)));
     drawTiles();
     drawPanels(clock);
     drawFlags(game, col, clock);
     drawButtons(game);
     drawCards(game, clock);
     drawMovers();
-    drawDrops(trail.drops, col);
-    if (!game.dead) drawSlime(slime, col, look, blink, game.carried);
+    drawDrops(trail.drops, palette(T.color));
+    // dying: the slime sags for the first 60 % of respawnTime, then shrinks away
+    const shrink = Math.max(0, (game.dying - 0.6) / 0.4);
+    drawSlime(slime, col, look, blink, game.carried, { shrink, dead: game.dead, wince: game.burns.length > 0 });
+    drawSmoke(game, dt);
   }
 
   addEventListener('resize', resize);
@@ -395,12 +481,16 @@ export function createRenderer(canvas, world, T) {
 
 // ---- colour ---------------------------------------------------------------------
 
+// the slime's colours, `heat` (0–1) of the way to a burning red
+const HOT = [255, 60, 25];
 let cached = null;
-function palette(hex) {
-  if (cached?.hex === hex) return cached;
+function palette(hex, heat = 0) {
+  heat = Math.round(heat * 40) / 40;
+  if (cached?.hex === hex && cached.heat === heat) return cached;
   const n = parseInt(String(hex).replace('#', ''), 16) || 0x6fdc4b;
-  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v, i) => v + (HOT[i] - v) * heat);
   const mix = (t, to) => 'rgb(' + rgb.map((v) => Math.round(v + (to - v) * t)).join(',') + ')';
-  cached = { hex, base: mix(0, 0), light: mix(0.45, 255), dark: mix(0.3, 0), edge: mix(0.5, 0) };
-  return cached;
+  const out = { hex, heat, base: mix(0, 0), light: mix(0.45, 255), dark: mix(0.3, 0), edge: mix(0.5, 0) };
+  if (!heat) cached = out;
+  return out;
 }
