@@ -123,14 +123,18 @@ export function buildWorld(level, T) {
   }
   const isOpen = (d) => d.to === 1;
 
-  // a panel's turn: 'off', 'warn' (about to glow red) or 'on' (red, kills)
-  function panel(e, t = time) {
+  // A panel's turn, { state, k }: state 'off', 'warn' (about to glow red)
+  // or 'on' (red, burns), and k how far into that state it is, 0–1.
+  function turn(e, t = time) {
     const { off, warn, on } = T.panel;
     const cycle = off + warn + on;
-    if (cycle <= 0) return 'off';
+    if (cycle <= 0) return { state: 'off', k: 0 };
     const u = (((t + (e?.phase || 0) * cycle) % cycle) + cycle) % cycle;
-    return u < off ? 'off' : u < off + warn ? 'warn' : 'on';
+    if (u < off) return { state: 'off', k: u / off };
+    if (u < off + warn) return { state: 'warn', k: (u - off) / warn };
+    return { state: 'on', k: (u - off - warn) / on };
   }
+  const panel = (e, t) => turn(e, t).state;
 
   // ---- surfaces -----------------------------------------------------------------
 
@@ -223,15 +227,32 @@ export function buildWorld(level, T) {
     return movers.some((m) => live(m) && x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h);
   }
 
-  // every panel cell, for drawing its glow
+  // The panels' glowing faces, for drawing: each run of panel cells of one
+  // phase along a face open to the room is one strip { x, y, nx, ny, len, e }:
+  // (x, y) the face's start corner, (nx, ny) its outward normal, len its
+  // length in tiles along the face.
   const panels = [];
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (grid[y * w + x] === 'panel') panels.push({ x, y, e: meta[y * w + x] });
+  const isPanel = (x, y, e) => at(x, y) === 'panel' && metaAt(x, y)?.phase === e.phase;
+  for (const [nx, ny] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+    const ax = ny ? 1 : 0, ay = ny ? 0 : 1;   // along the face
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const e = metaAt(x, y);
+        if (at(x, y) !== 'panel' || at(x + nx, y + ny)) continue;
+        // only the first cell of a run starts a strip
+        if (isPanel(x - ax, y - ay, e) && !at(x - ax + nx, y - ay + ny)) continue;
+        let len = 1;
+        while (isPanel(x + ax * len, y + ay * len, e) && !at(x + ax * len + nx, y + ay * len + ny)) len++;
+        panels.push({ x: x + (nx > 0 ? 1 : 0), y: y + (ny > 0 ? 1 : 0), nx, ny, len, e });
+      }
+    }
+  }
 
   setTime(0);
 
   return {
     w, h, at, metaAt, solidAt, nearest, collide, start, checkpoints, exits, buttons, cards,
-    movers, doors, panels, panel, setTime, setDoor, isOpen, keyColor,
+    movers, doors, panels, panel, turn, setTime, setDoor, isOpen, keyColor,
     get time() { return time; },
   };
 }
