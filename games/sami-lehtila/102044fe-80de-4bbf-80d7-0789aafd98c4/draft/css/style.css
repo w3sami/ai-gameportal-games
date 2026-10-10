@@ -1,0 +1,28 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #3b3649; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fff; user-select: none; -webkit-user-select: none; touch-action: none; }
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+#hint { position: fixed; left: 16px; bottom: calc(10px + env(safe-area-inset-bottom)); font-size: 13px; opacity: .55; pointer-events: none; text-shadow: 0 1px 3px #000; padding-right: 70px; }
+
+button { font: inherit; color: #fff; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); border-radius: 12px; padding: 12px; cursor: pointer; }
+button:hover, button:focus-visible { background: rgba(255,255,255,.22); outline: none; }
+
+#fs { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: 44px; height: 44px; padding: 0; font-size: 22px; line-height: 1;
+  background: rgba(20, 16, 32, .5); border-radius: 10px; z-index: 40; }
+#fs[hidden] { display: none; }
+#fs svg { display: block; margin: auto; }
+
+#tuning { position: fixed; right: 8px; top: 8px; width: min(340px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; z-index: 50;
+  background: rgba(14, 10, 24, .9); border: 1px solid rgba(180, 255, 140, .25); border-radius: 10px; padding: 6px 10px 10px;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: #e2ffd6; pointer-events: auto; text-shadow: none; }
+#tuning[hidden] { display: none; }
+#tuning .tn-head { position: sticky; top: -6px; display: flex; gap: 6px; align-items: center; padding: 4px 0 6px; background: rgba(14, 10, 24, .96); flex-wrap: wrap; }
+#tuning .tn-state { flex: 1; opacity: .7; font-size: 11px; }
+#tuning button { padding: 2px 7px; font-size: 11px; border-radius: 6px; border-width: 1px; }
+#tuning summary { cursor: pointer; padding: 5px 0; font-weight: 700; color: #b6f37a; }
+#tuning .tn-row { display: grid; grid-template-columns: 1fr 64px 22px; gap: 2px 6px; align-items: center; margin: 2px 0 6px; }
+#tuning .tn-l { grid-column: 1 / -1; opacity: .85; }
+#tuning input[type=range] { width: 100%; margin: 0; }
+#tuning input[type=number] { width: 64px; background: #1a1430; color: #fff; border: 1px solid #3c3260; border-radius: 4px; font: inherit; padding: 1px 3px; }
+#tuning input[type=color] { width: 100%; height: 24px; padding: 0; border: 1px solid #3c3260; background: none; }
+#tuning .tn-def { padding: 0; width: 22px; }
