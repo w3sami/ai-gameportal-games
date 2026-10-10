@@ -77,7 +77,12 @@ export const DEFAULTS = {
   burnTime: 1,               // s one node can touch a red panel before the slime dies; n nodes burn n times as fast
   healTime: 3,               // s from no health back to full, once nothing burns
   healDelay: 0.5,            // s after the last burn before healing starts
+  crushArea: 0.25,           // share of its full area below which the slime is being crushed (at rest about `pressure`; a hard landing dips to 0.36)
+  crushTime: 0.3,            // s crushed that kills
   respawnTime: 1,            // s from bursting to coming back at the checkpoint
+  orbEnergy: 40,             // energy an orb gives
+  orbOverfill: 1.5,          // × energyMax an orb can fill the energy up to
+  orbRespawn: 8,             // s until a taken orb is back
   view: 20,                  // tiles of the level the screen shows top to bottom
 
   // trail: drops that stick where they land, recycled from a fixed pool
