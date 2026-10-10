@@ -7,6 +7,7 @@
   "edgeStiff": 800,
   "areaStiff": 200,
   "pressure": 0.85,
+  "spinLock": 0,
   "damping": 1.5,
   "gravity": 30,
   "crawlSpeed": 7,
@@ -25,7 +26,7 @@
   "popTime": 0.15,
   "popMax": 26,
   "energyMax": 100,
-  "energyRegen": 20,
+  "energyRegen": 39,
   "jumpCost": 2.4,
   "bounceCost": 1,
   "ballDrain": 5,
@@ -61,6 +62,5 @@
     "drip": 0.25
   },
   "substeps": 10,
-  "iterations": 2,
-  "spinLock": 1
+  "iterations": 2
 }
