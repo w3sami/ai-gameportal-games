@@ -46,6 +46,8 @@ const GROUPS = [
     ['ballMagnet', 'Magneetti pallona ×', 0, 1, 0.05],
     ['ballBounce', 'Pomppu täydellä voimalla: iskusta takaisin (0–1)', 0, 1.2, 0.05],
     ['bounceEnergy', 'Voima kertoo pompun (0 = ei, 1 = suoraan)', 0, 1, 0.05],
+    ['chargeTime', 'Hypyn lataus täyteen (s), 0 = ei latausta', 0, 2, 0.05],
+    ['chargeMagnet', 'Magneetti täydellä latauksella ×', 1, 10, 0.1],
     ['popTime', 'Napautus on pallo vähintään (s)', 0, 1, 0.01],
     ['popMax', 'Ponnahdus max (ruutua/s), kovempaa ei tehdä lainkaan', 1, 80, 0.5],
     ['energyMax', 'Voima max', 1, 500, 1],
