@@ -1,12 +1,12 @@
 {
-  "color": "#6fdc4b",
+  "color": "#e245e2",
   "nodes": 10,
   "radius": 1.45,
   "nodeRadius": 0.22,
   "radialStiff": 300,
   "edgeStiff": 800,
   "areaStiff": 200,
-  "pressure": 0.85,
+  "pressure": 0.99,
   "spinLock": 0,
   "damping": 1.5,
   "gravity": 30,
@@ -23,6 +23,8 @@
   "ballMagnet": 0,
   "ballBounce": 0.7,
   "bounceEnergy": 1,
+  "chargeTime": 0.5,
+  "chargeMagnet": 6,
   "popTime": 0.15,
   "popMax": 26,
   "energyMax": 100,
@@ -62,7 +64,5 @@
     "drip": 0.25
   },
   "substeps": 10,
-  "iterations": 2,
-  "chargeTime": 0.5,
-  "chargeMagnet": 6
+  "iterations": 2
 }
