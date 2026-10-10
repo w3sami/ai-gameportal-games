@@ -79,7 +79,14 @@ function frame(now) {
     stick = driven ?? input.stick();
     const held = driven ? !!driven.ball : input.held('ball');
     acc += dt;
-    while (acc >= DT) { ball.update(DT, held); slime.step(DT, stick, ball.on); trail.update(DT); acc -= DT; }
+    while (acc >= DT) {
+      ball.update(DT, held);
+      // a pop harder than popMax is no pop at all
+      if (ball.started && slime.popSpeed(stick, DT) > T.popMax) ball.cancel();
+      slime.step(DT, stick, ball.on);
+      trail.update(DT);
+      acc -= DT;
+    }
   }
 
   // eyes follow the stick, or the motion when the stick is let go
