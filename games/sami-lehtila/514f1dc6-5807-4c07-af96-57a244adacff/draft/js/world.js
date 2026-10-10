@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 import { COURSE } from './course.js';
-import { HALF_WIDTH, baseAt, groundAt, heightAt, houseFloor, rampCurve, KICKER_TAPER, startRamp } from './terrain.js';
+import { HALF_WIDTH, baseAt, groundAt, heightAt, houseFloor, rampCurve, sideTaper, startRamp } from './terrain.js';
 import { rng } from './art.js';
 
 export function buildWorld(scene, T, tune) {
@@ -188,7 +188,7 @@ export function buildWorld(scene, T, tune) {
     tree(it) { tree(it, true); },
 
     kicker(it) {
-      const hw = it.w / 2 + KICKER_TAPER;
+      const hw = it.w / 2 + sideTaper(it.h);
       patch(it.x - hw, it.x + hw, it.z + it.len, it.z, 10, 12,
         (x, z) => Math.max(heightAt(x, z), groundAt(x, z)), [0.9, 0.94, 1]);
       const lip = new THREE.Mesh(new THREE.BoxGeometry(it.w, 0.08, 0.12), lipMat);
@@ -473,7 +473,7 @@ export function buildWorld(scene, T, tune) {
     for (const m of rampMeshes) { group.remove(m); m.geometry.dispose(); }
     rampMeshes = [];
     if (!r) return;
-    const hw = r.half + KICKER_TAPER;
+    const hw = r.half + sideTaper(r.H);
     rampMeshes.push(patch(r.x - hw, r.x + hw, r.z + 1 + r.back, r.z - r.L, 10, 16,
       (px, pz) => heightAt(px, pz), [0.9, 0.94, 1]));
     // the start line on the top's front edge
