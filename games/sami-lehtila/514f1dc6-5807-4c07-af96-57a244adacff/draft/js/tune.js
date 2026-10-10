@@ -65,6 +65,7 @@ export const DEFAULTS = {
   // bouncers and rails
   bouncePower: 10,           // m/s up from a tree top
   balloonPower: 12,
+  balloonGrip: 0.85,         // 0 keeps the travel off a balloon, 1 sends it the way the skis point
   awningPower: 13,
   awningKeep: 0.45,          // downhill speed kept off an awning
   railFriction: 1.2,         // m/s² along a rail
