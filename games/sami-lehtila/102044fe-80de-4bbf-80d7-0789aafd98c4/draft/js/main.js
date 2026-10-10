@@ -15,7 +15,8 @@ import { createTuning } from './tuning.js';
 const T = await loadTune();
 const world = buildWorld(LEVEL, T);
 const trail = createTrail(T, world);
-const slime = createSlime(T, world, trail.on);
+// the slime's events go to the trail, and a pad's throw also to the game
+const slime = createSlime(T, world, (type, e) => { trail.on(type, e); if (type === 'pad') game.pad(e); });
 const ball = createBall(T);
 const game = createGame(T, world, slime, ball, trail);
 const renderer = createRenderer(document.getElementById('view'), world, T);
@@ -58,14 +59,15 @@ let blinkAt = 3, blinkUntil = 0, resetHeld = 0;
 // window.lima in the console: drive = () => ({ x, y, ball }) steers past the controls
 window.lima = { T, world, slime, ball, trail, game, drive: null };
 
-// the developer's energy bar and, under it, the jump's charge, while the
-// tuning panel is open
+// the developer's energy bar, with the jump's charge along its bottom and
+// health along its top, while the tuning panel is open
 const bar = document.getElementById('energy');
 function drawBar() {
   bar.hidden = !tuning.open;
   if (bar.hidden) return;
   bar.firstElementChild.style.width = (100 * ball.energy) / T.energyMax + '%';
   bar.lastElementChild.style.width = 100 * ball.charge + '%';
+  bar.querySelector('b').style.width = 100 * game.health + '%';
   bar.classList.toggle('ball', ball.on);
 }
 
@@ -106,8 +108,9 @@ function frame(now) {
     const held = driven ? !!driven.ball : input.held('ball');
     acc += dt;
     while (acc >= DT) {
+      // a dying slime sags where it is, with nothing steering it
       if (game.dead) {
-        world.setTime(world.time + DT);
+        slime.step(DT, { x: 0, y: 0 });
         game.update(DT);
         trail.update(DT);
         acc -= DT;
