@@ -1,0 +1,193 @@
+// The slime: a ring of nodes, each trying to keep `radius` from the ring's
+// centre, held together by neighbour springs and an area pressure. Solved as
+// extended position-based dynamics (XPBD): move the nodes, pull the springs
+// right for a few passes, then read velocity back off the motion.
+//
+// Surfaces act on each node by its nearest surface point (world.nearest):
+//   - magnetism pulls the node towards it, fading out at magnetRange
+//   - grip steers the node's speed along the surface towards the crawl
+//     target; how hard it can steer is friction × load, where load is the
+//     magnet's pull plus, while touching, the share of gravity pressing into
+//     the surface. So a non-magnetic wall gives no grip and the slime slides
+//     off it. Grip reaches as far as the magnet does: nodes about to touch
+//     already move with the surface, which keeps the body from rolling down
+//     a wall around the few nodes that touch it.
+//
+// The stick is { x, y } in screen directions (y down), length at most 1.
+// Events go out through `on`: splat, trail, drip (see trail.js).
+
+const TAU = Math.PI * 2;
+const CONTACT = 0.04;   // gap below which a node counts as touching
+
+export function createSlime(T, world, on) {
+  let nodes = [];
+
+  function build(x, y) {
+    const N = Math.max(3, Math.round(T.nodes)), R = T.radius;
+    nodes = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * TAU;
+      const nx = x + Math.cos(a) * R, ny = y + Math.sin(a) * R;
+      nodes.push({ x: nx, y: ny, px: nx, py: ny, vx: 0, vy: 0, inx: 0, iny: 0, q: null, touch: false, crawled: 0 });
+    }
+  }
+
+  function centre() {
+    let x = 0, y = 0;
+    for (const n of nodes) { x += n.x; y += n.y; }
+    return { x: x / nodes.length, y: y / nodes.length };
+  }
+
+  function velocity() {
+    let x = 0, y = 0;
+    for (const n of nodes) { x += n.vx; y += n.vy; }
+    return { x: x / nodes.length, y: y / nodes.length };
+  }
+
+  function area() {
+    let a = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      const p = nodes[i], q = nodes[(i + 1) % nodes.length];
+      a += p.x * q.y - q.x * p.y;
+    }
+    return a / 2;
+  }
+
+  // XPBD: each constraint is a spring of stiffness k (1/s², per unit mass),
+  // as compliance 1/k scaled by the substep. Its multiplier λ accumulates
+  // over the iterations of one substep, so more iterations converge on the
+  // same spring rather than a stiffer one. Arrays: [edges…, radials…, area].
+  let lambda = [];
+
+  function xpbd(i, C, wsum, k, h) {
+    if (k <= 0 || wsum < 1e-12) return 0;
+    const a = 1 / (k * h * h);
+    const dl = (-C - a * lambda[i]) / (wsum + a);
+    lambda[i] += dl;
+    return dl;
+  }
+
+  function solve(h) {
+    const N = nodes.length, R = T.radius;
+    // neighbours keep their spacing
+    const edge = 2 * R * Math.sin(Math.PI / N);
+    for (let i = 0; i < N; i++) {
+      const a = nodes[i], b = nodes[(i + 1) % N];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
+      const dl = xpbd(i, d - edge, 2, T.edgeStiff, h);
+      a.x -= (dx / d) * dl; a.y -= (dy / d) * dl;
+      b.x += (dx / d) * dl; b.y += (dy / d) * dl;
+    }
+    // each node towards its rest distance from the centre
+    const c = centre();
+    for (let i = 0; i < N; i++) {
+      const n = nodes[i];
+      const dx = n.x - c.x, dy = n.y - c.y, d = Math.hypot(dx, dy) || 1e-6;
+      const dl = xpbd(N + i, d - R, 1, T.radialStiff, h);
+      n.x += (dx / d) * dl; n.y += (dy / d) * dl;
+    }
+    // pressure: move every node along the area's gradient
+    const rest = T.pressure * (N / 2) * R * R * Math.sin(TAU / N);
+    const g = [];
+    let sum = 0;
+    for (let i = 0; i < N; i++) {
+      const prev = nodes[(i + N - 1) % N], next = nodes[(i + 1) % N];
+      const gx = (next.y - prev.y) / 2, gy = (prev.x - next.x) / 2;
+      g.push(gx, gy);
+      sum += gx * gx + gy * gy;
+    }
+    const dl = xpbd(2 * N, area() - rest, sum, T.areaStiff, h);
+    for (let i = 0; i < N; i++) { nodes[i].x += g[2 * i] * dl; nodes[i].y += g[2 * i + 1] * dl; }
+    // out of the walls
+    for (const n of nodes) world.collide(n, T.nodeRadius);
+  }
+
+  function step(dt, stick) {
+    if (nodes.length !== Math.max(3, Math.round(T.nodes))) { const c = centre(); build(c.x, c.y); }
+    const subs = Math.max(1, Math.round(T.substeps)), h = dt / subs;
+    const r = T.nodeRadius, reach = T.magnetRange;
+    for (let s = 0; s < subs; s++) {
+      const grounded = nodes.some((n) => n.touch);
+      const keep = Math.exp(-T.damping * h);
+
+      for (const n of nodes) {
+        let ax = 0, ay = T.gravity;
+        n.load = 0;
+        const q = n.q;
+        if (q) {
+          const tile = T.tiles[q.type];
+          const gap = Math.max(0, q.d - r);
+          // pointing the stick away from the surface lets go of it
+          const away = Math.max(0, (stick.x * q.nx + stick.y * q.ny - 0.3) / 0.7);
+          const m = gap < reach ? T.magnet * tile.magnet * (1 - gap / reach) * (1 - T.letGo * away) : 0;
+          ax -= q.nx * m; ay -= q.ny * m;
+          n.load = (n.touch ? Math.max(0, -T.gravity * q.ny) : 0) + m;
+        }
+        if (!grounded) { ax += stick.x * T.airControl; ay += stick.y * T.airControl; }
+        n.vx = (n.vx + ax * h) * keep;
+        n.vy = (n.vy + ay * h) * keep;
+        n.inx = n.vx; n.iny = n.vy;
+        n.px = n.x; n.py = n.y;
+        n.x += n.vx * h; n.y += n.vy * h;
+      }
+
+      lambda = new Array(2 * nodes.length + 1).fill(0);
+      for (let i = 0; i < T.iterations; i++) solve(h);
+
+      for (const n of nodes) {
+        n.vx = (n.x - n.px) / h;
+        n.vy = (n.y - n.py) / h;
+        const q = (n.q = world.nearest(n.x, n.y, r + reach));
+        const was = n.touch;
+        n.touch = !!q && q.d <= r + CONTACT;
+        if (!q) continue;
+
+        const nx = q.nx, ny = q.ny;
+        if (n.touch) {
+          const vn = n.vx * nx + n.vy * ny;
+          if (vn < 0) { n.vx -= nx * vn; n.vy -= ny * vn; }
+          const hit = -(n.inx * nx + n.iny * ny);
+          if (!was && hit > T.trail.splatSpeed) on('splat', { x: q.px, y: q.py, nx, ny, vx: n.inx, vy: n.iny, power: hit / T.trail.splatSpeed });
+        }
+
+        // crawl: the stick along the surface; pushed into a wall, up the wall
+        const tx = -ny, ty = nx;
+        let want = stick.x * tx + stick.y * ty;
+        if (Math.abs(nx) > 0.6) {
+          const into = Math.max(0, -(stick.x * nx + stick.y * ny));
+          want += T.wallClimb * into * (ty < 0 ? 1 : -1);
+        }
+        want = Math.max(-1, Math.min(1, want)) * T.crawlSpeed;
+        const vt = n.vx * tx + n.vy * ty;
+        const most = T.friction * T.tiles[q.type].grip * n.load * h;
+        const dv = Math.max(-most, Math.min(most, want - vt));
+        n.vx += tx * dv; n.vy += ty * dv;
+
+        if (!n.touch) continue;
+        n.crawled += Math.abs(vt) * h;
+        if (n.crawled > T.trail.spacing) {
+          n.crawled -= T.trail.spacing;
+          on('trail', { x: q.px, y: q.py, nx, ny });
+        }
+        if (ny > 0.7 && Math.random() < T.trail.drip * h) on('drip', { x: q.px, y: q.py + r * 2, vx: n.vx * 0.3, vy: n.vy });
+      }
+    }
+  }
+
+  // the skin: each node pushed out from the centre by its radius
+  function outline() {
+    const c = centre();
+    return nodes.map((n) => {
+      const dx = n.x - c.x, dy = n.y - c.y, d = Math.hypot(dx, dy) || 1;
+      return { x: n.x + (dx / d) * T.nodeRadius, y: n.y + (dy / d) * T.nodeRadius };
+    });
+  }
+
+  build(world.start.x, world.start.y);
+
+  return {
+    step, outline, centre, velocity, build,
+    get nodes() { return nodes; },
+    reset() { build(world.start.x, world.start.y); },
+  };
+}
