@@ -20,10 +20,7 @@
 // In ball mode (step's asBall, from ball.js) the springs firm up by
 // ballStiff, the area goes back to ballPressure (a full circle at 1), the
 // magnetism drops to ballMagnet, and the body bounces off a surface with
-// ballBounce of the speed it landed with (bounce()). The energy left scales
-// that bounce (bounceEnergy is how much of it depends on energy / energyMax),
-// and the bounce spends energy for what it adds. step's `energy` is ball.js's
-// { share, spend }; without one, energy is free.
+// ballBounce of the speed it landed with (bounce()).
 //
 // The ring does not turn (spinLock): left alone, grip at the touching nodes
 // rolls it like a tread, and a ball that is still spinning when it pops or
@@ -36,8 +33,10 @@
 // on. step() runs the world's clock along, a substep at a time.
 //
 // A pad tile throws the whole body: once any node touches one, the body's
-// speed along the throw is raised to the pad's speed. The throw points
-// along the pad's `dir`, or out of the face touched. A ball bounces off a
+// speed along the throw is raised to the pad's speed, out of the face
+// touched. A pad with a `dir` (an arrow) sets the body's whole speed to
+// its throw instead, along `dir`, so it throws the same way however the
+// body came in. A ball bounces off a
 // pad like a ping-pong ball: it leaves with padSpeed × the pad's `speed`,
 // or with padBounce × the speed it came in with if that is more, so ball
 // after ball between pads keeps all its height. A slime splats on it and
@@ -58,7 +57,6 @@ const SNAG_STEP = 0.1;     // tiles between samples along a node's line from the
 const SNAG_DEPTH = 0.5;    // solid along that line beyond which the node is caught behind a wall
 const LIMP_SPRINGS = 0.2;
 const LIMP_AREA = 0.6;
-const FREE = { share: 1, spend: (amount) => amount };   // energy without limit or cost
 
 export function createSlime(T, world, emit) {
   let nodes = [];
@@ -150,10 +148,6 @@ export function createSlime(T, world, emit) {
   // ball mode (ball.js): springs × ballStiff, area at ballPressure, magnetism × ballMagnet
   let ball = false, firm = 1, limp = 0;
   const loose = () => 1 - (1 - LIMP_SPRINGS) * limp;
-  // where ball mode's energy comes from: { share, spend(amount) → got } (ball.js)
-  let wallet = FREE;
-  // the bounce's multiplier from the energy left
-  let power = 1;
   // a jump's charge, 0–1 (ball.js), tightening the magnet
   let charge = 0;
   // capPop(): for POP_LOOK seconds the body's speed may move at most `most`
@@ -195,10 +189,7 @@ export function createSlime(T, world, emit) {
     if (!impact) return;
     const out = vx * impact.nx + vy * impact.ny;
     if (out < 0) return;   // still squashing
-    let add = Math.max(0, T.ballBounce * power * impact.speed - out);
-    // the bounce is paid for: bounceCost per unit of speed it adds, and
-    // what the energy left cannot pay for is not added
-    if (T.bounceCost > 0) add = wallet.spend(add * T.bounceCost) / T.bounceCost;
+    const add = Math.max(0, T.ballBounce * impact.speed - out);
     for (const n of nodes) { n.vx += impact.nx * add; n.vy += impact.ny * add; }
     impact = null;
   }
@@ -279,11 +270,9 @@ export function createSlime(T, world, emit) {
     return { x: dx * extra, y: dy * extra };
   }
 
-  function step(dt, stick, asBall = false, energy = FREE, charging = 0) {
+  function step(dt, stick, asBall = false, charging = 0) {
     ball = asBall;
     charge = charging;
-    wallet = energy;
-    power = 1 - T.bounceEnergy * (1 - Math.max(0, Math.min(1, wallet.share)));
     firm = ball ? T.ballStiff : 1;
     if (nodes.length !== Math.max(3, Math.round(T.nodes))) { const c = centre(); build(c.x, c.y); }
     breathe(dt, stick);
@@ -396,11 +385,11 @@ export function createSlime(T, world, emit) {
 
   // (inx, iny): the body's speed before this substep's contacts
   function pad(inx, iny) {
-    let dx = 0, dy = 0, fx = 0, fy = 0, speed = 0;
+    let dx = 0, dy = 0, fx = 0, fy = 0, speed = 0, arrow = false;
     for (const n of nodes) {
       if (!n.touch || n.q.type !== 'pad') continue;
       const dir = n.q.meta?.dir;
-      if (dir) { const l = Math.hypot(dir[0], dir[1]) || 1; dx += dir[0] / l; dy += dir[1] / l; }
+      if (dir) { const l = Math.hypot(dir[0], dir[1]) || 1; dx += dir[0] / l; dy += dir[1] / l; arrow = true; }
       else { dx += n.q.nx; dy += n.q.ny; }
       fx += n.q.nx; fy += n.q.ny;
       speed = Math.max(speed, T.padSpeed * (n.q.meta?.speed ?? 1));
@@ -410,9 +399,16 @@ export function createSlime(T, world, emit) {
     dx /= l; dy /= l;
     const came = Math.max(0, -(inx * fx + iny * fy) / fl);
     const want = ball ? Math.max(speed, came * T.padBounce) : speed * T.padSlime;
-    const v = velocity(), add = want - (v.x * dx + v.y * dy);
-    if (add <= 0) return;
-    for (const n of nodes) { n.vx += dx * add; n.vy += dy * add; }
+    const v = velocity();
+    if (arrow) {
+      const ax = dx * want - v.x, ay = dy * want - v.y;
+      if (Math.hypot(ax, ay) < 0.5) return;
+      for (const n of nodes) { n.vx += ax; n.vy += ay; }
+    } else {
+      const add = want - (v.x * dx + v.y * dy);
+      if (add <= 0) return;
+      for (const n of nodes) { n.vx += dx * add; n.vy += dy * add; }
+    }
     impact = null;
     const c = centre();
     on('pad', { x: c.x, y: c.y, nx: dx, ny: dy, ball });
@@ -446,7 +442,7 @@ export function createSlime(T, world, emit) {
     const run = (asBall) => {
       const saved = save();
       const out = [];
-      for (let f = 0; f < frames; f++) { step(dt, stick, asBall, FREE); out.push(velocity()); }
+      for (let f = 0; f < frames; f++) { step(dt, stick, asBall); out.push(velocity()); }
       load(saved);
       return out;
     };
@@ -462,12 +458,12 @@ export function createSlime(T, world, emit) {
 
   function save() {
     return {
-      nodes: nodes.map((n) => ({ ...n })), suction, idle, ball, firm, power, wallet, charge,
+      nodes: nodes.map((n) => ({ ...n })), suction, idle, ball, firm, charge,
       cap: cap && { ...cap }, impact: impact && { ...impact }, time: world.time,
     };
   }
   function load(s) {
-    ({ nodes, suction, idle, ball, firm, power, wallet, charge, cap, impact } = s);
+    ({ nodes, suction, idle, ball, firm, charge, cap, impact } = s);
     world.setTime(s.time);
   }
 
