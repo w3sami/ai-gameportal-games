@@ -61,5 +61,6 @@
     "drip": 0.25
   },
   "substeps": 10,
-  "iterations": 2
+  "iterations": 2,
+  "spinLock": 1
 }
