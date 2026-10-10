@@ -103,6 +103,7 @@ const GROUPS = [
   ['Pompput ja kaiteet', [
     ['bouncePower', 'Latvapomppu (m/s)', 2, 25, 0.5],
     ['balloonPower', 'Pallopomppu (m/s)', 2, 25, 0.5],
+    ['balloonGrip', 'Pallon pito: pompusta suksien suuntaan (0–1)', 0, 1, 0.05],
     ['awningPower', 'Markiisi (m/s)', 2, 25, 0.5],
     ['awningKeep', 'Markiisi: alamäkivauhtia jää', 0, 1, 0.05],
     ['railFriction', 'Kaiteen kitka (m/s²)', 0, 6, 0.1],
