@@ -616,6 +616,13 @@ export function createPhysics(T, W, ev) {
   reset();
   return {
     s, step, reset,
+    /** Developer jump: stand at checkpoint i (clamped), ready to push off. */
+    gotoCheckpoint(i) {
+      s.checkpoint = clamp(i, 0, W.checkpoints.length - 1);
+      s.started = true;
+      respawn();
+      s.readyLock = false;
+    },
     setGear(g) { gear = g; },
     get gear() { return gear; },
     speed,
