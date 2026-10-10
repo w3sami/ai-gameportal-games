@@ -7,6 +7,7 @@ export const DEFAULTS = {
   step: 0.55,                // a surface rising more than this in one tick is a wall
 
   // ground
+  speedScale: 1,             // multiplies what drives the rider on the snow (slope pull, tuck push) and the top speed
   tuckDrag: 0.35,            // drag multiplier while tucked (holding forward on the ground)
   tuckFriction: 0.5,         // snow friction multiplier while tucked
   tuckPush: 1.0,             // m/s² a tuck adds by pumping the terrain
