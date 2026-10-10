@@ -36,17 +36,11 @@ export const DEFAULTS = {
   ballStiff: 15,             // × all three springs while a ball
   ballPressure: 1,           // area aimed for while a ball, as a share of the full circle
   ballMagnet: 0,             // × magnetism while a ball; 0 lets go of everything
-  ballBounce: 0.7,           // share of its landing speed a ball leaves with at full energy; the bounce height is its square
-  bounceEnergy: 1,           // 0–1: how much of the bounce scales with the energy left; 1 = in proportion, 0 = not at all
+  ballBounce: 0.7,           // share of its landing speed a ball leaves with; the bounce height is its square
   chargeTime: 0.5,           // s pressed against a surface to charge a jump fully; the charge then holds, and the jump goes at release
   chargeMagnet: 6,           // × magnetism at full charge, pressing the slime flatter for a harder pop
   popTime: 0.15,             // s a tap stays a ball, so a tap is a whole pop
   popMax: 26,                // speed the springs may throw the body with: a charged jump is capped to it, an uncharged press that would pop harder does not jump
-  energyMax: 100,
-  energyRegen: 20,           // energy per second back while not a ball
-  jumpCost: 2.4,             // energy per tiles/s a jump throws the body with (from rest on a floor about 11.5); with less, no jump
-  bounceCost: 1,             // energy per tiles/s a bounce adds
-  ballDrain: 5,              // energy per second spent just being a ball
 
   // surfaces; each tile type below multiplies these
   magnet: 150,               // pull on each node towards its surface at touch, fading to nothing at magnetRange
@@ -80,9 +74,6 @@ export const DEFAULTS = {
   crushArea: 0.25,           // share of its full area below which the slime is being crushed (at rest about `pressure`; a hard landing dips to 0.36)
   crushTime: 0.3,            // s crushed that kills
   respawnTime: 1,            // s from bursting to coming back at the checkpoint
-  orbEnergy: 40,             // energy an orb gives
-  orbOverfill: 1.5,          // × energyMax an orb can fill the energy up to
-  orbRespawn: 8,             // s until a taken orb is back
   view: 20,                  // tiles of the level the screen shows top to bottom
 
   // trail: drops that stick where they land, recycled from a fixed pool

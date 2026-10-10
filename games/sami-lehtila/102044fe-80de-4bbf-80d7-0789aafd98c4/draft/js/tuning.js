@@ -40,21 +40,15 @@ const GROUPS = [
     ['letGo', 'Tikku poispäin irrottaa magneetin (0–1)', 0, 1, 0.05],
     ['slide', 'Valuu seinää alas (ruutua/s)', 0, 5, 0.05],
   ]],
-  ['Pallo ja voima', [
+  ['Pallo ja hyppy', [
     ['ballStiff', 'Jouset pallona ×', 1, 30, 0.5],
     ['ballPressure', 'Paine pallona: tavoiteala × ympyrä', 0.5, 1.5, 0.01],
     ['ballMagnet', 'Magneetti pallona ×', 0, 1, 0.05],
-    ['ballBounce', 'Pomppu täydellä voimalla: iskusta takaisin (0–1)', 0, 1.2, 0.05],
-    ['bounceEnergy', 'Voima kertoo pompun (0 = ei, 1 = suoraan)', 0, 1, 0.05],
+    ['ballBounce', 'Pomppu: iskusta takaisin (0–1)', 0, 1.2, 0.05],
     ['chargeTime', 'Hypyn lataus täyteen (s), 0 = ei latausta', 0, 2, 0.05],
     ['chargeMagnet', 'Magneetti täydellä latauksella ×', 1, 10, 0.1],
     ['popTime', 'Napautus on pallo vähintään (s)', 0, 1, 0.01],
     ['popMax', 'Ponnahdus max (ruutua/s): ladattu leikataan, lataamaton kovempi ei hyppää', 1, 80, 0.5],
-    ['energyMax', 'Voima max', 1, 500, 1],
-    ['energyRegen', 'Voiman palautuminen (/s)', 0, 200, 1],
-    ['jumpCost', 'Hyppy maksaa per ponnahduksen ruutua/s', 0, 10, 0.05],
-    ['bounceCost', 'Pomppu maksaa per lisätty ruutua/s', 0, 10, 0.05],
-    ['ballDrain', 'Pallona oleminen kuluttaa (/s)', 0, 100, 1],
   ]],
   ['Imu', [
     ['tireAfter', 'Paikallaan täysi imu (s)', 0, 10, 0.1],
@@ -88,9 +82,6 @@ const GROUPS = [
     ['crushArea', 'Puristus: ala alle × ympyrä', 0, 0.8, 0.01],
     ['crushTime', 'Puristus tappaa (s)', 0, 3, 0.05],
     ['respawnTime', 'Kuolemasta takaisin (s)', 0, 5, 0.1],
-    ['orbEnergy', 'Voimapallo antaa voimaa', 0, 200, 1],
-    ['orbOverfill', 'Voimapallo täyttää enintään × voima max', 1, 3, 0.05],
-    ['orbRespawn', 'Voimapallo palaa (s)', 0, 60, 0.5],
     ['view', 'Näkymän korkeus (ruutua)', 8, 40, 1],
   ]],
   ['Vana', [
