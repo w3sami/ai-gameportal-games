@@ -92,5 +92,6 @@
   "ringOpacity": 0.45,
   "ringSize": 1,
   "ringTime": 1.1,
-  "speedScale": 1
+  "speedScale": 1,
+  "balloonGrip": 0.85
 }
