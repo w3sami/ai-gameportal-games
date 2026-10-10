@@ -58,5 +58,6 @@
   "energyMax": 100,
   "energyRegen": 20,
   "ballDrain": 35,
-  "popMax": 26
+  "popMax": 26,
+  "bounceEnergy": 1
 }
