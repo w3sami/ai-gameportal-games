@@ -9,14 +9,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b3649; fon
 #msg { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); font-size: 22px; font-weight: 700; text-shadow: 0 2px 6px #000; pointer-events: none; white-space: nowrap; }
 #msg[hidden] { display: none; }
 
-/* developer's energy bar; the real game will show energy on the slime itself */
-#energy { position: fixed; left: 16px; top: 12px; width: 200px; height: 14px; border-radius: 7px; background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.3); overflow: hidden; pointer-events: none; }
-#energy[hidden] { display: none; }
-#energy > div { height: 100%; width: 100%; background: #6fdc4b; }
-#energy.ball > div { background: #ffd43b; }
-#energy > b { position: absolute; left: 0; top: 0; height: 3px; width: 100%; background: #ff5a3a; }
-#energy > i { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #fff; }
-#energy span { position: absolute; left: 8px; top: -1px; font: 11px/14px ui-monospace, monospace; color: #fff; text-shadow: 0 1px 2px #000; }
+/* developer's bar: health, and the jump's charge along its bottom */
+#devbar { position: fixed; left: 16px; top: 12px; width: 200px; height: 14px; border-radius: 7px; background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.3); overflow: hidden; pointer-events: none; }
+#devbar[hidden] { display: none; }
+#devbar > div { height: 100%; width: 100%; background: #ff6b4a; }
+#devbar.ball > div { background: #ffd43b; }
+#devbar > i { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #fff; }
+#devbar span { position: absolute; left: 8px; top: -1px; font: 11px/14px ui-monospace, monospace; color: #fff; text-shadow: 0 1px 2px #000; }
 
 button { font: inherit; color: #fff; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); border-radius: 12px; padding: 12px; cursor: pointer; }
 button:hover, button:focus-visible { background: rgba(255,255,255,.22); outline: none; }
