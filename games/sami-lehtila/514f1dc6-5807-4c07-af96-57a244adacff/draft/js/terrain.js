@@ -90,13 +90,16 @@ export function surfaceAt(x, z) {
 
 // Ramp shape: height fraction at t (0 at the foot, 1 at the lip).
 export const rampCurve = (t) => Math.pow(t, 1.6);
-export const KICKER_TAPER = 1.2;
+// How far a ramp's sides run out: never steeper than SIDE_SLOPE, so riding
+// onto one from the side is a gentle bump and not a launch wall.
+const SIDE_SLOPE = 0.5;
+export const sideTaper = (h) => Math.max(1.2, h / SIDE_SLOPE);
 
 // Start ramp: when the rider stands up at a checkpoint (or the start) whose
 // slope below is gentler than tune.checkpointSlope, a snow ramp appears under
 // them: a run-in falling at exactly that angle for checkpointRun metres
 // (shorter if it would stand taller than RAMP_MAX_H) and a one-metre top.
-// Nobody rides into it from behind, so its back is steep. There is at most
+// Its back slopes at about 27°, like its sides. There is at most
 // one, and it stays until the next start moves it; physics places it,
 // world.js draws it.
 const RAMP_MAX_RUN = 25, RAMP_MAX_H = 3.5, RAMP_HALF = 2.5;
@@ -109,7 +112,7 @@ export function placeStartRamp(x, z) {
   ramp = null;
   if (tanT > tanA + 1e-3) {
     const H = Math.min(RAMP_MAX_H, (tanT - tanA) * run);
-    ramp = { x, z, H, L: H / (tanT - tanA), back: H, half: RAMP_HALF, slope: (Math.atan(tanA) * 180) / Math.PI };
+    ramp = { x, z, H, L: H / (tanT - tanA), back: H * 2, half: RAMP_HALF, slope: (Math.atan(tanA) * 180) / Math.PI };
   }
   rampVersion++;
   return ramp;
@@ -127,7 +130,7 @@ function rampHeight(r, x, z) {
   const dz = r.z - z;                                // metres downhill of the top
   if (dz > r.L || dz < -1 - r.back) return -Infinity;
   const ax = Math.abs(x - r.x);
-  const s = ax <= r.half ? 1 : 1 - (ax - r.half) / KICKER_TAPER;
+  const s = ax <= r.half ? 1 : 1 - (ax - r.half) / sideTaper(r.H);
   if (s <= 0) return -Infinity;
   const rel = dz >= 0 ? r.H * (1 - dz / r.L) : dz >= -1 ? r.H : r.H * (1 + (1 + dz) / r.back);
   return groundAt(x, z) + rel * s;
@@ -142,7 +145,7 @@ function featureOf(it) {
         const dz = z - it.z;
         if (dz < 0 || dz > it.len) return -Infinity;
         const ax = Math.abs(x - it.x);
-        const s = ax <= half ? 1 : 1 - (ax - half) / KICKER_TAPER;
+        const s = ax <= half ? 1 : 1 - (ax - half) / sideTaper(it.h);
         if (s <= 0) return -Infinity;
         return baseAt(z) + it.h * rampCurve(1 - dz / it.len) * s;
       },
