@@ -242,7 +242,10 @@ function readInput() {
   return inp;
 }
 
+// PageUp / PageDown presses, read once by menuInput
+const keyEdge = { PageUp: false, PageDown: false };
 addEventListener('keydown', (e) => {
+  if (e.code in keyEdge && !e.repeat) { keyEdge[e.code] = true; e.preventDefault(); }
   if (input.isOpen() || e.repeat) return;
   if (state === 'menu' || state === 'results') {
     if (e.code === 'Digit1') setGear('skis');
@@ -277,7 +280,18 @@ function menuInput() {
   if (input.isOpen()) return;
   if (input.pressed('fullscreen')) toggleFullscreen();
   if (input.pressed('controls') && state !== 'run') return remap();
+  input.devTriggers = tuning.open;
   if (state === 'run') {
+    // developer: triggers (or PageUp / PageDown) step through the checkpoints
+    if (tuning.open) {
+      const step = (input.padPressed('LT') || keyEdge.PageUp ? -1 : 0) + (input.padPressed('RT') || keyEdge.PageDown ? 1 : 0);
+      if (step) {
+        physics.gotoCheckpoint(physics.s.checkpoint + step);
+        popup(pops, 'Checkpoint ' + physics.s.checkpoint + '/' + (W.checkpoints.length - 1));
+        snapCamera();
+      }
+    }
+    keyEdge.PageUp = keyEdge.PageDown = false;
     if (input.pressed('menu')) showPause();
     else if (input.pressed('restart')) start();
   } else if (state === 'paused') {
