@@ -29,6 +29,7 @@ const GROUPS = [
     ['edgeStiff', 'Jousi naapuripisteisiin (1/s²)', 0, 3000, 5],
     ['areaStiff', 'Pinta-alan jousi (1/s²)', 0, 1000, 1],
     ['pressure', 'Paine: tavoiteala × ympyrä', 0.2, 1.5, 0.01],
+    ['spinLock', 'Kehä ei pyöri (0 = pyörii vapaasti, 1 = ei lainkaan)', 0, 1, 0.05],
     ['damping', 'Vaimennus: hytkyntä (1/s), ei hidasta lentoa', 0, 20, 0.1],
   ]],
   ['Liike', [
