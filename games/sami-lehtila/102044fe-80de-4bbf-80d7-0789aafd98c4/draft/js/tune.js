@@ -26,7 +26,8 @@ export const DEFAULTS = {
   letGo: 1,                  // 0–1: share of magnetism dropped while the stick points away from the surface
 
   // surfaces; each tile type below multiplies these
-  magnet: 150,               // pull towards a surface at touch, fading to nothing at magnetRange
+  magnet: 150,               // pull on each node towards its surface at touch, fading to nothing at magnetRange
+  cling: 30,                 // how hard the whole body presses into a wall or ceiling it holds; gravity on a floor is the same thing
   magnetRange: 0.6,          // reach of the pull beyond the skin
   friction: 3,               // grip = friction × the load pressing a node to the surface (gravity's share + magnet)
 

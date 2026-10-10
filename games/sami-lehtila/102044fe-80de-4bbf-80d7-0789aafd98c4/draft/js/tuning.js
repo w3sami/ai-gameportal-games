@@ -39,7 +39,8 @@ const GROUPS = [
     ['letGo', 'Tikku poispäin irrottaa magneetin (0–1)', 0, 1, 0.05],
   ]],
   ['Seinät', [
-    ['magnet', 'Magneetti (ruutua/s² kosketuksessa)', 0, 300, 1],
+    ['magnet', 'Magneetti per piste (ruutua/s² kosketuksessa)', 0, 300, 1],
+    ['cling', 'Koko kehon veto pintaan (ruutua/s², painovoima on lattialla sama)', 0, 120, 1],
     ['magnetRange', 'Magneetin ulottuma kuoresta (ruutua)', 0, 2, 0.05],
     ['friction', 'Kitka × kuorma = pito', 0, 10, 0.1],
     ...TILE_ROWS('stone', 'Kivi'),
