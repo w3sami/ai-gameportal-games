@@ -59,5 +59,7 @@
   "energyRegen": 20,
   "ballDrain": 35,
   "popMax": 26,
-  "bounceEnergy": 1
+  "bounceEnergy": 1,
+  "jumpCost": 2.4,
+  "bounceCost": 1
 }
