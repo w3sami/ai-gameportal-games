@@ -1,13 +1,18 @@
 // The level's rules, once per fixed step after the slime has moved:
 //
-//   - a node touching a panel while it glows red kills the slime: it bursts
-//     into drops and comes back after respawnTime at the last checkpoint
-//     reached, with full energy. Opened doors and carried cards stay.
+//   - a node touching a panel while it glows red burns the slime's health
+//     (0–1) by 1 / burnTime a second, so one node kills in burnTime and
+//     more nodes faster. Health comes back over healTime, starting
+//     healDelay after the last burn. At none the slime bursts into drops
+//     and comes back after respawnTime at the last checkpoint reached, with
+//     full health and energy. Opened doors and carried cards stay.
 //   - a button opens the doors keyed to it while any node touches it; a
 //     button with a `time` shuts them again that long after the last touch
 //   - a card is picked up by touching it and opens the first door keyed to
 //     it that the slime then touches; that uses the card up
 //   - checkpoints and the exit count once the slime's centre is near them
+//   - the first time a pad throws a slime rather than a ball, a message
+//     says a ball bounces higher
 //
 // The run's clock starts with the level and stops at the exit. restart()
 // puts the whole level back as it began.
@@ -19,18 +24,25 @@ export function createGame(T, world, slime, ball, trail) {
   let dead = 0;             // s until the slime comes back, while dead
   let finished = false, time = 0;
   let message = null;       // { text, until } in run time
+  let health = 1, cool = 0; // cool: s since the last burn
+  let burns = [];           // surface points burning right now, for the smoke
   const taken = new Set();  // cards picked up (as objects in world.cards)
   const carried = [];       // those not used yet
   const reached = new Set();
   const pressed = new Map();   // button → run time it was last touched
+  let padHint = false;
+
+  // how far into dying, 0–1; 0 while alive
+  const dying = () => (dead > 0 ? 1 - dead / Math.max(0.01, T.respawnTime) : 0);
 
   function say(text, seconds = 2) { message = { text, until: time + seconds }; }
 
-  // the body bursts into flying drops, thrown out from its centre
+  // the body throws drops out from its centre and goes limp (slime.limp);
+  // render.js shrinks it away over the end of respawnTime
   function die() {
     const c = slime.centre();
     for (const n of slime.nodes) {
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         const s = 4 + Math.random() * 8;
         const dx = n.x - c.x + (Math.random() - 0.5), dy = n.y - c.y + (Math.random() - 0.5), l = Math.hypot(dx, dy) || 1;
         trail.on('drip', { x: n.x, y: n.y, vx: n.vx * 0.3 + (dx / l) * s, vy: n.vy * 0.3 + (dy / l) * s - 4 });
@@ -42,6 +54,7 @@ export function createGame(T, world, slime, ball, trail) {
   function respawn() {
     slime.place(checkpoint.x, checkpoint.y);
     ball.reset();
+    health = 1; burns = [];
   }
 
   function restart() {
@@ -66,13 +79,23 @@ export function createGame(T, world, slime, ball, trail) {
     if (!finished) time += dt;
     if (dead > 0) {
       dead -= dt;
+      slime.limp = Math.min(1, dying() * 5);
       if (dead <= 0) { dead = 0; respawn(); }
       return;
     }
     const c = slime.centre(), r = T.nodeRadius;
 
     // panels
-    if (slime.nodes.some((n) => n.touch && n.q.type === 'panel' && world.panel(n.q.meta) === 'on')) { die(); return; }
+    burns = slime.nodes.filter((n) => n.touch && n.q.type === 'panel' && world.panel(n.q.meta) === 'on')
+      .map((n) => ({ x: n.q.px, y: n.q.py, nx: n.q.nx, ny: n.q.ny }));
+    if (burns.length) {
+      health -= (burns.length * dt) / Math.max(0.01, T.burnTime);
+      cool = 0;
+      if (health <= 0) { health = 0; burns = []; die(); return; }
+    } else {
+      cool += dt;
+      if (cool > T.healDelay) health = Math.min(1, health + dt / Math.max(0.01, T.healTime));
+    }
 
     // buttons: a plate a tile wide on its surface
     for (const b of world.buttons) {
@@ -115,13 +138,23 @@ export function createGame(T, world, slime, ball, trail) {
     }
   }
 
+  // a pad threw the body (slime.js's 'pad' event)
+  function pad(e) {
+    if (e.ball || padHint || dead) return;
+    padHint = true;
+    say('Pallona alusta heittää kovempaa', 2.5);
+  }
+
   return {
-    update, restart,
+    update, restart, pad,
     // back to the last checkpoint, the same way as dying
     toCheckpoint() { if (!dead && !finished) die(); },
     get dead() { return dead > 0; },
+    get dying() { return dying(); },
     get finished() { return finished; },
     get time() { return time; },
+    get health() { return health; },
+    get burns() { return burns; },
     get carried() { return carried; },
     get checkpoint() { return checkpoint; },
     isReached: (p) => reached.has(p),
