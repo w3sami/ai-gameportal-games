@@ -41,7 +41,7 @@ export const DEFAULTS = {
   chargeTime: 0.5,           // s pressed against a surface to charge a jump fully; the charge then holds, and the jump goes at release
   chargeMagnet: 6,           // × magnetism at full charge, pressing the slime flatter for a harder pop
   popTime: 0.15,             // s a tap stays a ball, so a tap is a whole pop
-  popMax: 26,                // speed the springs may throw the body with; a harder pop does not happen at all
+  popMax: 26,                // speed the springs may throw the body with: a charged jump is capped to it, an uncharged press that would pop harder does not jump
   energyMax: 100,
   energyRegen: 20,           // energy per second back while not a ball
   jumpCost: 2.4,             // energy per tiles/s a jump throws the body with (from rest on a floor about 11.5); with less, no jump

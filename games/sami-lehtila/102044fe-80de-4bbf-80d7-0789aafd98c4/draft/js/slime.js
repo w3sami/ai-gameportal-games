@@ -135,6 +135,24 @@ export function createSlime(T, world, emit) {
   let power = 1;
   // a jump's charge, 0–1 (ball.js), tightening the magnet
   let charge = 0;
+  // capPop(): for POP_LOOK seconds the body's speed may move at most `most`
+  // away from what it was when the pop began
+  let cap = null;
+
+  function capPop(most) {
+    const v = velocity();
+    cap = { most, t: POP_LOOK, vx: v.x, vy: v.y };
+  }
+
+  function capped(h) {
+    if (!cap) return;
+    const v = velocity(), dx = v.x - cap.vx, dy = v.y - cap.vy, d = Math.hypot(dx, dy);
+    if (d > cap.most) {
+      const k = 1 - cap.most / d;
+      for (const n of nodes) { n.vx -= dx * k; n.vy -= dy * k; }
+    }
+    if ((cap.t -= h) <= 0) cap = null;
+  }
   // A ball's bounce is the whole body's: on landing, the speed it came in
   // with is kept, and once the body has squashed to a stop against the
   // surface it leaves again at ballBounce of that speed (restitution: the
@@ -322,6 +340,7 @@ export function createSlime(T, world, emit) {
         if (ny > 0.7 && Math.random() < T.trail.drip * h) on('drip', { x: q.px, y: q.py + r * 2, vx: n.vx * 0.3, vy: n.vy });
       }
       bounce(grounded, inx, iny);
+      capped(h);
     }
   }
 
@@ -362,17 +381,17 @@ export function createSlime(T, world, emit) {
   }
 
   function save() {
-    return { nodes: structuredClone(nodes), suction, idle, ball, firm, power, wallet, charge, impact: impact && { ...impact } };
+    return { nodes: structuredClone(nodes), suction, idle, ball, firm, power, wallet, charge, cap: cap && { ...cap }, impact: impact && { ...impact } };
   }
   function load(s) {
-    ({ nodes, suction, idle, ball, firm, power, wallet, charge, impact } = s);
+    ({ nodes, suction, idle, ball, firm, power, wallet, charge, cap, impact } = s);
   }
 
   return {
-    step, outline, centre, velocity, build, popSpeed,
+    step, outline, centre, velocity, build, popSpeed, capPop,
     get nodes() { return nodes; },
     get suction() { return suction; },
     get touching() { return nodes.some((n) => n.touch); },
-    reset() { build(world.start.x, world.start.y); suction = 1; idle = 0; },
+    reset() { build(world.start.x, world.start.y); suction = 1; idle = 0; cap = null; },
   };
 }
