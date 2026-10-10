@@ -24,6 +24,7 @@ import { heightAt, groundAt, surfaceAt, HALF_WIDTH, placeStartRamp } from './ter
 const TAU = Math.PI * 2;
 const wrap = (a) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const MAX_LAUNCH = 0.9;    // tan of the steepest take-off a surface can give, about 42°
 
 export function createPhysics(T, W, ev) {
   const s = {};
@@ -57,8 +58,6 @@ export function createPhysics(T, W, ev) {
     let gz = (heightAt(s.x, s.z + e) - heightAt(s.x, s.z - e)) / (2 * e);
     if (Math.abs(gx) > 2 || Math.abs(gz) > 2) { gx = clamp(gx, -2, 2); gz = clamp(gz, -2, 2); }
     const k = T.gravity / (1 + gx * gx + gz * gz);
-    s.vx -= gx * k * dt;
-    s.vz -= gz * k * dt;
 
     const sp = speed();
     // after a hard landing the legs are still soaking it up: steering is
@@ -72,8 +71,13 @@ export function createPhysics(T, W, ev) {
     // how far across the travel the skis point: 0 straight, 1 fully sideways
     const across = sp > 0.5 ? 1 - Math.abs(f) / Math.hypot(f, l) : 0;
     const braking = s.finished || inp.down > 0.3;
+    // gravity pulls only along the skis: across them the edges hold, so the
+    // fall line's sideways pull is neither a slide nor, below, extra speed
+    f -= (gx * dx + gz * dz) * k * dt;
+    // the edges take out sideways speed and give a share of its energy back
+    // forward: a turn can keep speed, never gain it
     const nl = l * Math.exp(-(braking ? g.grip * 0.6 : g.grip) * dt);
-    f += Math.abs(l - nl) * T.carveKeep;
+    f = Math.sign(f || 1) * Math.sqrt(f * f + T.carveKeep * (l * l - nl * nl));
     l = nl;
     const tuck = inp.up > 0.3 && !s.finished;
     const drag = g.drag * (tuck ? T.tuckDrag : 1);
@@ -104,7 +108,7 @@ export function createPhysics(T, W, ev) {
     // jump: hold to crouch, release to pop
     if (inp.jump && !s.finished) s.charge = Math.min(T.chargeTime, s.charge + dt);
     if (!inp.jump && s.jumpHeld && !s.finished) {
-      if (sp < T.pushBelow && !surfaceAt(s.x, s.z)) { s.jumpHeld = false; s.charge = 0; return pushOff(); }
+      if (sp < T.pushBelow) { s.jumpHeld = false; s.charge = 0; return pushOff(); }
       s.vy += g.jump * (0.65 + 0.35 * (s.charge / T.chargeTime));
       s.charge = 0;
       s.jumpHeld = false;
@@ -133,7 +137,8 @@ export function createPhysics(T, W, ev) {
       s.vy -= T.gravity * dt;
       takeOff();
     } else {
-      s.vy = (h - s.y) / dt;
+      // a surface can throw the rider up at most this steeply
+      s.vy = Math.min((h - s.y) / dt, sp * MAX_LAUNCH);
       s.y = h;
     }
   }
