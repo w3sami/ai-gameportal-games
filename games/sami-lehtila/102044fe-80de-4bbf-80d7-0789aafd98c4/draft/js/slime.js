@@ -55,7 +55,7 @@ export function createSlime(T, world, emit) {
     // standing on a floor is rest: gravity holds the slime there, and a tired
     // magnet would only leave it rounder and its jump weaker
     const floor = nodes.some((n) => n.touch && n.q.ny < -0.7);
-    if (floor || Math.hypot(stick.x, stick.y) > 0.2) {
+    if (floor || charge > 0 || Math.hypot(stick.x, stick.y) > 0.2) {
       idle = 0;
       suction = Math.min(1, suction + dt / Math.max(0.01, T.suctionRecover));
     } else {
@@ -133,6 +133,8 @@ export function createSlime(T, world, emit) {
   let wallet = FREE;
   // the bounce's multiplier from the energy left
   let power = 1;
+  // a jump's charge, 0–1 (ball.js), tightening the magnet
+  let charge = 0;
   // A ball's bounce is the whole body's: on landing, the speed it came in
   // with is kept, and once the body has squashed to a stop against the
   // surface it leaves again at ballBounce of that speed (restitution: the
@@ -206,13 +208,13 @@ export function createSlime(T, world, emit) {
   }
 
   // A node's own magnetism, as a share of T.magnet: the tile's multiplier,
-  // fading out over magnetRange, let go while the stick points away, and
-  // times the suction left.
+  // fading out over magnetRange, let go while the stick points away, times
+  // the suction left, and tightened by a jump's charge (up to chargeMagnet).
   function hold(q, stick) {
     const gap = Math.max(0, q.d - T.nodeRadius);
     if (gap >= T.magnetRange) return 0;
     const away = Math.max(0, (stick.x * q.nx + stick.y * q.ny - 0.3) / 0.7);
-    return (ball ? T.ballMagnet : 1) * suction * T.tiles[q.type].magnet
+    return (ball ? T.ballMagnet : 1 + (T.chargeMagnet - 1) * charge) * suction * T.tiles[q.type].magnet
       * (1 - gap / T.magnetRange) * (1 - T.letGo * away);
   }
 
@@ -238,8 +240,9 @@ export function createSlime(T, world, emit) {
     return { x: dx * extra, y: dy * extra };
   }
 
-  function step(dt, stick, asBall = false, energy = FREE) {
+  function step(dt, stick, asBall = false, energy = FREE, charging = 0) {
     ball = asBall;
+    charge = charging;
     wallet = energy;
     power = 1 - T.bounceEnergy * (1 - Math.max(0, Math.min(1, wallet.share)));
     firm = ball ? T.ballStiff : 1;
@@ -359,16 +362,17 @@ export function createSlime(T, world, emit) {
   }
 
   function save() {
-    return { nodes: structuredClone(nodes), suction, idle, ball, firm, power, wallet, impact: impact && { ...impact } };
+    return { nodes: structuredClone(nodes), suction, idle, ball, firm, power, wallet, charge, impact: impact && { ...impact } };
   }
   function load(s) {
-    ({ nodes, suction, idle, ball, firm, power, wallet, impact } = s);
+    ({ nodes, suction, idle, ball, firm, power, wallet, charge, impact } = s);
   }
 
   return {
     step, outline, centre, velocity, build, popSpeed,
     get nodes() { return nodes; },
     get suction() { return suction; },
+    get touching() { return nodes.some((n) => n.touch); },
     reset() { build(world.start.x, world.start.y); suction = 1; idle = 0; },
   };
 }
