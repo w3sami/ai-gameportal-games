@@ -70,6 +70,18 @@ const GROUPS = [
     ...TILE_ROWS('wood', 'Puu'),
     ...TILE_ROWS('ice', 'Jää'),
     ...TILE_ROWS('metal', 'Metalli'),
+    ...TILE_ROWS('pad', 'Pomppualusta'),
+    ...TILE_ROWS('panel', 'Hehkupaneeli'),
+    ...TILE_ROWS('platform', 'Liikkuva taso'),
+    ...TILE_ROWS('door', 'Ovi'),
+  ]],
+  ['Kenttä', [
+    ['padSpeed', 'Pomppualustan heitto (ruutua/s)', 0, 80, 0.5],
+    ['panel.off', 'Paneeli pimeänä (s)', 0, 10, 0.1],
+    ['panel.warn', 'Paneeli vilkkuu ennen punaista (s)', 0, 5, 0.1],
+    ['panel.on', 'Paneeli punaisena, tappaa (s)', 0, 10, 0.1],
+    ['respawnTime', 'Kuolemasta takaisin (s)', 0, 5, 0.1],
+    ['view', 'Näkymän korkeus (ruutua)', 8, 40, 1],
   ]],
   ['Vana', [
     ['trail.pool', 'Pisaroita poolissa', 10, 1000, 10],
