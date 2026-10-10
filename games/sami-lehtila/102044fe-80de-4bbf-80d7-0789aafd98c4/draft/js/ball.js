@@ -20,7 +20,9 @@
 //     measures it and pays with pay()); with too little energy, no jump
 //   - a bounce costs what it adds, through spend() from slime.js
 //   - being a ball costs ballDrain per second, and ends when energy runs out
-// Energy refills at energyRegen while not a ball.
+// Energy refills at energyRegen while not a ball, up to energyMax. gain()
+// (an orb) may fill it past that, up to the cap it is given; what is over
+// energyMax is spent like the rest, and does not refill.
 //
 // `started` is true for the one update a ball began in; cancel() takes that
 // ball back as if the press never happened (main.js does, when the pop would
@@ -34,7 +36,6 @@ export function createBall(T) {
   function update(dt, held, touching) {
     const press = held && !was;
     was = held;
-    energy = Math.min(energy, T.energyMax);
     started = false;
     if (press && energy > 0) {
       if (touching && T.chargeTime > 0) { charging = true; charge = 0; }
@@ -50,7 +51,7 @@ export function createBall(T) {
       pop -= dt;
       if (energy <= 0) { energy = 0; on = false; }
       else if (!held && pop <= 0) on = false;   // a tap is still a whole pop
-    } else {
+    } else if (energy < T.energyMax) {
       energy = Math.min(T.energyMax, energy + T.energyRegen * dt);
     }
   }
@@ -72,6 +73,11 @@ export function createBall(T) {
     return true;
   }
 
+  // add `amount`, up to `cap` (never taking away what is already there)
+  function gain(amount, cap) {
+    energy = Math.max(energy, Math.min(cap, energy + amount));
+  }
+
   // take up to `amount`; returns what there was
   function spend(amount) {
     const got = Math.max(0, Math.min(amount, energy));
@@ -80,7 +86,7 @@ export function createBall(T) {
   }
 
   return {
-    update, stall, cancel, pay, spend,
+    update, stall, cancel, pay, spend, gain,
     get share() { return energy / T.energyMax; },
     get on() { return on; },
     get started() { return started; },

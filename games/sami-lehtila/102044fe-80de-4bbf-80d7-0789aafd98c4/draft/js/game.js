@@ -6,10 +6,15 @@
 //     healDelay after the last burn. At none the slime bursts into drops
 //     and comes back after respawnTime at the last checkpoint reached, with
 //     full health and energy. Opened doors and carried cards stay.
+//   - squeezed below crushArea of its full area (slime.squeeze) for longer
+//     than crushTime (a door shutting on it, a platform pressing it into a
+//     wall), the slime dies the same way
 //   - a button opens the doors keyed to it while any node touches it; a
 //     button with a `time` shuts them again that long after the last touch
 //   - a card is picked up by touching it and opens the first door keyed to
 //     it that the slime then touches; that uses the card up
+//   - an orb touched gives orbEnergy, up to orbOverfill × energyMax, and is
+//     back orbRespawn seconds later
 //   - checkpoints and the exit count once the slime's centre is near them
 //   - the first time a pad throws a slime rather than a ball, a message
 //     says a ball bounces higher
@@ -25,12 +30,14 @@ export function createGame(T, world, slime, ball, trail) {
   let finished = false, time = 0;
   let message = null;       // { text, until } in run time
   let health = 1, cool = 0; // cool: s since the last burn
+  let crushed = 0;          // s squeezed past crushArea
   let burns = [];           // surface points burning right now, for the smoke
   const taken = new Set();  // cards picked up (as objects in world.cards)
   const carried = [];       // those not used yet
   const reached = new Set();
   const pressed = new Map();   // button → run time it was last touched
   let padHint = false;
+  const orbsBack = new Map();  // orb → run time it comes back
 
   // how far into dying, 0–1; 0 while alive
   const dying = () => (dead > 0 ? 1 - dead / Math.max(0.01, T.respawnTime) : 0);
@@ -54,13 +61,13 @@ export function createGame(T, world, slime, ball, trail) {
   function respawn() {
     slime.place(checkpoint.x, checkpoint.y);
     ball.reset();
-    health = 1; burns = [];
+    health = 1; burns = []; crushed = 0;
   }
 
   function restart() {
     for (const d of world.doors) { d.from = d.to = 0; d.since = -1e9; }
     world.setTime(world.time);
-    taken.clear(); carried.length = 0; reached.clear(); pressed.clear();
+    taken.clear(); carried.length = 0; reached.clear(); pressed.clear(); orbsBack.clear();
     checkpoint = world.start; dead = 0; finished = false; time = 0; message = null;
     trail.clear();
     respawn();
@@ -97,6 +104,9 @@ export function createGame(T, world, slime, ball, trail) {
       if (cool > T.healDelay) health = Math.min(1, health + dt / Math.max(0.01, T.healTime));
     }
 
+    crushed = slime.squeeze < T.crushArea ? crushed + dt : 0;
+    if (crushed > T.crushTime) { die(); return; }
+
     // buttons: a plate a tile wide on its surface
     for (const b of world.buttons) {
       const tx = -b.ny * 0.45, ty = b.nx * 0.45;
@@ -124,6 +134,13 @@ export function createGame(T, world, slime, ball, trail) {
       const i = carried.findIndex((k) => k.char === d.e.key);
       if (i >= 0) { carried.splice(i, 1); world.setDoor(d, 1); }
       else if (!message || message.until < time) say('Ovi tarvitsee kortin');
+    }
+
+    // orbs
+    for (const o of world.orbs) {
+      if ((orbsBack.get(o) ?? 0) > time || Math.hypot(c.x - o.x, c.y - o.y) > T.radius + 0.6) continue;
+      ball.gain(T.orbEnergy, T.orbOverfill * T.energyMax);
+      orbsBack.set(o, time + T.orbRespawn);
     }
 
     // checkpoints and the exit
@@ -154,11 +171,14 @@ export function createGame(T, world, slime, ball, trail) {
     get finished() { return finished; },
     get time() { return time; },
     get health() { return health; },
+    get energy() { return ball.energy; },
     get burns() { return burns; },
     get carried() { return carried; },
     get checkpoint() { return checkpoint; },
     isReached: (p) => reached.has(p),
     isTaken: (k) => taken.has(k),
+    // an orb's state: 1 there, 0 just taken, growing back to 1 as it returns
+    orbIn: (o) => { const b = orbsBack.get(o); return b === undefined || b <= time ? 1 : 1 - (b - time) / Math.max(0.01, T.orbRespawn); },
     isPressed: (b) => pressed.has(b),
     get message() { return message && message.until > time ? message.text : ''; },
   };
