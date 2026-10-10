@@ -10,7 +10,7 @@
   "spinLock": 0,
   "damping": 1.5,
   "gravity": 30,
-  "crawlSpeed": 3.5,
+  "crawlSpeed": 5.2,
   "airControl": 10,
   "wallClimb": 0.5,
   "letGo": 1,
