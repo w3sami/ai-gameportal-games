@@ -57,5 +57,6 @@
   "popTime": 0.15,
   "energyMax": 100,
   "energyRegen": 20,
-  "ballDrain": 35
+  "ballDrain": 35,
+  "popMax": 26
 }
