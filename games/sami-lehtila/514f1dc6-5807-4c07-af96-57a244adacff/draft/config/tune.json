@@ -91,5 +91,6 @@
   "landStunSteer": 0.75,
   "ringOpacity": 0.45,
   "ringSize": 1,
-  "ringTime": 1.1
+  "ringTime": 1.1,
+  "speedScale": 1
 }
