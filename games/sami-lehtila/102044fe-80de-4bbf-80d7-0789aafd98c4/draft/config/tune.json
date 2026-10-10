@@ -1,0 +1,48 @@
+{
+  "color": "#6fdc4b",
+  "nodes": 10,
+  "radius": 1,
+  "nodeRadius": 0.2,
+  "radialStiff": 300,
+  "edgeStiff": 800,
+  "areaStiff": 200,
+  "pressure": 0.85,
+  "damping": 1.5,
+  "gravity": 30,
+  "crawlSpeed": 7,
+  "airControl": 10,
+  "wallClimb": 1,
+  "letGo": 1,
+  "magnet": 150,
+  "magnetRange": 0.6,
+  "friction": 3,
+  "tiles": {
+    "stone": {
+      "grip": 1,
+      "magnet": 1
+    },
+    "wood": {
+      "grip": 1,
+      "magnet": 0
+    },
+    "ice": {
+      "grip": 0.03,
+      "magnet": 0.5
+    },
+    "metal": {
+      "grip": 0.8,
+      "magnet": 2
+    }
+  },
+  "trail": {
+    "pool": 200,
+    "spacing": 0.7,
+    "size": 0.13,
+    "life": 25,
+    "splatSpeed": 9,
+    "splatCount": 5,
+    "drip": 0.25
+  },
+  "substeps": 10,
+  "iterations": 2
+}
