@@ -10,9 +10,9 @@
   "spinLock": 0,
   "damping": 1.5,
   "gravity": 30,
-  "crawlSpeed": 7,
+  "crawlSpeed": 7.2,
   "airControl": 10,
-  "wallClimb": 1,
+  "wallClimb": 0.5,
   "letGo": 1,
   "slide": 0.8,
   "tireAfter": 1,
@@ -27,7 +27,7 @@
   "chargeMagnet": 6,
   "popTime": 0.15,
   "popMax": 26,
-  "energyMax": 100,
+  "energyMax": 498,
   "energyRegen": 39,
   "jumpCost": 2.4,
   "bounceCost": 1,
@@ -70,6 +70,24 @@
       "magnet": 1
     }
   },
+  "padSpeed": 32,
+  "padBounce": 1,
+  "padSlime": 0.5,
+  "panel": {
+    "off": 2.5,
+    "warn": 0.8,
+    "on": 1.5
+  },
+  "burnTime": 1,
+  "healTime": 3,
+  "healDelay": 0.5,
+  "crushArea": 0.25,
+  "crushTime": 0.3,
+  "respawnTime": 1,
+  "orbEnergy": 40,
+  "orbOverfill": 1.5,
+  "orbRespawn": 8,
+  "view": 20,
   "trail": {
     "pool": 200,
     "spacing": 0.7,
@@ -80,23 +98,5 @@
     "drip": 0.25
   },
   "substeps": 10,
-  "iterations": 2,
-  "padSpeed": 32,
-  "panel": {
-    "off": 2.5,
-    "warn": 0.8,
-    "on": 1.5
-  },
-  "respawnTime": 1,
-  "view": 20,
-  "padBounce": 1,
-  "padSlime": 0.5,
-  "burnTime": 1,
-  "healTime": 3,
-  "healDelay": 0.5,
-  "crushArea": 0.25,
-  "crushTime": 0.3,
-  "orbEnergy": 40,
-  "orbOverfill": 1.5,
-  "orbRespawn": 8
+  "iterations": 2
 }
