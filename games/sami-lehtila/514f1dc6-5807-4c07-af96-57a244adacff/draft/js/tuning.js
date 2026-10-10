@@ -60,6 +60,7 @@ const GROUPS = [
   ['Sukset', GEAR_ROWS.map(([k, ...r]) => ['skis.' + k, ...r])],
   ['Lauta', GEAR_ROWS.map(([k, ...r]) => ['board.' + k, ...r])],
   ['Maa', [
+    ['speedScale', 'Vauhti × (rinteen veto, kyykky, huippunopeus)', 1, 3, 0.05],
     ['tuckDrag', 'Kyykky: ilmanvastus ×', 0, 1, 0.05],
     ['tuckFriction', 'Kyykky: kitka ×', 0, 1, 0.05],
     ['tuckPush', 'Kyykky: lisävauhti (m/s²)', 0, 4, 0.1],
