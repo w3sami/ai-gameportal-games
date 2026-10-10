@@ -5,10 +5,12 @@
 //
 // Surfaces act on each node by its nearest surface point (world.nearest):
 //   - magnetism pulls the node towards it, fading out at magnetRange
+//   - cling pulls the whole body into the surface it holds, so a wall or a
+//     ceiling flattens it the way gravity flattens it on a floor (cling())
 //   - grip steers the node's speed along the surface towards the crawl
 //     target; how hard it can steer is friction × load, where load is the
-//     magnet's pull plus, while touching, the share of gravity pressing into
-//     the surface. So a non-magnetic wall gives no grip and the slime slides
+//     magnet's pull plus, while touching, the share of gravity and cling
+//     pressing into the surface. So a non-magnetic wall gives no grip and the slime slides
 //     off it. Grip reaches as far as the magnet does: nodes about to touch
 //     already move with the surface, which keeps the body from rolling down
 //     a wall around the few nodes that touch it.
@@ -102,6 +104,37 @@ export function createSlime(T, world, on) {
     for (const n of nodes) world.collide(n, T.nodeRadius);
   }
 
+  // A node's own magnetism, as a share of T.magnet: the tile's multiplier,
+  // fading out over magnetRange, and let go while the stick points away.
+  function hold(q, stick) {
+    const gap = Math.max(0, q.d - T.nodeRadius);
+    if (gap >= T.magnetRange) return 0;
+    const away = Math.max(0, (stick.x * q.nx + stick.y * q.ny - 0.3) / 0.7);
+    return T.tiles[q.type].magnet * (1 - gap / T.magnetRange) * (1 - T.letGo * away);
+  }
+
+  // Cling: the whole body is pulled into the surface it holds on to, so that
+  // it presses against a wall or a ceiling with T.cling, the way gravity
+  // presses it onto a floor, and spreads out on it the same way. The pull
+  // points along the held nodes' normals, weighted by how hard each holds;
+  // it is full once three nodes hold, and the tiles' magnet multiplier
+  // scales it. Gravity's own share into the surface counts towards it.
+  function cling(stick) {
+    let sx = 0, sy = 0, sum = 0, count = 0;
+    for (const n of nodes) {
+      if (!n.q) continue;
+      const w = hold(n.q, stick);
+      if (w <= 0) continue;
+      sx -= n.q.nx * w; sy -= n.q.ny * w; sum += w; count++;
+    }
+    const l = Math.hypot(sx, sy);
+    if (!count || l < 0.3 * sum) return { x: 0, y: 0 };   // held from opposite sides: no one way in
+    const dx = sx / l, dy = sy / l;
+    const want = T.cling * (sum / count) * Math.min(1, count / 3);
+    const extra = Math.max(0, want - T.gravity * dy);
+    return { x: dx * extra, y: dy * extra };
+  }
+
   function step(dt, stick) {
     if (nodes.length !== Math.max(3, Math.round(T.nodes))) { const c = centre(); build(c.x, c.y); }
     const subs = Math.max(1, Math.round(T.substeps)), h = dt / subs;
@@ -109,19 +142,17 @@ export function createSlime(T, world, on) {
     for (let s = 0; s < subs; s++) {
       const grounded = nodes.some((n) => n.touch);
       const keep = Math.exp(-T.damping * h);
+      const pull = cling(stick);
+      const fx = pull.x, fy = T.gravity + pull.y;   // what presses the whole body
 
       for (const n of nodes) {
-        let ax = 0, ay = T.gravity;
+        let ax = fx, ay = fy;
         n.load = 0;
         const q = n.q;
         if (q) {
-          const tile = T.tiles[q.type];
-          const gap = Math.max(0, q.d - r);
-          // pointing the stick away from the surface lets go of it
-          const away = Math.max(0, (stick.x * q.nx + stick.y * q.ny - 0.3) / 0.7);
-          const m = gap < reach ? T.magnet * tile.magnet * (1 - gap / reach) * (1 - T.letGo * away) : 0;
+          const m = T.magnet * hold(q, stick);
           ax -= q.nx * m; ay -= q.ny * m;
-          n.load = (n.touch ? Math.max(0, -T.gravity * q.ny) : 0) + m;
+          n.load = (n.touch ? Math.max(0, -(fx * q.nx + fy * q.ny)) : 0) + m;
         }
         if (!grounded) { ax += stick.x * T.airControl; ay += stick.y * T.airControl; }
         n.vx = (n.vx + ax * h) * keep;
