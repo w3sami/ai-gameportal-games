@@ -36,8 +36,16 @@
 // on. step() runs the world's clock along, a substep at a time.
 //
 // A pad tile throws the whole body: once any node touches one, the body's
-// speed along the throw is raised to padSpeed × the pad's `speed`. The throw
-// points along the pad's `dir`, or out of the face touched.
+// speed along the throw is raised to the pad's speed. The throw points
+// along the pad's `dir`, or out of the face touched. A ball bounces off a
+// pad like a ping-pong ball: it leaves with padSpeed × the pad's `speed`,
+// or with padBounce × the speed it came in with if that is more, so ball
+// after ball between pads keeps all its height. A slime splats on it and
+// is thrown with only padSlime of padSpeed.
+//
+// `limp` (0–1, set from outside) lets the body go: at 1 the ring's springs
+// keep LIMP_SPRINGS of their stiffness, the area aims for LIMP_AREA of its
+// own, and the magnetism is gone, so a dying slime sags into a puddle.
 //
 // The stick is { x, y } in screen directions (y down), length at most 1.
 // Events go out through `on`: splat, trail, drip (see trail.js).
@@ -46,6 +54,10 @@ const TAU = Math.PI * 2;
 const CONTACT = 0.04;   // gap below which a node counts as touching
 const BOUNCE_FROM = 1.5;   // landing speed below which a ball just rolls
 const POP_LOOK = 0.1;      // s of ball mode popSpeed() runs ahead
+const SNAG_STEP = 0.1;     // tiles between samples along a node's line from the centre
+const SNAG_DEPTH = 0.5;    // solid along that line beyond which the node is caught behind a wall
+const LIMP_SPRINGS = 0.2;
+const LIMP_AREA = 0.6;
 const FREE = { share: 1, spend: (amount) => amount };   // energy without limit or cost
 
 export function createSlime(T, world, emit) {
@@ -136,7 +148,8 @@ export function createSlime(T, world, emit) {
   }
 
   // ball mode (ball.js): springs × ballStiff, area at ballPressure, magnetism × ballMagnet
-  let ball = false, firm = 1;
+  let ball = false, firm = 1, limp = 0;
+  const loose = () => 1 - (1 - LIMP_SPRINGS) * limp;
   // where ball mode's energy comes from: { share, spend(amount) → got } (ball.js)
   let wallet = FREE;
   // the bounce's multiplier from the energy left
@@ -205,7 +218,7 @@ export function createSlime(T, world, emit) {
     for (let i = 0; i < N; i++) {
       const a = nodes[i], b = nodes[(i + 1) % N];
       const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
-      const dl = xpbd(i, d - edge, 2, T.edgeStiff * firm, h);
+      const dl = xpbd(i, d - edge, 2, T.edgeStiff * firm * loose(), h);
       a.x -= (dx / d) * dl; a.y -= (dy / d) * dl;
       b.x += (dx / d) * dl; b.y += (dy / d) * dl;
     }
@@ -214,11 +227,11 @@ export function createSlime(T, world, emit) {
     for (let i = 0; i < N; i++) {
       const n = nodes[i];
       const dx = n.x - c.x, dy = n.y - c.y, d = Math.hypot(dx, dy) || 1e-6;
-      const dl = xpbd(N + i, d - R, 1, T.radialStiff * firm, h);
+      const dl = xpbd(N + i, d - R, 1, T.radialStiff * firm * loose(), h);
       n.x += (dx / d) * dl; n.y += (dy / d) * dl;
     }
     // pressure: move every node along the area's gradient
-    const rest = (ball ? T.ballPressure : T.pressure) * (N / 2) * R * R * Math.sin(TAU / N);
+    const rest = (ball ? T.ballPressure : T.pressure) * (1 - (1 - LIMP_AREA) * limp) * (N / 2) * R * R * Math.sin(TAU / N);
     const g = [];
     let sum = 0;
     for (let i = 0; i < N; i++) {
@@ -241,7 +254,7 @@ export function createSlime(T, world, emit) {
     if (gap >= T.magnetRange) return 0;
     const away = Math.max(0, (stick.x * q.nx + stick.y * q.ny - 0.3) / 0.7);
     return (ball ? T.ballMagnet : 1 + (T.chargeMagnet - 1) * charge) * suction * T.tiles[q.type].magnet
-      * (1 - gap / T.magnetRange) * (1 - T.letGo * away);
+      * (1 - gap / T.magnetRange) * (1 - T.letGo * away) * (1 - limp);
   }
 
   // Cling: the whole body is pulled into the surface it holds on to, so that
@@ -350,29 +363,59 @@ export function createSlime(T, world, emit) {
         if (ny > 0.7 && Math.random() < T.trail.drip * h) on('drip', { x: q.px, y: q.py + r * 2, vx: n.vx * 0.3, vy: n.vy });
       }
       bounce(grounded, inx, iny);
-      pad();
+      pad(inx, iny);
       capped(h);
+    }
+    unsnag();
+  }
+
+  // A node can be pushed through a thin wall and get caught on its far side,
+  // the skin stretched through the wall. A node whose line from the centre
+  // runs more than SNAG_DEPTH through solid is put back on the near side,
+  // just short of where the line enters the wall, moving with the body.
+  // (Wrapped round a corner, the line only clips the corner, by less.)
+  function unsnag() {
+    const c = centre(), v = velocity();
+    for (const n of nodes) {
+      const dx = n.x - c.x, dy = n.y - c.y, d = Math.hypot(dx, dy);
+      const steps = Math.ceil(d / SNAG_STEP);
+      let enter = -1, inside = 0;
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        if (!world.solidAt(c.x + dx * t, c.y + dy * t)) continue;
+        if (enter < 0) enter = t;
+        inside += d / steps;
+      }
+      if (inside <= SNAG_DEPTH) continue;
+      const back = Math.max(0, enter * d - T.nodeRadius - SNAG_STEP) / d;
+      n.x = n.px = c.x + dx * back; n.y = n.py = c.y + dy * back;
+      n.vx = v.x; n.vy = v.y;
+      world.collide(n, T.nodeRadius);
     }
   }
 
-  function pad() {
-    let dx = 0, dy = 0, speed = 0;
+  // (inx, iny): the body's speed before this substep's contacts
+  function pad(inx, iny) {
+    let dx = 0, dy = 0, fx = 0, fy = 0, speed = 0;
     for (const n of nodes) {
       if (!n.touch || n.q.type !== 'pad') continue;
       const dir = n.q.meta?.dir;
       if (dir) { const l = Math.hypot(dir[0], dir[1]) || 1; dx += dir[0] / l; dy += dir[1] / l; }
       else { dx += n.q.nx; dy += n.q.ny; }
+      fx += n.q.nx; fy += n.q.ny;
       speed = Math.max(speed, T.padSpeed * (n.q.meta?.speed ?? 1));
     }
-    const l = Math.hypot(dx, dy);
-    if (l < 1e-6) return;
+    const l = Math.hypot(dx, dy), fl = Math.hypot(fx, fy);
+    if (l < 1e-6 || fl < 1e-6) return;
     dx /= l; dy /= l;
-    const v = velocity(), add = speed - (v.x * dx + v.y * dy);
+    const came = Math.max(0, -(inx * fx + iny * fy) / fl);
+    const want = ball ? Math.max(speed, came * T.padBounce) : speed * T.padSlime;
+    const v = velocity(), add = want - (v.x * dx + v.y * dy);
     if (add <= 0) return;
     for (const n of nodes) { n.vx += dx * add; n.vy += dy * add; }
     impact = null;
     const c = centre();
-    on('pad', { x: c.x, y: c.y, nx: dx, ny: dy });
+    on('pad', { x: c.x, y: c.y, nx: dx, ny: dy, ball });
   }
 
   // the skin: each node pushed out from the centre by its radius
@@ -387,7 +430,7 @@ export function createSlime(T, world, emit) {
   // the body resting on the floor point (x, y)
   function place(x, y) {
     build(x, y - T.radius - T.nodeRadius - 0.05);
-    suction = 1; idle = 0; cap = null; impact = null;
+    suction = 1; idle = 0; cap = null; impact = null; limp = 0;
   }
 
   place(world.start.x, world.start.y);
@@ -432,6 +475,8 @@ export function createSlime(T, world, emit) {
     step, outline, centre, velocity, build, place, popSpeed, capPop,
     get nodes() { return nodes; },
     get suction() { return suction; },
+    get limp() { return limp; },
+    set limp(v) { limp = Math.max(0, Math.min(1, v)); },
     get touching() { return nodes.some((n) => n.touch); },
     reset() { place(world.start.x, world.start.y); },
   };
