@@ -1,10 +1,15 @@
 // Ball mode: the jump button firms the slime up into a bouncy ball. A press
 // stiffens the springs and restores the full circle, which throws a
 // flattened slime off the surface it lies on; holding the button keeps the
-// ball. Being a ball spends energy (ballDrain per second) and ends when it
-// runs out; it starts again only on a fresh press, never by holding through
-// a refill. Energy refills at energyRegen while not a ball.
-
+// ball. It starts again only on a fresh press, never by holding through a
+// refill.
+//
+// Energy is spent three ways:
+//   - a jump costs jumpCost × the speed it throws the body with (main.js
+//     measures it and pays with pay()); with too little energy, no jump
+//   - a bounce costs what it adds, through spend() from slime.js
+//   - being a ball costs ballDrain per second, and ends when energy runs out
+// Energy refills at energyRegen while not a ball.
 //
 // `started` is true for the one update a ball began in; cancel() takes that
 // ball back as if the press never happened (main.js does, when the pop would
@@ -35,8 +40,23 @@ export function createBall(T) {
     on = false; started = false; energy = before;
   }
 
+  // take all of `amount` or nothing; returns whether it was taken
+  function pay(amount) {
+    if (amount > energy) return false;
+    energy -= amount;
+    return true;
+  }
+
+  // take up to `amount`; returns what there was
+  function spend(amount) {
+    const got = Math.max(0, Math.min(amount, energy));
+    energy -= got;
+    return got;
+  }
+
   return {
-    update, cancel,
+    update, cancel, pay, spend,
+    get share() { return energy / T.energyMax; },
     get on() { return on; },
     get started() { return started; },
     get energy() { return energy; },
