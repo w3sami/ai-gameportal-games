@@ -83,7 +83,7 @@ function frame(now) {
       ball.update(DT, held);
       // a pop harder than popMax is no pop at all
       if (ball.started && slime.popSpeed(stick, DT) > T.popMax) ball.cancel();
-      slime.step(DT, stick, ball.on);
+      slime.step(DT, stick, ball.on, ball.energy / T.energyMax);
       trail.update(DT);
       acc -= DT;
     }
