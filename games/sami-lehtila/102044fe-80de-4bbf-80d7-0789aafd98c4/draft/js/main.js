@@ -1,21 +1,24 @@
-// Boot, the fixed-step loop, the hint line and fullscreen.
+// Boot, the fixed-step loop, the run's clock and messages, the hint line
+// and fullscreen.
 
 import { loadTune } from './tune.js';
-import { ROOM } from './level.js';
+import { LEVEL } from './level.js';
 import { buildWorld } from './world.js';
 import { createSlime } from './slime.js';
 import { createBall } from './ball.js';
 import { createTrail } from './trail.js';
+import { createGame } from './game.js';
 import { createRenderer } from './render.js';
 import { createInput } from './input.js';
 import { createTuning } from './tuning.js';
 
 const T = await loadTune();
-const world = buildWorld(ROOM);
+const world = buildWorld(LEVEL, T);
 const trail = createTrail(T, world);
 const slime = createSlime(T, world, trail.on);
 const ball = createBall(T);
-const renderer = createRenderer(document.getElementById('view'), world);
+const game = createGame(T, world, slime, ball, trail);
+const renderer = createRenderer(document.getElementById('view'), world, T);
 const input = createInput();
 
 let frozen = false;
@@ -46,13 +49,14 @@ document.addEventListener('fullscreenchange', () => {
 
 const DT = 1 / 60;
 const CHARGE_MARGIN = 0.9;    // a charge stops building this far short of the most a jump may be
+const RESTART_HOLD = 1;       // s of holding reset that starts the whole level again
 let last = performance.now(), acc = 0, clock = 0;
 let stick = { x: 0, y: 0 };
 const look = { x: 0, y: 0 };
-let blinkAt = 3, blinkUntil = 0;
+let blinkAt = 3, blinkUntil = 0, resetHeld = 0;
 
 // window.lima in the console: drive = () => ({ x, y, ball }) steers past the controls
-window.lima = { T, world, slime, ball, trail, drive: null };
+window.lima = { T, world, slime, ball, trail, game, drive: null };
 
 // the developer's energy bar and, under it, the jump's charge, while the
 // tuning panel is open
@@ -65,6 +69,17 @@ function drawBar() {
   bar.classList.toggle('ball', ball.on);
 }
 
+// the run's clock, and what the level has to say
+const timeEl = document.getElementById('time'), msgEl = document.getElementById('msg');
+const clockText = (t) => Math.floor(t / 60) + ':' + (t % 60).toFixed(1).padStart(4, '0');
+function drawHud() {
+  timeEl.textContent = clockText(game.time);
+  timeEl.classList.toggle('done', game.finished);
+  const text = game.finished ? 'Maali! ' + clockText(game.time) + ' · R: uudestaan' : game.message;
+  if (msgEl.textContent !== text) msgEl.textContent = text;
+  msgEl.hidden = !text;
+}
+
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
@@ -74,7 +89,15 @@ function frame(now) {
   if (!input.isOpen()) {
     if (input.pressed('fullscreen')) toggleFullscreen();
     if (input.pressed('controls')) input.open(() => { last = performance.now(); });
-    if (input.pressed('reset')) { slime.reset(); ball.reset(); trail.clear(); }
+    // reset: a press goes back to the last checkpoint, a long hold (or any
+    // press once at the exit) starts the level over
+    if (input.pressed('reset')) {
+      if (game.finished) game.restart(); else game.toCheckpoint();
+      resetHeld = 0;
+    } else if (input.held('reset')) {
+      resetHeld += dt;
+      if (resetHeld >= RESTART_HOLD && resetHeld - dt < RESTART_HOLD) game.restart();
+    }
   }
 
   if (!frozen) {
@@ -83,6 +106,13 @@ function frame(now) {
     const held = driven ? !!driven.ball : input.held('ball');
     acc += dt;
     while (acc >= DT) {
+      if (game.dead) {
+        world.setTime(world.time + DT);
+        game.update(DT);
+        trail.update(DT);
+        acc -= DT;
+        continue;
+      }
       ball.update(DT, held, slime.touching);
       // a charge stops building short of a jump that popMax or the energy
       // would not allow
@@ -103,6 +133,7 @@ function frame(now) {
         else ball.cancel();
       }
       slime.step(DT, stick, ball.on, ball, ball.charge);
+      game.update(DT);
       trail.update(DT);
       acc -= DT;
     }
@@ -115,8 +146,9 @@ function frame(now) {
   look.x += (want.x - look.x) * k; look.y += (want.y - look.y) * k;
   if (clock > blinkAt) { blinkUntil = clock + 0.12; blinkAt = clock + 2.5 + Math.random() * 3; }
 
-  renderer.draw(slime, trail, T, look, clock < blinkUntil);
+  renderer.draw(slime, trail, game, look, clock < blinkUntil, clock, dt);
   drawBar();
+  drawHud();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
