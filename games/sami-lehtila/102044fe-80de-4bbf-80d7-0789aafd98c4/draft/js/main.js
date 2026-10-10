@@ -4,6 +4,7 @@ import { loadTune } from './tune.js';
 import { ROOM } from './level.js';
 import { buildWorld } from './world.js';
 import { createSlime } from './slime.js';
+import { createBall } from './ball.js';
 import { createTrail } from './trail.js';
 import { createRenderer } from './render.js';
 import { createInput } from './input.js';
@@ -13,6 +14,7 @@ const T = await loadTune();
 const world = buildWorld(ROOM);
 const trail = createTrail(T, world);
 const slime = createSlime(T, world, trail.on);
+const ball = createBall(T);
 const renderer = createRenderer(document.getElementById('view'), world);
 const input = createInput();
 
@@ -48,8 +50,17 @@ let stick = { x: 0, y: 0 };
 const look = { x: 0, y: 0 };
 let blinkAt = 3, blinkUntil = 0;
 
-// window.lima in the console: drive = () => ({ x, y }) steers past the controls
-window.lima = { T, world, slime, trail, drive: null };
+// window.lima in the console: drive = () => ({ x, y, ball }) steers past the controls
+window.lima = { T, world, slime, ball, trail, drive: null };
+
+// the developer's energy bar, while the tuning panel is open
+const bar = document.getElementById('energy');
+function drawBar() {
+  bar.hidden = !tuning.open;
+  if (bar.hidden) return;
+  bar.firstElementChild.style.width = (100 * ball.energy) / T.energyMax + '%';
+  bar.classList.toggle('ball', ball.on);
+}
 
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
@@ -60,13 +71,15 @@ function frame(now) {
   if (!input.isOpen()) {
     if (input.pressed('fullscreen')) toggleFullscreen();
     if (input.pressed('controls')) input.open(() => { last = performance.now(); });
-    if (input.pressed('reset')) { slime.reset(); trail.clear(); }
+    if (input.pressed('reset')) { slime.reset(); ball.reset(); trail.clear(); }
   }
 
   if (!frozen) {
-    stick = window.lima.drive?.() ?? input.stick();
+    const driven = window.lima.drive?.();
+    stick = driven ?? input.stick();
+    const held = driven ? !!driven.ball : input.held('ball');
     acc += dt;
-    while (acc >= DT) { slime.step(DT, stick); trail.update(DT); acc -= DT; }
+    while (acc >= DT) { ball.update(DT, held); slime.step(DT, stick, ball.on); trail.update(DT); acc -= DT; }
   }
 
   // eyes follow the stick, or the motion when the stick is let go
@@ -77,6 +90,7 @@ function frame(now) {
   if (clock > blinkAt) { blinkUntil = clock + 0.12; blinkAt = clock + 2.5 + Math.random() * 3; }
 
   renderer.draw(slime, trail, T, look, clock < blinkUntil);
+  drawBar();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
