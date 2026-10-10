@@ -37,6 +37,12 @@ const GROUPS = [
     ['airControl', 'Ohjaus ilmassa (ruutua/s²)', 0, 60, 1],
     ['wallClimb', 'Seinään päin työntö kiipeää (0–1)', 0, 1, 0.05],
     ['letGo', 'Tikku poispäin irrottaa magneetin (0–1)', 0, 1, 0.05],
+    ['slide', 'Valuu seinää alas (ruutua/s)', 0, 5, 0.05],
+  ]],
+  ['Imu', [
+    ['tireAfter', 'Paikallaan täysi imu (s)', 0, 10, 0.1],
+    ['tireTime', 'Sitten imu hiipuu nollaan (s), 0 = ei väsy', 0, 10, 0.1],
+    ['suctionRecover', 'Liike palauttaa imun (s)', 0.01, 3, 0.01],
   ]],
   ['Seinät', [
     ['magnet', 'Magneetti per piste (ruutua/s² kosketuksessa)', 0, 300, 1],
