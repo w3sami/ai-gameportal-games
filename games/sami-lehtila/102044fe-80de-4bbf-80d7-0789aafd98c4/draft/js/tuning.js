@@ -45,6 +45,7 @@ const GROUPS = [
     ['ballMagnet', 'Magneetti pallona ×', 0, 1, 0.05],
     ['ballBounce', 'Pomppu: iskusta takaisin (0–1)', 0, 1.2, 0.05],
     ['popTime', 'Napautus on pallo vähintään (s)', 0, 1, 0.01],
+    ['popMax', 'Ponnahdus max (ruutua/s), kovempaa ei tehdä lainkaan', 1, 80, 0.5],
     ['energyMax', 'Voima max', 1, 500, 1],
     ['energyRegen', 'Voiman palautuminen (/s)', 0, 200, 1],
     ['ballDrain', 'Pallo kuluttaa (/s)', 0, 300, 1],

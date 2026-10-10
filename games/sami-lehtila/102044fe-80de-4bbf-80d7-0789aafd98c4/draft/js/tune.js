@@ -37,6 +37,7 @@ export const DEFAULTS = {
   ballMagnet: 0,             // × magnetism while a ball; 0 lets go of everything
   ballBounce: 0.7,           // share of its landing speed a ball leaves with; the bounce height is its square
   popTime: 0.15,             // s a tap stays a ball, so a tap is a whole pop
+  popMax: 26,                // speed the springs may throw the body with; a harder pop does not happen at all
   energyMax: 100,
   energyRegen: 20,           // energy per second back while not a ball
   ballDrain: 35,             // energy per second spent while a ball
