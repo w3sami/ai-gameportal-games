@@ -21,8 +21,9 @@
 // ballStiff, the area goes back to ballPressure (a full circle at 1), the
 // magnetism drops to ballMagnet, and the body bounces off a surface with
 // ballBounce of the speed it landed with (bounce()). The energy left scales
-// that bounce: step's `share` is energy / energyMax, and bounceEnergy is how
-// much of the bounce depends on it.
+// that bounce (bounceEnergy is how much of it depends on energy / energyMax),
+// and the bounce spends energy for what it adds. step's `energy` is ball.js's
+// { share, spend }; without one, energy is free.
 //
 // The stick is { x, y } in screen directions (y down), length at most 1.
 // Events go out through `on`: splat, trail, drip (see trail.js).
@@ -31,19 +32,24 @@ const TAU = Math.PI * 2;
 const CONTACT = 0.04;   // gap below which a node counts as touching
 const BOUNCE_FROM = 1.5;   // landing speed below which a ball just rolls
 const POP_LOOK = 0.1;      // s of ball mode popSpeed() runs ahead
+const FREE = { share: 1, spend: (amount) => amount };   // energy without limit or cost
 
 export function createSlime(T, world, emit) {
   let nodes = [];
   let on = emit;   // silenced while popSpeed() looks ahead
   // Suction, 0–1, multiplies all magnetism. It tires when the stick is left
-  // alone: full for tireAfter seconds, then gone over tireTime, so a slime
-  // that stops on a wall or a ceiling falls off. Any stick brings it back
-  // over suctionRecover. tireTime 0 never tires.
+  // alone off a floor: full for tireAfter seconds, then gone over tireTime,
+  // so a slime that stops on a wall or a ceiling falls off. Any stick, or
+  // standing on a floor, brings it back over suctionRecover. tireTime 0
+  // never tires.
   let suction = 1, idle = 0;
 
   function breathe(dt, stick) {
     if (T.tireTime <= 0) { suction = 1; idle = 0; return; }
-    if (Math.hypot(stick.x, stick.y) > 0.2) {
+    // standing on a floor is rest: gravity holds the slime there, and a tired
+    // magnet would only leave it rounder and its jump weaker
+    const floor = nodes.some((n) => n.touch && n.q.ny < -0.7);
+    if (floor || Math.hypot(stick.x, stick.y) > 0.2) {
       idle = 0;
       suction = Math.min(1, suction + dt / Math.max(0.01, T.suctionRecover));
     } else {
@@ -90,7 +96,9 @@ export function createSlime(T, world, emit) {
   let lambda = [];
   // ball mode (ball.js): springs × ballStiff, area at ballPressure, magnetism × ballMagnet
   let ball = false, firm = 1;
-  // the bounce's multiplier from the energy left (step's share of energyMax)
+  // where ball mode's energy comes from: { share, spend(amount) → got } (ball.js)
+  let wallet = FREE;
+  // the bounce's multiplier from the energy left
   let power = 1;
   // A ball's bounce is the whole body's: on landing, the speed it came in
   // with is kept, and once the body has squashed to a stop against the
@@ -113,7 +121,10 @@ export function createSlime(T, world, emit) {
     if (!impact) return;
     const out = vx * impact.nx + vy * impact.ny;
     if (out < 0) return;   // still squashing
-    const add = Math.max(0, T.ballBounce * power * impact.speed - out);
+    let add = Math.max(0, T.ballBounce * power * impact.speed - out);
+    // the bounce is paid for: bounceCost per unit of speed it adds, and
+    // what the energy left cannot pay for is not added
+    if (T.bounceCost > 0) add = wallet.spend(add * T.bounceCost) / T.bounceCost;
     for (const n of nodes) { n.vx += impact.nx * add; n.vy += impact.ny * add; }
     impact = null;
   }
@@ -194,9 +205,10 @@ export function createSlime(T, world, emit) {
     return { x: dx * extra, y: dy * extra };
   }
 
-  function step(dt, stick, asBall = false, share = 1) {
+  function step(dt, stick, asBall = false, energy = FREE) {
     ball = asBall;
-    power = 1 - T.bounceEnergy * (1 - Math.max(0, Math.min(1, share)));
+    wallet = energy;
+    power = 1 - T.bounceEnergy * (1 - Math.max(0, Math.min(1, wallet.share)));
     firm = ball ? T.ballStiff : 1;
     if (nodes.length !== Math.max(3, Math.round(T.nodes))) { const c = centre(); build(c.x, c.y); }
     breathe(dt, stick);
@@ -298,7 +310,7 @@ export function createSlime(T, world, emit) {
     const run = (asBall) => {
       const saved = save();
       const out = [];
-      for (let f = 0; f < frames; f++) { step(dt, stick, asBall); out.push(velocity()); }
+      for (let f = 0; f < frames; f++) { step(dt, stick, asBall, FREE); out.push(velocity()); }
       load(saved);
       return out;
     };
@@ -313,10 +325,10 @@ export function createSlime(T, world, emit) {
   }
 
   function save() {
-    return { nodes: structuredClone(nodes), suction, idle, ball, firm, power, impact: impact && { ...impact } };
+    return { nodes: structuredClone(nodes), suction, idle, ball, firm, power, wallet, impact: impact && { ...impact } };
   }
   function load(s) {
-    ({ nodes, suction, idle, ball, firm, power, impact } = s);
+    ({ nodes, suction, idle, ball, firm, power, wallet, impact } = s);
   }
 
   return {
