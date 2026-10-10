@@ -25,6 +25,12 @@
 // and the bounce spends energy for what it adds. step's `energy` is ball.js's
 // { share, spend }; without one, energy is free.
 //
+// The ring does not turn (spinLock): left alone, grip at the touching nodes
+// rolls it like a tread, and a ball that is still spinning when it pops or
+// lands turns that spin into a sideways throw. unspin() takes the turning
+// out of the nodes' speeds and turns the ring back to its rest orientation,
+// node i at angle i / N of a full turn.
+//
 // The stick is { x, y } in screen directions (y down), length at most 1.
 // Events go out through `on`: splat, trail, drip (see trail.js).
 
@@ -94,6 +100,33 @@ export function createSlime(T, world, emit) {
   // over the iterations of one substep, so more iterations converge on the
   // same spring rather than a stiffer one. Arrays: [edges…, radials…, area].
   let lambda = [];
+  // spinLock of the ring's spin and of its turn away from rest, taken out
+  function unspin() {
+    const k = Math.max(0, Math.min(1, T.spinLock));
+    if (!k) return;
+    const N = nodes.length, c = centre(), v = velocity();
+    let w = 0, r2 = 0, cross = 0, dot = 0;
+    for (let i = 0; i < N; i++) {
+      const n = nodes[i], rx = n.x - c.x, ry = n.y - c.y;
+      w += rx * (n.vy - v.y) - ry * (n.vx - v.x);
+      r2 += rx * rx + ry * ry;
+      // best-fit turn from the rest ring (2D shape matching)
+      const a = (i / N) * TAU, qx = Math.cos(a), qy = Math.sin(a);
+      cross += qx * ry - qy * rx;
+      dot += qx * rx + qy * ry;
+    }
+    if (r2 < 1e-9) return;
+    w = (w / r2) * k;
+    const t = -Math.atan2(cross, dot) * k, cos = Math.cos(t), sin = Math.sin(t);
+    for (const n of nodes) {
+      const rx = n.x - c.x, ry = n.y - c.y;
+      n.vx += w * ry; n.vy -= w * rx;
+      const x = c.x + rx * cos - ry * sin, y = c.y + rx * sin + ry * cos;
+      n.px += x - n.x; n.py += y - n.y;   // a turn of the frame, not a motion
+      n.x = x; n.y = y;
+    }
+  }
+
   // ball mode (ball.js): springs × ballStiff, area at ballPressure, magnetism × ballMagnet
   let ball = false, firm = 1;
   // where ball mode's energy comes from: { share, spend(amount) → got } (ball.js)
@@ -215,6 +248,7 @@ export function createSlime(T, world, emit) {
     const subs = Math.max(1, Math.round(T.substeps)), h = dt / subs;
     const r = T.nodeRadius, reach = T.magnetRange;
     for (let s = 0; s < subs; s++) {
+      unspin();
       const grounded = nodes.some((n) => n.touch);
       // damping works on the nodes' motion relative to the body only, so it
       // calms the wobble without slowing a jump or a fall
