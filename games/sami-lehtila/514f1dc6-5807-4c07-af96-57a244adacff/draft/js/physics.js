@@ -555,6 +555,25 @@ export function createPhysics(T, W, ev) {
     }
   }
 
+  // A grippy surface sends the rider the way the skis point (or their tails,
+  // whichever is nearer the travel): spin in the air to aim the next hop.
+  // grip blends the old direction (0) into the skis' (1); speed is kept, and
+  // the rider looks the same, the spin so far turned into steering.
+  function gripBounce(grip) {
+    const sp = speed();
+    if (sp < 0.5 || grip <= 0) return;
+    const a = s.heading + s.trickYaw;
+    let dx = -Math.sin(a), dz = -Math.cos(a);
+    if (dx * s.vx + dz * s.vz < 0) { dx = -dx; dz = -dz; }
+    let nx = s.vx / sp + (dx - s.vx / sp) * grip, nz = s.vz / sp + (dz - s.vz / sp) * grip;
+    const n = Math.hypot(nx, nz) || 1;
+    s.vx = (nx / n) * sp; s.vz = (nz / n) * sp;
+    // move only the turn from heading to spin, so whole turns still score
+    const turn = wrap(Math.atan2(-s.vx, -s.vz) - s.heading);
+    s.heading += turn;
+    s.trickYaw -= turn;
+  }
+
   function bounce(b, power, name) {
     s.vy = Math.max(power, -s.vy * 0.6);
     s.bounceGrace = 0.4;
@@ -566,6 +585,7 @@ export function createPhysics(T, W, ev) {
       s.vx = (b.aimX - s.x) / t;
       s.vz *= T.awningKeep;
     } else if (b.kind === 'awning') { s.vx *= 0.5; s.vz *= T.awningKeep; }
+    else if (b.kind === 'balloon') gripBounce(T.balloonGrip);
     b.wobble = 1;
     s.run.parts.push(name);
     s.run.pts += T.points.bounce;
