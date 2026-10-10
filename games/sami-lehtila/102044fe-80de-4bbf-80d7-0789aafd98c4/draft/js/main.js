@@ -1,8 +1,11 @@
-// Boot, the fixed-step loop, the run's clock and messages, the hint line
-// and fullscreen.
+// Boot, the levels one after another, the fixed-step loop, the run's clock
+// and messages, the hint line and fullscreen.
+//
+// Each level gets a world, a slime, a ball, a trail and its rules of its
+// own (load()). ?level=2 in the address starts at level 2.
 
 import { loadTune } from './tune.js';
-import { LEVEL } from './level.js';
+import { LEVELS } from './level.js';
 import { buildWorld } from './world.js';
 import { createSlime } from './slime.js';
 import { createBall } from './ball.js';
@@ -13,14 +16,23 @@ import { createInput } from './input.js';
 import { createTuning } from './tuning.js';
 
 const T = await loadTune();
-const world = buildWorld(LEVEL, T);
-const trail = createTrail(T, world);
-// the slime's events go to the trail, and a pad's throw also to the game
-const slime = createSlime(T, world, (type, e) => { trail.on(type, e); if (type === 'pad') game.pad(e); });
-const ball = createBall(T);
-const game = createGame(T, world, slime, ball, trail);
-const renderer = createRenderer(document.getElementById('view'), world, T);
+const renderer = createRenderer(document.getElementById('view'), T);
 const input = createInput();
+
+let level = 0, world, trail, slime, ball, game;
+function load(i) {
+  level = Math.max(0, Math.min(LEVELS.length - 1, i));
+  world = buildWorld(LEVELS[level], T);
+  trail = createTrail(T, world);
+  // the slime's events go to the trail, and a pad's throw also to the game
+  slime = createSlime(T, world, (type, e) => { trail.on(type, e); if (type === 'pad') game.pad(e); });
+  ball = createBall(T);
+  game = createGame(T, world, slime, ball, trail);
+  renderer.setWorld(world);
+  game.say(`${level + 1}. ${LEVELS[level].name}`, 2.5);
+  if (window.lima) Object.assign(window.lima, { world, slime, ball, trail, game, level });
+}
+load((parseInt(new URLSearchParams(location.search).get('level'), 10) || 1) - 1);
 
 let frozen = false;
 const tuning = createTuning(T, { onPause: (on) => { frozen = on ?? !frozen; last = performance.now(); } });
@@ -56,18 +68,18 @@ let stick = { x: 0, y: 0 };
 const look = { x: 0, y: 0 };
 let blinkAt = 3, blinkUntil = 0, resetHeld = 0;
 
-// window.lima in the console: drive = () => ({ x, y, ball }) steers past the controls
-window.lima = { T, world, slime, ball, trail, game, drive: null };
+// window.lima in the console: drive = () => ({ x, y, ball }) steers past
+// the controls, load(i) starts level i (from 0)
+window.lima = { T, world, slime, ball, trail, game, level, load, drive: null };
 
-// the developer's energy bar, with the jump's charge along its bottom and
-// health along its top, while the tuning panel is open
-const bar = document.getElementById('energy');
+// the developer's bar while the tuning panel is open: health (yellow while
+// a ball), and the jump's charge along its bottom
+const bar = document.getElementById('devbar');
 function drawBar() {
   bar.hidden = !tuning.open;
   if (bar.hidden) return;
-  bar.firstElementChild.style.width = (100 * ball.energy) / T.energyMax + '%';
+  bar.firstElementChild.style.width = 100 * game.health + '%';
   bar.lastElementChild.style.width = 100 * ball.charge + '%';
-  bar.querySelector('b').style.width = 100 * game.health + '%';
   bar.classList.toggle('ball', ball.on);
 }
 
@@ -77,7 +89,8 @@ const clockText = (t) => Math.floor(t / 60) + ':' + (t % 60).toFixed(1).padStart
 function drawHud() {
   timeEl.textContent = clockText(game.time);
   timeEl.classList.toggle('done', game.finished);
-  const text = game.finished ? 'Maali! ' + clockText(game.time) + ' · R: uudestaan' : game.message;
+  const next = level + 1 < LEVELS.length ? ' · A: seuraava kenttä' : '';
+  const text = game.finished ? 'Maali! ' + clockText(game.time) + next + ' · R: uudestaan' : game.message;
   if (msgEl.textContent !== text) msgEl.textContent = text;
   msgEl.hidden = !text;
 }
@@ -91,6 +104,8 @@ function frame(now) {
   if (!input.isOpen()) {
     if (input.pressed('fullscreen')) toggleFullscreen();
     if (input.pressed('controls')) input.open(() => { last = performance.now(); });
+    // at the exit, the ball button goes on to the next level
+    if (game.finished && input.pressed('ball') && level + 1 < LEVELS.length) load(level + 1);
     // reset: a press goes back to the last checkpoint, a long hold (or any
     // press once at the exit) starts the level over
     if (input.pressed('reset')) {
@@ -117,25 +132,16 @@ function frame(now) {
         continue;
       }
       ball.update(DT, held, slime.touching);
-      // a charge stops building short of a jump that popMax or the energy
-      // would not allow
-      if (ball.charging && ball.charge > 0) {
-        const pop = slime.popSpeed(stick, DT);
-        if (pop > CHARGE_MARGIN * Math.min(T.popMax, ball.energy / T.jumpCost)) ball.stall(DT);
-      }
-      // A pop is paid for by how hard it throws. A charged release always
-      // jumps: a pop harder than popMax or than the energy pays for is capped
-      // to that. An uncharged press that would pop harder than popMax (a
-      // slime squeezed into a corner) does not jump at all.
+      // a charge stops building short of a jump popMax would not allow
+      if (ball.charging && ball.charge > 0 && slime.popSpeed(stick, DT) > CHARGE_MARGIN * T.popMax) ball.stall(DT);
+      // A charged release always jumps: a pop harder than popMax is capped
+      // to it. An uncharged press that would pop harder than popMax (a slime
+      // squeezed into a corner) does not jump at all.
       if (ball.started) {
         const pop = slime.popSpeed(stick, DT);
-        const most = Math.min(T.popMax, ball.energy / T.jumpCost);
-        if (!ball.charged && pop > T.popMax) ball.cancel();
-        else if (pop <= most) ball.pay(pop * T.jumpCost);
-        else if (most > 0) { ball.pay(most * T.jumpCost); slime.capPop(most); }
-        else ball.cancel();
+        if (pop > T.popMax) { if (ball.charged) slime.capPop(T.popMax); else ball.cancel(); }
       }
-      slime.step(DT, stick, ball.on, ball, ball.charge);
+      slime.step(DT, stick, ball.on, ball.charge);
       game.update(DT);
       trail.update(DT);
       acc -= DT;
