@@ -62,9 +62,14 @@ export function createInput() {
         x: Math.max(-1, Math.min(1, v('right') + t('right') - v('left') - t('left'))),
         up: Math.min(1, v('up') + t('up')),
         down: Math.min(1, v('down') + t('down')),
-        jump: (!controls.isOpen() && controls.held('jump')) || touch.jump,
+        // with the developer's triggers on, RT moves checkpoints instead of jumping
+        jump: (!controls.isOpen() && controls.held('jump') && !(this.devTriggers && controls.pad.held('RT') && !controls.pad.held('A'))) || touch.jump,
       };
     },
+    /** Set while the tuning panel is open: LT/RT step through checkpoints. */
+    devTriggers: false,
+    /** Edge of a raw controller button this frame. */
+    padPressed(name) { return !controls.isOpen() && controls.pad.pressed(name); },
     /** Edge of a named input this frame, for menus. */
     pressed(id) { return !controls.isOpen() && controls.pressed(id); },
     isOpen: () => controls.isOpen(),
