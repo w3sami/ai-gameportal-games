@@ -24,6 +24,12 @@ export const DEFAULTS = {
   airControl: 10,            // push from the stick while nothing touches
   wallClimb: 1,              // 0–1: pushing into a wall turns into climbing up it
   letGo: 1,                  // 0–1: share of magnetism dropped while the stick points away from the surface
+  slide: 0.8,                // speed the slime slides down a wall even while holding on or climbing
+
+  // suction: all magnetism tires while the stick is left alone
+  tireAfter: 1,              // s of no stick at full suction
+  tireTime: 2,               // s from full suction to none after that; 0 never tires
+  suctionRecover: 0.25,      // s from none back to full once the stick moves
 
   // surfaces; each tile type below multiplies these
   magnet: 150,               // pull on each node towards its surface at touch, fading to nothing at magnetRange
