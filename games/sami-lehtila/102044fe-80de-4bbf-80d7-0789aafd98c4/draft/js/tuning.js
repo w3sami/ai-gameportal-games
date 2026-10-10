@@ -29,7 +29,7 @@ const GROUPS = [
     ['edgeStiff', 'Jousi naapuripisteisiin (1/s²)', 0, 3000, 5],
     ['areaStiff', 'Pinta-alan jousi (1/s²)', 0, 1000, 1],
     ['pressure', 'Paine: tavoiteala × ympyrä', 0.2, 1.5, 0.01],
-    ['damping', 'Vaimennus (1/s)', 0, 10, 0.1],
+    ['damping', 'Vaimennus: hytkyntä (1/s), ei hidasta lentoa', 0, 20, 0.1],
   ]],
   ['Liike', [
     ['gravity', 'Painovoima (ruutua/s²)', 0, 80, 1],
@@ -38,6 +38,16 @@ const GROUPS = [
     ['wallClimb', 'Seinään päin työntö kiipeää (0–1)', 0, 1, 0.05],
     ['letGo', 'Tikku poispäin irrottaa magneetin (0–1)', 0, 1, 0.05],
     ['slide', 'Valuu seinää alas (ruutua/s)', 0, 5, 0.05],
+  ]],
+  ['Pallo ja voima', [
+    ['ballStiff', 'Jouset pallona ×', 1, 30, 0.5],
+    ['ballPressure', 'Paine pallona: tavoiteala × ympyrä', 0.5, 1.5, 0.01],
+    ['ballMagnet', 'Magneetti pallona ×', 0, 1, 0.05],
+    ['ballBounce', 'Pomppu: iskusta takaisin (0–1)', 0, 1.2, 0.05],
+    ['popTime', 'Napautus on pallo vähintään (s)', 0, 1, 0.01],
+    ['energyMax', 'Voima max', 1, 500, 1],
+    ['energyRegen', 'Voiman palautuminen (/s)', 0, 200, 1],
+    ['ballDrain', 'Pallo kuluttaa (/s)', 0, 300, 1],
   ]],
   ['Imu', [
     ['tireAfter', 'Paikallaan täysi imu (s)', 0, 10, 0.1],
