@@ -73,7 +73,7 @@ export function createPhysics(T, W, ev) {
     const braking = s.finished || inp.down > 0.3;
     // gravity pulls only along the skis: across them the edges hold, so the
     // fall line's sideways pull is neither a slide nor, below, extra speed
-    f -= (gx * dx + gz * dz) * k * dt;
+    f -= (gx * dx + gz * dz) * k * dt * T.speedScale;
     // the edges take out sideways speed and give a share of its energy back
     // forward: a turn can keep speed, never gain it
     const nl = l * Math.exp(-(braking ? g.grip * 0.6 : g.grip) * dt);
@@ -83,7 +83,7 @@ export function createPhysics(T, W, ev) {
     const drag = g.drag * (tuck ? T.tuckDrag : 1);
     f -= (g.friction * (tuck ? T.tuckFriction : 1) * T.gravity + drag * f * f) * dt;
     if (tuck) {
-      f += T.tuckPush * inp.up * dt;
+      f += T.tuckPush * inp.up * dt * T.speedScale;
       // slow enough to need it: push with the poles every so often
       if (sp < T.poleBelow) {
         s.poleT += dt;
@@ -91,7 +91,7 @@ export function createPhysics(T, W, ev) {
       } else s.poleT = T.poleEvery * 0.9;
     } else s.poleT = T.poleEvery * 0.9;
     if (braking) f -= T.brake * (s.finished ? 1 : inp.down) * dt;
-    f = clamp(f, -6, g.maxSpeed);   // slow enough on an uphill ramp, slide back down it
+    f = clamp(f, -6, g.maxSpeed * T.speedScale);   // slow enough on an uphill ramp, slide back down it
     s.vx = f * dx + l * rx;
     s.vz = f * dz + l * rz;
 
