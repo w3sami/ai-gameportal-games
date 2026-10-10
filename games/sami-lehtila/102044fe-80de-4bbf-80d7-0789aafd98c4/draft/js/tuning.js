@@ -85,7 +85,12 @@ const GROUPS = [
     ['burnTime', 'Punainen paneeli tappaa yhdellä pisteellä (s); n pistettä n× nopeammin', 0.05, 10, 0.05],
     ['healTime', 'Kestävyys palautuu tyhjästä täyteen (s)', 0.1, 20, 0.1],
     ['healDelay', 'Palautuminen alkaa viime palamisesta (s)', 0, 5, 0.1],
+    ['crushArea', 'Puristus: ala alle × ympyrä', 0, 0.8, 0.01],
+    ['crushTime', 'Puristus tappaa (s)', 0, 3, 0.05],
     ['respawnTime', 'Kuolemasta takaisin (s)', 0, 5, 0.1],
+    ['orbEnergy', 'Voimapallo antaa voimaa', 0, 200, 1],
+    ['orbOverfill', 'Voimapallo täyttää enintään × voima max', 1, 3, 0.05],
+    ['orbRespawn', 'Voimapallo palaa (s)', 0, 60, 0.5],
     ['view', 'Näkymän korkeus (ruutua)', 8, 40, 1],
   ]],
   ['Vana', [

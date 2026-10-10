@@ -7,7 +7,7 @@
 // moves goes through the clock, so slime.js can step it a substep at a time
 // and wind it back after a look ahead.
 //
-// The things that are not solid (start, checkpoints, exit, buttons, cards)
+// The things that are not solid (start, checkpoints, exit, buttons, cards, orbs)
 // are listed for game.js and render.js.
 
 import { LEGEND } from './level.js';
@@ -39,7 +39,7 @@ export function buildWorld(level, T) {
   // the floor point under a marker cell: where the slime sits
   const spot = ({ x, y }) => ({ x: x + 0.5, y: y + 1 });
   let start = { x: w / 2, y: h / 2 };
-  const checkpoints = [], exits = [], buttons = [], cards = [], movers = [];
+  const checkpoints = [], exits = [], buttons = [], cards = [], orbs = [], movers = [];
 
   // a button lies on the surface below its cell, else beside it, else above
   function attach({ x, y }) {
@@ -77,6 +77,7 @@ export function buildWorld(level, T) {
     else if (e.kind === 'exit') for (const p of list) exits.push(spot(p));
     else if (e.kind === 'button') for (const p of list) buttons.push({ char: c, e, ...attach(p) });
     else if (e.kind === 'card') for (const p of list) cards.push({ char: c, e, x: p.x + 0.5, y: p.y + 0.5 });
+    else if (e.kind === 'orb') for (const p of list) orbs.push({ e, x: p.x + 0.5, y: p.y + 0.5 });
     else if (e.kind === 'door' || e.kind === 'platform') {
       for (const r of groups(list)) {
         movers.push({
@@ -251,7 +252,7 @@ export function buildWorld(level, T) {
   setTime(0);
 
   return {
-    w, h, at, metaAt, solidAt, nearest, collide, start, checkpoints, exits, buttons, cards,
+    w, h, at, metaAt, solidAt, nearest, collide, start, checkpoints, exits, buttons, cards, orbs,
     movers, doors, panels, panel, turn, setTime, setDoor, isOpen, keyColor,
     get time() { return time; },
   };
