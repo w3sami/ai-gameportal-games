@@ -49,5 +49,13 @@
   "slide": 0.8,
   "tireAfter": 1,
   "tireTime": 2,
-  "suctionRecover": 0.25
+  "suctionRecover": 0.25,
+  "ballStiff": 15,
+  "ballPressure": 1,
+  "ballMagnet": 0,
+  "ballBounce": 0.7,
+  "popTime": 0.15,
+  "energyMax": 100,
+  "energyRegen": 20,
+  "ballDrain": 35
 }
