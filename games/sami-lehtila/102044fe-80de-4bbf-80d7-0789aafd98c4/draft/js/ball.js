@@ -5,14 +5,21 @@
 // runs out; it starts again only on a fresh press, never by holding through
 // a refill. Energy refills at energyRegen while not a ball.
 
+//
+// `started` is true for the one update a ball began in; cancel() takes that
+// ball back as if the press never happened (main.js does, when the pop would
+// be too hard).
+
 export function createBall(T) {
   let on = false, pop = 0, energy = T.energyMax, was = false;
+  let started = false, before = 0;
 
   function update(dt, held) {
     const press = held && !was;
     was = held;
     energy = Math.min(energy, T.energyMax);
-    if (press && energy > 0) { on = true; pop = T.popTime; }
+    started = press && energy > 0;
+    if (started) { on = true; pop = T.popTime; before = energy; }
     if (on) {
       energy -= T.ballDrain * dt;
       pop -= dt;
@@ -23,9 +30,15 @@ export function createBall(T) {
     }
   }
 
+  function cancel() {
+    if (!started) return;
+    on = false; started = false; energy = before;
+  }
+
   return {
-    update,
+    update, cancel,
     get on() { return on; },
+    get started() { return started; },
     get energy() { return energy; },
     reset() { on = false; pop = 0; energy = T.energyMax; },
   };
