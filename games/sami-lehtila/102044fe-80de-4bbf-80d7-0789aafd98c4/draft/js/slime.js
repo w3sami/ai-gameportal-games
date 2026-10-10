@@ -31,6 +31,14 @@
 // out of the nodes' speeds and turns the ring back to its rest orientation,
 // node i at angle i / N of a full turn.
 //
+// Surfaces may move (platforms, doors: world.js). Contact and grip work on
+// the node's speed relative to the surface, so the slime rides what it sits
+// on. step() runs the world's clock along, a substep at a time.
+//
+// A pad tile throws the whole body: once any node touches one, the body's
+// speed along the throw is raised to padSpeed × the pad's `speed`. The throw
+// points along the pad's `dir`, or out of the face touched.
+//
 // The stick is { x, y } in screen directions (y down), length at most 1.
 // Events go out through `on`: splat, trail, drip (see trail.js).
 
@@ -268,7 +276,9 @@ export function createSlime(T, world, emit) {
     breathe(dt, stick);
     const subs = Math.max(1, Math.round(T.substeps)), h = dt / subs;
     const r = T.nodeRadius, reach = T.magnetRange;
+    const t0 = world.time;
     for (let s = 0; s < subs; s++) {
+      world.setTime(t0 + (s + 1) * h);
       unspin();
       const grounded = nodes.some((n) => n.touch);
       // damping works on the nodes' motion relative to the body only, so it
@@ -311,10 +321,10 @@ export function createSlime(T, world, emit) {
 
         const nx = q.nx, ny = q.ny;
         if (n.touch) {
-          const vn = n.vx * nx + n.vy * ny;
+          const vn = (n.vx - q.vx) * nx + (n.vy - q.vy) * ny;
           if (vn < 0) { n.vx -= nx * vn; n.vy -= ny * vn; }
-          const hit = -(n.inx * nx + n.iny * ny);
-          if (!was && hit > T.trail.splatSpeed) on('splat', { x: q.px, y: q.py, nx, ny, vx: n.inx, vy: n.iny, power: hit / T.trail.splatSpeed });
+          const hit = -((n.inx - q.vx) * nx + (n.iny - q.vy) * ny);
+          if (!was && hit > T.trail.splatSpeed) on('splat', { x: q.px, y: q.py, nx, ny, vx: n.inx, vy: n.iny, power: hit / T.trail.splatSpeed, mover: q.mover });
         }
 
         // crawl: the stick along the surface; pushed into a wall, up the wall
@@ -326,7 +336,7 @@ export function createSlime(T, world, emit) {
         }
         // and always a little downhill: slide × the slope's share of gravity
         want = Math.max(-1, Math.min(1, want)) * T.crawlSpeed + T.slide * ty;
-        const vt = n.vx * tx + n.vy * ty;
+        const vt = (n.vx - q.vx) * tx + (n.vy - q.vy) * ty;
         const most = T.friction * T.tiles[q.type].grip * n.load * h;
         const dv = Math.max(-most, Math.min(most, want - vt));
         n.vx += tx * dv; n.vy += ty * dv;
@@ -335,13 +345,34 @@ export function createSlime(T, world, emit) {
         n.crawled += Math.abs(vt) * h;
         if (n.crawled > T.trail.spacing) {
           n.crawled -= T.trail.spacing;
-          on('trail', { x: q.px, y: q.py, nx, ny });
+          on('trail', { x: q.px, y: q.py, nx, ny, mover: q.mover });
         }
         if (ny > 0.7 && Math.random() < T.trail.drip * h) on('drip', { x: q.px, y: q.py + r * 2, vx: n.vx * 0.3, vy: n.vy });
       }
       bounce(grounded, inx, iny);
+      pad();
       capped(h);
     }
+  }
+
+  function pad() {
+    let dx = 0, dy = 0, speed = 0;
+    for (const n of nodes) {
+      if (!n.touch || n.q.type !== 'pad') continue;
+      const dir = n.q.meta?.dir;
+      if (dir) { const l = Math.hypot(dir[0], dir[1]) || 1; dx += dir[0] / l; dy += dir[1] / l; }
+      else { dx += n.q.nx; dy += n.q.ny; }
+      speed = Math.max(speed, T.padSpeed * (n.q.meta?.speed ?? 1));
+    }
+    const l = Math.hypot(dx, dy);
+    if (l < 1e-6) return;
+    dx /= l; dy /= l;
+    const v = velocity(), add = speed - (v.x * dx + v.y * dy);
+    if (add <= 0) return;
+    for (const n of nodes) { n.vx += dx * add; n.vy += dy * add; }
+    impact = null;
+    const c = centre();
+    on('pad', { x: c.x, y: c.y, nx: dx, ny: dy });
   }
 
   // the skin: each node pushed out from the centre by its radius
@@ -353,7 +384,13 @@ export function createSlime(T, world, emit) {
     });
   }
 
-  build(world.start.x, world.start.y);
+  // the body resting on the floor point (x, y)
+  function place(x, y) {
+    build(x, y - T.radius - T.nodeRadius - 0.05);
+    suction = 1; idle = 0; cap = null; impact = null;
+  }
+
+  place(world.start.x, world.start.y);
 
   // How hard ball mode would throw the body right now: ball mode's first
   // POP_LOOK seconds are run ahead and undone, next to the same seconds as a
@@ -381,17 +418,21 @@ export function createSlime(T, world, emit) {
   }
 
   function save() {
-    return { nodes: structuredClone(nodes), suction, idle, ball, firm, power, wallet, charge, cap: cap && { ...cap }, impact: impact && { ...impact } };
+    return {
+      nodes: nodes.map((n) => ({ ...n })), suction, idle, ball, firm, power, wallet, charge,
+      cap: cap && { ...cap }, impact: impact && { ...impact }, time: world.time,
+    };
   }
   function load(s) {
     ({ nodes, suction, idle, ball, firm, power, wallet, charge, cap, impact } = s);
+    world.setTime(s.time);
   }
 
   return {
-    step, outline, centre, velocity, build, popSpeed, capPop,
+    step, outline, centre, velocity, build, place, popSpeed, capPop,
     get nodes() { return nodes; },
     get suction() { return suction; },
     get touching() { return nodes.some((n) => n.touch); },
-    reset() { build(world.start.x, world.start.y); suction = 1; idle = 0; cap = null; },
+    reset() { place(world.start.x, world.start.y); },
   };
 }
