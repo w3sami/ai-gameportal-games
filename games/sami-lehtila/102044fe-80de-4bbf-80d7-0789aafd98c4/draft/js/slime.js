@@ -20,7 +20,9 @@
 // In ball mode (step's asBall, from ball.js) the springs firm up by
 // ballStiff, the area goes back to ballPressure (a full circle at 1), the
 // magnetism drops to ballMagnet, and the body bounces off a surface with
-// ballBounce of the speed it landed with (bounce()).
+// ballBounce of the speed it landed with (bounce()). The energy left scales
+// that bounce: step's `share` is energy / energyMax, and bounceEnergy is how
+// much of the bounce depends on it.
 //
 // The stick is { x, y } in screen directions (y down), length at most 1.
 // Events go out through `on`: splat, trail, drip (see trail.js).
@@ -88,6 +90,8 @@ export function createSlime(T, world, emit) {
   let lambda = [];
   // ball mode (ball.js): springs × ballStiff, area at ballPressure, magnetism × ballMagnet
   let ball = false, firm = 1;
+  // the bounce's multiplier from the energy left (step's share of energyMax)
+  let power = 1;
   // A ball's bounce is the whole body's: on landing, the speed it came in
   // with is kept, and once the body has squashed to a stop against the
   // surface it leaves again at ballBounce of that speed (restitution: the
@@ -109,7 +113,7 @@ export function createSlime(T, world, emit) {
     if (!impact) return;
     const out = vx * impact.nx + vy * impact.ny;
     if (out < 0) return;   // still squashing
-    const add = Math.max(0, T.ballBounce * impact.speed - out);
+    const add = Math.max(0, T.ballBounce * power * impact.speed - out);
     for (const n of nodes) { n.vx += impact.nx * add; n.vy += impact.ny * add; }
     impact = null;
   }
@@ -190,8 +194,9 @@ export function createSlime(T, world, emit) {
     return { x: dx * extra, y: dy * extra };
   }
 
-  function step(dt, stick, asBall = false) {
+  function step(dt, stick, asBall = false, share = 1) {
     ball = asBall;
+    power = 1 - T.bounceEnergy * (1 - Math.max(0, Math.min(1, share)));
     firm = ball ? T.ballStiff : 1;
     if (nodes.length !== Math.max(3, Math.round(T.nodes))) { const c = centre(); build(c.x, c.y); }
     breathe(dt, stick);
@@ -308,10 +313,10 @@ export function createSlime(T, world, emit) {
   }
 
   function save() {
-    return { nodes: structuredClone(nodes), suction, idle, ball, firm, impact: impact && { ...impact } };
+    return { nodes: structuredClone(nodes), suction, idle, ball, firm, power, impact: impact && { ...impact } };
   }
   function load(s) {
-    ({ nodes, suction, idle, ball, firm, impact } = s);
+    ({ nodes, suction, idle, ball, firm, power, impact } = s);
   }
 
   return {
