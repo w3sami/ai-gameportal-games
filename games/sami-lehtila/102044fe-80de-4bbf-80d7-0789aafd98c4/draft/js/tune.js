@@ -16,7 +16,7 @@ export const DEFAULTS = {
   edgeStiff: 800,            // 1/s²: spring keeping neighbouring nodes at their spacing
   areaStiff: 200,            // 1/s²: spring holding the area at `pressure`
   pressure: 0.85,            // area aimed for, as a share of the full circle; below 1 the body can sag and flatten
-  damping: 1.5,              // 1/s of speed lost everywhere
+  damping: 1.5,              // 1/s of the nodes' speed relative to the body lost; the body's own flight is not slowed
 
   // movement
   gravity: 30,
@@ -30,6 +30,16 @@ export const DEFAULTS = {
   tireAfter: 1,              // s of no stick at full suction
   tireTime: 2,               // s from full suction to none after that; 0 never tires
   suctionRecover: 0.25,      // s from none back to full once the stick moves
+
+  // ball mode (ball.js): the jump button firms the slime into a ball
+  ballStiff: 15,             // × all three springs while a ball
+  ballPressure: 1,           // area aimed for while a ball, as a share of the full circle
+  ballMagnet: 0,             // × magnetism while a ball; 0 lets go of everything
+  ballBounce: 0.7,           // share of its landing speed a ball leaves with; the bounce height is its square
+  popTime: 0.15,             // s a tap stays a ball, so a tap is a whole pop
+  energyMax: 100,
+  energyRegen: 20,           // energy per second back while not a ball
+  ballDrain: 35,             // energy per second spent while a ball
 
   // surfaces; each tile type below multiplies these
   magnet: 150,               // pull on each node towards its surface at touch, fading to nothing at magnetRange
