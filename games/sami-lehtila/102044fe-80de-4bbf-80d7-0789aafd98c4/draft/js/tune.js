@@ -66,12 +66,17 @@ export const DEFAULTS = {
   },
 
   // the level (level.js)
-  padSpeed: 32,              // speed a pad throws the slime with (× the pad's own speed); the rise is its square / (2 × gravity)
+  padSpeed: 32,              // speed a pad throws a ball with (× the pad's own speed); the rise is its square / (2 × gravity)
+  padBounce: 1,              // share of its landing speed a ball keeps off a pad, if more than padSpeed: 1 bounces back as high
+  padSlime: 0.5,             // share of padSpeed a pad throws a slime (not a ball) with
   panel: {                   // a glow panel's turn, repeating; level.js shifts each panel's start
     off: 2.5,                // s dark, safe to touch
     warn: 0.8,               // s blinking before it glows red
     on: 1.5,                 // s red: touching it kills
   },
+  burnTime: 1,               // s one node can touch a red panel before the slime dies; n nodes burn n times as fast
+  healTime: 3,               // s from no health back to full, once nothing burns
+  healDelay: 0.5,            // s after the last burn before healing starts
   respawnTime: 1,            // s from bursting to coming back at the checkpoint
   view: 20,                  // tiles of the level the screen shows top to bottom
 
