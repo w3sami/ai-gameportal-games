@@ -88,5 +88,10 @@
     "on": 1.5
   },
   "respawnTime": 1,
-  "view": 20
+  "view": 20,
+  "padBounce": 1,
+  "padSlime": 0.5,
+  "burnTime": 1,
+  "healTime": 3,
+  "healDelay": 0.5
 }
