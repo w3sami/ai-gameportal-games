@@ -52,6 +52,22 @@
     "metal": {
       "grip": 0.8,
       "magnet": 2
+    },
+    "pad": {
+      "grip": 1,
+      "magnet": 0
+    },
+    "panel": {
+      "grip": 1,
+      "magnet": 1
+    },
+    "platform": {
+      "grip": 1,
+      "magnet": 1
+    },
+    "door": {
+      "grip": 1,
+      "magnet": 1
     }
   },
   "trail": {
@@ -64,5 +80,13 @@
     "drip": 0.25
   },
   "substeps": 10,
-  "iterations": 2
+  "iterations": 2,
+  "padSpeed": 32,
+  "panel": {
+    "off": 2.5,
+    "warn": 0.8,
+    "on": 1.5
+  },
+  "respawnTime": 1,
+  "view": 20
 }
