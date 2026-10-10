@@ -45,6 +45,7 @@ document.addEventListener('fullscreenchange', () => {
 // ---- loop -----------------------------------------------------------------------
 
 const DT = 1 / 60;
+const CHARGE_MARGIN = 0.9;    // a charge stops building this far short of the most a jump may be
 let last = performance.now(), acc = 0, clock = 0;
 let stick = { x: 0, y: 0 };
 const look = { x: 0, y: 0 };
@@ -83,11 +84,23 @@ function frame(now) {
     acc += dt;
     while (acc >= DT) {
       ball.update(DT, held, slime.touching);
-      // a pop harder than popMax is no pop at all, and a pop is paid for
-      // by how hard it throws: no energy for it, no pop
+      // a charge stops building short of a jump that popMax or the energy
+      // would not allow
+      if (ball.charging && ball.charge > 0) {
+        const pop = slime.popSpeed(stick, DT);
+        if (pop > CHARGE_MARGIN * Math.min(T.popMax, ball.energy / T.jumpCost)) ball.stall(DT);
+      }
+      // A pop is paid for by how hard it throws. A charged release always
+      // jumps: a pop harder than popMax or than the energy pays for is capped
+      // to that. An uncharged press that would pop harder than popMax (a
+      // slime squeezed into a corner) does not jump at all.
       if (ball.started) {
         const pop = slime.popSpeed(stick, DT);
-        if (pop > T.popMax || !ball.pay(pop * T.jumpCost)) ball.cancel();
+        const most = Math.min(T.popMax, ball.energy / T.jumpCost);
+        if (!ball.charged && pop > T.popMax) ball.cancel();
+        else if (pop <= most) ball.pay(pop * T.jumpCost);
+        else if (most > 0) { ball.pay(most * T.jumpCost); slime.capPop(most); }
+        else ball.cancel();
       }
       slime.step(DT, stick, ball.on, ball, ball.charge);
       trail.update(DT);
