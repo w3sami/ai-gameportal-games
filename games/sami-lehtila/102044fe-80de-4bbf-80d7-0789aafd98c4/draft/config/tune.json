@@ -93,5 +93,10 @@
   "padSlime": 0.5,
   "burnTime": 1,
   "healTime": 3,
-  "healDelay": 0.5
+  "healDelay": 0.5,
+  "crushArea": 0.25,
+  "crushTime": 0.3,
+  "orbEnergy": 40,
+  "orbOverfill": 1.5,
+  "orbRespawn": 8
 }
