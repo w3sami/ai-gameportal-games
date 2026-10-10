@@ -81,9 +81,13 @@ function frame(now) {
     acc += dt;
     while (acc >= DT) {
       ball.update(DT, held);
-      // a pop harder than popMax is no pop at all
-      if (ball.started && slime.popSpeed(stick, DT) > T.popMax) ball.cancel();
-      slime.step(DT, stick, ball.on, ball.energy / T.energyMax);
+      // a pop harder than popMax is no pop at all, and a pop is paid for
+      // by how hard it throws: no energy for it, no pop
+      if (ball.started) {
+        const pop = slime.popSpeed(stick, DT);
+        if (pop > T.popMax || !ball.pay(pop * T.jumpCost)) ball.cancel();
+      }
+      slime.step(DT, stick, ball.on, ball);
       trail.update(DT);
       acc -= DT;
     }
