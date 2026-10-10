@@ -66,6 +66,13 @@ export function createPhysics(T, W, ev) {
     if (s.stun > 0) s.stun -= dt;
     const steer = s.finished ? 0 : inp.x * (1 - stunF * T.landStunSteer);
     s.heading -= steer * g.turnRate * (1 + 2 / (1 + sp)) * dt;
+    // travelling tail first: the physics heading turns to the travel and the
+    // rider is marked switch, so they still look the same way while brake,
+    // friction and steering all act on the way they are actually going
+    if ((s.vx * dirX() + s.vz * dirZ()) < -0.3) {
+      s.heading += Math.PI;
+      s.switchStance = !s.switchStance;
+    }
     const dx = dirX(), dz = dirZ(), rx = -dz, rz = dx;
     let f = s.vx * dx + s.vz * dz, l = s.vx * rx + s.vz * rz;
     // how far across the travel the skis point: 0 straight, 1 fully sideways
@@ -81,7 +88,9 @@ export function createPhysics(T, W, ev) {
     l = nl;
     const tuck = inp.up > 0.3 && !s.finished;
     const drag = g.drag * (tuck ? T.tuckDrag : 1);
-    f -= (g.friction * (tuck ? T.tuckFriction : 1) * T.gravity + drag * f * f) * dt;
+    // friction and drag only ever slow down: never past zero, never pushing
+    const resist = (g.friction * (tuck ? T.tuckFriction : 1) * T.gravity + drag * f * f) * dt;
+    f = Math.sign(f) * Math.max(0, Math.abs(f) - resist);
     if (tuck) {
       f += T.tuckPush * inp.up * dt * T.speedScale;
       // slow enough to need it: push with the poles every so often
@@ -90,7 +99,7 @@ export function createPhysics(T, W, ev) {
         if (s.poleT > T.poleEvery) { s.poleT = 0; f += T.polePush; s.pushAnim = 0.35; }
       } else s.poleT = T.poleEvery * 0.9;
     } else s.poleT = T.poleEvery * 0.9;
-    if (braking) f -= T.brake * (s.finished ? 1 : inp.down) * dt;
+    if (braking) f = Math.sign(f) * Math.max(0, Math.abs(f) - T.brake * (s.finished ? 1 : inp.down) * dt);
     f = clamp(f, -6, g.maxSpeed * T.speedScale);   // slow enough on an uphill ramp, slide back down it
     s.vx = f * dx + l * rx;
     s.vz = f * dz + l * rz;
