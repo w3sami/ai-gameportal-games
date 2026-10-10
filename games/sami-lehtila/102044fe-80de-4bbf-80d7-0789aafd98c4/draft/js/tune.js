@@ -35,7 +35,8 @@ export const DEFAULTS = {
   ballStiff: 15,             // × all three springs while a ball
   ballPressure: 1,           // area aimed for while a ball, as a share of the full circle
   ballMagnet: 0,             // × magnetism while a ball; 0 lets go of everything
-  ballBounce: 0.7,           // share of its landing speed a ball leaves with; the bounce height is its square
+  ballBounce: 0.7,           // share of its landing speed a ball leaves with at full energy; the bounce height is its square
+  bounceEnergy: 1,           // 0–1: how much of the bounce scales with the energy left; 1 = in proportion, 0 = not at all
   popTime: 0.15,             // s a tap stays a ball, so a tap is a whole pop
   popMax: 26,                // speed the springs may throw the body with; a harder pop does not happen at all
   energyMax: 100,
