@@ -59,7 +59,21 @@ export const DEFAULTS = {
     wood: { grip: 1, magnet: 0 },
     ice: { grip: 0.03, magnet: 0.5 },
     metal: { grip: 0.8, magnet: 2 },
+    pad: { grip: 1, magnet: 0 },
+    panel: { grip: 1, magnet: 1 },
+    platform: { grip: 1, magnet: 1 },
+    door: { grip: 1, magnet: 1 },
   },
+
+  // the level (level.js)
+  padSpeed: 32,              // speed a pad throws the slime with (× the pad's own speed); the rise is its square / (2 × gravity)
+  panel: {                   // a glow panel's turn, repeating; level.js shifts each panel's start
+    off: 2.5,                // s dark, safe to touch
+    warn: 0.8,               // s blinking before it glows red
+    on: 1.5,                 // s red: touching it kills
+  },
+  respawnTime: 1,            // s from bursting to coming back at the checkpoint
+  view: 20,                  // tiles of the level the screen shows top to bottom
 
   // trail: drops that stick where they land, recycled from a fixed pool
   trail: {
