@@ -53,12 +53,14 @@ let blinkAt = 3, blinkUntil = 0;
 // window.lima in the console: drive = () => ({ x, y, ball }) steers past the controls
 window.lima = { T, world, slime, ball, trail, drive: null };
 
-// the developer's energy bar, while the tuning panel is open
+// the developer's energy bar and, under it, the jump's charge, while the
+// tuning panel is open
 const bar = document.getElementById('energy');
 function drawBar() {
   bar.hidden = !tuning.open;
   if (bar.hidden) return;
   bar.firstElementChild.style.width = (100 * ball.energy) / T.energyMax + '%';
+  bar.lastElementChild.style.width = 100 * ball.charge + '%';
   bar.classList.toggle('ball', ball.on);
 }
 
@@ -80,14 +82,14 @@ function frame(now) {
     const held = driven ? !!driven.ball : input.held('ball');
     acc += dt;
     while (acc >= DT) {
-      ball.update(DT, held);
+      ball.update(DT, held, slime.touching);
       // a pop harder than popMax is no pop at all, and a pop is paid for
       // by how hard it throws: no energy for it, no pop
       if (ball.started) {
         const pop = slime.popSpeed(stick, DT);
         if (pop > T.popMax || !ball.pay(pop * T.jumpCost)) ball.cancel();
       }
-      slime.step(DT, stick, ball.on, ball);
+      slime.step(DT, stick, ball.on, ball, ball.charge);
       trail.update(DT);
       acc -= DT;
     }
