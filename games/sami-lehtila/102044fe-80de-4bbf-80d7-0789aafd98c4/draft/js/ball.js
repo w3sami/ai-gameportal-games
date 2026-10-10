@@ -8,6 +8,10 @@
 // 0 to 1 over chargeTime, and slime.js tightens the magnet with it
 // (chargeMagnet), which presses the slime flatter for a harder pop. A full
 // charge holds there; the jump goes only on release, and lasts popTime.
+// The charge stops building (stall()) once the pop it would give nears
+// popMax or what the energy pays for. A charged release always jumps: main.js
+// caps a pop that still comes out harder (slime.capPop) instead of refusing
+// it, and `charged` tells it which kind of press this was.
 // Pressed in the air, there is nothing to charge against: the ball begins
 // at once, and holding the button keeps it.
 //
@@ -25,7 +29,7 @@
 export function createBall(T) {
   let on = false, pop = 0, energy = T.energyMax, was = false;
   let started = false, before = 0;
-  let charging = false, charge = 0;
+  let charging = false, charge = 0, charged = false;
 
   function update(dt, held, touching) {
     const press = held && !was;
@@ -34,11 +38,11 @@ export function createBall(T) {
     started = false;
     if (press && energy > 0) {
       if (touching && T.chargeTime > 0) { charging = true; charge = 0; }
-      else started = true;
+      else { started = true; charged = false; }
     }
     if (charging) {
       charge = Math.min(1, charge + dt / T.chargeTime);
-      if (!held) { charging = false; started = true; }
+      if (!held) { charging = false; started = true; charged = true; }
     }
     if (started) { on = true; pop = T.popTime; before = energy; }
     if (on) {
@@ -49,6 +53,11 @@ export function createBall(T) {
     } else {
       energy = Math.min(T.energyMax, energy + T.energyRegen * dt);
     }
+  }
+
+  // keep the charge where it was before this update's growth
+  function stall(dt) {
+    if (charging) charge = Math.max(0, charge - dt / Math.max(0.01, T.chargeTime));
   }
 
   function cancel() {
@@ -71,12 +80,14 @@ export function createBall(T) {
   }
 
   return {
-    update, cancel, pay, spend,
+    update, stall, cancel, pay, spend,
     get share() { return energy / T.energyMax; },
     get on() { return on; },
     get started() { return started; },
     // 0–1 while charging; once the ball begins it drops back to 0
     get charge() { return charging ? charge : 0; },
+    get charging() { return charging; },
+    get charged() { return charged; },
     get energy() { return energy; },
     reset() { on = false; pop = 0; energy = T.energyMax; charging = false; charge = 0; },
   };
