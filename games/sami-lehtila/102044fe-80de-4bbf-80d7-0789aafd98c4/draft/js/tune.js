@@ -16,6 +16,7 @@ export const DEFAULTS = {
   edgeStiff: 800,            // 1/s²: spring keeping neighbouring nodes at their spacing
   areaStiff: 200,            // 1/s²: spring holding the area at `pressure`
   pressure: 0.85,            // area aimed for, as a share of the full circle; below 1 the body can sag and flatten
+  spinLock: 1,               // 0–1: share of the ring's spin and turn taken out every substep; 1 never turns
   damping: 1.5,              // 1/s of the nodes' speed relative to the body lost; the body's own flight is not slowed
 
   // movement
