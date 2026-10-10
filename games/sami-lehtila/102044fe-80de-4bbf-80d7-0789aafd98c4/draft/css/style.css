@@ -4,6 +4,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b3649; fon
 
 #hint { position: fixed; left: 16px; bottom: calc(10px + env(safe-area-inset-bottom)); font-size: 13px; opacity: .55; pointer-events: none; text-shadow: 0 1px 3px #000; padding-right: 70px; }
 
+#time { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); font: 600 15px/1 ui-monospace, monospace; opacity: .7; text-shadow: 0 1px 3px #000; pointer-events: none; }
+#time.done { opacity: 1; color: #ffe680; }
+#msg { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); font-size: 22px; font-weight: 700; text-shadow: 0 2px 6px #000; pointer-events: none; white-space: nowrap; }
+#msg[hidden] { display: none; }
+
 /* developer's energy bar; the real game will show energy on the slime itself */
 #energy { position: fixed; left: 16px; top: 12px; width: 200px; height: 14px; border-radius: 7px; background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.3); overflow: hidden; pointer-events: none; }
 #energy[hidden] { display: none; }
