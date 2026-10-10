@@ -6,7 +6,7 @@
   "radialStiff": 300,
   "edgeStiff": 800,
   "areaStiff": 200,
-  "pressure": 0.99,
+  "pressure": 0.88,
   "spinLock": 0,
   "damping": 1.5,
   "gravity": 30,
@@ -47,7 +47,7 @@
     },
     "ice": {
       "grip": 0.03,
-      "magnet": 0.5
+      "magnet": 0.35
     },
     "metal": {
       "grip": 0.8,
