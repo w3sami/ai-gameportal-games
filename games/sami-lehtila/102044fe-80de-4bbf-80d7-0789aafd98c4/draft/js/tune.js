@@ -38,6 +38,8 @@ export const DEFAULTS = {
   ballMagnet: 0,             // × magnetism while a ball; 0 lets go of everything
   ballBounce: 0.7,           // share of its landing speed a ball leaves with at full energy; the bounce height is its square
   bounceEnergy: 1,           // 0–1: how much of the bounce scales with the energy left; 1 = in proportion, 0 = not at all
+  chargeTime: 0.5,           // s pressed against a surface to charge a jump fully; the charge then holds, and the jump goes at release
+  chargeMagnet: 6,           // × magnetism at full charge, pressing the slime flatter for a harder pop
   popTime: 0.15,             // s a tap stays a ball, so a tap is a whole pop
   popMax: 26,                // speed the springs may throw the body with; a harder pop does not happen at all
   energyMax: 100,
