@@ -49,7 +49,9 @@ const GROUPS = [
     ['popMax', 'Ponnahdus max (ruutua/s), kovempaa ei tehdä lainkaan', 1, 80, 0.5],
     ['energyMax', 'Voima max', 1, 500, 1],
     ['energyRegen', 'Voiman palautuminen (/s)', 0, 200, 1],
-    ['ballDrain', 'Pallo kuluttaa (/s)', 0, 300, 1],
+    ['jumpCost', 'Hyppy maksaa per ponnahduksen ruutua/s', 0, 10, 0.05],
+    ['bounceCost', 'Pomppu maksaa per lisätty ruutua/s', 0, 10, 0.05],
+    ['ballDrain', 'Pallona oleminen kuluttaa (/s)', 0, 100, 1],
   ]],
   ['Imu', [
     ['tireAfter', 'Paikallaan täysi imu (s)', 0, 10, 0.1],

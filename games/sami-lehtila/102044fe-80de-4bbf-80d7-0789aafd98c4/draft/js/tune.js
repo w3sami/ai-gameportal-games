@@ -41,7 +41,9 @@ export const DEFAULTS = {
   popMax: 26,                // speed the springs may throw the body with; a harder pop does not happen at all
   energyMax: 100,
   energyRegen: 20,           // energy per second back while not a ball
-  ballDrain: 35,             // energy per second spent while a ball
+  jumpCost: 2.4,             // energy per tiles/s a jump throws the body with (from rest on a floor about 11.5); with less, no jump
+  bounceCost: 1,             // energy per tiles/s a bounce adds
+  ballDrain: 5,              // energy per second spent just being a ball
 
   // surfaces; each tile type below multiplies these
   magnet: 150,               // pull on each node towards its surface at touch, fading to nothing at magnetRange
