@@ -17,11 +17,17 @@
 //     body from rolling down a wall around the few nodes that touch it.
 //   - all of the magnetism tires while the stick is left alone (suction)
 //
+// In ball mode (step's asBall, from ball.js) the springs firm up by
+// ballStiff, the area goes back to ballPressure (a full circle at 1), the
+// magnetism drops to ballMagnet, and the body bounces off a surface with
+// ballBounce of the speed it landed with (bounce()).
+//
 // The stick is { x, y } in screen directions (y down), length at most 1.
 // Events go out through `on`: splat, trail, drip (see trail.js).
 
 const TAU = Math.PI * 2;
 const CONTACT = 0.04;   // gap below which a node counts as touching
+const BOUNCE_FROM = 1.5;   // landing speed below which a ball just rolls
 
 export function createSlime(T, world, on) {
   let nodes = [];
@@ -78,6 +84,33 @@ export function createSlime(T, world, on) {
   // over the iterations of one substep, so more iterations converge on the
   // same spring rather than a stiffer one. Arrays: [edges…, radials…, area].
   let lambda = [];
+  // ball mode (ball.js): springs × ballStiff, area at ballPressure, magnetism × ballMagnet
+  let ball = false, firm = 1;
+  // A ball's bounce is the whole body's: on landing, the speed it came in
+  // with is kept, and once the body has squashed to a stop against the
+  // surface it leaves again at ballBounce of that speed (restitution: the
+  // height comes back as its square).
+  let impact = null;
+
+  function bounce(touched, inx, iny) {
+    let nx = 0, ny = 0, vx = 0, vy = 0, count = 0;
+    for (const n of nodes) {
+      vx += n.vx; vy += n.vy;
+      if (n.touch) { nx += n.q.nx; ny += n.q.ny; count++; }
+    }
+    if (!ball || !count) { impact = null; return; }
+    const l = Math.hypot(nx, ny);
+    if (l < 1e-6) return;
+    nx /= l; ny /= l; vx /= nodes.length; vy /= nodes.length;
+    const came = -(inx * nx + iny * ny);
+    if (!touched && came > BOUNCE_FROM) impact = { nx, ny, speed: came };
+    if (!impact) return;
+    const out = vx * impact.nx + vy * impact.ny;
+    if (out < 0) return;   // still squashing
+    const add = Math.max(0, T.ballBounce * impact.speed - out);
+    for (const n of nodes) { n.vx += impact.nx * add; n.vy += impact.ny * add; }
+    impact = null;
+  }
 
   function xpbd(i, C, wsum, k, h) {
     if (k <= 0 || wsum < 1e-12) return 0;
@@ -94,7 +127,7 @@ export function createSlime(T, world, on) {
     for (let i = 0; i < N; i++) {
       const a = nodes[i], b = nodes[(i + 1) % N];
       const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
-      const dl = xpbd(i, d - edge, 2, T.edgeStiff, h);
+      const dl = xpbd(i, d - edge, 2, T.edgeStiff * firm, h);
       a.x -= (dx / d) * dl; a.y -= (dy / d) * dl;
       b.x += (dx / d) * dl; b.y += (dy / d) * dl;
     }
@@ -103,11 +136,11 @@ export function createSlime(T, world, on) {
     for (let i = 0; i < N; i++) {
       const n = nodes[i];
       const dx = n.x - c.x, dy = n.y - c.y, d = Math.hypot(dx, dy) || 1e-6;
-      const dl = xpbd(N + i, d - R, 1, T.radialStiff, h);
+      const dl = xpbd(N + i, d - R, 1, T.radialStiff * firm, h);
       n.x += (dx / d) * dl; n.y += (dy / d) * dl;
     }
     // pressure: move every node along the area's gradient
-    const rest = T.pressure * (N / 2) * R * R * Math.sin(TAU / N);
+    const rest = (ball ? T.ballPressure : T.pressure) * (N / 2) * R * R * Math.sin(TAU / N);
     const g = [];
     let sum = 0;
     for (let i = 0; i < N; i++) {
@@ -116,7 +149,7 @@ export function createSlime(T, world, on) {
       g.push(gx, gy);
       sum += gx * gx + gy * gy;
     }
-    const dl = xpbd(2 * N, area() - rest, sum, T.areaStiff, h);
+    const dl = xpbd(2 * N, area() - rest, sum, T.areaStiff * firm, h);
     for (let i = 0; i < N; i++) { nodes[i].x += g[2 * i] * dl; nodes[i].y += g[2 * i + 1] * dl; }
     // out of the walls
     for (const n of nodes) world.collide(n, T.nodeRadius);
@@ -129,7 +162,8 @@ export function createSlime(T, world, on) {
     const gap = Math.max(0, q.d - T.nodeRadius);
     if (gap >= T.magnetRange) return 0;
     const away = Math.max(0, (stick.x * q.nx + stick.y * q.ny - 0.3) / 0.7);
-    return suction * T.tiles[q.type].magnet * (1 - gap / T.magnetRange) * (1 - T.letGo * away);
+    return (ball ? T.ballMagnet : 1) * suction * T.tiles[q.type].magnet
+      * (1 - gap / T.magnetRange) * (1 - T.letGo * away);
   }
 
   // Cling: the whole body is pulled into the surface it holds on to, so that
@@ -154,14 +188,19 @@ export function createSlime(T, world, on) {
     return { x: dx * extra, y: dy * extra };
   }
 
-  function step(dt, stick) {
+  function step(dt, stick, asBall = false) {
+    ball = asBall;
+    firm = ball ? T.ballStiff : 1;
     if (nodes.length !== Math.max(3, Math.round(T.nodes))) { const c = centre(); build(c.x, c.y); }
     breathe(dt, stick);
     const subs = Math.max(1, Math.round(T.substeps)), h = dt / subs;
     const r = T.nodeRadius, reach = T.magnetRange;
     for (let s = 0; s < subs; s++) {
       const grounded = nodes.some((n) => n.touch);
+      // damping works on the nodes' motion relative to the body only, so it
+      // calms the wobble without slowing a jump or a fall
       const keep = Math.exp(-T.damping * h);
+      const body = velocity();
       const pull = cling(stick);
       const fx = pull.x, fy = T.gravity + pull.y;   // what presses the whole body
 
@@ -175,12 +214,15 @@ export function createSlime(T, world, on) {
           n.load = (n.touch ? Math.max(0, -(fx * q.nx + fy * q.ny)) : 0) + m;
         }
         if (!grounded) { ax += stick.x * T.airControl; ay += stick.y * T.airControl; }
-        n.vx = (n.vx + ax * h) * keep;
-        n.vy = (n.vy + ay * h) * keep;
+        n.vx = body.x + (n.vx - body.x) * keep + ax * h;
+        n.vy = body.y + (n.vy - body.y) * keep + ay * h;
         n.inx = n.vx; n.iny = n.vy;
         n.px = n.x; n.py = n.y;
         n.x += n.vx * h; n.y += n.vy * h;
       }
+
+      let inx = 0, iny = 0;
+      for (const n of nodes) { inx += n.inx / nodes.length; iny += n.iny / nodes.length; }
 
       lambda = new Array(2 * nodes.length + 1).fill(0);
       for (let i = 0; i < T.iterations; i++) solve(h);
@@ -223,6 +265,7 @@ export function createSlime(T, world, on) {
         }
         if (ny > 0.7 && Math.random() < T.trail.drip * h) on('drip', { x: q.px, y: q.py + r * 2, vx: n.vx * 0.3, vy: n.vy });
       }
+      bounce(grounded, inx, iny);
     }
   }
 
