@@ -816,12 +816,15 @@ function drawBack(ctx) {
   const spin = clock / 1000;
   for (const p of PORTALS) {
     /* Sisäänmeno on aina ruudulla. Se sykkii hieman, ja imiessään se kiihtyy
-       ja kasvaa. */
+       ja kasvaa. Kaikki portit pyörivät vastapäivään (negatiivinen kulma):
+       sakarat kaartuvat ulospäin myötäpäivään, joten vastapäivään pyöriessä
+       ne laahaavat perässä kuin porealtaassa. Myötäpäivään pyörivä portti
+       näytti pyörivän väärin päin (Sami 11.10.2026). */
     const busy = trip && trip.p === p && trip.phase === 'in';
     const pull = busy ? 1 - clamp01(trip.t / WARP.suck) : 1;
     const pulse = 1 + Math.sin(spin * 2.2 + p.a.x) * 0.05;
     portal(ctx, p.a.x, p.a.y, p.a.r * pulse * lerp(1, 1.4, 1 - pull), p.col,
-           spin * (busy ? 5 : 1.4), busy ? 1 : 0.8);
+           -spin * (busy ? 5 : 1.4), busy ? 1 : 0.8);
 
     /* Ulostulo vain silloin kun siitä tullaan. */
     if (p.b.open > 0) {
