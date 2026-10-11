@@ -23,7 +23,7 @@
 //                       `phase` (0–1) of the way into its round
 //
 // Pads throw the slime: along the face it touches, or along `dir` when the
-// entry has one, at tune.padSpeed × `speed`. Panels glow in turns
+// entry has one, at tune.padSpeed × `speed`; with `ballOnly`, only a ball. Panels glow in turns
 // (tune.panel) and kill while red; `phase` (0–1) shifts a panel's turn.
 // Outside the map counts as stone, so the edge of the map is a wall too.
 
