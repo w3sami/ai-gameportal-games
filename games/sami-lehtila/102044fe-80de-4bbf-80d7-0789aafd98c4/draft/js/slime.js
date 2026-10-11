@@ -36,7 +36,8 @@
 // speed along the throw is raised to the pad's speed, out of the face
 // touched. A pad with a `dir` (an arrow) sets the body's whole speed to
 // its throw instead, along `dir`, so it throws the same way however the
-// body came in. A ball bounces off a
+// body came in; touching an arrow and a plain pad at once, the arrow
+// throws. A ball bounces off a
 // pad like a ping-pong ball: it leaves with padSpeed × the pad's `speed`,
 // or with padBounce × the speed it came in with if that is more, so ball
 // after ball between pads keeps all its height. A slime splats on it and
@@ -384,16 +385,18 @@ export function createSlime(T, world, emit) {
   }
 
   // (inx, iny): the body's speed before this substep's contacts
+  // An arrow touched wins over plain pads touched at the same time.
   function pad(inx, iny) {
-    let dx = 0, dy = 0, fx = 0, fy = 0, speed = 0, arrow = false;
+    let dx = 0, dy = 0, ax = 0, ay = 0, fx = 0, fy = 0, speed = 0, arrowSpeed = 0;
     for (const n of nodes) {
       if (!n.touch || n.q.type !== 'pad') continue;
-      const dir = n.q.meta?.dir;
-      if (dir) { const l = Math.hypot(dir[0], dir[1]) || 1; dx += dir[0] / l; dy += dir[1] / l; arrow = true; }
-      else { dx += n.q.nx; dy += n.q.ny; }
+      const dir = n.q.meta?.dir, sp = T.padSpeed * (n.q.meta?.speed ?? 1);
+      if (dir) { const l = Math.hypot(dir[0], dir[1]) || 1; ax += dir[0] / l; ay += dir[1] / l; arrowSpeed = Math.max(arrowSpeed, sp); }
+      else { dx += n.q.nx; dy += n.q.ny; speed = Math.max(speed, sp); }
       fx += n.q.nx; fy += n.q.ny;
-      speed = Math.max(speed, T.padSpeed * (n.q.meta?.speed ?? 1));
     }
+    const arrow = arrowSpeed > 0;
+    if (arrow) { dx = ax; dy = ay; speed = arrowSpeed; }
     const l = Math.hypot(dx, dy), fl = Math.hypot(fx, fy);
     if (l < 1e-6 || fl < 1e-6) return;
     dx /= l; dy /= l;
