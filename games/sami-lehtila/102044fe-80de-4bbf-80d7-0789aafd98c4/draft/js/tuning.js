@@ -72,7 +72,6 @@ const GROUPS = [
   ['Kenttä', [
     ['padSpeed', 'Pomppualusta heittää palloa (ruutua/s)', 0, 80, 0.5],
     ['padBounce', 'Pallo alustalta: iskusta takaisin, jos yli heiton (0–1,5)', 0, 1.5, 0.05],
-    ['padSlime', 'Lima alustalta: osuus heitosta', 0, 1, 0.05],
     ['panel.off', 'Paneeli pimeänä (s)', 0, 10, 0.1],
     ['panel.warn', 'Paneeli vilkkuu ennen punaista (s)', 0, 5, 0.1],
     ['panel.on', 'Paneeli punaisena, tappaa (s)', 0, 10, 0.1],
