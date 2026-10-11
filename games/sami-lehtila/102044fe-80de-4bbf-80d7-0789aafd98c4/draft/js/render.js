@@ -4,8 +4,13 @@
 // tiles, kept until the screen's size changes; platforms, doors, the
 // panels' glow, the things, the drops and the slime are drawn every frame,
 // and last the hot air over red panels bends what is already drawn.
+//
+// A level begins with the slime growing out of a portal at the start, and
+// its exit is a portal. Reaching it, the slime and then everything on the
+// screen is sucked into it along a spiral (finale()).
 
 import { SLOPES } from './world.js';
+import { drawPortal, ARRIVE, ARRIVE_COLOR, EXIT_COLOR } from './portal.js';
 
 const TAU = Math.PI * 2;
 const CHUNK = 16;
@@ -349,18 +354,21 @@ export function createRenderer(canvas, T) {
   function drawMovers() {
     for (const m of world.movers) {
       if (m.w < 1e-3 || m.h < 1e-3 || !visible(m.x + m.w / 2, m.y + m.h / 2, m.w + m.h)) continue;
-      if (m.kind === 'platform') {
-        for (let j = 0; j < m.h0; j++) {
-          for (let i = 0; i < m.w0; i++) {
-            g.save(); g.translate(sx(m.x + i), sy(m.y + j));
-            (TILE[m.type] || TILE.platform)(g, S, i, j, m.e);
-            g.restore();
-          }
-        }
-        g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = Math.max(1, S * 0.05);
-        g.strokeRect(sx(m.x), sy(m.y), m.w * S, m.h * S);
-      } else drawDoor(m);
+      drawMover(m);
     }
+  }
+
+  function drawMover(m) {
+    if (m.kind !== 'platform') { drawDoor(m); return; }
+    for (let j = 0; j < m.h0; j++) {
+      for (let i = 0; i < m.w0; i++) {
+        g.save(); g.translate(sx(m.x + i), sy(m.y + j));
+        (TILE[m.type] || TILE.platform)(g, S, i, j, m.e);
+        g.restore();
+      }
+    }
+    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = Math.max(1, S * 0.05);
+    g.strokeRect(sx(m.x), sy(m.y), m.w * S, m.h * S);
   }
 
   // bars in the key's colour, sliding into the door's top (or left)
@@ -439,18 +447,101 @@ export function createRenderer(canvas, T) {
       g.fillStyle = on ? col.base : '#6b6478';
       g.beginPath(); g.moveTo(X, top); g.lineTo(X + S * 0.9, top + S * 0.25 + wave); g.lineTo(X, top + S * 0.55); g.fill();
     }
+  }
+
+  // the exit portals, pulsing; sucking, the one reached spins faster and
+  // grows, and closes once all is in
+  function drawExits(game, clock) {
     for (const p of world.exits) {
-      if (!visible(p.x, p.y)) continue;
-      const X = sx(p.x), Y = sy(p.y - 1.4);
-      g.save();
-      g.shadowColor = '#fff3b0'; g.shadowBlur = S * 0.8;
-      g.strokeStyle = '#ffe680'; g.lineWidth = S * 0.12;
-      g.setLineDash([S * 0.35, S * 0.2]); g.lineDashOffset = -clock * S * 2;
-      g.beginPath(); g.arc(X, Y, S * 1.1, 0, TAU); g.stroke();
-      g.restore();
-      g.fillStyle = 'rgba(255,240,170,.18)';
-      g.beginPath(); g.arc(X, Y, S * 1.0, 0, TAU); g.fill();
+      if (!visible(p.x, p.y - EXIT_UP, 4)) continue;
+      const pulse = 1 + Math.sin(clock * 2.2 + p.x) * 0.05;
+      let r = EXIT_R * pulse, spin = clock * 1.4, glow = 0.85;
+      if (game.finished && p === sink) {
+        const T = game.after, end = SUCK.start + SUCK.spread + SUCK.each + SUCK.jitter;
+        r *= 1 + 0.5 * Math.min(1, T / 0.6);
+        if (T > end) r *= Math.max(0, 1 - (T - end) / SUCK.close);
+        spin = clock * 7;
+        glow = 1;
+      }
+      drawPortal(g, sx(p.x), sy(p.y - EXIT_UP), r * S, EXIT_COLOR, spin, glow);
     }
+  }
+
+  // the start portal while the slime comes out of it
+  function drawArrival(game, clock) {
+    const t = game.time, { open, hold, close, lead, grow } = ARRIVE;
+    if (game.finished || t > lead + grow + hold + close) return;
+    const ease = (u) => 1 - (1 - u) * (1 - u);
+    let k = ease(Math.min(1, t / open));
+    if (t > lead + grow + hold) k *= 1 - (t - lead - grow - hold) / close;
+    const st = world.start;
+    drawPortal(g, sx(st.x), sy(st.y - T.radius - T.nodeRadius), EXIT_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
+  }
+
+  // ---- the finale ---------------------------------------------------------------
+
+  // Everything goes into the exit portal it reached (sink) along a spiral:
+  // the slime first, over SUCK.slime seconds, then each tile on the screen
+  // and each platform and door, the nearer ones first (spread over
+  // SUCK.spread, each taking SUCK.each). warp() is the path, the same for
+  // anything that is to go in, so a later thing (an enemy) goes in by
+  // drawing itself through it. The things that are not solid (buttons,
+  // cards, flags, panels' glow, drops) fade out first.
+  const EXIT_R = 1.2, EXIT_UP = 1.5;   // tiles: the exit portal's radius, its centre above the exit's floor point
+  const SUCK = { slime: 0.6, start: 0.35, spread: 1.8, each: 0.9, jitter: 0.15, twist: 3.2, fade: 0.35, close: 0.4 };
+  let sink = null, pieces = null;
+
+  // where the world point (x, y) is when it started going in at ts and
+  // takes d seconds, at finale time t: { x, y, k (scale), a (turn), alpha }
+  function warp(x, y, ts, d, t) {
+    const cx = sink.x, cy = sink.y - EXIT_UP;
+    const u = Math.max(0, Math.min(1, (t - ts) / d)), e = u * u;
+    const dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy) * (1 - e), a = SUCK.twist * e;
+    const th = Math.atan2(dy, dx) + a;
+    return { x: cx + Math.cos(th) * r, y: cy + Math.sin(th) * r, k: Math.pow(1 - e, 0.7), a, alpha: u < 0.85 ? 1 : (1 - u) / 0.15 };
+  }
+
+  function startFinale(slime) {
+    const c = slime.centre();
+    sink = world.exits.reduce((a, b) => (Math.hypot(b.x - c.x, b.y - c.y) < Math.hypot(a.x - c.x, a.y - c.y) ? b : a));
+    const vw = canvas.width / S, vh = canvas.height / S, x0 = Math.floor(-offX / S) - 3, y0 = Math.floor(-offY / S) - 3;
+    const cx = sink.x, cy = sink.y - EXIT_UP;
+    pieces = [];
+    for (let y = y0; y < y0 + vh + 6; y++) {
+      for (let x = x0; x < x0 + vw + 6; x++) {
+        if (x < 0 || y < 0 || x >= world.w || y >= world.h || !world.at(x, y)) continue;
+        pieces.push({ x: x + 0.5, y: y + 0.5, cell: [x, y] });
+      }
+    }
+    for (const m of world.movers) if (m.w > 1e-3 && m.h > 1e-3) pieces.push({ x: m.x + m.w / 2, y: m.y + m.h / 2, mover: m });
+    const far = Math.max(1, ...pieces.map((q) => Math.hypot(q.x - cx, q.y - cy)));
+    for (const q of pieces) q.ts = SUCK.start + (Math.hypot(q.x - cx, q.y - cy) / far) * SUCK.spread + Math.random() * SUCK.jitter;
+  }
+
+  // the screen through the finale: the empty room, and what has not gone in yet
+  function drawFinale(t) {
+    const grad = g.createLinearGradient(0, sy(0), 0, sy(world.h));
+    grad.addColorStop(0, '#15111f'); grad.addColorStop(1, '#251c33');
+    g.fillStyle = grad; g.fillRect(0, 0, canvas.width, canvas.height);
+    for (const q of pieces) {
+      if (t > q.ts + SUCK.each) continue;
+      const w = warp(q.x, q.y, q.ts, SUCK.each, t);
+      const cos = Math.cos(w.a) * w.k, sin = Math.sin(w.a) * w.k;
+      g.globalAlpha = w.alpha;
+      if (q.cell) {
+        const [x, y] = q.cell, ccx = Math.floor(x / CHUNK), ccy = Math.floor(y / CHUNK);
+        const ch = chunk(ccx, ccy), px0 = Math.round(ccx * CHUNK * S), py0 = Math.round(ccy * CHUNK * S);
+        const X = Math.round(x * S) - px0, Y = Math.round(y * S) - py0, s = Math.round((x + 1) * S) - px0 - X, h = Math.round((y + 1) * S) - py0 - Y;
+        g.setTransform(cos, sin, -sin, cos, sx(w.x), sy(w.y));
+        g.drawImage(ch, X, Y, s, h, -s / 2, -h / 2, s, h);
+      } else {
+        g.setTransform(cos, sin, -sin, cos, sx(w.x), sy(w.y));
+        g.translate(-sx(q.x), -sy(q.y));
+        drawMover(q.mover);
+      }
+    }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
   }
 
   // ---- drops and slime ----------------------------------------------------------
@@ -474,11 +565,19 @@ export function createRenderer(canvas, T) {
   }
 
   // `look`: { x, y } the eyes' direction; `fx`: { shrink 0–1 (1 = gone),
-  // dead (crossed eyes), wince (squeezed eyes) }
+  // dead (crossed eyes), wince (squeezed eyes), warp (a point's place on
+  // the way into the exit portal) }
   function drawSlime(slime, col, look, blink, carried, fx) {
-    const c = slime.centre(), keep = 1 - fx.shrink;
+    let c = slime.centre(), keep = 1 - fx.shrink;
     if (keep <= 0.01) return;
-    const pts = slime.outline().map((p) => ({ x: c.x + (p.x - c.x) * keep, y: c.y + (p.y - c.y) * keep }));
+    let pts = slime.outline().map((p) => ({ x: c.x + (p.x - c.x) * keep, y: c.y + (p.y - c.y) * keep }));
+    if (fx.warp) {
+      const wc = fx.warp(c.x, c.y);
+      if (wc.k <= 0.02 || wc.alpha <= 0.02) return;
+      pts = pts.map((p) => fx.warp(p.x, p.y));
+      keep *= wc.k;
+      c = wc;
+    }
     const N = pts.length, R = T.radius * S * keep;
     const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
     const cx = sx(c.x), cy = sy(c.y);
@@ -543,18 +642,36 @@ export function createRenderer(canvas, T) {
     // hurt, the slime runs hot: towards red, flickering while it burns
     const hurt = 1 - game.health, flicker = game.burns.length ? 0.15 * Math.sin(clock * 40) : 0;
     const col = palette(T.color, Math.max(0, Math.min(1, hurt * 0.75 + flicker)));
-    drawTiles();
-    drawPanels(clock);
-    drawFlags(game, col, clock);
-    drawButtons(game);
-    drawCards(game, clock);
-    drawMovers();
-    drawDrops(trail.drops, palette(T.color));
-    // dying: the slime sags for the first 60 % of respawnTime, then shrinks away
-    const shrink = Math.max(0, (game.dying - 0.6) / 0.4);
-    drawSlime(slime, col, look, blink, game.carried, { shrink, dead: game.dead, wince: game.burns.length > 0 });
-    drawSmoke(game, dt);
-    drawHaze(clock);
+    if (!game.finished) { sink = null; pieces = null; }
+    else if (!pieces) startFinale(slime);
+    const t = game.after;
+    // the things that are not solid fade out as the finale begins
+    const things = pieces ? Math.max(0, 1 - t / SUCK.fade) : 1;
+    if (pieces) drawFinale(t); else drawTiles();
+    g.globalAlpha = things;
+    if (things > 0) {
+      drawPanels(clock);
+      drawFlags(game, col, clock);
+      drawButtons(game);
+      drawCards(game, clock);
+    }
+    g.globalAlpha = 1;
+    drawExits(game, clock);
+    drawArrival(game, clock);
+    if (!pieces) drawMovers();
+    g.globalAlpha = things;
+    if (things > 0) drawDrops(trail.drops, palette(T.color));
+    g.globalAlpha = 1;
+    // dying: the slime sags for the first 60 % of respawnTime, then shrinks
+    // away; arriving, it grows out of the start portal
+    let shrink = Math.max(0, (game.dying - 0.6) / 0.4);
+    if (!game.finished && game.time < ARRIVE.lead + ARRIVE.grow) {
+      const u = Math.max(0, (game.time - ARRIVE.lead) / ARRIVE.grow);
+      shrink = (1 - u) * (1 - u);
+    }
+    const warpSlime = pieces ? (x, y) => warp(x, y, 0, SUCK.slime, t) : null;
+    drawSlime(slime, col, look, blink, game.carried, { shrink, dead: game.dead, wince: game.burns.length > 0, warp: warpSlime });
+    if (!pieces) { drawSmoke(game, dt); drawHaze(clock); }
   }
 
   addEventListener('resize', resize);
