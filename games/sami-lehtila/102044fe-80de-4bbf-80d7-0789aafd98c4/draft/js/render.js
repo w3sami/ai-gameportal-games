@@ -469,13 +469,13 @@ export function createRenderer(canvas, T) {
 
   // the start portal while the slime comes out of it
   function drawArrival(game, clock) {
-    const t = game.time, { open, hold, close, lead, grow } = ARRIVE;
-    if (game.finished || t > lead + grow + hold + close) return;
+    const t = game.time, { open, free, hold, close } = ARRIVE;
+    if (game.finished || t > free + hold + close) return;
     const ease = (u) => 1 - (1 - u) * (1 - u);
     let k = ease(Math.min(1, t / open));
-    if (t > lead + grow + hold) k *= 1 - (t - lead - grow - hold) / close;
+    if (t > free + hold) k *= 1 - ease((t - free - hold) / close);
     const st = world.start;
-    drawPortal(g, sx(st.x), sy(st.y - arriveLift(T) - T.radius - T.nodeRadius), ARRIVE_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
+    drawPortal(g, sx(st.x), sy(st.y - arriveLift(T) - T.radius - T.nodeRadius), EXIT_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
   }
 
   // ---- the finale ---------------------------------------------------------------
@@ -488,7 +488,6 @@ export function createRenderer(canvas, T) {
   // drawing itself through it. The things that are not solid (buttons,
   // cards, flags, panels' glow, drops) fade out first.
   const EXIT_R = 1.2, EXIT_UP = 1.5;   // tiles: the exit portal's radius, its centre above the exit's floor point
-  const ARRIVE_R = 0.6;                // tiles: the start portal's radius; its glow is about the slime's size
   // twist: the turn a piece takes is twist × (1 / (r + 1) − 1 / (r0 + 1))
   // radians, r its distance from the portal in tiles, so a piece from afar
   // falls in almost straight and swirls only near the portal
