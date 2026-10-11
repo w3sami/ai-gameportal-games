@@ -27,12 +27,12 @@ const LABELS = [
   { key: 'huomio', color: '#e9edff' },
 ];
 
-const TILE_NAME = { stone: 'kivi', wood: 'puu', ice: 'jää', metal: 'metalli', pad: 'alusta', panel: 'paneeli' };
-const TILE_COLOR = { stone: '#5a536b', wood: '#80532f', ice: '#9fdcf3', metal: '#7a8593', pad: '#ffd43b', panel: '#ff5a3a' };
+const TILE_NAME = { stone: 'kivi', wood: 'puu', ice: 'jää', metal: 'metalli', diamond: 'timantti', pad: 'alusta', panel: 'paneeli' };
+const TILE_COLOR = { stone: '#5a536b', wood: '#80532f', ice: '#9fdcf3', metal: '#7a8593', diamond: '#5fc4e0', pad: '#ffd43b', panel: '#ff5a3a' };
 const KIND_NAME = { start: 'alku', checkpoint: 'tarkistuspiste', exit: 'maali', button: 'nappi', card: 'kortti', door: 'ovi', platform: 'liikkuva taso' };
 const KIND_COLOR = { start: '#7fd4ff', checkpoint: '#c9c2d6', exit: '#c58cff', platform: '#56657a' };
 const SLOPE = { br: '◢', bl: '◣', tr: '◥', tl: '◤' };
-const ORDER = ['stone', 'wood', 'ice', 'metal', 'pad', 'panel'];
+const ORDER = ['stone', 'wood', 'diamond', 'ice', 'metal', 'pad', 'panel'];
 const KIND_ORDER = ['start', 'checkpoint', 'exit', 'button', 'card', 'door', 'platform'];
 
 // what a legend entry is, in a few words
