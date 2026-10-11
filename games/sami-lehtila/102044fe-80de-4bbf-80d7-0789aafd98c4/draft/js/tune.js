@@ -50,7 +50,8 @@ export const DEFAULTS = {
 
   tiles: {
     stone: { grip: 1, magnet: 1 },
-    wood: { grip: 1, magnet: 0 },
+    wood: { grip: 1, magnet: 1 },
+    diamond: { grip: 1, magnet: 0 },
     ice: { grip: 0.03, magnet: 0.5 },
     metal: { grip: 0.8, magnet: 2 },
     pad: { grip: 1, magnet: 0 },
