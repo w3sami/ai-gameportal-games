@@ -1,8 +1,10 @@
-// Boot, the levels one after another, the fixed-step loop, the run's clock
-// and messages, the hint line and fullscreen.
+// Boot, the levels one after another, the level menu, the fixed-step loop,
+// the run's clock and messages, the hint line and fullscreen.
 //
 // Each level gets a world, a slime, a ball, a trail and its rules of its
-// own (load()). ?level=2 in the address starts at level 2.
+// own (load()). ?level=2 in the address starts at level 2. A level starts
+// with the ball button counted as let go, so the press that chose it does
+// not jump.
 
 import { loadTune } from './tune.js';
 import { LEVELS } from './level.js';
@@ -14,12 +16,15 @@ import { createGame } from './game.js';
 import { createRenderer } from './render.js';
 import { createInput } from './input.js';
 import { createTuning } from './tuning.js';
+import { createMenu } from './menu.js';
 
 const T = await loadTune();
 const renderer = createRenderer(document.getElementById('view'), T);
 const input = createInput();
 
 let level = 0, world, trail, slime, ball, game;
+let holdOff = false;   // the ball button is ignored until it is let go
+let recorded = false;  // this run's time at the exit has gone to the best times
 function load(i) {
   level = Math.max(0, Math.min(LEVELS.length - 1, i));
   world = buildWorld(LEVELS[level], T);
@@ -30,6 +35,7 @@ function load(i) {
   game = createGame(T, world, slime, ball, trail);
   renderer.setWorld(world);
   game.say(`${level + 1}. ${LEVELS[level].name}`, 2.5);
+  holdOff = true; recorded = false;
   if (window.lima) Object.assign(window.lima, { world, slime, ball, trail, game, level });
 }
 load((parseInt(new URLSearchParams(location.search).get('level'), 10) || 1) - 1);
@@ -86,14 +92,24 @@ function drawBar() {
 // the run's clock, and what the level has to say
 const timeEl = document.getElementById('time'), msgEl = document.getElementById('msg');
 const clockText = (t) => Math.floor(t / 60) + ':' + (t % 60).toFixed(1).padStart(4, '0');
+let record = false;   // the finished run beat the best time
 function drawHud() {
   timeEl.textContent = clockText(game.time);
   timeEl.classList.toggle('done', game.finished);
+  if (game.finished && !recorded) { recorded = true; record = menu.record(level, game.time); }
   const next = level + 1 < LEVELS.length ? ' · A: seuraava kenttä' : '';
-  const text = game.finished ? 'Maali! ' + clockText(game.time) + next + ' · R: uudestaan' : game.message;
+  const text = game.finished
+    ? 'Maali! ' + clockText(game.time) + (record ? ' · ennätys!' : '') + next + ' · R: uudestaan · M: kentät'
+    : game.message;
   if (msgEl.textContent !== text) msgEl.textContent = text;
   msgEl.hidden = !text;
 }
+
+// ---- level menu ----------------------------------------------------------------
+
+const menu = createMenu(LEVELS, clockText, (i) => { load(i); last = performance.now(); });
+const menuButton = document.getElementById('menu');
+menuButton.addEventListener('click', () => { if (menu.open) menu.close(); else menu.show(level); menuButton.blur(); });
 
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
@@ -101,7 +117,18 @@ function frame(now) {
   clock += dt;
   input.poll(dt);
 
+  // the menu pauses the game and takes the controls while it is open
+  if (menu.open && !input.isOpen()) {
+    if (input.pressed('menu')) menu.close();
+    else menu.update(input.stick(), input.pressed('ball'));
+    renderer.draw(slime, trail, game, look, false, clock, 0);
+    drawHud();
+    requestAnimationFrame(frame);
+    return;
+  }
+
   if (!input.isOpen()) {
+    if (input.pressed('menu')) menu.show(level);
     if (input.pressed('fullscreen')) toggleFullscreen();
     if (input.pressed('controls')) input.open(() => { last = performance.now(); });
     // at the exit, the ball button goes on to the next level
@@ -120,7 +147,9 @@ function frame(now) {
   if (!frozen) {
     const driven = window.lima.drive?.();
     stick = driven ?? input.stick();
-    const held = driven ? !!driven.ball : input.held('ball');
+    let held = driven ? !!driven.ball : input.held('ball');
+    if (!held) holdOff = false;
+    if (holdOff) held = false;
     acc += dt;
     while (acc >= DT) {
       // a dying slime sags where it is, with nothing steering it
