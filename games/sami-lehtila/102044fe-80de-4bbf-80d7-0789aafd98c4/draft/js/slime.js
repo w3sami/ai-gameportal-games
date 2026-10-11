@@ -33,8 +33,8 @@
 // on. step() runs the world's clock along, a substep at a time.
 //
 // A pad tile throws the whole body, but only while the jump button is held
-// (step's `held`), ball or not; otherwise it is a floor like any other, and
-// a 'padwait' event says the body is on one. Once any node touches a pad,
+// (step's `held`), ball or not; otherwise it is a floor like any other.
+// Once any node touches a pad,
 // the body's speed along the throw is raised to the pad's speed, out of the
 // face touched. A pad with a `dir` (an arrow) sets the body's whole speed
 // to its throw instead, along `dir`, so it throws the same way however the
@@ -401,7 +401,7 @@ export function createSlime(T, world, emit) {
     if (arrow) { dx = ax; dy = ay; speed = arrowSpeed; }
     const l = Math.hypot(dx, dy), fl = Math.hypot(fx, fy);
     if (l < 1e-6 || fl < 1e-6) return;
-    if (!jump) { on('padwait', {}); return; }
+    if (!jump) return;
     dx /= l; dy /= l;
     const came = Math.max(0, -(inx * fx + iny * fy) / fl);
     const want = Math.max(speed, came * T.padBounce);

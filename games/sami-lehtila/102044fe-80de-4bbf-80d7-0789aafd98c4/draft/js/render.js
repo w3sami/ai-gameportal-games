@@ -2,7 +2,8 @@
 // to bottom (fewer across a narrow screen), and stops at the level's edges.
 // The tiles that never change are drawn once into chunks of CHUNK × CHUNK
 // tiles, kept until the screen's size changes; platforms, doors, the
-// panels' glow, the things, the drops and the slime are drawn every frame.
+// panels' glow, the things, the drops and the slime are drawn every frame,
+// and last the hot air over red panels bends what is already drawn.
 
 import { SLOPES } from './world.js';
 
@@ -274,6 +275,53 @@ export function createRenderer(canvas, T) {
     }
   }
 
+  // Hot air over a red panel: the picture just out from the face is copied
+  // aside once (haze), then drawn back in thin bands parallel to the face,
+  // each nudged along it by a wave rising off it, so whatever is behind
+  // (the slime too) shimmers. Pieces of HAZE_PIECE tiles along the face each
+  // get a wave of their own. A warning panel starts to shimmer as it heats.
+  const HAZE_DEPTH = 2.2;   // tiles out from the face
+  const HAZE_BAND = 5;      // device pixels across one band
+  const HAZE_PIECE = 4;     // tiles along the face in one piece
+  const haze = document.createElement('canvas'), hg = haze.getContext('2d');
+  function drawHaze(clock) {
+    for (const p of world.panels) {
+      const { state, k } = world.turn(p.e);
+      const heat = state === 'on' ? 1 : state === 'warn' ? k * k * 0.6 : 0;
+      if (heat < 0.05 || !visible(p.x + p.tx * p.len / 2, p.y + p.ty * p.len / 2, p.len)) continue;
+      // the area on screen, copied aside
+      const at = (a, d) => [sx(p.x + p.tx * a + p.nx * d), sy(p.y + p.ty * a + p.ny * d)];
+      const box = [at(0, 0), at(p.len, 0), at(0, HAZE_DEPTH), at(p.len, HAZE_DEPTH)];
+      const X0 = Math.max(0, Math.floor(Math.min(...box.map((q) => q[0])) - S));
+      const Y0 = Math.max(0, Math.floor(Math.min(...box.map((q) => q[1])) - S));
+      const X1 = Math.min(canvas.width, Math.ceil(Math.max(...box.map((q) => q[0])) + S));
+      const Y1 = Math.min(canvas.height, Math.ceil(Math.max(...box.map((q) => q[1])) + S));
+      if (X1 - X0 < 2 || Y1 - Y0 < 2) continue;
+      if (haze.width < X1 - X0 || haze.height < Y1 - Y0) { haze.width = Math.max(haze.width, X1 - X0); haze.height = Math.max(haze.height, Y1 - Y0); }
+      hg.clearRect(0, 0, X1 - X0, Y1 - Y0);
+      hg.drawImage(canvas, X0, Y0, X1 - X0, Y1 - Y0, 0, 0, X1 - X0, Y1 - Y0);
+      const band = HAZE_BAND / S, pieces = Math.max(1, Math.round(p.len / HAZE_PIECE)), piece = p.len / pieces;
+      g.save();
+      g.beginPath(); g.rect(X0, Y0, X1 - X0, Y1 - Y0); g.clip();
+      for (let i = 0; i < pieces; i++) {
+        const a0 = i * piece, seed = p.x * 1.7 + p.y * 2.3 + i * 4.1;
+        for (let d = 0; d < HAZE_DEPTH; d += band) {
+          const fade = 1 - d / HAZE_DEPTH;
+          const shift = heat * fade * (0.06 * Math.sin(d * 5 - clock * 7 + seed) + 0.03 * Math.sin(d * 11 - clock * 13 + seed * 2));
+          const q = [at(a0, d), at(a0 + piece, d), at(a0 + piece, d + band), at(a0, d + band)];
+          const x0 = Math.max(X0, Math.floor(Math.min(...q.map((c) => c[0])))), y0 = Math.max(Y0, Math.floor(Math.min(...q.map((c) => c[1]))));
+          const x1 = Math.min(X1, Math.ceil(Math.max(...q.map((c) => c[0])))), y1 = Math.min(Y1, Math.ceil(Math.max(...q.map((c) => c[1]))));
+          if (x1 - x0 < 1 || y1 - y0 < 1) continue;
+          g.save();
+          g.beginPath(); g.moveTo(q[0][0], q[0][1]); for (let j = 1; j < 4; j++) g.lineTo(q[j][0], q[j][1]); g.closePath(); g.clip();
+          g.drawImage(haze, x0 - X0, y0 - Y0, x1 - x0, y1 - y0, x0 + p.tx * shift * S, y0 + p.ty * shift * S, x1 - x0, y1 - y0);
+          g.restore();
+        }
+      }
+      g.restore();
+    }
+  }
+
   // smoke and sparks where the slime burns
   const puffs = [];
   function drawSmoke(game, dt) {
@@ -506,6 +554,7 @@ export function createRenderer(canvas, T) {
     const shrink = Math.max(0, (game.dying - 0.6) / 0.4);
     drawSlime(slime, col, look, blink, game.carried, { shrink, dead: game.dead, wince: game.burns.length > 0 });
     drawSmoke(game, dt);
+    drawHaze(clock);
   }
 
   addEventListener('resize', resize);
