@@ -1,7 +1,8 @@
 // Everything drawn. The camera follows the slime and shows T.view tiles top
 // to bottom (fewer across a narrow screen), and stops at the level's edges.
 // The tiles that never change are drawn once into chunks of CHUNK × CHUNK
-// tiles, kept until the screen's size changes; platforms, doors, the
+// tiles, kept until the screen's size changes, the ones seen longest ago
+// let go past KEEP screens' worth of them; platforms, doors, the
 // panels' glow, the things, the drops and the slime are drawn every frame,
 // and last the hot air over red panels bends what is already drawn.
 //
@@ -14,6 +15,7 @@ import { drawPortal, ARRIVE, ARRIVE_COLOR, EXIT_COLOR, arriveLift } from './port
 
 const TAU = Math.PI * 2;
 const CHUNK = 16;
+const KEEP = 4;
 
 export function createRenderer(canvas, T) {
   const g = canvas.getContext('2d');
@@ -160,7 +162,8 @@ export function createRenderer(canvas, T) {
   function chunk(cx, cy) {
     const key = cx + ',' + cy;
     let ch = chunks.get(key);
-    if (ch) return ch;
+    // the map's order is the order of use: a chunk drawn goes last
+    if (ch) { chunks.delete(key); chunks.set(key, ch); return ch; }
     const px0 = Math.round(cx * CHUNK * S), py0 = Math.round(cy * CHUNK * S);
     ch = document.createElement('canvas');
     ch.width = Math.round((cx + 1) * CHUNK * S) - px0;
@@ -208,7 +211,20 @@ export function createRenderer(canvas, T) {
       }
     }
     chunks.set(key, ch);
+    trim();
     return ch;
+  }
+
+  // a big level is never all in memory: past KEEP screens' worth of pixels,
+  // the chunks drawn longest ago go
+  function trim() {
+    let px = 0;
+    for (const c of chunks.values()) px += c.width * c.height;
+    for (const [k, c] of chunks) {
+      if (px <= KEEP * canvas.width * canvas.height) break;
+      chunks.delete(k);
+      px -= c.width * c.height;
+    }
   }
 
   // ---- camera -------------------------------------------------------------------

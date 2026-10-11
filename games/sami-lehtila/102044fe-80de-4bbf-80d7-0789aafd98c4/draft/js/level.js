@@ -33,6 +33,7 @@ import luola from './levels/luola.js';
 import siksak from './levels/siksak.js';
 import vino from './levels/vino.js';
 import ranni from './levels/ranni.js';
+import hiekka from './levels/hiekka.js';
 
 export const LEGEND = {
   '#': { tile: 'stone' },
@@ -55,7 +56,7 @@ export const LEGEND = {
   E: { kind: 'exit' },
 };
 
-export const LEVELS = [luola, siksak, vino, ranni];
+export const LEVELS = [luola, siksak, vino, ranni, hiekka];
 
 // Each level's rows from config/level-<key>.json. A level whose file cannot
 // be read gets a closed room with a start and an exit, and says so.
