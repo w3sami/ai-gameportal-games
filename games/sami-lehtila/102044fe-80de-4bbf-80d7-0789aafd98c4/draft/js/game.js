@@ -14,8 +14,8 @@
 //   - a card is picked up by touching it and opens the first door keyed to
 //     it that the slime then touches; that uses the card up
 //   - checkpoints and the exit count once the slime's centre is near them
-//   - the first time a pad throws a slime rather than a ball, a message
-//     says a ball bounces higher
+//   - the first time the slime is on a pad without the jump button held, a
+//     message says holding it makes the pad throw
 //
 // The run's clock starts with the level and stops at the exit. restart()
 // puts the whole level back as it began.
@@ -145,15 +145,15 @@ export function createGame(T, world, slime, ball, trail) {
     }
   }
 
-  // a pad threw the body (slime.js's 'pad' event)
-  function pad(e) {
-    if (e.ball || padHint || dead) return;
+  // the body is on a pad with the jump button let go (slime.js's 'padwait')
+  function padWait() {
+    if (padHint || dead) return;
     padHint = true;
-    say('Pallona alusta heittää kovempaa', 2.5);
+    say('Pidä hyppy pohjassa, niin alusta heittää', 2.5);
   }
 
   return {
-    update, restart, pad, say,
+    update, restart, padWait, say,
     // back to the last checkpoint, the same way as dying
     toCheckpoint() { if (!dead && !finished) die(); },
     get dead() { return dead > 0; },
