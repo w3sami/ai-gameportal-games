@@ -13,6 +13,7 @@
 // and labels (drawn in those units) keep a readable size.
 
 import { createSketchpad } from 'https://plugins.game.bigbools.fi/sketchpad/v1/index.js';
+import { packRows, MAP_MAX } from './level.js';
 
 const U = 32;
 
@@ -94,16 +95,20 @@ export function createEditor(host) {
     end: () => host.rebuild(),
     dirty,
     async save() {
-      const body = JSON.stringify({ rows: rowsOf() }, null, 1) + '\n';
+      const body = mapFile();
       const res = await host.save(`config/level-${level().key}.json`, body);
       if (res?.saved) remember();
       return res;
     },
   };
 
+  const mapFile = () => JSON.stringify({ rows: packRows(rowsOf()) }, null, 1) + '\n';
+
   // the things the game rules need, as warnings (they never block anything)
   function check() {
     const w = host.world(), out = [], box = (p) => ({ x: (p.x - 1) * U, y: (p.y - 2) * U, w: 2 * U, h: 2 * U });
+    const size = new Blob([mapFile()]).size;
+    if (size > MAP_MAX) out.push({ text: `kartta on ${Math.ceil(size / 1024)} kt, tallennus ottaa enintään ${MAP_MAX / 1024} kt` });
     const starts = Object.entries(w.legend).filter(([, e]) => e.kind === 'start').map(([k]) => k);
     const n = [...rowsOf().join('')].filter((c) => starts.includes(c)).length;
     if (n !== 1) out.push({ text: `kentässä pitää olla tasan yksi alku (nyt ${n})` });
