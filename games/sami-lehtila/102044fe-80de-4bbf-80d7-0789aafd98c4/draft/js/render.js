@@ -74,6 +74,26 @@ export function createRenderer(canvas, T) {
       c.fillStyle = 'rgba(255,220,170,.12)';
       for (let i = 0; i < 3; i++) c.fillRect(rand(x, y, i) * s * 0.6, s * (0.1 + i * 0.33), s * 0.35, Math.max(1, s * 0.03));
     },
+    // a cut gem: four facets around a lighter table, a glint on some
+    diamond(c, s, x, y) {
+      const m = s / 2, k = s * 0.22;
+      const facet = (col, pts) => { c.fillStyle = col; c.beginPath(); pts.forEach(([a, b], i) => (i ? c.lineTo(a, b) : c.moveTo(a, b))); c.closePath(); c.fill(); };
+      fill(c, s, '#2f86a8');
+      facet('#7fd3ec', [[0, 0], [s, 0], [m, m]]);
+      facet('#4fb0d2', [[0, 0], [0, s], [m, m]]);
+      facet('#2a7898', [[s, 0], [s, s], [m, m]]);
+      facet('#1f6280', [[0, s], [s, s], [m, m]]);
+      facet('#b6ecfa', [[m, m - k], [m + k, m], [m, m + k], [m - k, m]]);
+      c.strokeStyle = 'rgba(255,255,255,.25)'; c.lineWidth = Math.max(1, s * 0.03);
+      c.strokeRect(0.5, 0.5, s - 1, s - 1);
+      if (rand(x, y, 3) < 0.3) {
+        // a four-pointed glint
+        const gx = s * (0.25 + rand(x, y, 4) * 0.5), gy = s * (0.2 + rand(x, y, 5) * 0.3), r = s * 0.14;
+        c.fillStyle = 'rgba(255,255,255,.85)';
+        facet(c.fillStyle, [[gx, gy - r], [gx + r * 0.25, gy], [gx, gy + r], [gx - r * 0.25, gy]]);
+        facet(c.fillStyle, [[gx - r, gy], [gx, gy - r * 0.25], [gx + r, gy], [gx, gy + r * 0.25]]);
+      }
+    },
     ice(c, s) {
       fill(c, s, '#9fdcf3');
       c.strokeStyle = 'rgba(255,255,255,.65)'; c.lineWidth = Math.max(1, s * 0.05);
@@ -248,6 +268,18 @@ export function createRenderer(canvas, T) {
     cam.y = world.h <= 2 * vh ? world.h / 2 : Math.max(vh, Math.min(world.h - vh, cam.y));
     offX = Math.round(canvas.width / 2 - cam.x * S);
     offY = Math.round(canvas.height / 2 - cam.y * S);
+  }
+
+  // outside the map counts as stone (world.js) and is drawn as stone; with
+  // the editor's camera, which can go there, it is darkened so the map's
+  // own edge shows
+  function shadeOutside() {
+    const x0 = sx(0), y0 = sy(0), x1 = sx(world.w), y1 = sy(world.h), W = canvas.width, H = canvas.height;
+    g.fillStyle = 'rgba(0,0,0,.6)';
+    g.fillRect(0, 0, W, Math.max(0, y0));
+    g.fillRect(0, y1, W, Math.max(0, H - y1));
+    g.fillRect(0, y0, Math.max(0, x0), y1 - y0);
+    g.fillRect(x1, y0, Math.max(0, W - x1), y1 - y0);
   }
 
   function drawTiles() {
@@ -683,6 +715,7 @@ export function createRenderer(canvas, T) {
     // the things that are not solid fade out as the finale begins
     const things = pieces ? Math.max(0, 1 - t / SUCK.fade) : 1;
     if (pieces) drawFinale(t); else drawTiles();
+    if (free) shadeOutside();
     g.globalAlpha = things;
     if (things > 0) {
       drawPanels(clock);
