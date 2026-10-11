@@ -4,6 +4,8 @@
 // tiles, kept until the screen's size changes; platforms, doors, the
 // panels' glow, the things, the drops and the slime are drawn every frame.
 
+import { SLOPES } from './world.js';
+
 const TAU = Math.PI * 2;
 const CHUNK = 16;
 
@@ -41,7 +43,8 @@ export function createRenderer(canvas, T) {
   };
 
   // Each draws one tile of size s at the context's origin. `face` is the
-  // outward normal of a side open to the room, if any.
+  // outward normal of a side open to the room, if any, with `slope` (from
+  // world.js's SLOPES) when that side is a slope's long side.
   const TILE = {
     stone(c, s, x, y) {
       fill(c, s, '#3b3649');
@@ -79,7 +82,11 @@ export function createRenderer(canvas, T) {
       const dir = meta?.dir || (face && [face.nx, face.ny]) || [0, -1];
       const l = Math.hypot(dir[0], dir[1]) || 1, a = Math.atan2(dir[1] / l, dir[0] / l);
       c.save();
-      c.translate(s / 2, s / 2); c.rotate(a);
+      // on a slope, smaller, in the middle of its triangle
+      const pts = face?.slope?.pts;
+      if (pts) { c.translate(s * (pts[0][0] + pts[1][0] + pts[2][0]) / 3, s * (pts[0][1] + pts[1][1] + pts[2][1]) / 3); c.scale(0.6, 0.6); }
+      else c.translate(s / 2, s / 2);
+      c.rotate(a);
       c.strokeStyle = '#ffd43b'; c.fillStyle = '#ffd43b';
       c.lineWidth = Math.max(1.5, s * 0.1); c.lineCap = 'round'; c.lineJoin = 'round';
       if (meta?.dir) {
@@ -92,7 +99,13 @@ export function createRenderer(canvas, T) {
         }
       }
       c.restore();
-      if (face) {
+      if (face?.slope) {
+        // the springy face along the slope's long side
+        const { a, b, n } = face.slope;
+        c.strokeStyle = '#ffd43b'; c.lineWidth = s * 0.14; c.lineCap = 'butt';
+        c.beginPath(); c.moveTo((a[0] - n[0] * 0.07) * s, (a[1] - n[1] * 0.07) * s);
+        c.lineTo((b[0] - n[0] * 0.07) * s, (b[1] - n[1] * 0.07) * s); c.stroke();
+      } else if (face) {
         // the springy face itself
         c.fillStyle = '#ffd43b';
         const t = s * 0.14;
@@ -125,7 +138,12 @@ export function createRenderer(canvas, T) {
 
   function fill(c, s, col) { c.fillStyle = col; c.fillRect(0, 0, s + 0.5, s + 0.5); }
 
-  const open = (x, y) => [[0, -1], [-1, 0], [1, 0], [0, 1]].map(([dx, dy]) => (!world.at(x + dx, y + dy) ? { nx: dx, ny: dy } : null)).find(Boolean);
+  const bare = (x, y, dx, dy) => !world.covers(x + dx, y + dy, -dx, -dy);
+  function open(x, y) {
+    const sl = world.slopeAt(x, y);
+    if (sl) return { nx: sl.n[0], ny: sl.n[1], slope: sl };
+    return [[0, -1], [-1, 0], [1, 0], [0, 1]].map(([dx, dy]) => (bare(x, y, dx, dy) ? { nx: dx, ny: dy } : null)).find(Boolean);
+  }
 
   function chunk(cx, cy) {
     const key = cx + ',' + cy;
@@ -154,15 +172,27 @@ export function createRenderer(canvas, T) {
         const x = cx * CHUNK + i, y = cy * CHUNK + j, type = world.at(x, y);
         if (!type) continue;
         const X = Math.round(x * S) - px0, Y = Math.round(y * S) - py0, s = Math.round((x + 1) * S) - px0 - X;
+        const sl = world.slopeAt(x, y);
         c.save(); c.translate(X, Y);
+        if (sl) {
+          // a slope: the tile's art clipped to its triangle, a dark rim along its long side
+          c.beginPath(); sl.pts.forEach(([a, b], k) => (k ? c.lineTo(a * s, b * s) : c.moveTo(a * s, b * s))); c.closePath();
+          c.save(); c.clip();
+          (TILE[type] || TILE.stone)(c, s, x, y, world.metaAt(x, y), open(x, y));
+          c.restore();
+          c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = rim * 2;
+          c.beginPath(); c.moveTo(sl.a[0] * s, sl.a[1] * s); c.lineTo(sl.b[0] * s, sl.b[1] * s); c.stroke();
+          c.restore();
+          continue;
+        }
         (TILE[type] || TILE.stone)(c, s, x, y, world.metaAt(x, y), open(x, y));
         c.restore();
         // a dark rim where the tile faces the room
         c.fillStyle = 'rgba(0,0,0,.35)';
-        if (!world.at(x, y - 1)) c.fillRect(X, Y, s, rim);
-        if (!world.at(x, y + 1)) c.fillRect(X, Y + s - rim, s, rim);
-        if (!world.at(x - 1, y)) c.fillRect(X, Y, rim, s);
-        if (!world.at(x + 1, y)) c.fillRect(X + s - rim, Y, rim, s);
+        if (bare(x, y, 0, -1)) c.fillRect(X, Y, s, rim);
+        if (bare(x, y, 0, 1)) c.fillRect(X, Y + s - rim, s, rim);
+        if (bare(x, y, -1, 0)) c.fillRect(X, Y, rim, s);
+        if (bare(x, y, 1, 0)) c.fillRect(X + s - rim, Y, rim, s);
       }
     }
     chunks.set(key, ch);
@@ -203,54 +233,44 @@ export function createRenderer(canvas, T) {
   // A glass tube just inside each strip of open panel face. Dark it shows a
   // faint cool line; warning, it heats up in quickening pulses; red, it
   // burns white-hot at the core and throws a red glow into the room.
+  // Drawn in the strip's own frame: x along the face, y into the tile.
   function drawPanels(clock) {
     for (const p of world.panels) {
-      const ax = p.ny ? 1 : 0, ay = p.ny ? 0 : 1;   // along the face
-      if (!visible(p.x + ax * p.len / 2, p.y + ay * p.len / 2, p.len)) continue;
+      if (!visible(p.x + p.tx * p.len / 2, p.y + p.ty * p.len / 2, p.len)) continue;
       const { state, k } = world.turn(p.e);
-      // the tube: from 0.1 to len − 0.1 along, 0.08 to 0.36 in from the face
-      const box = (a0, a1, d0, d1) => {
-        const xs = [p.x + ax * a0 - p.nx * d0, p.x + ax * a1 - p.nx * d1];
-        const ys = [p.y + ay * a0 - p.ny * d0, p.y + ay * a1 - p.ny * d1];
-        const x0 = Math.min(...xs), y0 = Math.min(...ys);
-        return [sx(x0), sy(y0), (Math.max(...xs) - x0) * S, (Math.max(...ys) - y0) * S];
-      };
-      const [X, Y, Wt, Ht] = box(0.1, p.len - 0.1, 0.08, 0.36);
-      const r = Math.min(Wt, Ht) / 2;
       let heat = 0;
       if (state === 'warn') heat = k * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(clock * (10 + 30 * k))));
       if (state === 'on') heat = 0.92 + 0.08 * Math.sin(clock * 37 + p.x * 3 + p.y);
-
+      g.save();
+      g.transform(p.tx * S, p.ty * S, -p.nx * S, -p.ny * S, sx(p.x), sy(p.y));
       if (state === 'on') {
         // glow into the room
-        const [hx, hy, hw, hh] = box(0, p.len, 0, -1.4);
-        const grad = g.createLinearGradient(
-          sx(p.x + ax * 0), sy(p.y + ay * 0), sx(p.x + p.nx * 1.4), sy(p.y + p.ny * 1.4));
+        const grad = g.createLinearGradient(0, 0, 0, -1.4);
         grad.addColorStop(0, `rgba(255,70,30,${0.32 * heat})`); grad.addColorStop(1, 'rgba(255,70,30,0)');
         g.fillStyle = grad;
-        g.fillRect(hx, hy, hw, hh);
+        g.fillRect(0, -1.4, p.len, 1.4);
       }
-      g.save();
+      // the tube: from 0.1 to len − 0.1 along, 0.08 to 0.36 in from the face
+      const x0 = 0.1, w = p.len - 0.2, y0 = 0.08, ht = 0.28, r = ht / 2, e = 2 / S;
       g.fillStyle = '#0d0b12';
-      g.beginPath(); g.roundRect(X - 2, Y - 2, Wt + 4, Ht + 4, r + 2); g.fill();
+      g.beginPath(); g.roundRect(x0 - e, y0 - e, w + 2 * e, ht + 2 * e, r + e); g.fill();
       if (heat > 0.02) {
         g.shadowColor = '#ff3a12'; g.shadowBlur = S * 1.1 * heat;
         // across the tube: red at the glass, white-hot in the middle
-        const across = ax ? g.createLinearGradient(0, Y, 0, Y + Ht) : g.createLinearGradient(X, 0, X + Wt, 0);
-        const core = state === 'on' ? '#fff3c4' : '#ffb347';
+        const across = g.createLinearGradient(0, y0, 0, y0 + ht);
         across.addColorStop(0, `rgba(200,30,10,${heat})`);
-        across.addColorStop(0.5, state === 'on' ? core : `rgba(255,140,50,${heat})`);
+        across.addColorStop(0.5, state === 'on' ? '#fff3c4' : `rgba(255,140,50,${heat})`);
         across.addColorStop(1, `rgba(200,30,10,${heat})`);
         g.fillStyle = across;
       } else {
         g.fillStyle = '#1a2a36';
       }
-      g.beginPath(); g.roundRect(X, Y, Wt, Ht, r); g.fill();
-      g.restore();
+      g.beginPath(); g.roundRect(x0, y0, w, ht, r); g.fill();
+      g.shadowBlur = 0;
       // a highlight on the glass
       g.fillStyle = heat > 0.02 ? `rgba(255,255,255,${0.25 * heat})` : 'rgba(140,210,255,.3)';
-      const [lx, ly, lw, lh] = box(0.25, p.len - 0.25, 0.13, 0.17);
-      g.fillRect(lx, ly, lw, lh);
+      g.fillRect(0.25, 0.13, p.len - 0.5, 0.04);
+      g.restore();
     }
   }
 
