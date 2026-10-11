@@ -17,6 +17,7 @@ import { createRenderer } from './render.js';
 import { createInput } from './input.js';
 import { createTuning } from './tuning.js';
 import { createMenu } from './menu.js';
+import { ARRIVE } from './portal.js';
 
 const T = await loadTune();
 const renderer = createRenderer(document.getElementById('view'), T);
@@ -152,6 +153,14 @@ function frame(now) {
     if (holdOff) held = false;
     acc += dt;
     while (acc >= DT) {
+      // coming out of the start portal, or gone into the exit, the slime
+      // stays where it is
+      if (game.finished || game.time < ARRIVE.lead + ARRIVE.grow) {
+        game.update(DT);
+        trail.update(DT);
+        acc -= DT;
+        continue;
+      }
       // a dying slime sags where it is, with nothing steering it
       if (game.dead) {
         slime.step(DT, { x: 0, y: 0 });
