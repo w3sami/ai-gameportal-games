@@ -29,8 +29,8 @@ function load(i) {
   level = Math.max(0, Math.min(LEVELS.length - 1, i));
   world = buildWorld(LEVELS[level], T);
   trail = createTrail(T, world);
-  // the slime's events go to the trail, and resting on a pad also to the game
-  slime = createSlime(T, world, (type, e) => { trail.on(type, e); if (type === 'padwait') game.padWait(); });
+  // the slime's events go to the trail
+  slime = createSlime(T, world, (type, e) => trail.on(type, e));
   ball = createBall(T);
   game = createGame(T, world, slime, ball, trail);
   renderer.setWorld(world);
