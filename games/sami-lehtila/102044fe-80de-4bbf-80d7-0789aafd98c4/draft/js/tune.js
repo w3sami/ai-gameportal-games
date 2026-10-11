@@ -62,7 +62,6 @@ export const DEFAULTS = {
   // the level (level.js)
   padSpeed: 32,              // speed a pad throws a ball with (× the pad's own speed); the rise is its square / (2 × gravity)
   padBounce: 1,              // share of its landing speed a ball keeps off a pad, if more than padSpeed: 1 bounces back as high
-  padSlime: 0.5,             // share of padSpeed a pad throws a slime (not a ball) with
   panel: {                   // a glow panel's turn, repeating; level.js shifts each panel's start
     off: 2.5,                // s dark, safe to touch
     warn: 0.8,               // s blinking before it glows red
