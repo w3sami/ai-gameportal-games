@@ -1,7 +1,7 @@
 // Keyboard and controller into one stick, { x, y } in screen directions
 // (y down), length at most 1. Both go through the gamepad plugin's
-// createControls, so the player can remap them (open()). A is the ball;
-// B, X, the shoulders and the triggers are still free.
+// createControls, so the player can remap them (open()). A is the ball,
+// Start the level menu; B, X, the shoulders and the triggers are still free.
 
 import { createControls } from 'https://plugins.game.bigbools.fi/gamepad/v1/index.js';
 
@@ -19,6 +19,7 @@ export function createInput() {
       { id: 'ball', label: L('Pallo / hyppy', 'Ball / jump'), type: 'digital', keys: ['Space'], pad: ['A'] },
       { id: 'reset', label: L('Alkuun', 'Reset'), type: 'digital', keys: ['KeyR'], pad: ['Back'] },
       { id: 'controls', label: L('Ohjainasetukset', 'Controls'), type: 'digital', keys: ['KeyC'], pad: ['Y'] },
+      { id: 'menu', label: L('Kentät', 'Levels'), type: 'digital', keys: ['KeyM'], pad: ['Start'] },
       { id: 'fullscreen', label: L('Koko ruutu', 'Fullscreen'), type: 'digital', keys: ['KeyF'], pad: ['RS'] },
     ],
   });
