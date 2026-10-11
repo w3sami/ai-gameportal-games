@@ -324,9 +324,19 @@ export function buildWorld(level, T) {
     }
   }
 
+  // The editor's brush: a tile character takes effect at once; anything else
+  // (a thing, or empty) leaves the cell empty until the world is built again.
+  function setCell(cx, cy, ch) {
+    if (cx < 0 || cy < 0 || cx >= w || cy >= h) return;
+    const e = legend[ch];
+    grid[cy * w + cx] = e?.tile || null;
+    meta[cy * w + cx] = e?.tile ? e : null;
+  }
+
   setTime(0);
 
   return {
+    legend, setCell,
     w, h, at, metaAt, slopeAt, covers, solidAt, nearest, collide, start, checkpoints, exits, buttons, cards,
     movers, doors, panels, panel, turn, setTime, setDoor, isOpen, keyColor,
     get time() { return time; },
