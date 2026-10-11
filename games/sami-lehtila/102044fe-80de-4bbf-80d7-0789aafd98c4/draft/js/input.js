@@ -25,7 +25,9 @@ export function createInput() {
   });
 
   // keep arrows and space from scrolling the page around the game
+  // (but not from a text field, such as the editor's)
   addEventListener('keydown', (e) => {
+    if (/^(INPUT|TEXTAREA)$/.test(e.target?.tagName)) return;
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
   });
 

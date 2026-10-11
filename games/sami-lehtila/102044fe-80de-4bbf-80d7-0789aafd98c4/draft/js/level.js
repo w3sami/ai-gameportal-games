@@ -1,10 +1,11 @@
 // The levels, in the order they are played (LEVELS), each in its own file
-// under levels/ as { name, legend, rows }. A level is text: one character
-// per tile, every row the same length. LEGEND says what each character is;
-// a level's own legend adds the characters only it uses (doors and what
-// opens them, moving platforms, pads of its own). devtools/level.py draws
-// the rows.
-//
+// under levels/ as { key, name, legend }. A level's map is text, one
+// character per tile and every row the same length, in
+// config/level-<key>.json as { rows }; loadLevels() reads them in. The level
+// editor (editor.js) paints those rows and saves them back there, so that
+// file is the map. LEGEND says what each character is; a level's own legend
+// adds the characters only it uses (doors and what opens them, moving
+// platforms, pads of its own).//
 // A legend entry is either a tile, { tile: type, … }, solid, with what the
 // type does in tune.tiles (grip, magnet), or a thing, { kind, … }:
 //
@@ -22,9 +23,10 @@
 //                       (dx, dy) and back every `period` seconds, starting
 //                       `phase` (0–1) of the way into its round
 //
-// Pads throw the slime: along the face it touches, or along `dir` when the
-// entry has one, at tune.padSpeed × `speed`, while the jump button is held. Panels glow in turns
-// (tune.panel) and kill while red; `phase` (0–1) shifts a panel's turn.
+// A tile with a `slope` fills half its cell (world.js). Pads throw the
+// slime, while the jump button is held: along the face it touches, or along
+// `dir` when the entry has one, at tune.padSpeed × `speed`. Panels glow in
+// turns (tune.panel) and kill while red; `phase` (0–1) shifts a panel's turn.
 // Outside the map counts as stone, so the edge of the map is a wall too.
 
 import luola from './levels/luola.js';
@@ -35,6 +37,10 @@ import ranni from './levels/ranni.js';
 export const LEGEND = {
   '#': { tile: 'stone' },
   W: { tile: 'wood' },
+  '◢': { tile: 'wood', slope: 'br' },
+  '◣': { tile: 'wood', slope: 'bl' },
+  '◤': { tile: 'wood', slope: 'tl' },
+  '◥': { tile: 'wood', slope: 'tr' },
   I: { tile: 'ice' },
   M: { tile: 'metal' },
   J: { tile: 'pad' },
@@ -50,3 +56,17 @@ export const LEGEND = {
 };
 
 export const LEVELS = [luola, siksak, vino, ranni];
+
+// Each level's rows from config/level-<key>.json. A level whose file cannot
+// be read gets a closed room with a start and an exit, and says so.
+export async function loadLevels() {
+  await Promise.all(LEVELS.map(async (lv) => {
+    try {
+      const r = await fetch(`config/level-${lv.key}.json`, { cache: 'no-store' });
+      const j = r.ok ? await r.json() : null;
+      if (j && Array.isArray(j.rows) && j.rows.length && j.rows.every((row) => row.length === j.rows[0].length)) { lv.rows = j.rows; return; }
+    } catch { /* falls through to the stand-in room */ }
+    console.warn(`[lima] config/level-${lv.key}.json missing or broken: a stand-in room`);
+    lv.rows = ['##########', '#........#', '#........#', '#S......E#', '##########'];
+  }));
+}
