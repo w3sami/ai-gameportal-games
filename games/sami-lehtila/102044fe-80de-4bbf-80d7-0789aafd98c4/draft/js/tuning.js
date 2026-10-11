@@ -105,7 +105,7 @@ function set(o, path, v) {
   ks.reduce((a, k) => a[k], o)[last] = v;
 }
 
-export function createTuning(T, { onPause } = {}) {
+export function createTuning(T, { onPause, onEditor } = {}) {
   const allowed = () => !portal.embedded || portal.canWrite;
   let el = null, dirty = false, open = false;
 
@@ -114,7 +114,7 @@ export function createTuning(T, { onPause } = {}) {
     el.id = 'tuning';
     el.innerHTML = `<div class="tn-head"><b>Säädöt</b><span class="tn-state"></span>
       <button data-a="save">Tallenna</button><button data-a="copy">Kopioi</button>
-      <button data-a="pause">Tauko</button><button data-a="close">×</button></div>`;
+      <button data-a="pause">Tauko</button><button data-a="editor">Editori</button><button data-a="close">×</button></div>`;
     GROUPS.forEach(([title, rows], gi) => {
       const d = document.createElement('details');
       d.open = gi === 0;
@@ -164,6 +164,7 @@ export function createTuning(T, { onPause } = {}) {
     const a = e.target.dataset?.a;
     if (a === 'close') toggle(false);
     if (a === 'pause') onPause?.();   // no argument: toggle
+    if (a === 'editor') onEditor?.();
     if (a === 'copy') {
       try { await navigator.clipboard.writeText(JSON.stringify(T, null, 2)); state('kopioitu'); }
       catch { state('kopiointi estetty'); }
