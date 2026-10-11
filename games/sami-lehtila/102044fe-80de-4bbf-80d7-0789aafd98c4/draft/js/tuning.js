@@ -62,6 +62,7 @@ const GROUPS = [
     ['friction', 'Kitka × kuorma = pito', 0, 10, 0.1],
     ...TILE_ROWS('stone', 'Kivi'),
     ...TILE_ROWS('wood', 'Puu'),
+    ...TILE_ROWS('diamond', 'Timantti'),
     ...TILE_ROWS('ice', 'Jää'),
     ...TILE_ROWS('metal', 'Metalli'),
     ...TILE_ROWS('pad', 'Pomppualusta'),
