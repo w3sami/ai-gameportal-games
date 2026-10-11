@@ -2,12 +2,14 @@
 // the run's clock and messages, the hint line and fullscreen.
 //
 // Each level gets a world, a slime, a ball, a trail and its rules of its
-// own (load()). ?level=2 in the address starts at level 2. A level starts
+// own (load()), built from its rows (level.js). ?level=2 in the address
+// starts at level 2. The level editor (editor.js) opens from the tuning
+// panel; painting rebuilds the level around the slime where it is. A level starts
 // with the ball button counted as let go, so the press that chose it does
 // not jump.
 
 import { loadTune } from './tune.js';
-import { LEVELS } from './level.js';
+import { LEVELS, loadLevels } from './level.js';
 import { buildWorld } from './world.js';
 import { createSlime } from './slime.js';
 import { createBall } from './ball.js';
@@ -18,15 +20,21 @@ import { createInput } from './input.js';
 import { createTuning } from './tuning.js';
 import { createMenu } from './menu.js';
 import { ARRIVE } from './portal.js';
+import { createEditor } from './editor.js';
+import { portal, savePortalFile } from 'https://plugins.game.bigbools.fi/portal-events/v1/index.js';
 
 const T = await loadTune();
+await loadLevels();
 const renderer = createRenderer(document.getElementById('view'), T);
 const input = createInput();
 
 let level = 0, world, trail, slime, ball, game;
+let editor = null;     // the level editor, made once the page is up
 let holdOff = false;   // the ball button is ignored until it is let go
 let recorded = false;  // this run's time at the exit has gone to the best times
-function load(i) {
+// `at`: a floor point to put the slime on instead of the start, with no
+// arrival and no level name (the editor rebuilding the level)
+function load(i, at = null) {
   level = Math.max(0, Math.min(LEVELS.length - 1, i));
   world = buildWorld(LEVELS[level], T);
   trail = createTrail(T, world);
@@ -35,14 +43,29 @@ function load(i) {
   ball = createBall(T);
   game = createGame(T, world, slime, ball, trail);
   renderer.setWorld(world);
-  game.say(`${level + 1}. ${LEVELS[level].name}`, 2.5);
+  if (at) { game.restart(false); slime.place(at.x, at.y); }
+  else game.say(`${level + 1}. ${LEVELS[level].name}`, 2.5);
   holdOff = true; recorded = false;
+  editor?.refresh();
   if (window.lima) Object.assign(window.lima, { world, slime, ball, trail, game, level });
 }
 load((parseInt(new URLSearchParams(location.search).get('level'), 10) || 1) - 1);
 
 let frozen = false;
-const tuning = createTuning(T, { onPause: (on) => { frozen = on ?? !frozen; last = performance.now(); } });
+const pause = (on) => { frozen = on ?? !frozen; last = performance.now(); };
+const canvas = document.getElementById('view');
+editor = createEditor({
+  canvas, renderer,
+  level: () => LEVELS[level],
+  world: () => world,
+  view: () => T.view,
+  // the slime stays where it is, its floor point under its centre
+  rebuild: () => { const c = slime.centre(); load(level, { x: c.x, y: c.y + T.radius + T.nodeRadius + 0.05 }); },
+  pause,
+  save: (path, body) => savePortalFile(path, body),
+  canSave: () => portal.canWrite,
+});
+const tuning = createTuning(T, { onPause: pause, onEditor: () => editor.toggle() });
 
 // ---- fullscreen -----------------------------------------------------------------
 
@@ -118,6 +141,15 @@ function frame(now) {
   clock += dt;
   input.poll(dt);
 
+  // the editor takes the page while it is open
+  if (editor.active) {
+    renderer.draw(slime, trail, game, look, false, clock, 0);
+    editor.draw(canvas.getContext('2d'));
+    drawHud();
+    requestAnimationFrame(frame);
+    return;
+  }
+
   // the menu pauses the game and takes the controls while it is open
   if (menu.open && !input.isOpen()) {
     if (input.pressed('menu')) menu.close();
@@ -155,7 +187,7 @@ function frame(now) {
     while (acc >= DT) {
       // coming out of the start portal, or gone into the exit, the slime
       // stays where it is
-      if (game.finished || game.time < ARRIVE.free) {
+      if (game.finished || game.since < ARRIVE.free) {
         game.update(DT);
         trail.update(DT);
         acc -= DT;
