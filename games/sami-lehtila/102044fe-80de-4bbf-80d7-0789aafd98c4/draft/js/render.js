@@ -90,14 +90,8 @@ export function createRenderer(canvas, T) {
       c.strokeStyle = '#ffd43b'; c.fillStyle = '#ffd43b';
       c.lineWidth = Math.max(1.5, s * 0.1); c.lineCap = 'round'; c.lineJoin = 'round';
       if (meta?.dir) {
-        // an arrow: the way an arrow pad throws, whatever face is touched;
-        // one that throws only a ball has a ring for a tail
-        if (meta.ballOnly) {
-          c.beginPath(); c.arc(-s * 0.24, 0, s * 0.1, 0, TAU); c.stroke();
-          c.beginPath(); c.moveTo(-s * 0.14, 0); c.lineTo(s * 0.08, 0); c.stroke();
-        } else {
-          c.beginPath(); c.moveTo(-s * 0.3, 0); c.lineTo(s * 0.08, 0); c.stroke();
-        }
+        // an arrow: the way an arrow pad throws, whatever face is touched
+        c.beginPath(); c.moveTo(-s * 0.3, 0); c.lineTo(s * 0.08, 0); c.stroke();
         c.beginPath(); c.moveTo(s * 0.32, 0); c.lineTo(s * 0.04, -s * 0.2); c.lineTo(s * 0.04, s * 0.2); c.closePath(); c.fill();
       } else {
         for (const k of [-0.18, 0.12]) {

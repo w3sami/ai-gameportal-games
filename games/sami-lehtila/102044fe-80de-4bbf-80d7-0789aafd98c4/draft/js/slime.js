@@ -32,17 +32,16 @@
 // the node's speed relative to the surface, so the slime rides what it sits
 // on. step() runs the world's clock along, a substep at a time.
 //
-// A pad tile throws the whole body: once any node touches one, the body's
-// speed along the throw is raised to the pad's speed, out of the face
-// touched. A pad with a `dir` (an arrow) sets the body's whole speed to
-// its throw instead, along `dir`, so it throws the same way however the
+// A pad tile throws the whole body, but only while the jump button is held
+// (step's `held`), ball or not; otherwise it is a floor like any other, and
+// a 'padwait' event says the body is on one. Once any node touches a pad,
+// the body's speed along the throw is raised to the pad's speed, out of the
+// face touched. A pad with a `dir` (an arrow) sets the body's whole speed
+// to its throw instead, along `dir`, so it throws the same way however the
 // body came in; touching an arrow and a plain pad at once, the arrow
-// throws. A pad with `ballOnly` throws only a ball; a slime crawls over it
-// like any floor. A ball bounces off a
-// pad like a ping-pong ball: it leaves with padSpeed × the pad's `speed`,
-// or with padBounce × the speed it came in with if that is more, so ball
-// after ball between pads keeps all its height. A slime splats on it and
-// is thrown with only padSlime of padSpeed.
+// throws. The body bounces off a pad like a ping-pong ball: it leaves with
+// padSpeed × the pad's `speed`, or with padBounce × the speed it came in
+// with if that is more, so pad after pad keeps all its height.
 //
 // `limp` (0–1, set from outside) lets the body go: at 1 the ring's springs
 // keep LIMP_SPRINGS of their stiffness, the area aims for LIMP_AREA of its
@@ -149,6 +148,7 @@ export function createSlime(T, world, emit) {
 
   // ball mode (ball.js): springs × ballStiff, area at ballPressure, magnetism × ballMagnet
   let ball = false, firm = 1, limp = 0;
+  let jump = false;   // the jump button is held: pads throw
   const loose = () => 1 - (1 - LIMP_SPRINGS) * limp;
   // a jump's charge, 0–1 (ball.js), tightening the magnet
   let charge = 0;
@@ -272,8 +272,9 @@ export function createSlime(T, world, emit) {
     return { x: dx * extra, y: dy * extra };
   }
 
-  function step(dt, stick, asBall = false, charging = 0) {
+  function step(dt, stick, asBall = false, charging = 0, held = false) {
     ball = asBall;
+    jump = held;
     charge = charging;
     firm = ball ? T.ballStiff : 1;
     if (nodes.length !== Math.max(3, Math.round(T.nodes))) { const c = centre(); build(c.x, c.y); }
@@ -390,7 +391,7 @@ export function createSlime(T, world, emit) {
   function pad(inx, iny) {
     let dx = 0, dy = 0, ax = 0, ay = 0, fx = 0, fy = 0, speed = 0, arrowSpeed = 0;
     for (const n of nodes) {
-      if (!n.touch || n.q.type !== 'pad' || (n.q.meta?.ballOnly && !ball)) continue;
+      if (!n.touch || n.q.type !== 'pad') continue;
       const dir = n.q.meta?.dir, sp = T.padSpeed * (n.q.meta?.speed ?? 1);
       if (dir) { const l = Math.hypot(dir[0], dir[1]) || 1; ax += dir[0] / l; ay += dir[1] / l; arrowSpeed = Math.max(arrowSpeed, sp); }
       else { dx += n.q.nx; dy += n.q.ny; speed = Math.max(speed, sp); }
@@ -400,9 +401,10 @@ export function createSlime(T, world, emit) {
     if (arrow) { dx = ax; dy = ay; speed = arrowSpeed; }
     const l = Math.hypot(dx, dy), fl = Math.hypot(fx, fy);
     if (l < 1e-6 || fl < 1e-6) return;
+    if (!jump) { on('padwait', {}); return; }
     dx /= l; dy /= l;
     const came = Math.max(0, -(inx * fx + iny * fy) / fl);
-    const want = ball ? Math.max(speed, came * T.padBounce) : speed * T.padSlime;
+    const want = Math.max(speed, came * T.padBounce);
     const v = velocity();
     if (arrow) {
       const ax = dx * want - v.x, ay = dy * want - v.y;
@@ -415,7 +417,7 @@ export function createSlime(T, world, emit) {
     }
     impact = null;
     const c = centre();
-    on('pad', { x: c.x, y: c.y, nx: dx, ny: dy, ball });
+    on('pad', { x: c.x, y: c.y, nx: dx, ny: dy });
   }
 
   // the skin: each node pushed out from the centre by its radius
