@@ -455,12 +455,12 @@ export function createRenderer(canvas, T) {
     for (const p of world.exits) {
       if (!visible(p.x, p.y - EXIT_UP, 4)) continue;
       const pulse = 1 + Math.sin(clock * 2.2 + p.x) * 0.05;
-      let r = EXIT_R * pulse, spin = clock * 1.4, glow = 0.85;
+      let r = EXIT_R * pulse, spin = -clock * 1.4, glow = 0.85;
       if (game.finished && p === sink) {
         const T = game.after, end = SUCK.start + SUCK.spread + SUCK.each + SUCK.jitter;
         r *= 1 + 0.5 * Math.min(1, T / 0.6);
         if (T > end) r *= Math.max(0, 1 - (T - end) / SUCK.close);
-        spin = clock * 7;
+        spin = -clock * 7;
         glow = 1;
       }
       drawPortal(g, sx(p.x), sy(p.y - EXIT_UP), r * S, EXIT_COLOR, spin, glow);
@@ -490,8 +490,10 @@ export function createRenderer(canvas, T) {
   const EXIT_R = 0.8, EXIT_UP = 1.5;   // tiles: the exit portal's radius, its centre above the exit's floor point
   const ARRIVE_R = 1.2;                // tiles: the start portal's radius
   // twist: the turn a piece takes is twist × (1 / (r + 1) − 1 / (r0 + 1))
-  // radians, r its distance from the portal in tiles, so a piece from afar
-  // falls in almost straight and swirls only near the portal
+  // radians anticlockwise, r its distance from the portal in tiles, so a
+  // piece from afar falls in almost straight and swirls only near the
+  // portal. Anticlockwise is the way the portals turn (portal.js), so the
+  // pieces follow the arms in.
   const SUCK = { slime: 0.6, start: 0.35, spread: 1.8, each: 0.8, jitter: 0.15, pull: 2.4, twist: 4, fade: 0.35, close: 0.4 };
   let sink = null, pieces = null;
 
@@ -501,7 +503,7 @@ export function createRenderer(canvas, T) {
     const cx = sink.x, cy = sink.y - EXIT_UP;
     const u = Math.max(0, Math.min(1, (t - ts) / d)), e = Math.pow(u, SUCK.pull);
     const dx = x - cx, dy = y - cy, r0 = Math.hypot(dx, dy), r = r0 * (1 - e);
-    const a = SUCK.twist * (1 / (r + 1) - 1 / (r0 + 1));
+    const a = -SUCK.twist * (1 / (r + 1) - 1 / (r0 + 1));
     const th = Math.atan2(dy, dx) + a;
     return { x: cx + Math.cos(th) * r, y: cy + Math.sin(th) * r, k: Math.pow(1 - e, 0.7), a, alpha: u < 0.85 ? 1 : (1 - u) / 0.15 };
   }
