@@ -11,7 +11,7 @@ export default {
     q: { tile: 'panel', slope: 'br', phase: 0.5 },
     P: { tile: 'panel', slope: 'tl', phase: 0.25 },
     Q: { tile: 'panel', slope: 'tl', phase: 0.75 },
-    a: { tile: 'pad', dir: [1, -1], speed: 1.3, ballOnly: true },
+    a: { tile: 'pad', dir: [1, -1], speed: 1.3 },
   },
   rows: [
     '##################################################################################################################################',
