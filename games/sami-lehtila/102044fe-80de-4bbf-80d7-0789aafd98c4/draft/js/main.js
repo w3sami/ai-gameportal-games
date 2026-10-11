@@ -155,7 +155,7 @@ function frame(now) {
     while (acc >= DT) {
       // coming out of the start portal, or gone into the exit, the slime
       // stays where it is
-      if (game.finished || game.time < ARRIVE.lead + ARRIVE.grow) {
+      if (game.finished || game.time < ARRIVE.free) {
         game.update(DT);
         trail.update(DT);
         acc -= DT;
