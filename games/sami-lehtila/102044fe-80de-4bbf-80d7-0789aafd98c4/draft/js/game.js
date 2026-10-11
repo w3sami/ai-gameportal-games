@@ -15,15 +15,16 @@
 //     it that the slime then touches; that uses the card up
 //   - checkpoints and the exit count once the slime's centre is near them
 //
-// The run's clock starts with the level and stops at the exit. restart()
-// puts the whole level back as it began.
+// The run's clock starts with the level and stops at the exit; `after`
+// counts on from there (the finale, render.js). restart() puts the whole
+// level back as it began.
 
 const NEAR = 2;   // tiles from the centre for a checkpoint or the exit to count
 
 export function createGame(T, world, slime, ball, trail) {
   let checkpoint = world.start;
   let dead = 0;             // s until the slime comes back, while dead
-  let finished = false, time = 0;
+  let finished = false, time = 0, after = 0;
   let message = null;       // { text, until } in run time
   let health = 1, cool = 0; // cool: s since the last burn
   let crushed = 0;          // s squeezed past crushArea
@@ -62,7 +63,7 @@ export function createGame(T, world, slime, ball, trail) {
     for (const d of world.doors) { d.from = d.to = 0; d.since = -1e9; }
     world.setTime(world.time);
     taken.clear(); carried.length = 0; reached.clear(); pressed.clear();
-    checkpoint = world.start; dead = 0; finished = false; time = 0; message = null;
+    checkpoint = world.start; dead = 0; finished = false; time = 0; after = 0; message = null;
     trail.clear();
     respawn();
   }
@@ -77,7 +78,8 @@ export function createGame(T, world, slime, ball, trail) {
   }
 
   function update(dt) {
-    if (!finished) time += dt;
+    if (finished) { after += dt; return; }
+    time += dt;
     if (dead > 0) {
       dead -= dt;
       slime.limp = Math.min(1, dying() * 5);
@@ -150,6 +152,7 @@ export function createGame(T, world, slime, ball, trail) {
     get dying() { return dying(); },
     get finished() { return finished; },
     get time() { return time; },
+    get after() { return after; },
     get health() { return health; },
     get burns() { return burns; },
     get carried() { return carried; },
