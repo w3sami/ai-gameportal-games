@@ -29,6 +29,8 @@
 
 import luola from './levels/luola.js';
 import siksak from './levels/siksak.js';
+import vino from './levels/vino.js';
+import ranni from './levels/ranni.js';
 
 export const LEGEND = {
   '#': { tile: 'stone' },
@@ -47,4 +49,4 @@ export const LEGEND = {
   E: { kind: 'exit' },
 };
 
-export const LEVELS = [luola, siksak];
+export const LEVELS = [luola, siksak, vino, ranni];
