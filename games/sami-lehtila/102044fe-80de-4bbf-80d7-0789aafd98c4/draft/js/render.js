@@ -35,8 +35,14 @@ export function createRenderer(canvas, T) {
     chunks = new Map();
   }
 
+  // The editor's camera: { x, y, view } in tiles, set from outside while the
+  // editor is open; the camera then stays where it is put instead of
+  // following the slime.
+  let free = null;
+
   function scale() {
-    const s = Math.min(canvas.height / T.view, canvas.width / (T.view * 1.2));
+    const view = free ? free.view : T.view;
+    const s = Math.min(canvas.height / view, canvas.width / (view * 1.2));
     if (s !== S) { S = s; chunks = new Map(); }
   }
 
@@ -210,6 +216,12 @@ export function createRenderer(canvas, T) {
   const sx = (x) => offX + x * S, sy = (y) => offY + y * S;
 
   function follow(slime, dt) {
+    if (free) {
+      cam.x = free.x; cam.y = free.y; cam.set = true;
+      offX = Math.round(canvas.width / 2 - cam.x * S);
+      offY = Math.round(canvas.height / 2 - cam.y * S);
+      return;
+    }
     const c = slime.centre(), v = slime.velocity();
     const tx = c.x + Math.max(-3, Math.min(3, v.x * 0.15)), ty = c.y + Math.max(-2, Math.min(2, v.y * 0.1));
     if (!cam.set) { cam.x = tx; cam.y = ty; cam.set = true; }
@@ -469,7 +481,7 @@ export function createRenderer(canvas, T) {
 
   // the start portal while the slime comes out of it
   function drawArrival(game, clock) {
-    const t = game.time, { open, free, hold, close } = ARRIVE;
+    const t = game.since, { open, free, hold, close } = ARRIVE;
     if (game.finished || t > free + hold + close) return;
     const ease = (u) => 1 - (1 - u) * (1 - u);
     let k = ease(Math.min(1, t / open));
@@ -672,8 +684,8 @@ export function createRenderer(canvas, T) {
     // dying: the slime sags for the first 60 % of respawnTime, then shrinks
     // away; arriving, it grows out of the start portal
     let shrink = Math.max(0, (game.dying - 0.6) / 0.4);
-    if (!game.finished && game.time < ARRIVE.lead + ARRIVE.grow) {
-      const u = Math.max(0, (game.time - ARRIVE.lead) / ARRIVE.grow);
+    if (!game.finished && game.since < ARRIVE.lead + ARRIVE.grow) {
+      const u = Math.max(0, (game.since - ARRIVE.lead) / ARRIVE.grow);
       shrink = (1 - u) * (1 - u);
     }
     const warpSlime = pieces ? (x, y) => warp(x, y, 0, SUCK.slime, t) : null;
@@ -681,9 +693,25 @@ export function createRenderer(canvas, T) {
     if (!pieces) { drawSmoke(game, dt); drawHaze(clock); }
   }
 
+  // the cached tile art around a cell that changed (its neighbours' rims too)
+  function dirtyCell(cx, cy) {
+    for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) {
+      chunks.delete(Math.floor((cx + dx) / CHUNK) + ',' + Math.floor((cy + dy) / CHUNK));
+    }
+  }
+
   addEventListener('resize', resize);
   resize();
-  return { draw, resize, setWorld };
+  return {
+    draw, resize, setWorld, dirtyCell,
+    // a point on the page (CSS pixels) in tiles
+    toWorld: (clientX, clientY) => ({ x: (clientX * dpr - offX) / S, y: (clientY * dpr - offY) / S }),
+    // the transform from tiles to canvas pixels: x · S + offX
+    get view() { return { S, offX, offY }; },
+    get camera() { return { x: cam.x, y: cam.y }; },
+    get free() { return free; },
+    set free(v) { free = v; },
+  };
 }
 
 // ---- colour ---------------------------------------------------------------------
