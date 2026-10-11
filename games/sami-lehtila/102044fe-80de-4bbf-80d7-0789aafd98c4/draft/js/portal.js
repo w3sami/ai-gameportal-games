@@ -6,6 +6,10 @@
 //
 // The whirl is drawn with 'lighter', so it adds its glow to what is behind.
 // Its glow reaches about three times `r` out; the bright core is r × 0.6.
+//
+// Its arms bend clockwise going out, so the portal turns anticlockwise
+// (a negative spin): the arms then trail behind the turn like a whirlpool's.
+// Turning clockwise, they lead and the whirl looks to turn the wrong way.
 
 // Coming into a level (s): the portal snaps open a slime's height
 // (arriveLift) above the start, the slime starts to grow out of it `lead`
