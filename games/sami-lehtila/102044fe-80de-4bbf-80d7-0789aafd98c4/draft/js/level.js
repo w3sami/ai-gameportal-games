@@ -1,7 +1,10 @@
 // The levels, in the order they are played (LEVELS), each in its own file
 // under levels/ as { key, name, legend }. A level's map is text, one
 // character per tile and every row the same length, in
-// config/level-<key>.json as { rows }; loadLevels() reads them in. The level
+// config/level-<key>.json as { rows }; loadLevels() reads them in. In the
+// file a run of five or more of one character is written c{n}, so that
+// `.{994}` is 994 empty cells: the portal takes a saved file of at most
+// MAP_MAX bytes, and the whole config folder at most 256 kB. The level
 // editor (editor.js) paints those rows and saves them back there, so that
 // file is the map. LEGEND says what each character is; a level's own legend
 // adds the characters only it uses (doors and what opens them, moving
@@ -61,6 +64,15 @@ export const LEGEND = {
   E: { kind: 'exit' },
 };
 
+export const MAP_MAX = 64 * 1024;
+
+const RUN = /(.)\{(\d+)\}/gu;
+const unpack = (row) => row.replace(RUN, (m, c, n) => c.repeat(+n));
+// a level's rows as its file holds them
+export function packRows(rows) {
+  return rows.map((row) => row.replace(/(.)\1{4,}/gu, (m, c) => `${c}{${[...m].length}}`));
+}
+
 export const LEVELS = [luola, siksak, vino, ranni, hiekka];
 
 // Each level's rows from config/level-<key>.json. A level whose file cannot
@@ -70,7 +82,8 @@ export async function loadLevels() {
     try {
       const r = await fetch(`config/level-${lv.key}.json`, { cache: 'no-store' });
       const j = r.ok ? await r.json() : null;
-      if (j && Array.isArray(j.rows) && j.rows.length && j.rows.every((row) => row.length === j.rows[0].length)) { lv.rows = j.rows; return; }
+      const rows = j && Array.isArray(j.rows) ? j.rows.map(unpack) : [];
+      if (rows.length && rows.every((row) => row.length === rows[0].length)) { lv.rows = rows; return; }
     } catch { /* falls through to the stand-in room */ }
     console.warn(`[lima] config/level-${lv.key}.json missing or broken: a stand-in room`);
     lv.rows = ['##########', '#........#', '#........#', '#S......E#', '##########'];
