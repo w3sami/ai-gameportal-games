@@ -29,8 +29,8 @@ function load(i) {
   level = Math.max(0, Math.min(LEVELS.length - 1, i));
   world = buildWorld(LEVELS[level], T);
   trail = createTrail(T, world);
-  // the slime's events go to the trail, and a pad's throw also to the game
-  slime = createSlime(T, world, (type, e) => { trail.on(type, e); if (type === 'pad') game.pad(e); });
+  // the slime's events go to the trail, and resting on a pad also to the game
+  slime = createSlime(T, world, (type, e) => { trail.on(type, e); if (type === 'padwait') game.padWait(); });
   ball = createBall(T);
   game = createGame(T, world, slime, ball, trail);
   renderer.setWorld(world);
@@ -170,7 +170,7 @@ function frame(now) {
         const pop = slime.popSpeed(stick, DT);
         if (pop > T.popMax) { if (ball.charged) slime.capPop(T.popMax); else ball.cancel(); }
       }
-      slime.step(DT, stick, ball.on, ball.charge);
+      slime.step(DT, stick, ball.on, ball.charge, held);
       game.update(DT);
       trail.update(DT);
       acc -= DT;
