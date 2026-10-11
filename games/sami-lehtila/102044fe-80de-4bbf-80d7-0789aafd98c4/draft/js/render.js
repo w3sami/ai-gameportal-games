@@ -475,7 +475,7 @@ export function createRenderer(canvas, T) {
     let k = ease(Math.min(1, t / open));
     if (t > lead + grow + hold) k *= 1 - (t - lead - grow - hold) / close;
     const st = world.start;
-    drawPortal(g, sx(st.x), sy(st.y - T.radius - T.nodeRadius), EXIT_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
+    drawPortal(g, sx(st.x), sy(st.y - T.radius - T.nodeRadius), ARRIVE_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
   }
 
   // ---- the finale ---------------------------------------------------------------
@@ -488,15 +488,20 @@ export function createRenderer(canvas, T) {
   // drawing itself through it. The things that are not solid (buttons,
   // cards, flags, panels' glow, drops) fade out first.
   const EXIT_R = 1.2, EXIT_UP = 1.5;   // tiles: the exit portal's radius, its centre above the exit's floor point
-  const SUCK = { slime: 0.6, start: 0.35, spread: 1.8, each: 0.9, jitter: 0.15, twist: 3.2, fade: 0.35, close: 0.4 };
+  const ARRIVE_R = 0.6;                // tiles: the start portal's radius; its glow is about the slime's size
+  // twist: the turn a piece takes is twist × (1 / (r + 1) − 1 / (r0 + 1))
+  // radians, r its distance from the portal in tiles, so a piece from afar
+  // falls in almost straight and swirls only near the portal
+  const SUCK = { slime: 0.6, start: 0.35, spread: 1.8, each: 0.8, jitter: 0.15, pull: 2.4, twist: 4, fade: 0.35, close: 0.4 };
   let sink = null, pieces = null;
 
   // where the world point (x, y) is when it started going in at ts and
   // takes d seconds, at finale time t: { x, y, k (scale), a (turn), alpha }
   function warp(x, y, ts, d, t) {
     const cx = sink.x, cy = sink.y - EXIT_UP;
-    const u = Math.max(0, Math.min(1, (t - ts) / d)), e = u * u;
-    const dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy) * (1 - e), a = SUCK.twist * e;
+    const u = Math.max(0, Math.min(1, (t - ts) / d)), e = Math.pow(u, SUCK.pull);
+    const dx = x - cx, dy = y - cy, r0 = Math.hypot(dx, dy), r = r0 * (1 - e);
+    const a = SUCK.twist * (1 / (r + 1) - 1 / (r0 + 1));
     const th = Math.atan2(dy, dx) + a;
     return { x: cx + Math.cos(th) * r, y: cy + Math.sin(th) * r, k: Math.pow(1 - e, 0.7), a, alpha: u < 0.85 ? 1 : (1 - u) / 0.15 };
   }
