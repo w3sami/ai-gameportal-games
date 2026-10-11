@@ -475,7 +475,7 @@ export function createRenderer(canvas, T) {
     let k = ease(Math.min(1, t / open));
     if (t > free + hold) k *= 1 - ease((t - free - hold) / close);
     const st = world.start;
-    drawPortal(g, sx(st.x), sy(st.y - arriveLift(T) - T.radius - T.nodeRadius), EXIT_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
+    drawPortal(g, sx(st.x), sy(st.y - arriveLift(T) - T.radius - T.nodeRadius), ARRIVE_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
   }
 
   // ---- the finale ---------------------------------------------------------------
@@ -487,7 +487,8 @@ export function createRenderer(canvas, T) {
   // anything that is to go in, so a later thing (an enemy) goes in by
   // drawing itself through it. The things that are not solid (buttons,
   // cards, flags, panels' glow, drops) fade out first.
-  const EXIT_R = 1.2, EXIT_UP = 1.5;   // tiles: the exit portal's radius, its centre above the exit's floor point
+  const EXIT_R = 0.8, EXIT_UP = 1.5;   // tiles: the exit portal's radius, its centre above the exit's floor point
+  const ARRIVE_R = 1.2;                // tiles: the start portal's radius
   // twist: the turn a piece takes is twist × (1 / (r + 1) − 1 / (r0 + 1))
   // radians, r its distance from the portal in tiles, so a piece from afar
   // falls in almost straight and swirls only near the portal
