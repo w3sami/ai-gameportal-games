@@ -7,11 +7,13 @@
 // The whirl is drawn with 'lighter', so it adds its glow to what is behind.
 // Its glow reaches about three times `r` out; the bright core is r × 0.6.
 
-// Coming into a level: the portal opens a slime's height (arriveLift) above
-// the start, the slime grows out of it a moment later and faster, drops to
-// its place, and the portal closes after it (s). The slime hangs in the
-// portal and takes no input until it has grown (ARRIVE.lead + ARRIVE.grow).
-export const ARRIVE = { open: 0.22, lead: 0.08, grow: 0.34, hold: 0.5, close: 0.3 };
+// Coming into a level (s): the portal snaps open a slime's height
+// (arriveLift) above the start, the slime starts to grow out of it `lead`
+// later and is let go at `free`, half grown, so it drops out of the portal
+// while it grows to its full size by lead + grow. The portal stays `hold`
+// after `free` and then closes. Until `free` the slime hangs in the portal
+// and takes no input.
+export const ARRIVE = { open: 0.12, lead: 0.04, grow: 0.3, free: 0.14, hold: 0.25, close: 0.25 };
 export const arriveLift = (T) => 2 * (T.radius + T.nodeRadius);
 export const ARRIVE_COLOR = '#7fd4ff';
 export const EXIT_COLOR = '#c58cff';
