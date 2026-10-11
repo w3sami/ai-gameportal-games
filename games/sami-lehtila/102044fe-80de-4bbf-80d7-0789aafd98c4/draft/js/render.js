@@ -10,7 +10,7 @@
 // screen is sucked into it along a spiral (finale()).
 
 import { SLOPES } from './world.js';
-import { drawPortal, ARRIVE, ARRIVE_COLOR, EXIT_COLOR } from './portal.js';
+import { drawPortal, ARRIVE, ARRIVE_COLOR, EXIT_COLOR, arriveLift } from './portal.js';
 
 const TAU = Math.PI * 2;
 const CHUNK = 16;
@@ -475,7 +475,7 @@ export function createRenderer(canvas, T) {
     let k = ease(Math.min(1, t / open));
     if (t > lead + grow + hold) k *= 1 - (t - lead - grow - hold) / close;
     const st = world.start;
-    drawPortal(g, sx(st.x), sy(st.y - T.radius - T.nodeRadius), ARRIVE_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
+    drawPortal(g, sx(st.x), sy(st.y - arriveLift(T) - T.radius - T.nodeRadius), ARRIVE_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
   }
 
   // ---- the finale ---------------------------------------------------------------
