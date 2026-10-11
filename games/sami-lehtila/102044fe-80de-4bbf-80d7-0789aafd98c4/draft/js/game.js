@@ -17,9 +17,12 @@
 //
 // The run's clock starts with the level and stops at the exit; `after`
 // counts on from there (the finale, render.js). restart() puts the whole
-// level back as it began.
+// level back as it began, with the slime arriving out of the start portal
+// (portal.js), a slime's height above the start.
 
 const NEAR = 2;   // tiles from the centre for a checkpoint or the exit to count
+
+import { arriveLift } from './portal.js';
 
 export function createGame(T, world, slime, ball, trail) {
   let checkpoint = world.start;
@@ -66,6 +69,7 @@ export function createGame(T, world, slime, ball, trail) {
     checkpoint = world.start; dead = 0; finished = false; time = 0; after = 0; message = null;
     trail.clear();
     respawn();
+    slime.place(world.start.x, world.start.y - arriveLift(T));
   }
 
   // whether any node is within `reach` of the segment a–b
@@ -143,6 +147,8 @@ export function createGame(T, world, slime, ball, trail) {
       say('Maali!', 1e9);
     }
   }
+
+  restart();
 
   return {
     update, restart, say,
