@@ -279,7 +279,7 @@
   },
   {
     "name": "sketchpad",
-    "description": "Kenttäluonnostelu pelin päälle: näe missä törmäys oikeasti on, raahaa tavarat paikoilleen, pane lisää valmiita paloja ja maalaa kentän päälle mitä kohtaan oli tarkoitus tulla. Jokaisella maalatulla muodolla on label ja vapaa teksti, joten kuva kertoo itse mitä siinä lukee.\n\nTämä ei kirjoita geometriaa peliin, ja se on pluginin muoto eikä puuttuva ominaisuus: kenttä on tavallisesti koodia eikä dataa, ja jos osa luvuista eläisi konffissa ja osa koodissa, geometriaa tarkistava työkalu tarkistaisi eri kentän kuin se jota pelataan. Maalaus, siirrot ja lisäykset menevät config/sketch.jsoniin luonnokseksi avustajalle, ja kentän luvut pysyvät kentän omassa lähdekoodissa. Muutokset ovat voimassa vain siinä selaimessa jossa ne tehtiin, ja sekä paneeli että konsoli kertovat montako niistä on vielä kirjoittamatta lähteeseen.\n\nKenttä julistaa itse mitä saa siirtää (olio jolla on x ja y), mitä saa muuntaa (skaala, kierto ja peilaus yhtenä 2D-transformina, sama jonka canvas ja CSS osaavat — applyTransform ja cssTransform antavat sen yhdellä rivillä), mitä yksittäistä lukua saa säätää (knob: kupolin r, alustan w — se muuttaa mikä olio on, toisin kuin transform joka muuttaa vain miltä se näyttää), ja mitä siitä saa panna lisää (spawn: make ja drop, jolloin paneeli osaa asettaa lisää sitä mitä kenttä jo piirtää).\n\nVaroitukset ovat pelin omia — plugin ei tiedä mikä pelissä on virhe, joten peli antaa listan ja plugin näyttää sen tekstinä ja punaisena kehyksenä, estämättä mitään. Paikan voi raahata tai kirjoittaa. index.js on pieni puolisko ja paneeli haetaan vasta kun se avataan, joten pelin voi tuoda tämän lähettämättä editoria yhdellekään pelaajalle. Mikään ei heitä.",
+    "description": "Kenttäluonnostelu pelin päälle: näe missä törmäys oikeasti on, raahaa tavarat paikoilleen, pane lisää valmiita paloja ja maalaa kentän päälle mitä kohtaan oli tarkoitus tulla. Jokaisella maalatulla muodolla on label ja vapaa teksti, joten kuva kertoo itse mitä siinä lukee.\n\nTämä ei kirjoita geometriaa peliin, ja se on pluginin muoto eikä puuttuva ominaisuus: kenttä on tavallisesti koodia eikä dataa, ja jos osa luvuista eläisi konffissa ja osa koodissa, geometriaa tarkistava työkalu tarkistaisi eri kentän kuin se jota pelataan. Maalaus, siirrot ja lisäykset menevät config/sketch.jsoniin luonnokseksi avustajalle, ja kentän luvut pysyvät kentän omassa lähdekoodissa. Muutokset ovat voimassa vain siinä selaimessa jossa ne tehtiin, ja sekä paneeli että konsoli kertovat montako niistä on vielä kirjoittamatta lähteeseen.\n\nKenttä julistaa itse mitä saa siirtää (olio jolla on x ja y), mitä saa muuntaa (skaala, kierto ja peilaus yhtenä 2D-transformina, sama jonka canvas ja CSS osaavat — applyTransform ja cssTransform antavat sen yhdellä rivillä), mitä yksittäistä lukua saa säätää (knob: kupolin r, alustan w — se muuttaa mikä olio on, toisin kuin transform joka muuttaa vain miltä se näyttää), ja mitä siitä saa panna lisää (spawn: make ja drop, jolloin paneeli osaa asettaa lisää sitä mitä kenttä jo piirtää).\n\nVaroitukset ovat pelin omia — plugin ei tiedä mikä pelissä on virhe, joten peli antaa listan ja plugin näyttää sen tekstinä ja punaisena kehyksenä, estämättä mitään. Paikan voi raahata tai kirjoittaa. index.js on pieni puolisko ja paneeli haetaan vasta kun se avataan, joten pelin voi tuoda tämän lähettämättä editoria yhdellekään pelaajalle. Mikään ei heitä.\n\nRuutupohjaiselle pelille ruudut-kalu: peli antaa ruudukkonsa (cell, palette, get, set, end, dirty, save), ja paneeli maalaa sitä suoraan — veto maalaa reitin, shift-veto laatikon, alt poimii, kumoa vie koko vedon, ja tallennus kutsuu pelin omaa tallennusta. Plugin ei silloinkaan kirjoita mitään itse, mutta maalaus on kenttä eikä luonnos.",
     "author": "Sami Lehtilä",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
@@ -483,12 +483,32 @@
         "sizeBytes": 90413,
         "entryFile": "index.js",
         "publishedAt": "2026-09-20T21:04:26.824Z"
+      },
+      {
+        "version": "1.3.0",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 32197
+          },
+          {
+            "path": "README.md",
+            "sizeBytes": 17787
+          },
+          {
+            "path": "ui.js",
+            "sizeBytes": 48387
+          }
+        ],
+        "sizeBytes": 98371,
+        "entryFile": "index.js",
+        "publishedAt": "2026-10-11T07:16:56.165Z"
       }
     ],
     "aliases": {
-      "v1": "1.2.4"
+      "v1": "1.3.0"
     },
     "createdAt": "2026-09-20T18:06:45.736Z",
-    "updatedAt": "2026-09-20T21:04:26.831Z"
+    "updatedAt": "2026-10-11T07:16:56.166Z"
   }
 ]
