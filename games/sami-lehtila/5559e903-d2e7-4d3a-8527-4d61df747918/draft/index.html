@@ -146,7 +146,8 @@ summary{cursor:pointer;font-weight:600}
 <script>
 (() => {
   const API = 'https://api.open-meteo.com/v1/forecast';
-  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+  const OVERPASS_ROUNDS = 3, OVERPASS_WAIT = 30000;
   const DAYS = 7;
   const RAMP = ['#3b4a8c','#4f7cbf','#7fb9c9','#e9d65b','#f5a524','#e0551f'];
   const $ = id => document.getElementById(id);
@@ -220,14 +221,33 @@ summary{cursor:pointer;font-weight:600}
     if (!r.ok || !j || j.error) throw new Error((j && j.reason) || ('HTTP ' + r.status));
     return Array.isArray(j) ? j : [j];
   }
-  async function overpass(q) {
+  // A busy Overpass server answers 504 or 429 and is usually free again within seconds,
+  // so every server is tried in each round and the rounds back off. A server that does
+  // not answer at all is abandoned after OVERPASS_WAIT. alive() false stops the retries.
+  const overpassCache = new Map();
+  async function overpass(q, alive, onRetry) {
+    if (overpassCache.has(q)) return overpassCache.get(q);
     let last = new Error('ei vastausta');
-    for (const url of OVERPASS) {
-      try {
-        const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'data=' + encodeURIComponent(q)});
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return await r.json();
-      } catch (e) { last = e; }
+    for (let round = 0; round < OVERPASS_ROUNDS; round++) {
+      if (round) {
+        if (!alive()) throw last;
+        onRetry(round + 1);
+        await new Promise(r => setTimeout(r, 3000 * round));
+      }
+      for (const url of OVERPASS) {
+        if (!alive()) throw last;
+        const ac = new AbortController(), timer = setTimeout(() => ac.abort(), OVERPASS_WAIT);
+        try {
+          const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'data=' + encodeURIComponent(q), signal: ac.signal});
+          if (!r.ok) throw new Error(r.status === 504 || r.status === 429 ? 'palvelin ruuhkassa' : 'HTTP ' + r.status);
+          const j = await r.json();
+          overpassCache.set(q, j);
+          if (overpassCache.size > 8) overpassCache.delete(overpassCache.keys().next().value);
+          return j;
+        } catch (e) {
+          last = e.name === 'AbortError' ? new Error('ei vastausta') : e;
+        } finally { clearTimeout(timer); }
+      }
     }
     throw last;
   }
@@ -443,7 +463,8 @@ summary{cursor:pointer;font-weight:600}
 out tags center 800;`;
     poiMsg('Haetaan sähkö- ja vesipisteitä…');
     try {
-      const j = await overpass(q);
+      const j = await overpass(q, () => id === poiReq,
+        n => poiMsg(`Karttapalvelin ruuhkassa, yritetään uudelleen (${n}/${OVERPASS_ROUNDS})…`));
       if (id !== poiReq) return;
       const seen = new Set();
       pois = (j.elements || []).map(toPoi).filter(p => p && !seen.has(p.type + p.id) && seen.add(p.type + p.id));
