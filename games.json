@@ -407,25 +407,26 @@
     "id": "5559e903-d2e7-4d3a-8527-4d61df747918",
     "slug": "aurinkoennuste",
     "title": "Aurinkoennuste",
-    "description": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Säädata Open-Meteo.",
+    "description": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Lisäksi sähkö- ja vesipisteet (rasiat, vesihanat, juomavesi, septityhjennys) OpenStreetMapista, ilmaisten suodatus. Säädata Open-Meteo.",
     "descriptions": {
-      "fi": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Säädata Open-Meteo.",
-      "en": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Säädata Open-Meteo."
+      "fi": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Lisäksi sähkö- ja vesipisteet (rasiat, vesihanat, juomavesi, septityhjennys) OpenStreetMapista, ilmaisten suodatus. Säädata Open-Meteo.",
+      "en": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Lisäksi sähkö- ja vesipisteet (rasiat, vesihanat, juomavesi, septityhjennys) OpenStreetMapista, ilmaisten suodatus. Säädata Open-Meteo."
     },
     "author": "Sami Lehtilä",
     "tags": [
       "työkalu",
       "aurinko",
-      "kartta"
+      "kartta",
+      "matkailu"
     ],
     "status": "published",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
-    "revision": 2,
-    "sizeBytes": 26315,
+    "revision": 3,
+    "sizeBytes": 26450,
     "createdAt": "2026-09-26T07:48:14.890Z",
-    "updatedAt": "2026-10-14T05:23:00.599Z"
+    "updatedAt": "2026-10-14T05:23:08.352Z"
   },
   {
     "id": "d47dd260-f0e0-4a00-a862-677f6ebb22fa",
