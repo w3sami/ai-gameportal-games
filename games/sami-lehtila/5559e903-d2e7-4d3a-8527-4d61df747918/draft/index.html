@@ -84,6 +84,7 @@ summary{cursor:pointer;font-weight:600}
   background:var(--sheet);border:2px solid var(--line);font-size:14px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35)}
 .poi.free{border-color:var(--free);border-width:3px}
 .poi.paid{opacity:.55}
+.poi.maybe{border-style:dashed;opacity:.7}
 .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--sheet);color:var(--ink)}
 .leaflet-popup-content{font:14px/1.4 var(--body);margin:12px 14px}
 .pp h3{font:700 19px/1.1 var(--display);margin:0 0 4px}
@@ -138,7 +139,7 @@ summary{cursor:pointer;font-weight:600}
         <p class="note">Vaakatasossa (0°) suunnalla ei ole merkitystä. Aurinkokartta käyttää vaakatason säteilyä, joten kallistetuilla paneeleilla se on suuntaa-antava.</p>
       </div>
     </details>
-    <p class="src">Säädata <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0). Kartta, sähkö- ja vesipisteet © OpenStreetMap-tekijät (ODbL), haku Overpass API. Vihreä reunus = merkitty ilmaiseksi, haalea = maksullinen.</p>
+    <p class="src">Säädata <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0). Kartta, sähkö- ja vesipisteet © OpenStreetMap-tekijät (ODbL), haku Overpass API. ⚡ = sähkö merkitty, ⚡? = matkailuautoalue jolle sähköä ei ole merkitty, 🔌 = auton latauspiste jossa myös tavallinen pistorasia. Vihreä reunus = merkitty ilmaiseksi, haalea = maksullinen.</p>
   </section>
 </div>
 
@@ -393,34 +394,53 @@ summary{cursor:pointer;font-weight:600}
     if (lat == null || lon == null) return null;
     if (/^(private|no)$/.test(t.access || '')) return null;
     const site = /^(caravan_site|camp_site)$/.test(t.tourism || '');
-    const elec = (!!t.power_supply && t.power_supply !== 'no') || t.amenity === 'power_supply' ||
-      (t.amenity === 'charging_station' && !!(t['socket:schuko'] || t['socket:cee_blue']));
+    const ps = (t.power_supply || '').toLowerCase();
+    const caravans = t.tourism === 'caravan_site' || (t.tourism === 'camp_site' && t.caravans === 'yes');
+    // power: 'yes' = electricity tagged, 'charger' = car charger with a household or CEE socket,
+    // 'maybe' = caravan site with no power_supply tag at all (most of them have hook-ups).
+    const power = t.amenity === 'charging_station' ? (t['socket:schuko'] || t['socket:cee_blue'] ? 'charger' : null)
+      : (ps && !/^(no|solar)$/.test(ps)) || t.amenity === 'power_supply' ? 'yes'
+      : !ps && caravans ? 'maybe' : null;
+    const elec = !!power;
     const water = /^(drinking_water|water_point|sanitary_dump_station)$/.test(t.amenity || '') ||
       t.man_made === 'water_tap' || t.natural === 'spring' || t.drinking_water === 'yes';
     if (!elec && !water) return null;
     const f = ((elec && t['power_supply:fee']) || t.fee || '').toLowerCase();
     const fee = /^(no|donation)$/.test(f) ? 'free' : (f || t.charge) ? 'paid' : '?';
-    return {lat, lon, t, elec, water, fee, site, type: el.type, id: el.id};
+    return {lat, lon, t, elec, power, water, fee, site, type: el.type, id: el.id};
   }
 
   function kindLabel(p) {
     const t = p.t;
     if (p.site) return t.tourism === 'caravan_site' ? 'Matkailuautopaikka' : 'Leirintäalue';
     if (t.amenity === 'power_supply') return 'Sähköpistoke';
-    if (t.amenity === 'charging_station') return 'Latausasema (Schuko/CEE)';
+    if (t.amenity === 'charging_station') return 'Auton latauspiste';
+    if (t.leisure === 'marina') return 'Venesatama';
+    if (t.tourism === 'wilderness_hut') return 'Autiotupa';
+    if (t.amenity === 'parking') return 'Pysäköintialue';
     if (t.amenity === 'sanitary_dump_station') return 'Septityhjennys';
     if (t.amenity === 'water_point') return 'Vesipiste';
     if (t.amenity === 'drinking_water') return 'Juomavesi';
     if (t.man_made === 'water_tap') return 'Vesihana';
     if (t.natural === 'spring') return 'Lähde';
-    return 'Piste';
+    return p.elec ? 'Sähköpiste' : 'Piste';
   }
+
+  const SOCKETS = {yes: 'kyllä', grid: 'kyllä', schuko: 'tavallinen pistorasia (Schuko)', cee_7_3: 'tavallinen pistorasia (Schuko)',
+    cee_7_4: 'tavallinen pistorasia (Schuko)', cee_blue: 'CEE sininen (matkailuauto)', cee_17_blue: 'CEE sininen (matkailuauto)'};
+  const socketLabel = v => (v || '').split(';').map(x => SOCKETS[x.trim().toLowerCase()] || esc(x.trim())).join(', ');
 
   function popupEl(p) {
     const t = p.t, rows = [];
     rows.push(`<h3>${esc(t.name || kindLabel(p))}</h3>`);
     if (t.name) rows.push(`<p>${kindLabel(p)}</p>`);
-    if (p.elec) rows.push(`<p>⚡ Sähkö: ${t.power_supply && t.power_supply !== 'yes' ? esc(t.power_supply) : 'kyllä'}</p>`);
+    if (p.power === 'yes') rows.push(`<p>⚡ Sähkö: ${socketLabel(t.power_supply)}</p>`);
+    if (p.power === 'maybe') rows.push('<p>⚡ Sähkö: ei merkitty, matkailuautoalueilla yleensä on. Tarkista.</p>');
+    if (p.power === 'charger') {
+      const sockets = [['socket:schuko', 'tavallinen pistorasia (Schuko)'], ['socket:cee_blue', 'CEE sininen']]
+        .filter(([k]) => t[k] && t[k] !== 'no').map(([k, l]) => /^\d+$/.test(t[k]) ? `${l} × ${t[k]}` : l);
+      rows.push(`<p>🔌 ${sockets.join(', ')}</p>`);
+    }
     if (p.water) {
       const unsure = t.amenity === 'sanitary_dump_station' && t.water_point !== 'yes' && t.drinking_water !== 'yes';
       rows.push(`<p>💧 Vesi: ${unsure ? 'ei merkitty, tarkista' : t.drinking_water === 'no' ? 'ei juomakelpoinen' : 'kyllä'}</p>`);
@@ -451,7 +471,9 @@ summary{cursor:pointer;font-weight:600}
     const bb = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map(v => v.toFixed(4)).join(',');
     const q = `[out:json][timeout:25][bbox:${bb}];
 (
-  nwr["tourism"~"^(caravan_site|camp_site)$"]["power_supply"]["power_supply"!="no"];
+  nwr["power_supply"]["power_supply"!~"^(no|solar)$"];
+  nwr["tourism"="caravan_site"];
+  nwr["tourism"="camp_site"]["caravans"="yes"];
   nwr["amenity"="power_supply"];
   nwr["amenity"="charging_station"]["socket:schuko"];
   nwr["amenity"="charging_station"]["socket:cee_blue"];
@@ -480,19 +502,20 @@ out tags center 800;`;
     const list = pois.filter(p => !(S.freeOnly && p.fee === 'paid'));
     poiLayer = L.layerGroup();
     list.forEach(p => {
-      const cls = 'poi' + (p.fee === 'free' ? ' free' : p.fee === 'paid' ? ' paid' : '');
-      const w = p.elec && p.water ? 42 : 28;
+      const cls = 'poi' + (p.fee === 'free' ? ' free' : p.fee === 'paid' ? ' paid' : '') + (p.power === 'maybe' && !p.water ? ' maybe' : '');
+      const sym = ({yes: '⚡', maybe: '⚡?', charger: '🔌'}[p.power] || '') + (p.water ? '💧' : '');
+      const w = 14 + 14 * [...sym].length;
       L.marker([p.lat, p.lon], {
         title: p.t.name || kindLabel(p),
-        icon: L.divIcon({className: '', html: `<div class="${cls}">${p.elec ? '⚡' : ''}${p.water ? '💧' : ''}</div>`, iconSize: [w, 28], iconAnchor: [w / 2, 14]})
+        icon: L.divIcon({className: '', html: `<div class="${cls}">${sym}</div>`, iconSize: [w, 28], iconAnchor: [w / 2, 14]})
       }).bindPopup(() => popupEl(p), {maxWidth: 260}).addTo(poiLayer);
     });
     poiLayer.addTo(map);
     marker.setZIndexOffset(1000);
     if (quiet) return;
-    const ne = list.filter(p => p.elec).length, nw = list.filter(p => p.water).length;
+    const n = k => list.filter(p => p.power === k).length, nw = list.filter(p => p.water).length;
     poiMsg(list.length
-      ? `⚡ ${ne} sähkö · 💧 ${nw} vesi tällä alueella. OSM-data, tarkista paikan päällä.`
+      ? `⚡ ${n('yes')} sähkö · ⚡? ${n('maybe')} ehkä · 🔌 ${n('charger')} latauspiste · 💧 ${nw} vesi tällä alueella. OSM-data, tarkista paikan päällä.`
       : 'OSM:ssä ei sähkö- tai vesipisteitä tällä alueella.');
   }
 
