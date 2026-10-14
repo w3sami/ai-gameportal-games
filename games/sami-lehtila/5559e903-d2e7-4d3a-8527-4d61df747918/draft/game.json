@@ -3,7 +3,8 @@
   "tags": [
     "työkalu",
     "aurinko",
-    "kartta"
+    "kartta",
+    "matkailu"
   ],
-  "description": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Säädata Open-Meteo."
+  "description": "Aurinkopaneelien tuottoennuste kartalla: GPS-sijainti, siirrettävä piste ja aurinkokartta-overlay. Lisäksi sähkö- ja vesipisteet (rasiat, vesihanat, juomavesi, septityhjennys) OpenStreetMapista, ilmaisten suodatus. Säädata Open-Meteo."
 }
