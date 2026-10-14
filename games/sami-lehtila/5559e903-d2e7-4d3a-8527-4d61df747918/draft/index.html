@@ -11,7 +11,7 @@
 <style>
 :root{
   --ink:#1f2a33; --muted:#5d6b75; --paper:#eef2f3; --sheet:#ffffff;
-  --line:#d3dade; --sun:#f0a202; --sun-ink:#5a3b00; --sky:#2f5d8a;
+  --line:#d3dade; --sun:#f0a202; --sun-ink:#5a3b00; --sky:#2f5d8a; --free:#2e9e44;
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
   box-sizing:border-box;
@@ -21,9 +21,10 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --ink:#e6ecef; --muted:#9aa8b1; --paper:#141b21; --sheet:#1b242b;
-    --line:#2e3a43; --sun:#f5b333; --sun-ink:#1b1200; --sky:#8fb7de;
+    --line:#2e3a43; --sun:#f5b333; --sun-ink:#1b1200; --sky:#8fb7de; --free:#4cc265;
   }
 }
+[hidden]{display:none!important}
 *,*::before,*::after{box-sizing:inherit}
 html,body{height:100%;margin:0}
 body{background:var(--paper);color:var(--ink);font:16px/1.45 var(--body)}
@@ -31,13 +32,16 @@ body{background:var(--paper);color:var(--ink);font:16px/1.45 var(--body)}
 @media (min-width:860px){#app{grid-template-rows:none;grid-template-columns:1fr 380px}}
 #mapwrap{position:relative;min-height:0}
 #map{position:absolute;inset:0;background:#cfd8dc}
-.ctrls{position:absolute;top:12px;right:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
+.ctrls{position:absolute;top:12px;right:12px;z-index:500;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
 button{font:600 15px/1 var(--body);color:var(--ink);background:var(--sheet);border:1px solid var(--line);
   border-radius:10px;padding:11px 14px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18)}
 button:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 button[aria-pressed="true"]{background:var(--sun);color:var(--sun-ink);border-color:var(--sun)}
+.chip{font:600 14px/1 var(--body);color:var(--ink);background:var(--sheet);border:1px solid var(--line);
+  border-radius:10px;padding:9px 11px;display:flex;gap:6px;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.18);cursor:pointer}
+.chip input{margin:0;width:18px;height:18px}
 #btnRefresh{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:500;
-  background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  background:var(--ink);color:var(--paper);border-color:var(--ink);white-space:nowrap}
 #legend{position:absolute;left:10px;bottom:22px;z-index:500;background:var(--sheet);border:1px solid var(--line);
   border-radius:8px;padding:8px 10px;font-size:13px;min-width:170px}
 #legend .bar{height:10px;border-radius:3px;margin:5px 0 3px}
@@ -58,8 +62,9 @@ button[aria-pressed="true"]{background:var(--sun);color:var(--sun-ink);border-co
 #meta{color:var(--muted);font-size:14px;padding-bottom:4px}
 #hours{width:100%;height:70px;display:block;margin-top:8px}
 .hl{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
-#status{min-height:1.4em;font-size:14px;color:var(--muted);margin:10px 0}
-#status.err{color:#c0392b}
+#status,#poiStatus{min-height:1.4em;font-size:14px;color:var(--muted);margin:10px 0}
+#poiStatus{margin-top:-4px}
+#status.err,#poiStatus.err{color:#c0392b}
 details{border-top:1px solid var(--line);padding-top:10px}
 summary{cursor:pointer;font-weight:600}
 .form{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;margin-top:10px}
@@ -75,6 +80,18 @@ summary{cursor:pointer;font-weight:600}
 .pin{width:26px;height:26px;border-radius:50%;background:var(--sun);border:3px solid #fff;
   box-shadow:0 0 0 2px #5a3b00,0 2px 6px rgba(0,0,0,.4)}
 .me{width:14px;height:14px;border-radius:50%;background:#2f7de1;border:2px solid #fff;box-shadow:0 0 0 6px rgba(47,125,225,.25)}
+.poi{height:28px;min-width:28px;padding:0 3px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  background:var(--sheet);border:2px solid var(--line);font-size:14px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.poi.free{border-color:var(--free);border-width:3px}
+.poi.paid{opacity:.55}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--sheet);color:var(--ink)}
+.leaflet-popup-content{font:14px/1.4 var(--body);margin:12px 14px}
+.pp h3{font:700 19px/1.1 var(--display);margin:0 0 4px}
+.pp p{margin:2px 0}
+.pp .free{color:var(--free);font-weight:600}
+.pp .links{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;align-items:center}
+.pp a{color:var(--sky);font-weight:600}
+.pp button{padding:7px 10px;font-size:13px;box-shadow:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -85,8 +102,10 @@ summary{cursor:pointer;font-weight:600}
     <div class="ctrls">
       <button id="btnLocate" type="button">Oma sijainti</button>
       <button id="btnHeat" type="button" aria-pressed="false">Aurinkokartta</button>
+      <button id="btnPoi" type="button" aria-pressed="false">⚡💧 Sähkö &amp; vesi</button>
+      <label class="chip" id="poiOpts" hidden><input type="checkbox" id="freeOnly"> Piilota maksulliset</label>
     </div>
-    <button id="btnRefresh" type="button" hidden>Päivitä aurinkokartta tälle alueelle</button>
+    <button id="btnRefresh" type="button" hidden>Päivitä tälle alueelle</button>
     <div id="legend" hidden>
       <div id="legTitle">Arvioitu tuotto, kWh/päivä</div>
       <div class="bar" id="legBar"></div>
@@ -103,6 +122,7 @@ summary{cursor:pointer;font-weight:600}
     <svg id="hours" viewBox="0 0 240 70" preserveAspectRatio="none" role="img" aria-label="Tuotto tunneittain"></svg>
     <div class="hl"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>
     <p id="status"></p>
+    <p id="poiStatus" hidden></p>
     <details>
       <summary>Paneelit</summary>
       <div class="form">
@@ -118,7 +138,7 @@ summary{cursor:pointer;font-weight:600}
         <p class="note">Vaakatasossa (0°) suunnalla ei ole merkitystä. Aurinkokartta käyttää vaakatason säteilyä, joten kallistetuilla paneeleilla se on suuntaa-antava.</p>
       </div>
     </details>
-    <p class="src">Säädata <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0). Kartta © OpenStreetMap.</p>
+    <p class="src">Säädata <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0). Kartta, sähkö- ja vesipisteet © OpenStreetMap-tekijät (ODbL), haku Overpass API. Vihreä reunus = merkitty ilmaiseksi, haalea = maksullinen.</p>
   </section>
 </div>
 
@@ -126,13 +146,15 @@ summary{cursor:pointer;font-weight:600}
 <script>
 (() => {
   const API = 'https://api.open-meteo.com/v1/forecast';
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
   const DAYS = 7;
   const RAMP = ['#3b4a8c','#4f7cbf','#7fb9c9','#e9d65b','#f5a524','#e0551f'];
   const $ = id => document.getElementById(id);
   const fmt = (n, d = 1) => n.toLocaleString('fi-FI', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
   // ---------- state ----------
-  const S = {lat: 60.40, lon: 25.10, kwp: 2.0, pr: 0.8, tilt: 0, az: 0, day: 0};
+  const S = {lat: 60.40, lon: 25.10, kwp: 2.0, pr: 0.8, tilt: 0, az: 0, day: 0, poi: false, freeOnly: false};
   try { Object.assign(S, JSON.parse(localStorage.getItem('aurinko') || '{}')); } catch (e) {}
   S.day = 0;
   const save = () => { try { localStorage.setItem('aurinko', JSON.stringify(S)); } catch (e) {} };
@@ -140,6 +162,7 @@ summary{cursor:pointer;font-weight:600}
   let point = null;      // {days:[], hourly:[[Wh x24]...], cloud:[], kwh:[]}
   let grid = null;       // {cells:[{b, mj:[]}], dates:[]}
   let heatOn = false, gridLayer = null, pointReq = 0, gridReq = 0;
+  let poiOn = !!S.poi, poiLayer = null, poiReq = 0, pois = [];
 
   // ---------- map ----------
   const map = L.map('map', {zoomControl: false, attributionControl: true}).setView([S.lat, S.lon], 8);
@@ -156,7 +179,7 @@ summary{cursor:pointer;font-weight:600}
 
   marker.on('dragend', () => setPos(marker.getLatLng()));
   map.on('click', e => setPos(e.latlng));
-  map.on('moveend', () => { if (heatOn) $('btnRefresh').hidden = false; });
+  map.on('moveend', () => { if (heatOn || poiOn) $('btnRefresh').hidden = false; });
 
   function setPos(ll) {
     S.lat = +ll.lat.toFixed(4); S.lon = +ll.lng.toFixed(4);
@@ -165,10 +188,15 @@ summary{cursor:pointer;font-weight:600}
   }
 
   function status(msg, err = false) { const el = $('status'); el.textContent = msg || ''; el.classList.toggle('err', err); }
+  function poiMsg(msg, err = false) { const el = $('poiStatus'); el.textContent = msg || ''; el.classList.toggle('err', err); el.hidden = !msg; }
 
   // ---------- geolocation ----------
   function locate(auto = false) {
-    if (!navigator.geolocation) { if (!auto) status('Selain ei tue sijaintia.', true); else loadPoint(); return; }
+    if (!navigator.geolocation) {
+      if (!auto) status('Selain ei tue sijaintia.', true); else loadPoint();
+      if (poiOn) loadPoi();
+      return;
+    }
     status('Haetaan sijaintia…');
     navigator.geolocation.getCurrentPosition(p => {
       const ll = L.latLng(p.coords.latitude, p.coords.longitude);
@@ -176,9 +204,11 @@ summary{cursor:pointer;font-weight:600}
       else meMarker.setLatLng(ll);
       map.setView(ll, Math.max(map.getZoom(), 9));
       setPos(ll);
+      if (poiOn) loadPoi();
     }, e => {
       status(e.code === 1 ? 'Sijaintilupa evätty. Siirrä merkkiä kartalla.' : 'Sijaintia ei saatu. Siirrä merkkiä kartalla.', !auto);
       if (auto) loadPoint();
+      if (poiOn) loadPoi();
     }, {enableHighAccuracy: false, timeout: 15000, maximumAge: 300000});
   }
   $('btnLocate').onclick = () => locate(false);
@@ -189,6 +219,17 @@ summary{cursor:pointer;font-weight:600}
     const j = await r.json().catch(() => null);
     if (!r.ok || !j || j.error) throw new Error((j && j.reason) || ('HTTP ' + r.status));
     return Array.isArray(j) ? j : [j];
+  }
+  async function overpass(q) {
+    let last = new Error('ei vastausta');
+    for (const url of OVERPASS) {
+      try {
+        const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'data=' + encodeURIComponent(q)});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return await r.json();
+      } catch (e) { last = e; }
+    }
+    throw last;
   }
   const sysKwh = whPerM2 => whPerM2 / 1000 * S.kwp * S.pr;
 
@@ -250,7 +291,6 @@ summary{cursor:pointer;font-weight:600}
   // ---------- heatmap ----------
   async function loadGrid() {
     const id = ++gridReq;
-    $('btnRefresh').hidden = true;
     const b = map.getBounds(), size = map.getSize();
     const cols = 10, rows = Math.min(16, Math.max(6, Math.round(cols * size.y / size.x)));
     const s = b.getSouth(), n = b.getNorth(), w = b.getWest(), e = b.getEast();
@@ -306,6 +346,7 @@ summary{cursor:pointer;font-weight:600}
       }
     });
     gridLayer.addTo(map);
+    gridLayer.eachLayer(l => l.bringToBack && l.bringToBack());
     marker.setZIndexOffset(1000);
     $('legBar').style.background = `linear-gradient(90deg,${RAMP.join(',')})`;
     $('legMin').textContent = fmt(lo); $('legMax').textContent = fmt(hi);
@@ -316,9 +357,134 @@ summary{cursor:pointer;font-weight:600}
   $('btnHeat').onclick = () => {
     heatOn = !heatOn;
     $('btnHeat').setAttribute('aria-pressed', heatOn);
-    if (heatOn) loadGrid(); else { $('btnRefresh').hidden = true; renderGrid(); }
+    if (heatOn) loadGrid(); else { if (!poiOn) $('btnRefresh').hidden = true; renderGrid(); }
   };
-  $('btnRefresh').onclick = loadGrid;
+  $('btnRefresh').onclick = () => {
+    $('btnRefresh').hidden = true;
+    if (heatOn) loadGrid();
+    if (poiOn) loadPoi();
+  };
+
+  // ---------- electricity & water (OpenStreetMap via Overpass) ----------
+  function toPoi(el) {
+    const t = el.tags || {};
+    const lat = el.lat != null ? el.lat : el.center && el.center.lat;
+    const lon = el.lon != null ? el.lon : el.center && el.center.lon;
+    if (lat == null || lon == null) return null;
+    if (/^(private|no)$/.test(t.access || '')) return null;
+    const site = /^(caravan_site|camp_site)$/.test(t.tourism || '');
+    const elec = (!!t.power_supply && t.power_supply !== 'no') || t.amenity === 'power_supply' ||
+      (t.amenity === 'charging_station' && !!(t['socket:schuko'] || t['socket:cee_blue']));
+    const water = /^(drinking_water|water_point|sanitary_dump_station)$/.test(t.amenity || '') ||
+      t.man_made === 'water_tap' || t.natural === 'spring' || t.drinking_water === 'yes';
+    if (!elec && !water) return null;
+    const f = ((elec && t['power_supply:fee']) || t.fee || '').toLowerCase();
+    const fee = /^(no|donation)$/.test(f) ? 'free' : (f || t.charge) ? 'paid' : '?';
+    return {lat, lon, t, elec, water, fee, site, type: el.type, id: el.id};
+  }
+
+  function kindLabel(p) {
+    const t = p.t;
+    if (p.site) return t.tourism === 'caravan_site' ? 'Matkailuautopaikka' : 'Leirintäalue';
+    if (t.amenity === 'power_supply') return 'Sähköpistoke';
+    if (t.amenity === 'charging_station') return 'Latausasema (Schuko/CEE)';
+    if (t.amenity === 'sanitary_dump_station') return 'Septityhjennys';
+    if (t.amenity === 'water_point') return 'Vesipiste';
+    if (t.amenity === 'drinking_water') return 'Juomavesi';
+    if (t.man_made === 'water_tap') return 'Vesihana';
+    if (t.natural === 'spring') return 'Lähde';
+    return 'Piste';
+  }
+
+  function popupEl(p) {
+    const t = p.t, rows = [];
+    rows.push(`<h3>${esc(t.name || kindLabel(p))}</h3>`);
+    if (t.name) rows.push(`<p>${kindLabel(p)}</p>`);
+    if (p.elec) rows.push(`<p>⚡ Sähkö: ${t.power_supply && t.power_supply !== 'yes' ? esc(t.power_supply) : 'kyllä'}</p>`);
+    if (p.water) {
+      const unsure = t.amenity === 'sanitary_dump_station' && t.water_point !== 'yes' && t.drinking_water !== 'yes';
+      rows.push(`<p>💧 Vesi: ${unsure ? 'ei merkitty, tarkista' : t.drinking_water === 'no' ? 'ei juomakelpoinen' : 'kyllä'}</p>`);
+    }
+    rows.push(p.fee === 'free' ? '<p class="free">Merkitty ilmaiseksi</p>'
+      : p.fee === 'paid' ? `<p>Maksullinen${t.charge ? ' (' + esc(t.charge) + ')' : ''}</p>` : '<p>Maksu: ei tietoa</p>');
+    if (t.opening_hours) rows.push(`<p>Auki: ${esc(t.opening_hours)}</p>`);
+    if (t.seasonal && t.seasonal !== 'no') rows.push(`<p>Kausi: ${esc(t.seasonal)}</p>`);
+    if (t.description) rows.push(`<p>${esc(t.description)}</p>`);
+    rows.push(`<div class="links">
+      <a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank" rel="noopener">Navigoi</a>
+      <a href="https://www.openstreetmap.org/${p.type}/${p.id}" target="_blank" rel="noopener">OSM</a>
+      <button type="button">Aurinko tähän</button></div>`);
+    const div = document.createElement('div');
+    div.className = 'pp'; div.innerHTML = rows.join('');
+    div.querySelector('button').onclick = () => { map.closePopup(); setPos(L.latLng(p.lat, p.lon)); };
+    return div;
+  }
+
+  async function loadPoi() {
+    const id = ++poiReq;
+    if (map.getZoom() < 8) {
+      pois = []; renderPoi(true);
+      poiMsg('Zoomaa lähemmäs hakeaksesi sähkö- ja vesipisteet.', true);
+      return;
+    }
+    const b = map.getBounds();
+    const bb = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map(v => v.toFixed(4)).join(',');
+    const q = `[out:json][timeout:25][bbox:${bb}];
+(
+  nwr["tourism"~"^(caravan_site|camp_site)$"]["power_supply"]["power_supply"!="no"];
+  nwr["amenity"="power_supply"];
+  nwr["amenity"="charging_station"]["socket:schuko"];
+  nwr["amenity"="charging_station"]["socket:cee_blue"];
+  nwr["amenity"~"^(drinking_water|water_point|sanitary_dump_station)$"];
+  nwr["man_made"="water_tap"]["drinking_water"!="no"];
+  nwr["natural"="spring"]["drinking_water"="yes"];
+  nwr["tourism"~"^(caravan_site|camp_site)$"]["drinking_water"="yes"];
+);
+out tags center 800;`;
+    poiMsg('Haetaan sähkö- ja vesipisteitä…');
+    try {
+      const j = await overpass(q);
+      if (id !== poiReq) return;
+      const seen = new Set();
+      pois = (j.elements || []).map(toPoi).filter(p => p && !seen.has(p.type + p.id) && seen.add(p.type + p.id));
+      renderPoi();
+    } catch (e) {
+      if (id === poiReq) poiMsg('Sähkö- ja vesihaku epäonnistui (' + e.message + '). Yritä hetken päästä uudelleen.', true);
+    }
+  }
+
+  function renderPoi(quiet = false) {
+    if (poiLayer) { map.removeLayer(poiLayer); poiLayer = null; }
+    if (!poiOn) { poiMsg(''); return; }
+    const list = pois.filter(p => !(S.freeOnly && p.fee === 'paid'));
+    poiLayer = L.layerGroup();
+    list.forEach(p => {
+      const cls = 'poi' + (p.fee === 'free' ? ' free' : p.fee === 'paid' ? ' paid' : '');
+      const w = p.elec && p.water ? 42 : 28;
+      L.marker([p.lat, p.lon], {
+        title: p.t.name || kindLabel(p),
+        icon: L.divIcon({className: '', html: `<div class="${cls}">${p.elec ? '⚡' : ''}${p.water ? '💧' : ''}</div>`, iconSize: [w, 28], iconAnchor: [w / 2, 14]})
+      }).bindPopup(() => popupEl(p), {maxWidth: 260}).addTo(poiLayer);
+    });
+    poiLayer.addTo(map);
+    marker.setZIndexOffset(1000);
+    if (quiet) return;
+    const ne = list.filter(p => p.elec).length, nw = list.filter(p => p.water).length;
+    poiMsg(list.length
+      ? `⚡ ${ne} sähkö · 💧 ${nw} vesi tällä alueella. OSM-data, tarkista paikan päällä.`
+      : 'OSM:ssä ei sähkö- tai vesipisteitä tällä alueella.');
+  }
+
+  $('btnPoi').onclick = () => {
+    poiOn = !poiOn; S.poi = poiOn; save();
+    $('btnPoi').setAttribute('aria-pressed', poiOn);
+    $('poiOpts').hidden = !poiOn;
+    if (poiOn) loadPoi(); else { poiReq++; if (!heatOn) $('btnRefresh').hidden = true; renderPoi(); }
+  };
+  $('freeOnly').checked = !!S.freeOnly;
+  $('freeOnly').onchange = () => { S.freeOnly = $('freeOnly').checked; save(); renderPoi(); };
+  $('btnPoi').setAttribute('aria-pressed', poiOn);
+  $('poiOpts').hidden = !poiOn;
 
   // ---------- settings ----------
   const inputs = {kwp: $('kwp'), pr: $('pr'), tilt: $('tilt'), az: $('az')};
