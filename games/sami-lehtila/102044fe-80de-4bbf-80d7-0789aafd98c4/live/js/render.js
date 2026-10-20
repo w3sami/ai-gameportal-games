@@ -1,0 +1,780 @@
+// Everything drawn. The camera follows the slime and shows T.view tiles top
+// to bottom (fewer across a narrow screen), and stops at the level's edges.
+// The tiles that never change are drawn once into chunks of CHUNK × CHUNK
+// tiles, kept until the screen's size changes, the ones seen longest ago
+// let go past KEEP screens' worth of them; platforms, doors, the
+// panels' glow, the things, the drops and the slime are drawn every frame,
+// and last the hot air over red panels bends what is already drawn.
+//
+// A level begins with the slime growing out of a portal at the start, and
+// its exit is a portal. Reaching it, the slime and then everything on the
+// screen is sucked into it along a spiral (finale()).
+
+import { SLOPES } from './world.js';
+import { drawPortal, ARRIVE, ARRIVE_COLOR, EXIT_COLOR, arriveLift } from './portal.js';
+
+const TAU = Math.PI * 2;
+const CHUNK = 16;
+const KEEP = 4;
+
+export function createRenderer(canvas, T) {
+  const g = canvas.getContext('2d');
+  let S = 1, dpr = 1, offX = 0, offY = 0;
+  const cam = { x: 0, y: 0, set: false };
+  let chunks = new Map(), world = null;
+
+  // a new level: nothing of the old one's drawing is kept
+  function setWorld(w) {
+    world = w;
+    chunks = new Map();
+    cam.set = false;
+  }
+
+  function resize() {
+    dpr = Math.min(2, devicePixelRatio || 1);
+    canvas.width = Math.round(innerWidth * dpr);
+    canvas.height = Math.round(innerHeight * dpr);
+    chunks = new Map();
+  }
+
+  // The editor's camera: { x, y, view } in tiles, set from outside while the
+  // editor is open; the camera then stays where it is put instead of
+  // following the slime.
+  let free = null;
+
+  function scale() {
+    const view = free ? free.view : T.view;
+    const s = Math.min(canvas.height / view, canvas.width / (view * 1.2));
+    if (s !== S) { S = s; chunks = new Map(); }
+  }
+
+  // ---- tile art -----------------------------------------------------------------
+
+  // the same speckles for the same tile every time
+  const rand = (x, y, i) => {
+    const s = Math.sin(x * 127.1 + y * 311.7 + i * 74.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+
+  // Each draws one tile of size s at the context's origin. `face` is the
+  // outward normal of a side open to the room, if any, with `slope` (from
+  // world.js's SLOPES) when that side is a slope's long side.
+  const TILE = {
+    stone(c, s, x, y) {
+      fill(c, s, '#3b3649');
+      c.fillStyle = 'rgba(255,255,255,.06)'; c.fillRect(0, 0, s, s * 0.12); c.fillRect(0, 0, s * 0.12, s);
+      c.fillStyle = 'rgba(0,0,0,.22)'; c.fillRect(0, s * 0.88, s, s * 0.12); c.fillRect(s * 0.88, 0, s * 0.12, s);
+      c.fillStyle = 'rgba(255,255,255,.07)';
+      for (let i = 0; i < 4; i++) c.fillRect(rand(x, y, i) * s * 0.8, rand(x, y, i + 9) * s * 0.8, s * 0.08, s * 0.08);
+    },
+    wood(c, s, x, y) {
+      fill(c, s, '#80532f');
+      c.fillStyle = 'rgba(0,0,0,.25)';
+      for (const f of [0.33, 0.66]) c.fillRect(0, s * f, s, Math.max(1, s * 0.04));
+      c.fillStyle = 'rgba(255,220,170,.12)';
+      for (let i = 0; i < 3; i++) c.fillRect(rand(x, y, i) * s * 0.6, s * (0.1 + i * 0.33), s * 0.35, Math.max(1, s * 0.03));
+    },
+    // a cut gem: four facets around a lighter table, a glint on some
+    diamond(c, s, x, y) {
+      const m = s / 2, k = s * 0.22;
+      const facet = (col, pts) => { c.fillStyle = col; c.beginPath(); pts.forEach(([a, b], i) => (i ? c.lineTo(a, b) : c.moveTo(a, b))); c.closePath(); c.fill(); };
+      fill(c, s, '#2f86a8');
+      facet('#7fd3ec', [[0, 0], [s, 0], [m, m]]);
+      facet('#4fb0d2', [[0, 0], [0, s], [m, m]]);
+      facet('#2a7898', [[s, 0], [s, s], [m, m]]);
+      facet('#1f6280', [[0, s], [s, s], [m, m]]);
+      facet('#b6ecfa', [[m, m - k], [m + k, m], [m, m + k], [m - k, m]]);
+      c.strokeStyle = 'rgba(255,255,255,.25)'; c.lineWidth = Math.max(1, s * 0.03);
+      c.strokeRect(0.5, 0.5, s - 1, s - 1);
+      if (rand(x, y, 3) < 0.3) {
+        // a four-pointed glint
+        const gx = s * (0.25 + rand(x, y, 4) * 0.5), gy = s * (0.2 + rand(x, y, 5) * 0.3), r = s * 0.14;
+        c.fillStyle = 'rgba(255,255,255,.85)';
+        facet(c.fillStyle, [[gx, gy - r], [gx + r * 0.25, gy], [gx, gy + r], [gx - r * 0.25, gy]]);
+        facet(c.fillStyle, [[gx - r, gy], [gx, gy - r * 0.25], [gx + r, gy], [gx, gy + r * 0.25]]);
+      }
+    },
+    ice(c, s) {
+      fill(c, s, '#9fdcf3');
+      c.strokeStyle = 'rgba(255,255,255,.65)'; c.lineWidth = Math.max(1, s * 0.05);
+      c.beginPath(); c.moveTo(s * 0.15, s * 0.6); c.lineTo(s * 0.45, s * 0.2);
+      c.moveTo(s * 0.4, s * 0.85); c.lineTo(s * 0.8, s * 0.35); c.stroke();
+      c.fillStyle = 'rgba(30,90,140,.18)'; c.fillRect(0, s * 0.9, s, s * 0.1);
+    },
+    metal(c, s) {
+      fill(c, s, '#7a8593');
+      c.strokeStyle = 'rgba(0,0,0,.3)'; c.lineWidth = Math.max(1, s * 0.05);
+      c.strokeRect(s * 0.05, s * 0.05, s * 0.9, s * 0.9);
+      c.fillStyle = '#b8c2cf';
+      for (const [a, b] of [[0.2, 0.2], [0.8, 0.2], [0.2, 0.8], [0.8, 0.8]]) {
+        c.beginPath(); c.arc(s * a, s * b, s * 0.06, 0, TAU); c.fill();
+      }
+    },
+    // dark, with yellow chevrons pointing the way it throws
+    pad(c, s, x, y, meta, face) {
+      fill(c, s, '#2c2838');
+      const dir = meta?.dir || (face && [face.nx, face.ny]) || [0, -1];
+      const l = Math.hypot(dir[0], dir[1]) || 1, a = Math.atan2(dir[1] / l, dir[0] / l);
+      c.save();
+      // on a slope, smaller, in the middle of its triangle
+      const pts = face?.slope?.pts;
+      if (pts) { c.translate(s * (pts[0][0] + pts[1][0] + pts[2][0]) / 3, s * (pts[0][1] + pts[1][1] + pts[2][1]) / 3); c.scale(0.6, 0.6); }
+      else c.translate(s / 2, s / 2);
+      c.rotate(a);
+      c.strokeStyle = '#ffd43b'; c.fillStyle = '#ffd43b';
+      c.lineWidth = Math.max(1.5, s * 0.1); c.lineCap = 'round'; c.lineJoin = 'round';
+      if (meta?.dir) {
+        // an arrow: the way an arrow pad throws, whatever face is touched
+        c.beginPath(); c.moveTo(-s * 0.3, 0); c.lineTo(s * 0.08, 0); c.stroke();
+        c.beginPath(); c.moveTo(s * 0.32, 0); c.lineTo(s * 0.04, -s * 0.2); c.lineTo(s * 0.04, s * 0.2); c.closePath(); c.fill();
+      } else {
+        for (const k of [-0.18, 0.12]) {
+          c.beginPath(); c.moveTo(s * (k - 0.12), -s * 0.22); c.lineTo(s * (k + 0.1), 0); c.lineTo(s * (k - 0.12), s * 0.22); c.stroke();
+        }
+      }
+      c.restore();
+      if (face?.slope) {
+        // the springy face along the slope's long side
+        const { a, b, n } = face.slope;
+        c.strokeStyle = '#ffd43b'; c.lineWidth = s * 0.14; c.lineCap = 'butt';
+        c.beginPath(); c.moveTo((a[0] - n[0] * 0.07) * s, (a[1] - n[1] * 0.07) * s);
+        c.lineTo((b[0] - n[0] * 0.07) * s, (b[1] - n[1] * 0.07) * s); c.stroke();
+      } else if (face) {
+        // the springy face itself
+        c.fillStyle = '#ffd43b';
+        const t = s * 0.14;
+        if (face.ny < 0) c.fillRect(0, 0, s, t);
+        else if (face.ny > 0) c.fillRect(0, s - t, s, t);
+        else if (face.nx < 0) c.fillRect(0, 0, t, s);
+        else c.fillRect(s - t, 0, t, s);
+      }
+    },
+    // a riveted casing; the glowing tube along its open faces is drawn
+    // every frame (drawPanels)
+    panel(c, s, x, y) {
+      fill(c, s, '#2b2631');
+      c.fillStyle = 'rgba(255,255,255,.05)'; c.fillRect(0, 0, s, s * 0.08);
+      c.fillStyle = 'rgba(0,0,0,.25)';
+      for (const f of [0.45, 0.62, 0.79]) c.fillRect(s * 0.1, s * f, s * 0.8, Math.max(1, s * 0.04));
+      c.fillStyle = '#4a4352';
+      for (const [a, b] of [[0.5, 0.5], [(x + y) & 1 ? 0.2 : 0.8, 0.5]]) {
+        c.beginPath(); c.arc(s * a, s * b, s * 0.05, 0, TAU); c.fill();
+      }
+    },
+    platform(c, s, x) {
+      fill(c, s, '#56657a');
+      c.fillStyle = 'rgba(255,255,255,.18)'; c.fillRect(0, 0, s, s * 0.16);
+      c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(0, s * 0.84, s, s * 0.16);
+      c.fillStyle = (x & 1) ? '#ffd43b' : '#2b2b2b';
+      c.fillRect(0, s * 0.36, s, s * 0.22);
+    },
+  };
+
+  function fill(c, s, col) { c.fillStyle = col; c.fillRect(0, 0, s + 0.5, s + 0.5); }
+
+  const bare = (x, y, dx, dy) => !world.covers(x + dx, y + dy, -dx, -dy);
+  function open(x, y) {
+    const sl = world.slopeAt(x, y);
+    if (sl) return { nx: sl.n[0], ny: sl.n[1], slope: sl };
+    return [[0, -1], [-1, 0], [1, 0], [0, 1]].map(([dx, dy]) => (bare(x, y, dx, dy) ? { nx: dx, ny: dy } : null)).find(Boolean);
+  }
+
+  function chunk(cx, cy) {
+    const key = cx + ',' + cy;
+    let ch = chunks.get(key);
+    // the map's order is the order of use: a chunk drawn goes last
+    if (ch) { chunks.delete(key); chunks.set(key, ch); return ch; }
+    const px0 = Math.round(cx * CHUNK * S), py0 = Math.round(cy * CHUNK * S);
+    ch = document.createElement('canvas');
+    ch.width = Math.round((cx + 1) * CHUNK * S) - px0;
+    ch.height = Math.round((cy + 1) * CHUNK * S) - py0;
+    const c = ch.getContext('2d');
+    const grad = c.createLinearGradient(0, -py0, 0, world.h * S - py0);
+    grad.addColorStop(0, '#15111f'); grad.addColorStop(1, '#251c33');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, ch.width, ch.height);
+    // faint grid on the empty room
+    c.strokeStyle = 'rgba(255,255,255,.025)'; c.lineWidth = 1;
+    c.beginPath();
+    for (let i = 0; i <= CHUNK; i++) {
+      const X = Math.round((cx * CHUNK + i) * S) - px0 + 0.5, Y = Math.round((cy * CHUNK + i) * S) - py0 + 0.5;
+      c.moveTo(X, 0); c.lineTo(X, ch.height); c.moveTo(0, Y); c.lineTo(ch.width, Y);
+    }
+    c.stroke();
+    const rim = Math.max(1, S * 0.06);
+    for (let j = 0; j < CHUNK; j++) {
+      for (let i = 0; i < CHUNK; i++) {
+        const x = cx * CHUNK + i, y = cy * CHUNK + j, type = world.at(x, y);
+        if (!type) continue;
+        const X = Math.round(x * S) - px0, Y = Math.round(y * S) - py0, s = Math.round((x + 1) * S) - px0 - X;
+        const sl = world.slopeAt(x, y);
+        c.save(); c.translate(X, Y);
+        if (sl) {
+          // a slope: the tile's art clipped to its triangle, a dark rim along its long side
+          c.beginPath(); sl.pts.forEach(([a, b], k) => (k ? c.lineTo(a * s, b * s) : c.moveTo(a * s, b * s))); c.closePath();
+          c.save(); c.clip();
+          (TILE[type] || TILE.stone)(c, s, x, y, world.metaAt(x, y), open(x, y));
+          c.restore();
+          c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = rim * 2;
+          c.beginPath(); c.moveTo(sl.a[0] * s, sl.a[1] * s); c.lineTo(sl.b[0] * s, sl.b[1] * s); c.stroke();
+          c.restore();
+          continue;
+        }
+        (TILE[type] || TILE.stone)(c, s, x, y, world.metaAt(x, y), open(x, y));
+        c.restore();
+        // a dark rim where the tile faces the room
+        c.fillStyle = 'rgba(0,0,0,.35)';
+        if (bare(x, y, 0, -1)) c.fillRect(X, Y, s, rim);
+        if (bare(x, y, 0, 1)) c.fillRect(X, Y + s - rim, s, rim);
+        if (bare(x, y, -1, 0)) c.fillRect(X, Y, rim, s);
+        if (bare(x, y, 1, 0)) c.fillRect(X + s - rim, Y, rim, s);
+      }
+    }
+    chunks.set(key, ch);
+    trim();
+    return ch;
+  }
+
+  // a big level is never all in memory: past KEEP screens' worth of pixels,
+  // the chunks drawn longest ago go
+  function trim() {
+    let px = 0;
+    for (const c of chunks.values()) px += c.width * c.height;
+    for (const [k, c] of chunks) {
+      if (px <= KEEP * canvas.width * canvas.height) break;
+      chunks.delete(k);
+      px -= c.width * c.height;
+    }
+  }
+
+  // ---- camera -------------------------------------------------------------------
+
+  const sx = (x) => offX + x * S, sy = (y) => offY + y * S;
+
+  function follow(slime, dt) {
+    if (free) {
+      cam.x = free.x; cam.y = free.y; cam.set = true;
+      offX = Math.round(canvas.width / 2 - cam.x * S);
+      offY = Math.round(canvas.height / 2 - cam.y * S);
+      return;
+    }
+    const c = slime.centre(), v = slime.velocity();
+    const tx = c.x + Math.max(-3, Math.min(3, v.x * 0.15)), ty = c.y + Math.max(-2, Math.min(2, v.y * 0.1));
+    if (!cam.set) { cam.x = tx; cam.y = ty; cam.set = true; }
+    const k = 1 - Math.exp(-5 * dt);
+    cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
+    const vw = canvas.width / S / 2, vh = canvas.height / S / 2;
+    cam.x = world.w <= 2 * vw ? world.w / 2 : Math.max(vw, Math.min(world.w - vw, cam.x));
+    cam.y = world.h <= 2 * vh ? world.h / 2 : Math.max(vh, Math.min(world.h - vh, cam.y));
+    offX = Math.round(canvas.width / 2 - cam.x * S);
+    offY = Math.round(canvas.height / 2 - cam.y * S);
+  }
+
+  // outside the map counts as stone (world.js) and is drawn as stone; with
+  // the editor's camera, which can go there, it is darkened so the map's
+  // own edge shows
+  function shadeOutside() {
+    const x0 = sx(0), y0 = sy(0), x1 = sx(world.w), y1 = sy(world.h), W = canvas.width, H = canvas.height;
+    g.fillStyle = 'rgba(0,0,0,.6)';
+    g.fillRect(0, 0, W, Math.max(0, y0));
+    g.fillRect(0, y1, W, Math.max(0, H - y1));
+    g.fillRect(0, y0, Math.max(0, x0), y1 - y0);
+    g.fillRect(x1, y0, Math.max(0, W - x1), y1 - y0);
+  }
+
+  function drawTiles() {
+    const x0 = Math.floor(-offX / S / CHUNK), x1 = Math.floor((canvas.width - offX) / S / CHUNK);
+    const y0 = Math.floor(-offY / S / CHUNK), y1 = Math.floor((canvas.height - offY) / S / CHUNK);
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        g.drawImage(chunk(cx, cy), offX + Math.round(cx * CHUNK * S), offY + Math.round(cy * CHUNK * S));
+      }
+    }
+  }
+
+  const visible = (x, y, m = 2) => sx(x) > -m * S && sx(x) < canvas.width + m * S && sy(y) > -m * S && sy(y) < canvas.height + m * S;
+
+  // ---- moving and glowing parts -----------------------------------------------------
+
+  // A glass tube just inside each strip of open panel face. Dark it shows a
+  // faint cool line; warning, it heats up in quickening pulses; red, it
+  // burns white-hot at the core and throws a red glow into the room.
+  // Drawn in the strip's own frame: x along the face, y into the tile.
+  function drawPanels(clock) {
+    for (const p of world.panels) {
+      if (!visible(p.x + p.tx * p.len / 2, p.y + p.ty * p.len / 2, p.len)) continue;
+      const { state, k } = world.turn(p.e);
+      let heat = 0;
+      if (state === 'warn') heat = k * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(clock * (10 + 30 * k))));
+      if (state === 'on') heat = 0.92 + 0.08 * Math.sin(clock * 37 + p.x * 3 + p.y);
+      g.save();
+      g.transform(p.tx * S, p.ty * S, -p.nx * S, -p.ny * S, sx(p.x), sy(p.y));
+      if (state === 'on') {
+        // glow into the room
+        const grad = g.createLinearGradient(0, 0, 0, -1.4);
+        grad.addColorStop(0, `rgba(255,70,30,${0.32 * heat})`); grad.addColorStop(1, 'rgba(255,70,30,0)');
+        g.fillStyle = grad;
+        g.fillRect(0, -1.4, p.len, 1.4);
+      }
+      // the tube: from 0.1 to len − 0.1 along, 0.08 to 0.36 in from the face
+      const x0 = 0.1, w = p.len - 0.2, y0 = 0.08, ht = 0.28, r = ht / 2, e = 2 / S;
+      g.fillStyle = '#0d0b12';
+      g.beginPath(); g.roundRect(x0 - e, y0 - e, w + 2 * e, ht + 2 * e, r + e); g.fill();
+      if (heat > 0.02) {
+        g.shadowColor = '#ff3a12'; g.shadowBlur = S * 1.1 * heat;
+        // across the tube: red at the glass, white-hot in the middle
+        const across = g.createLinearGradient(0, y0, 0, y0 + ht);
+        across.addColorStop(0, `rgba(200,30,10,${heat})`);
+        across.addColorStop(0.5, state === 'on' ? '#fff3c4' : `rgba(255,140,50,${heat})`);
+        across.addColorStop(1, `rgba(200,30,10,${heat})`);
+        g.fillStyle = across;
+      } else {
+        g.fillStyle = '#1a2a36';
+      }
+      g.beginPath(); g.roundRect(x0, y0, w, ht, r); g.fill();
+      g.shadowBlur = 0;
+      // a highlight on the glass
+      g.fillStyle = heat > 0.02 ? `rgba(255,255,255,${0.25 * heat})` : 'rgba(140,210,255,.3)';
+      g.fillRect(0.25, 0.13, p.len - 0.5, 0.04);
+      g.restore();
+    }
+  }
+
+  // Hot air over a red panel: the picture just out from the face is copied
+  // aside once (haze), then drawn back in thin bands parallel to the face,
+  // each nudged along it by a wave rising off it, so whatever is behind
+  // (the slime too) shimmers. Pieces of HAZE_PIECE tiles along the face each
+  // get a wave of their own. A warning panel starts to shimmer as it heats.
+  const HAZE_DEPTH = 2.2;   // tiles out from the face
+  const HAZE_BAND = 5;      // device pixels across one band
+  const HAZE_PIECE = 4;     // tiles along the face in one piece
+  const haze = document.createElement('canvas'), hg = haze.getContext('2d');
+  function drawHaze(clock) {
+    for (const p of world.panels) {
+      const { state, k } = world.turn(p.e);
+      const heat = state === 'on' ? 1 : state === 'warn' ? k * k * 0.6 : 0;
+      if (heat < 0.05 || !visible(p.x + p.tx * p.len / 2, p.y + p.ty * p.len / 2, p.len)) continue;
+      // the area on screen, copied aside
+      const at = (a, d) => [sx(p.x + p.tx * a + p.nx * d), sy(p.y + p.ty * a + p.ny * d)];
+      const box = [at(0, 0), at(p.len, 0), at(0, HAZE_DEPTH), at(p.len, HAZE_DEPTH)];
+      const X0 = Math.max(0, Math.floor(Math.min(...box.map((q) => q[0])) - S));
+      const Y0 = Math.max(0, Math.floor(Math.min(...box.map((q) => q[1])) - S));
+      const X1 = Math.min(canvas.width, Math.ceil(Math.max(...box.map((q) => q[0])) + S));
+      const Y1 = Math.min(canvas.height, Math.ceil(Math.max(...box.map((q) => q[1])) + S));
+      if (X1 - X0 < 2 || Y1 - Y0 < 2) continue;
+      if (haze.width < X1 - X0 || haze.height < Y1 - Y0) { haze.width = Math.max(haze.width, X1 - X0); haze.height = Math.max(haze.height, Y1 - Y0); }
+      hg.clearRect(0, 0, X1 - X0, Y1 - Y0);
+      hg.drawImage(canvas, X0, Y0, X1 - X0, Y1 - Y0, 0, 0, X1 - X0, Y1 - Y0);
+      const band = HAZE_BAND / S, pieces = Math.max(1, Math.round(p.len / HAZE_PIECE)), piece = p.len / pieces;
+      g.save();
+      g.beginPath(); g.rect(X0, Y0, X1 - X0, Y1 - Y0); g.clip();
+      for (let i = 0; i < pieces; i++) {
+        const a0 = i * piece, seed = p.x * 1.7 + p.y * 2.3 + i * 4.1;
+        for (let d = 0; d < HAZE_DEPTH; d += band) {
+          const fade = 1 - d / HAZE_DEPTH;
+          const shift = heat * fade * (0.06 * Math.sin(d * 5 - clock * 7 + seed) + 0.03 * Math.sin(d * 11 - clock * 13 + seed * 2));
+          const q = [at(a0, d), at(a0 + piece, d), at(a0 + piece, d + band), at(a0, d + band)];
+          const x0 = Math.max(X0, Math.floor(Math.min(...q.map((c) => c[0])))), y0 = Math.max(Y0, Math.floor(Math.min(...q.map((c) => c[1]))));
+          const x1 = Math.min(X1, Math.ceil(Math.max(...q.map((c) => c[0])))), y1 = Math.min(Y1, Math.ceil(Math.max(...q.map((c) => c[1]))));
+          if (x1 - x0 < 1 || y1 - y0 < 1) continue;
+          g.save();
+          g.beginPath(); g.moveTo(q[0][0], q[0][1]); for (let j = 1; j < 4; j++) g.lineTo(q[j][0], q[j][1]); g.closePath(); g.clip();
+          g.drawImage(haze, x0 - X0, y0 - Y0, x1 - x0, y1 - y0, x0 + p.tx * shift * S, y0 + p.ty * shift * S, x1 - x0, y1 - y0);
+          g.restore();
+        }
+      }
+      g.restore();
+    }
+  }
+
+  // smoke and sparks where the slime burns
+  const puffs = [];
+  function drawSmoke(game, dt) {
+    for (const b of game.burns) {
+      if (Math.random() < 0.6) puffs.push({ x: b.x + (Math.random() - 0.5) * 0.3, y: b.y, vx: b.nx * 1.5 + (Math.random() - 0.5), vy: b.ny * 1.5 - 1.5, age: 0, life: 0.7 + Math.random() * 0.4, spark: false });
+      if (Math.random() < 0.4) puffs.push({ x: b.x, y: b.y, vx: b.nx * 5 + (Math.random() - 0.5) * 6, vy: b.ny * 5 - Math.random() * 4, age: 0, life: 0.35, spark: true });
+    }
+    for (let i = puffs.length - 1; i >= 0; i--) {
+      const f = puffs[i];
+      f.age += dt;
+      if (f.age > f.life) { puffs.splice(i, 1); continue; }
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      if (f.spark) f.vy += T.gravity * 0.5 * dt; else { f.vy -= 1.5 * dt; f.vx *= 0.97; }
+      const u = f.age / f.life;
+      if (f.spark) {
+        g.fillStyle = `rgba(255,${180 - 120 * u | 0},60,${1 - u})`;
+        g.fillRect(sx(f.x) - S * 0.04, sy(f.y) - S * 0.04, S * 0.08, S * 0.08);
+      } else {
+        g.fillStyle = `rgba(190,180,200,${0.35 * (1 - u)})`;
+        g.beginPath(); g.arc(sx(f.x), sy(f.y), S * (0.12 + 0.35 * u), 0, TAU); g.fill();
+      }
+    }
+  }
+
+  function drawMovers() {
+    for (const m of world.movers) {
+      if (m.w < 1e-3 || m.h < 1e-3 || !visible(m.x + m.w / 2, m.y + m.h / 2, m.w + m.h)) continue;
+      drawMover(m);
+    }
+  }
+
+  function drawMover(m) {
+    if (m.kind !== 'platform') { drawDoor(m); return; }
+    for (let j = 0; j < m.h0; j++) {
+      for (let i = 0; i < m.w0; i++) {
+        g.save(); g.translate(sx(m.x + i), sy(m.y + j));
+        (TILE[m.type] || TILE.platform)(g, S, i, j, m.e);
+        g.restore();
+      }
+    }
+    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = Math.max(1, S * 0.05);
+    g.strokeRect(sx(m.x), sy(m.y), m.w * S, m.h * S);
+  }
+
+  // bars in the key's colour, sliding into the door's top (or left)
+  function drawDoor(d) {
+    const vertical = d.h0 >= d.w0;
+    g.save();
+    g.beginPath(); g.rect(sx(d.x), sy(d.y), d.w * S, d.h * S); g.clip();
+    // the pattern moves with the door's free end
+    const shiftX = vertical ? 0 : d.w - d.w0, shiftY = vertical ? d.h - d.h0 : 0;
+    const X = sx(d.x + shiftX), Y = sy(d.y + shiftY), Wd = d.w0 * S, Hd = d.h0 * S;
+    g.fillStyle = '#1d1726'; g.fillRect(X, Y, Wd, Hd);
+    g.fillStyle = d.color;
+    const bars = vertical ? Math.max(2, Math.round(d.w0 * 2)) : Math.max(2, Math.round(d.h0 * 2));
+    for (let i = 0; i < bars; i++) {
+      if (vertical) g.fillRect(X + (i + 0.2) * (Wd / bars), Y, (Wd / bars) * 0.6, Hd);
+      else g.fillRect(X, Y + (i + 0.2) * (Hd / bars), Wd, (Hd / bars) * 0.6);
+    }
+    g.fillStyle = 'rgba(0,0,0,.35)';
+    for (let k = 0.5; k < (vertical ? d.h0 : d.w0); k += 1.5) {
+      if (vertical) g.fillRect(X, Y + k * S, Wd, S * 0.12); else g.fillRect(X + k * S, Y, S * 0.12, Hd);
+    }
+    // what opens it: a card slot, or a round button mark
+    const cx = X + Wd / 2, cy = Y + Hd - Math.min(Hd, 1.5 * S);
+    g.fillStyle = '#1d1726';
+    g.beginPath(); g.arc(cx, cy, S * 0.42, 0, TAU); g.fill();
+    g.fillStyle = d.color;
+    const card = world.cards.some((k) => k.char === d.e.key);
+    if (card) g.fillRect(cx - S * 0.22, cy - S * 0.15, S * 0.44, S * 0.3);
+    else { g.beginPath(); g.arc(cx, cy, S * 0.2, 0, TAU); g.fill(); }
+    g.restore();
+  }
+
+  function drawButtons(game) {
+    for (const b of world.buttons) {
+      if (!visible(b.x, b.y)) continue;
+      const down = game.isPressed(b);
+      g.save();
+      g.translate(sx(b.x), sy(b.y)); g.rotate(Math.atan2(b.nx, -b.ny));
+      g.fillStyle = '#2a2433';
+      g.fillRect(-S * 0.5, -S * 0.08, S, S * 0.08);
+      if (down) { g.shadowColor = b.e.color; g.shadowBlur = S * 0.5; }
+      g.fillStyle = b.e.color;
+      const t = down ? 0.08 : 0.26;
+      g.fillRect(-S * 0.4, -S * (0.08 + t), S * 0.8, S * t);
+      g.fillStyle = 'rgba(255,255,255,.4)';
+      g.fillRect(-S * 0.34, -S * (0.08 + t), S * 0.68, S * 0.05);
+      g.restore();
+    }
+  }
+
+  function card(x, y, size, color) {
+    g.fillStyle = color;
+    g.beginPath(); g.roundRect(x - size * 0.5, y - size * 0.35, size, size * 0.7, size * 0.1); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.8)';
+    g.fillRect(x - size * 0.35, y - size * 0.12, size * 0.7, size * 0.1);
+    g.fillStyle = 'rgba(0,0,0,.35)';
+    g.fillRect(x - size * 0.35, y + size * 0.08, size * 0.3, size * 0.12);
+  }
+
+  function drawCards(game, clock) {
+    for (const k of world.cards) {
+      if (game.carried.includes(k) || game.isTaken(k) || !visible(k.x, k.y)) continue;
+      const y = k.y + Math.sin(clock * 2.4 + k.x) * 0.15;
+      g.save(); g.shadowColor = k.e.color; g.shadowBlur = S * 0.6;
+      card(sx(k.x), sy(y), S * 0.8, k.e.color);
+      g.restore();
+    }
+  }
+
+  function drawFlags(game, col, clock) {
+    for (const p of world.checkpoints) {
+      if (!visible(p.x, p.y)) continue;
+      const on = game.isReached(p), X = sx(p.x - 0.3), top = sy(p.y - 2);
+      g.fillStyle = '#c9c2d6'; g.fillRect(X - S * 0.04, top, S * 0.08, sy(p.y) - top);
+      const wave = on ? Math.sin(clock * 6) * S * 0.08 : 0;
+      g.fillStyle = on ? col.base : '#6b6478';
+      g.beginPath(); g.moveTo(X, top); g.lineTo(X + S * 0.9, top + S * 0.25 + wave); g.lineTo(X, top + S * 0.55); g.fill();
+    }
+  }
+
+  // the exit portals, pulsing; sucking, the one reached spins faster and
+  // grows, and closes once all is in
+  function drawExits(game, clock) {
+    for (const p of world.exits) {
+      if (!visible(p.x, p.y - EXIT_UP, 4)) continue;
+      const pulse = 1 + Math.sin(clock * 2.2 + p.x) * 0.05;
+      let r = EXIT_R * pulse, spin = -clock * 1.4, glow = 0.85;
+      if (game.finished && p === sink) {
+        const T = game.after, end = SUCK.start + SUCK.spread + SUCK.each + SUCK.jitter;
+        r *= 1 + 0.5 * Math.min(1, T / 0.6);
+        if (T > end) r *= Math.max(0, 1 - (T - end) / SUCK.close);
+        spin = -clock * 7;
+        glow = 1;
+      }
+      drawPortal(g, sx(p.x), sy(p.y - EXIT_UP), r * S, EXIT_COLOR, spin, glow);
+    }
+  }
+
+  // the start portal while the slime comes out of it
+  function drawArrival(game, clock) {
+    const t = game.since, { open, free, hold, close } = ARRIVE;
+    if (game.finished || t > free + hold + close) return;
+    const ease = (u) => 1 - (1 - u) * (1 - u);
+    let k = ease(Math.min(1, t / open));
+    if (t > free + hold) k *= 1 - ease((t - free - hold) / close);
+    const st = world.start;
+    drawPortal(g, sx(st.x), sy(st.y - arriveLift(T) - T.radius - T.nodeRadius), ARRIVE_R * k * S, ARRIVE_COLOR, -clock * 4, 1);
+  }
+
+  // ---- the finale ---------------------------------------------------------------
+
+  // Everything goes into the exit portal it reached (sink) along a spiral:
+  // the slime first, over SUCK.slime seconds, then each tile on the screen
+  // and each platform and door, the nearer ones first (spread over
+  // SUCK.spread, each taking SUCK.each). warp() is the path, the same for
+  // anything that is to go in, so a later thing (an enemy) goes in by
+  // drawing itself through it. The things that are not solid (buttons,
+  // cards, flags, panels' glow, drops) fade out first.
+  const EXIT_R = 0.8, EXIT_UP = 1.5;   // tiles: the exit portal's radius, its centre above the exit's floor point
+  const ARRIVE_R = 1.2;                // tiles: the start portal's radius
+  // twist: the turn a piece takes is twist × (1 / (r + 1) − 1 / (r0 + 1))
+  // radians anticlockwise, r its distance from the portal in tiles, so a
+  // piece from afar falls in almost straight and swirls only near the
+  // portal. Anticlockwise is the way the portals turn (portal.js), so the
+  // pieces follow the arms in.
+  const SUCK = { slime: 0.6, start: 0.35, spread: 1.8, each: 0.8, jitter: 0.15, pull: 2.4, twist: 4, fade: 0.35, close: 0.4 };
+  let sink = null, pieces = null;
+
+  // where the world point (x, y) is when it started going in at ts and
+  // takes d seconds, at finale time t: { x, y, k (scale), a (turn), alpha }
+  function warp(x, y, ts, d, t) {
+    const cx = sink.x, cy = sink.y - EXIT_UP;
+    const u = Math.max(0, Math.min(1, (t - ts) / d)), e = Math.pow(u, SUCK.pull);
+    const dx = x - cx, dy = y - cy, r0 = Math.hypot(dx, dy), r = r0 * (1 - e);
+    const a = -SUCK.twist * (1 / (r + 1) - 1 / (r0 + 1));
+    const th = Math.atan2(dy, dx) + a;
+    return { x: cx + Math.cos(th) * r, y: cy + Math.sin(th) * r, k: Math.pow(1 - e, 0.7), a, alpha: u < 0.85 ? 1 : (1 - u) / 0.15 };
+  }
+
+  function startFinale(slime) {
+    const c = slime.centre();
+    sink = world.exits.reduce((a, b) => (Math.hypot(b.x - c.x, b.y - c.y) < Math.hypot(a.x - c.x, a.y - c.y) ? b : a));
+    const vw = canvas.width / S, vh = canvas.height / S, x0 = Math.floor(-offX / S) - 3, y0 = Math.floor(-offY / S) - 3;
+    const cx = sink.x, cy = sink.y - EXIT_UP;
+    pieces = [];
+    for (let y = y0; y < y0 + vh + 6; y++) {
+      for (let x = x0; x < x0 + vw + 6; x++) {
+        if (x < 0 || y < 0 || x >= world.w || y >= world.h || !world.at(x, y)) continue;
+        pieces.push({ x: x + 0.5, y: y + 0.5, cell: [x, y] });
+      }
+    }
+    for (const m of world.movers) if (m.w > 1e-3 && m.h > 1e-3) pieces.push({ x: m.x + m.w / 2, y: m.y + m.h / 2, mover: m });
+    const far = Math.max(1, ...pieces.map((q) => Math.hypot(q.x - cx, q.y - cy)));
+    for (const q of pieces) q.ts = SUCK.start + (Math.hypot(q.x - cx, q.y - cy) / far) * SUCK.spread + Math.random() * SUCK.jitter;
+  }
+
+  // the screen through the finale: the empty room, and what has not gone in yet
+  function drawFinale(t) {
+    const grad = g.createLinearGradient(0, sy(0), 0, sy(world.h));
+    grad.addColorStop(0, '#15111f'); grad.addColorStop(1, '#251c33');
+    g.fillStyle = grad; g.fillRect(0, 0, canvas.width, canvas.height);
+    for (const q of pieces) {
+      if (t > q.ts + SUCK.each) continue;
+      const w = warp(q.x, q.y, q.ts, SUCK.each, t);
+      const cos = Math.cos(w.a) * w.k, sin = Math.sin(w.a) * w.k;
+      g.globalAlpha = w.alpha;
+      if (q.cell) {
+        const [x, y] = q.cell, ccx = Math.floor(x / CHUNK), ccy = Math.floor(y / CHUNK);
+        const ch = chunk(ccx, ccy), px0 = Math.round(ccx * CHUNK * S), py0 = Math.round(ccy * CHUNK * S);
+        const X = Math.round(x * S) - px0, Y = Math.round(y * S) - py0, s = Math.round((x + 1) * S) - px0 - X, h = Math.round((y + 1) * S) - py0 - Y;
+        g.setTransform(cos, sin, -sin, cos, sx(w.x), sy(w.y));
+        g.drawImage(ch, X, Y, s, h, -s / 2, -h / 2, s, h);
+      } else {
+        g.setTransform(cos, sin, -sin, cos, sx(w.x), sy(w.y));
+        g.translate(-sx(q.x), -sy(q.y));
+        drawMover(q.mover);
+      }
+    }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+  }
+
+  // ---- drops and slime ----------------------------------------------------------
+
+  function drawDrops(drops, col) {
+    for (const d of drops) {
+      if (!d.state || !visible(d.x, d.y)) continue;
+      const fade = Math.min(1, (T.trail.life - d.age) / (T.trail.life / 3));
+      g.globalAlpha = 0.85 * fade;
+      g.fillStyle = col.base;
+      g.beginPath();
+      if (d.state === 'stuck') {
+        // flattened along the surface
+        g.ellipse(sx(d.x), sy(d.y), d.r * 1.5 * S, d.r * 0.75 * S, Math.atan2(d.nx, -d.ny), 0, TAU);
+      } else {
+        g.arc(sx(d.x), sy(d.y), d.r * S, 0, TAU);
+      }
+      g.fill();
+    }
+    g.globalAlpha = 1;
+  }
+
+  // `look`: { x, y } the eyes' direction; `fx`: { shrink 0–1 (1 = gone),
+  // dead (crossed eyes), wince (squeezed eyes), warp (a point's place on
+  // the way into the exit portal) }
+  function drawSlime(slime, col, look, blink, carried, fx) {
+    let c = slime.centre(), keep = 1 - fx.shrink;
+    if (keep <= 0.01) return;
+    let pts = slime.outline().map((p) => ({ x: c.x + (p.x - c.x) * keep, y: c.y + (p.y - c.y) * keep }));
+    if (fx.warp) {
+      const wc = fx.warp(c.x, c.y);
+      if (wc.k <= 0.02 || wc.alpha <= 0.02) return;
+      pts = pts.map((p) => fx.warp(p.x, p.y));
+      keep *= wc.k;
+      c = wc;
+    }
+    const N = pts.length, R = T.radius * S * keep;
+    const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const cx = sx(c.x), cy = sy(c.y);
+    g.save();
+    g.globalAlpha = Math.min(1, keep * 1.5);
+
+    // carried cards float inside the jelly
+    carried.forEach((k, i) => card(cx + (i - (carried.length - 1) / 2) * R * 0.5, cy + R * 0.4, R * 0.45, k.e.color));
+
+    g.beginPath();
+    const m0 = mid(pts[N - 1], pts[0]);
+    g.moveTo(sx(m0.x), sy(m0.y));
+    for (let i = 0; i < N; i++) {
+      const m = mid(pts[i], pts[(i + 1) % N]);
+      g.quadraticCurveTo(sx(pts[i].x), sy(pts[i].y), sx(m.x), sy(m.y));
+    }
+    g.closePath();
+
+    const grad = g.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R * 1.3);
+    grad.addColorStop(0, col.light); grad.addColorStop(0.55, col.base); grad.addColorStop(1, col.dark);
+    g.fillStyle = grad;
+    const alpha = g.globalAlpha;
+    g.globalAlpha = alpha * (carried.length ? 0.8 : 0.93);
+    g.fill();
+    g.globalAlpha = alpha;
+    g.lineWidth = Math.max(1.5, S * 0.06);
+    g.strokeStyle = col.edge;
+    g.stroke();
+
+    // gloss
+    g.fillStyle = 'rgba(255,255,255,.35)';
+    g.beginPath();
+    g.ellipse(cx - R * 0.35, cy - R * 0.45, R * 0.26, R * 0.13, -0.5, 0, TAU);
+    g.fill();
+
+    // eyes, looking where the slime goes; crossed out when dead, squeezed
+    // shut (> <) while burning
+    const ey = cy - R * 0.12;
+    for (const side of [-1, 1]) {
+      const ex = cx + side * R * 0.3;
+      if (fx.dead || fx.wince) {
+        g.strokeStyle = '#1b1426'; g.lineWidth = Math.max(1.5, R * 0.07); g.lineCap = 'round';
+        const e = R * 0.13;
+        g.beginPath();
+        if (fx.dead) { g.moveTo(ex - e, ey - e); g.lineTo(ex + e, ey + e); g.moveTo(ex + e, ey - e); g.lineTo(ex - e, ey + e); }
+        else { g.moveTo(ex + side * e, ey - e); g.lineTo(ex - side * e, ey); g.lineTo(ex + side * e, ey + e); }
+        g.stroke();
+        continue;
+      }
+      g.fillStyle = '#fff';
+      g.beginPath(); g.ellipse(ex, ey, R * 0.17, R * 0.2 * (blink ? 0.12 : 1), 0, 0, TAU); g.fill();
+      if (blink) continue;
+      g.fillStyle = '#1b1426';
+      g.beginPath(); g.arc(ex + look.x * R * 0.07, ey + look.y * R * 0.08, R * 0.085, 0, TAU); g.fill();
+    }
+    g.restore();
+  }
+
+  function draw(slime, trail, game, look, blink, clock, dt) {
+    scale();
+    follow(slime, dt);
+    // hurt, the slime runs hot: towards red, flickering while it burns
+    const hurt = 1 - game.health, flicker = game.burns.length ? 0.15 * Math.sin(clock * 40) : 0;
+    const col = palette(T.color, Math.max(0, Math.min(1, hurt * 0.75 + flicker)));
+    if (!game.finished) { sink = null; pieces = null; }
+    else if (!pieces) startFinale(slime);
+    const t = game.after;
+    // the things that are not solid fade out as the finale begins
+    const things = pieces ? Math.max(0, 1 - t / SUCK.fade) : 1;
+    if (pieces) drawFinale(t); else drawTiles();
+    if (free) shadeOutside();
+    g.globalAlpha = things;
+    if (things > 0) {
+      drawPanels(clock);
+      drawFlags(game, col, clock);
+      drawButtons(game);
+      drawCards(game, clock);
+    }
+    g.globalAlpha = 1;
+    drawExits(game, clock);
+    drawArrival(game, clock);
+    if (!pieces) drawMovers();
+    g.globalAlpha = things;
+    if (things > 0) drawDrops(trail.drops, palette(T.color));
+    g.globalAlpha = 1;
+    // dying: the slime sags for the first 60 % of respawnTime, then shrinks
+    // away; arriving, it grows out of the start portal
+    let shrink = Math.max(0, (game.dying - 0.6) / 0.4);
+    if (!game.finished && game.since < ARRIVE.lead + ARRIVE.grow) {
+      const u = Math.max(0, (game.since - ARRIVE.lead) / ARRIVE.grow);
+      shrink = (1 - u) * (1 - u);
+    }
+    const warpSlime = pieces ? (x, y) => warp(x, y, 0, SUCK.slime, t) : null;
+    drawSlime(slime, col, look, blink, game.carried, { shrink, dead: game.dead, wince: game.burns.length > 0, warp: warpSlime });
+    if (!pieces) { drawSmoke(game, dt); drawHaze(clock); }
+  }
+
+  // the cached tile art around a cell that changed (its neighbours' rims too)
+  function dirtyCell(cx, cy) {
+    for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) {
+      chunks.delete(Math.floor((cx + dx) / CHUNK) + ',' + Math.floor((cy + dy) / CHUNK));
+    }
+  }
+
+  addEventListener('resize', resize);
+  resize();
+  return {
+    draw, resize, setWorld, dirtyCell,
+    // a point on the page (CSS pixels) in tiles
+    toWorld: (clientX, clientY) => ({ x: (clientX * dpr - offX) / S, y: (clientY * dpr - offY) / S }),
+    // the transform from tiles to canvas pixels: x · S + offX
+    get view() { return { S, offX, offY }; },
+    get camera() { return { x: cam.x, y: cam.y }; },
+    get free() { return free; },
+    set free(v) { free = v; },
+  };
+}
+
+// ---- colour ---------------------------------------------------------------------
+
+// the slime's colours, `heat` (0–1) of the way to a burning red
+const HOT = [255, 60, 25];
+let cached = null;
+function palette(hex, heat = 0) {
+  heat = Math.round(heat * 40) / 40;
+  if (cached?.hex === hex && cached.heat === heat) return cached;
+  const n = parseInt(String(hex).replace('#', ''), 16) || 0x6fdc4b;
+  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v, i) => v + (HOT[i] - v) * heat);
+  const mix = (t, to) => 'rgb(' + rgb.map((v) => Math.round(v + (to - v) * t)).join(',') + ')';
+  const out = { hex, heat, base: mix(0, 0), light: mix(0.45, 255), dark: mix(0.3, 0), edge: mix(0.5, 0) };
+  if (!heat) cached = out;
+  return out;
+}

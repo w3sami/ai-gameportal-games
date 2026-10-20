@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lima</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="pad"></canvas>
+<div id="hint">Tikku tai nuolet: ryömi · seinään päin: kiipeä · poispäin: irrota · A / välilyönti: hyppy, pidä: lataa · R tarkistuspisteeseen, pidä: alkuun · M kentät · C ohjaimet</div>
+<div id="time"></div>
+<div id="msg" hidden></div>
+<div id="devbar" hidden><div></div><span>kestävyys</span><i></i></div>
+<button id="ballbtn" hidden aria-label="Pallo / hyppy">A</button>
+<button id="fs" title="Koko ruutu (F)" aria-label="Koko ruutu"></button>
+<button id="menu" title="Kentät (M)" aria-label="Kentät"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 6h14M5 12h14M5 18h14"/></svg></button>
+<div id="levels" hidden>
+  <div class="box">
+    <h2>Kentät</h2>
+    <ol></ol>
+    <p>Tikku: valitse · A / välilyönti: aloita · M: sulje</p>
+    <button class="touch"></button>
+    <button class="close">Sulje</button>
+  </div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
