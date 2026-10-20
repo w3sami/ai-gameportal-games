@@ -1,7 +1,7 @@
 {
   "color": "#e245e2",
   "nodes": 10,
-  "radius": 1.45,
+  "radius": 1.35,
   "nodeRadius": 0.56,
   "radialStiff": 300,
   "edgeStiff": 105,
