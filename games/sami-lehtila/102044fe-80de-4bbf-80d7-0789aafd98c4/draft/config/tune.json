@@ -7,7 +7,7 @@
   "edgeStiff": 105,
   "areaStiff": 991,
   "pressure": 0.88,
-  "spinLock": 0,
+  "spinLock": 1,
   "damping": 4.5,
   "gravity": 30,
   "crawlSpeed": 8.5,
