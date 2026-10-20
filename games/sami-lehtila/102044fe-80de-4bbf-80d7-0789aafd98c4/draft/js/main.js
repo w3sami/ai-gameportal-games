@@ -135,6 +135,9 @@ const menu = createMenu(LEVELS, clockText, (i) => { load(i); last = performance.
 const menuButton = document.getElementById('menu');
 menuButton.addEventListener('click', () => { if (menu.open) menu.close(); else menu.show(level); menuButton.blur(); });
 
+// the touch stick keeps off the screen while the editor or the menu has it
+input.setBlocked(() => editor.active || menu.open);
+
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
