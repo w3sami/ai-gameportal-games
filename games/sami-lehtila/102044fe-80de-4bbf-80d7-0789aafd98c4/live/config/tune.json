@@ -7,7 +7,7 @@
   "edgeStiff": 800,
   "areaStiff": 200,
   "pressure": 0.88,
-  "spinLock": 0,
+  "spinLock": 1,
   "damping": 1.5,
   "gravity": 30,
   "crawlSpeed": 5.2,
@@ -22,16 +22,10 @@
   "ballPressure": 1,
   "ballMagnet": 0,
   "ballBounce": 0.7,
-  "bounceEnergy": 1,
   "chargeTime": 0.5,
   "chargeMagnet": 6,
   "popTime": 0.15,
   "popMax": 26,
-  "energyMax": 498,
-  "energyRegen": 39,
-  "jumpCost": 2.4,
-  "bounceCost": 1,
-  "ballDrain": 5,
   "magnet": 150,
   "cling": 30,
   "magnetRange": 0.6,
@@ -44,6 +38,10 @@
     "wood": {
       "grip": 1,
       "magnet": 1
+    },
+    "diamond": {
+      "grip": 1,
+      "magnet": 0
     },
     "ice": {
       "grip": 0.03,
@@ -68,15 +66,10 @@
     "door": {
       "grip": 1,
       "magnet": 1
-    },
-    "diamond": {
-      "grip": 1,
-      "magnet": 0
     }
   },
   "padSpeed": 32,
   "padBounce": 1,
-  "padSlime": 0.5,
   "panel": {
     "off": 2.5,
     "warn": 0.8,
@@ -88,9 +81,6 @@
   "crushArea": 0.25,
   "crushTime": 0.3,
   "respawnTime": 1,
-  "orbEnergy": 40,
-  "orbOverfill": 1.5,
-  "orbRespawn": 8,
   "view": 20,
   "trail": {
     "pool": 200,
@@ -102,5 +92,15 @@
     "drip": 0.25
   },
   "substeps": 10,
-  "iterations": 2
+  "iterations": 2,
+  "bounceEnergy": 1,
+  "energyMax": 498,
+  "energyRegen": 39,
+  "jumpCost": 2.4,
+  "bounceCost": 1,
+  "ballDrain": 5,
+  "padSlime": 0.5,
+  "orbEnergy": 40,
+  "orbOverfill": 1.5,
+  "orbRespawn": 8
 }
