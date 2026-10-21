@@ -3,9 +3,11 @@
 //
 // It shows while the portal's debug switch is on (the game's own page,
 // /omat/<id>) or with ?debug in the address. Backquote (§ on a Finnish
-// keyboard, left of 1) toggles it where debugging is allowed. Saving needs
-// the game's own page, where portal.canWrite is true; elsewhere "Kopioi"
-// puts the JSON on the clipboard.
+// keyboard, left of 1) toggles it where debugging is allowed, and so does
+// a button of its own beside the corner buttons, for a phone in fullscreen,
+// where neither the portal's switch nor a keyboard can be reached. Saving
+// needs the game's own page, where portal.canWrite is true; elsewhere
+// "Kopioi" puts the JSON on the clipboard.
 //
 // Each row is [path in T, label, min, max, step]. The range is what the
 // slider allows, not what the value may be: tune.json can hold anything.
@@ -99,6 +101,9 @@ const GROUPS = [
   ]],
 ];
 
+// sliders, for the panel's own button
+const TUNE_ICON = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2.4" fill="currentColor"/><circle cx="15" cy="12" r="2.4" fill="currentColor"/><circle cx="7" cy="18" r="2.4" fill="currentColor"/></svg>';
+
 const get = (o, path) => path.split('.').reduce((a, k) => a?.[k], o);
 function set(o, path, v) {
   const ks = path.split('.');
@@ -109,6 +114,17 @@ function set(o, path, v) {
 export function createTuning(T, { onPause, onEditor } = {}) {
   const allowed = () => !portal.embedded || portal.canWrite;
   let el = null, dirty = false, open = false;
+
+  // the panel's own button, shown where the panel may open and debugging is on
+  const button = document.createElement('button');
+  button.id = 'tune';
+  button.title = 'Säädöt (§)';
+  button.setAttribute('aria-label', 'Säädöt');
+  button.innerHTML = TUNE_ICON;
+  button.hidden = true;
+  button.addEventListener('click', () => { toggle(); button.blur(); });
+  document.body.appendChild(button);
+  const showButton = () => { button.hidden = !(allowed() && (portal.canWrite || portal.debug || open)); };
 
   function build() {
     el = document.createElement('div');
@@ -192,13 +208,16 @@ export function createTuning(T, { onPause, onEditor } = {}) {
     open = on && allowed();
     if (open && !el) build();
     if (el) el.hidden = !open;
+    button.classList.toggle('on', open);
+    showButton();
   }
 
   onPortal('debug', (on) => toggle(on));
   // canWrite arrives after debug when framed, and decides whether debug may open
-  onPortal('canWrite', () => { refreshHead(); if (portal.debug) toggle(true); });
+  onPortal('canWrite', () => { refreshHead(); if (portal.debug) toggle(true); else showButton(); });
   onPortal('pause', (on) => onPause?.(on));
   addEventListener('keydown', (e) => { if (e.code === 'Backquote' && allowed()) toggle(); });
+  showButton();
 
   return { toggle, get open() { return open; } };
 }
