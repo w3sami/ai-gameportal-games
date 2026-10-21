@@ -1,7 +1,7 @@
 [
   {
     "name": "joystick",
-    "description": "Kelluva ohjaussauva kosketusnäytölle: sauva syntyy siihen mihin sormi laskeutuu. Antaa pelkän suuntavektorin eikä tiedä pelistä mitään.",
+    "description": "Kelluva ohjaussauva kosketusnäytölle: sauva syntyy siihen mihin sormi laskeutuu. Antaa pelkän suuntavektorin eikä tiedä pelistä mitään. 1.0.1: toinen sormi ei enää vie sauvaa kesken ohjauksen.",
     "author": "Sami Lehtilä",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
@@ -17,13 +17,29 @@
         "sizeBytes": 5181,
         "entryFile": "index.js",
         "publishedAt": "2026-09-13T18:31:02.685Z"
+      },
+      {
+        "version": "1.0.1",
+        "files": [
+          {
+            "path": "index.js",
+            "sizeBytes": 5400
+          },
+          {
+            "path": "README.md",
+            "sizeBytes": 2547
+          }
+        ],
+        "sizeBytes": 7947,
+        "entryFile": "index.js",
+        "publishedAt": "2026-10-21T05:53:51.968Z"
       }
     ],
     "aliases": {
-      "v1": "1.0.0"
+      "v1": "1.0.1"
     },
     "createdAt": "2026-09-13T18:31:02.690Z",
-    "updatedAt": "2026-09-13T18:31:02.690Z"
+    "updatedAt": "2026-10-21T05:53:51.969Z"
   },
   {
     "name": "debug-panel",
