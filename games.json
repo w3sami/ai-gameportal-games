@@ -528,5 +528,27 @@
     "sizeBytes": 179302,
     "createdAt": "2026-10-10T15:35:56.428Z",
     "updatedAt": "2026-10-21T07:10:49.200Z"
+  },
+  {
+    "id": "14a16aaa-1fc0-4d84-b7d0-290b7ffe5217",
+    "slug": "norppa",
+    "title": "Norppa",
+    "description": "Slide a Saimaa ringed seal across the frozen lake to its breathing hole. On ice it can't stop until something stops it. Every level is generated and checked for a solution, and you get stars for matching the shortest route.",
+    "descriptions": {},
+    "author": "Sami Lehtilä",
+    "tags": [
+      "puzzle",
+      "ice",
+      "casual",
+      "mobile"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 337,
+    "createdAt": "2026-10-21T15:22:21.717Z",
+    "updatedAt": "2026-10-21T15:22:21.743Z"
   }
 ]
