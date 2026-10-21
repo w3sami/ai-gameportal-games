@@ -1,10 +1,8 @@
 {
   "title": "Norppa",
-  "tags": [
-    "puzzle",
-    "ice",
-    "casual",
-    "mobile"
-  ],
-  "description": "Slide a Saimaa ringed seal across the frozen lake to its breathing hole. On ice it can't stop until something stops it. Every level is generated and checked for a solution, and you get stars for matching the shortest route."
+  "tags": ["puzzle", "ice", "casual", "mobile"],
+  "description": {
+    "fi": "Liu'uta saimaannorppa jään poikki hengitysreiälleen. Jäällä se pysähtyy vain kiveen, rantaan tai hankeen. Jokainen taso on generoitu ja ratkaistu valmiiksi, ja tähtiä saa lyhimmän reitin löytämisestä.",
+    "en": "Slide a Saimaa ringed seal across the frozen lake to its breathing hole. On ice it stops only at a rock, the shore or deep snow. Every level is generated and checked for a solution, and you get stars for matching the shortest route."
+  }
 }
