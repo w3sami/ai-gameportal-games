@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Norppa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main class="app">
+  <header class="bar">
+    <h1>Norppa</h1>
+    <nav class="levelnav">
+      <button id="prev" class="icon" data-t-label="prev">‹</button>
+      <span class="lvlwrap"><span id="lvl">Level 1</span><span id="lvlStars" class="lvlstars"></span></span>
+      <button id="nextLvl" class="icon" data-t-label="nextLvl">›</button>
+    </nav>
+    <dl class="score">
+      <div><dt data-t="moves">Moves</dt><dd id="moves">0</dd></div>
+      <div><dt data-t="best">Shortest</dt><dd id="par">0</dd></div>
+    </dl>
+  </header>
+
+  <section class="stage">
+    <canvas id="board" aria-label="Norppa game board"></canvas>
+    <div id="win" class="win" hidden role="dialog" aria-live="polite">
+      <div class="card">
+        <h2 data-t="solved">Into the hole!</h2>
+        <p id="winStars" class="stars"></p>
+        <p id="winText"></p>
+        <div class="row">
+          <button id="replay" class="ghost" data-t="replay">Play again</button>
+          <button id="next" class="primary" data-t="next">Next level</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p id="howto" class="howto" data-t="howto"></p>
+
+  <footer class="controls">
+    <button id="undo" data-t="undo">Undo</button>
+    <button id="restart" data-t="restart">Restart</button>
+    <button id="hint" data-t="hint">Hint</button>
+  </footer>
+  <p class="keys" data-t="keys"></p>
+</main>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
