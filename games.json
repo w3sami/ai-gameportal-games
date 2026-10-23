@@ -574,5 +574,26 @@
     "sizeBytes": 52966,
     "createdAt": "2026-10-23T06:17:52.454Z",
     "updatedAt": "2026-10-23T07:01:36.791Z"
+  },
+  {
+    "id": "5f31205a-a21f-4a09-b35e-70a3d617808f",
+    "slug": "selain-ai",
+    "title": "Selain-AI-testi",
+    "description": "Kielimalli pyörii omassa selaimessasi WebGPU:lla (WebLLM) tai Chromen sisäänrakennetulla Gemini Nanolla. Chattaa tai pyydä mallia tekemään pieni peli ja aja se heti.",
+    "descriptions": {},
+    "author": "Sami Lehtilä",
+    "tags": [
+      "tool",
+      "ai",
+      "webgpu"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 277,
+    "createdAt": "2026-10-23T08:12:18.782Z",
+    "updatedAt": "2026-10-23T08:12:18.795Z"
   }
 ]
