@@ -1,10 +1,8 @@
 {
   "title": "Robotin ohjelma",
-  "tags": [
-    "pulma",
-    "ohjelmointi",
-    "robotti",
-    "mobiili"
-  ],
-  "description": "Ohjelmointiaiheinen pulmapeli: korjaa robotin ohjelma kentältä kerätyillä käskykorteilla."
+  "tags": ["pulma", "ohjelmointi", "robotti", "mobiili"],
+  "description": {
+    "fi": "Ohjelmointiaiheinen pulmapeli. Robotti tottelee ohjelmaa käsky kerrallaan – eteen, taakse, käänny ja aktivoi – mutta ohjelmassa on vika. Kerää kentältä käskykortteja ja lisää ne ohjelmaan oikeisiin kohtiin, jotta robotti pääsee maaliin. Vivut avaavat ovia ja laskevat siltoja, kuiluun ei kannata ajaa. Kumoa toimii aina alkuun asti. 12 tasoa sekä loputtomasti satunnaisia, ratkaisijalla tarkistettuja tasoja.",
+    "en": "A programming puzzle. The robot follows its program one command at a time – forward, back, turn and activate – but the program has a bug. Collect command cards from the floor and insert them into the program so the robot reaches the goal. Levers open doors and lower bridges; pits are best avoided. Undo goes all the way back to the start. 12 levels plus endless random levels, each checked by a solver. (Finnish UI.)"
+  }
 }
