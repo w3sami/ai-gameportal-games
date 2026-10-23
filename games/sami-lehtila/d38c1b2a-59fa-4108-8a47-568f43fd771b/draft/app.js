@@ -101,10 +101,27 @@ function showTalk(t, key, label) {
   dlg.showModal();
 }
 
+// Fullscreen koko sivulle; webkit-etuliite vanhemmille Safareille. Nappi piiloon, jos kehys ei salli.
+const root = document.documentElement;
+const canFs = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+const fsLabel = () => (isFs() ? "⤡ Pienennä" : "⤢ Koko näyttö");
+function toggleFs() {
+  const p = isFs()
+    ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
+    : (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+  p?.catch?.(() => {});
+}
+// Päivitetään vain napin teksti, ettei render() nollaa auki olevaa lomaketta.
+for (const ev of ["fullscreenchange", "webkitfullscreenchange"])
+  document.addEventListener(ev, () => { const b = document.querySelector(".fs"); if (b) b.textContent = fsLabel(); });
+
 function header() {
   return h("header", {},
     h("div", {}, h("h1", {}, "Lane-äänestys"), h("p", { class: "sub" }, "Kuka menee mihinkin — CityJS Athens")),
-    state.name ? h("button", { class: "me", onclick: () => { state.prevName = state.name; state.name = ""; render(); } }, "👤 " + state.name) : null);
+    h("div", { class: "tools" },
+      canFs ? h("button", { class: "me fs", onclick: toggleFs }, fsLabel()) : null,
+      state.name ? h("button", { class: "me", onclick: () => { state.prevName = state.name; state.name = ""; render(); } }, "👤 " + state.name) : null));
 }
 
 function nameCard() {
@@ -122,9 +139,10 @@ function nameCard() {
 }
 
 // Lane on div eikä button, jotta sen sisällä voi olla oma kuvausnappi.
+// Klikkaus valitsee vain tämän lanen (myös "molemmat"-tilasta); uusi klikkaus omaan laneen peruu äänen.
 function laneButton(slot, key, label, voters, mine) {
   const t = T(slot[key]);
-  const cls = ["lane", mine === key && "mine"].filter(Boolean).join(" ");
+  const cls = ["lane", (mine === key || mine === "ab") && "mine"].filter(Boolean).join(" ");
   const pick = () => cast(slot.id, mine === key ? "none" : key);
   return h("div", { class: cls, "data-k": key, role: "button", tabIndex: 0, onclick: pick,
     onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } } },
@@ -144,7 +162,7 @@ function laneButton(slot, key, label, voters, mine) {
 function slotCard(slot) {
   const v = state.votes[slot.id] || {};
   const voters = { a: [], b: [] };
-  for (const [name, lane] of Object.entries(v)) voters[lane]?.push(name);
+  for (const [name, lane] of Object.entries(v)) for (const k of lane) voters[k]?.push(name);
   const mine = v[state.name];
   // Piilota lane, jolla ei ole puhetta — paitsi tyhjässä slotissa, jota ollaan vasta täyttämässä.
   const keys = [slot.a && "a", slot.b && "b"].filter(Boolean);
@@ -152,6 +170,8 @@ function slotCard(slot) {
   return h("section", { class: "slot" },
     h("div", { class: "slot-head" },
       h("span", { class: "time" }, slot.time),
+      shown.length === 2 ? h("button", { class: mine === "ab" ? "both on" : "both", "aria-pressed": String(mine === "ab"),
+        onclick: () => cast(slot.id, mine === "ab" ? "none" : "ab") }, "Molemmat") : null,
       h("button", { class: "edit", "aria-label": "Muokkaa slottia", onclick: () => { state.editing = slot.id; render(); } }, "✎")),
     h("div", { class: shown.length === 1 ? "lanes single" : "lanes" },
       shown.map((k) => laneButton(slot, k, k === "a" ? "Track 1" : "Track 2", voters[k], mine))));
