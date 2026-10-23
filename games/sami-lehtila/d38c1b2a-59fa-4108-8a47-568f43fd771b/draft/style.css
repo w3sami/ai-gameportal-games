@@ -1,0 +1,37 @@
+:root{--bg:#f6f4ef;--fg:#1d1b18;--muted:#6b665d;--card:#fff;--line:#e2ddd3;--a:#2f6fdb;--b:#d9480f;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#15171a;--fg:#ecebe7;--muted:#9a978f;--card:#1f2226;--line:#30343a;--a:#5b93f0;--b:#f07b45;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+#app{max-width:640px;margin:0 auto;padding:16px}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+h1{font-size:1.4rem;margin:0}
+.sub{color:var(--muted);margin:0;font-size:.9rem}
+button{font:inherit;color:inherit;cursor:pointer}
+.me{background:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;white-space:nowrap}
+.day{margin:20px 0 8px;font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.slot{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
+.slot-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.time{font-weight:700;font-variant-numeric:tabular-nums}
+.edit{background:none;border:0;color:var(--muted);font-size:1.1rem;padding:2px 8px}
+.lanes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lane{display:grid;grid-template-columns:1fr auto;grid-template-areas:"label count" "talk talk" "who who";align-content:start;gap:4px;text-align:left;background:transparent;border:2px solid var(--line);border-radius:10px;padding:10px;min-height:96px}
+.lane[data-k=a]{--c:var(--a)}
+.lane[data-k=b]{--c:var(--b)}
+.lane-label{grid-area:label;font-size:.72rem;font-weight:700;color:var(--c);text-transform:uppercase;letter-spacing:.04em}
+.count{grid-area:count;font-weight:800;font-size:1.3rem;color:var(--c);line-height:1}
+.talk{grid-area:talk;font-size:.95rem;overflow-wrap:anywhere}
+.who{grid-area:who;font-size:.8rem;color:var(--muted)}
+.lane.lead{border-color:var(--c)}
+.lane.mine{background:var(--c);border-color:var(--c);color:#fff}
+.lane.mine .lane-label,.lane.mine .count,.lane.mine .who{color:#fff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0;display:grid;gap:10px}
+.card label{display:grid;gap:4px;font-size:.85rem;color:var(--muted)}
+input{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%;min-width:0}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.primary{background:var(--fg);color:var(--bg);border:0;border-radius:8px;padding:10px 16px;font-weight:600}
+.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:10px 16px}
+.danger{margin-left:auto;background:none;border:1px solid var(--b);color:var(--b);border-radius:8px;padding:10px 16px}
+.add{width:100%;padding:14px;border:2px dashed var(--line);border-radius:12px;background:none;color:var(--muted);margin-top:6px}
+.status{background:var(--card);border-left:4px solid var(--b);padding:8px 12px;border-radius:6px}
+.empty{color:var(--muted)}
