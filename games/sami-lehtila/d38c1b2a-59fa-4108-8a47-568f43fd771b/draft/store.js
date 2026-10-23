@@ -1,12 +1,13 @@
 // Äänet ja slotit asuvat portaalin tulostauluissa, ei omaa backendiä.
 //   board "slots": yksi rivi per tallennus, data = { id, day: "YYYY-MM-DD", time: "HH:MM", a, b, deleted? }
-//                  a/b = { title, speaker?, img? } tai pelkkä merkkijono. Sama id kuin
+//                  a/b = { title, speaker?, img?, desc? } tai pelkkä merkkijono. Sama id kuin
 //                  config/agenda.jsonissa korvaa sen slotin.
 //                  uusin rivi (score = unix-sekunnit) per id voittaa.
-//   board "votes": level = slotin id, name = äänestäjä, data = { lane: "a" | "b" | "none" }
-//                  uusin rivi per nimi voittaa; "none" = ääni peruttu.
+//   board "votes": level = slotin id, name = äänestäjä, data = { lane: "a" | "b" | "ab" | "none" }
+//                  uusin rivi per nimi voittaa; "ab" = molemmat, "none" = ääni peruttu.
 import { submit, top, setName } from "https://plugins.game.bigbools.fi/leaderboard/1.1.1/index.js";
 
+const LANES = new Set(["a", "b", "ab"]);
 const now = () => Math.floor(Date.now() / 1000);
 const newer = (e, cur) =>
   e.score > cur.score || (e.score === cur.score && (e.id ?? 0) > (cur.id ?? 0));
@@ -39,7 +40,7 @@ export async function loadVotes(slotId) {
   const votes = {};
   for (const [name, e] of latestBy(entries, (e) => e.name)) {
     const lane = e.data?.lane;
-    if (lane === "a" || lane === "b") votes[name] = lane;
+    if (LANES.has(lane)) votes[name] = lane;
   }
   return { votes, reason };
 }
