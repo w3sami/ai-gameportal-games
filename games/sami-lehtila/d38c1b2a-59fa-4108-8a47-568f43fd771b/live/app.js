@@ -139,11 +139,15 @@ function nameCard() {
 }
 
 // Lane on div eikä button, jotta sen sisällä voi olla oma kuvausnappi.
-// Klikkaus valitsee vain tämän lanen (myös "molemmat"-tilasta); uusi klikkaus omaan laneen peruu äänen.
+// Klikkaus kytkee tämän lanen päälle/pois; molemmat päällä = "ab", kumpikaan = "none".
 function laneButton(slot, key, label, voters, mine) {
   const t = T(slot[key]);
-  const cls = ["lane", (mine === key || mine === "ab") && "mine"].filter(Boolean).join(" ");
-  const pick = () => cast(slot.id, mine === key ? "none" : key);
+  const on = !!mine?.includes(key);
+  const cls = ["lane", on && "mine"].filter(Boolean).join(" ");
+  const pick = () => {
+    const next = ["a", "b"].filter((k) => (k === key ? !on : !!mine?.includes(k))).join("");
+    cast(slot.id, next || "none");
+  };
   return h("div", { class: cls, "data-k": key, role: "button", tabIndex: 0, onclick: pick,
     onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } } },
     h("span", { class: "lane-label" }, label),
@@ -170,8 +174,6 @@ function slotCard(slot) {
   return h("section", { class: "slot" },
     h("div", { class: "slot-head" },
       h("span", { class: "time" }, slot.time),
-      shown.length === 2 ? h("button", { class: mine === "ab" ? "both on" : "both", "aria-pressed": String(mine === "ab"),
-        onclick: () => cast(slot.id, mine === "ab" ? "none" : "ab") }, "Molemmat") : null,
       h("button", { class: "edit", "aria-label": "Muokkaa slottia", onclick: () => { state.editing = slot.id; render(); } }, "✎")),
     h("div", { class: shown.length === 1 ? "lanes single" : "lanes" },
       shown.map((k) => laneButton(slot, k, k === "a" ? "Track 1" : "Track 2", voters[k], mine))));
