@@ -52,3 +52,8 @@ input{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1p
 .modal h3{margin:0;font-size:1.1rem;line-height:1.3}
 .desc p{margin:0 0 10px;font-size:.95rem;white-space:pre-line}
 .desc p:last-child{margin:0}
+.tools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.slot-head{gap:8px}
+.slot-head .time{margin-right:auto}
+.both{background:none;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:.8rem;color:var(--muted)}
+.both.on{background:linear-gradient(90deg,var(--a),var(--b));border-color:transparent;color:#fff;font-weight:600}
