@@ -1,5 +1,7 @@
 // Äänet ja slotit asuvat portaalin tulostauluissa, ei omaa backendiä.
 //   board "slots": yksi rivi per tallennus, data = { id, day: "YYYY-MM-DD", time: "HH:MM", a, b, deleted? }
+//                  a/b = { title, speaker?, img? } tai pelkkä merkkijono. Sama id kuin
+//                  config/agenda.jsonissa korvaa sen slotin.
 //                  uusin rivi (score = unix-sekunnit) per id voittaa.
 //   board "votes": level = slotin id, name = äänestäjä, data = { lane: "a" | "b" | "none" }
 //                  uusin rivi per nimi voittaa; "none" = ääni peruttu.
@@ -22,10 +24,8 @@ function latestBy(entries, keyOf) {
 
 export async function loadSlots() {
   const { entries = [], reason } = await top({ board: "slots", limit: 100 });
-  const slots = [...latestBy(entries, (e) => e.data?.id).values()]
-    .map((e) => e.data)
-    .filter((d) => !d.deleted)
-    .sort((x, y) => (x.day + x.time).localeCompare(y.day + y.time));
+  // Palauttaa myös poistetut, jotta poisto voi peittää config/agenda.jsonin slotin.
+  const slots = [...latestBy(entries, (e) => e.data?.id).values()].map((e) => e.data);
   return { slots, reason };
 }
 

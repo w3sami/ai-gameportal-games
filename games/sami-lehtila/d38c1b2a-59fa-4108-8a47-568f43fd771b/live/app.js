@@ -2,7 +2,23 @@ import { loadSlots, saveSlot, loadVotes, vote } from "./store.js";
 
 const REFRESH_MS = 30000;
 const app = document.getElementById("app");
-const state = { name: readName(), prevName: "", slots: [], votes: {}, editing: null, adding: false, status: "" };
+const state = { name: readName(), prevName: "", seed: [], board: [], slots: [], votes: {}, editing: null, adding: false, status: "" };
+
+const T = (x) => (typeof x === "string" ? { title: x } : x || {});
+const byTime = (x, y) => (x.day + x.time).localeCompare(y.day + y.time);
+
+async function loadSeed() {
+  try {
+    const r = await fetch("config/agenda.json", { cache: "no-store" });
+    state.seed = (await r.json()).slots || [];
+  } catch { state.seed = []; }
+}
+
+function merge() {
+  const map = new Map(state.seed.map((s) => [s.id, s]));
+  for (const s of state.board) map.set(s.id, s);
+  state.slots = [...map.values()].filter((s) => !s.deleted).sort(byTime);
+}
 
 function readName() { try { return localStorage.getItem("lv-name") || ""; } catch { return ""; } }
 function writeName(n) { try { localStorage.setItem("lv-name", n); } catch {} }
@@ -40,7 +56,8 @@ const formOpen = () => state.adding || state.editing;
 async function refresh() {
   const { slots, reason } = await loadSlots();
   state.status = msg(reason);
-  if (!reason) state.slots = slots;
+  if (!reason) state.board = slots;
+  merge();
   const results = await Promise.all(state.slots.map((s) => loadVotes(s.id)));
   state.slots.forEach((s, i) => { if (!results[i].reason) state.votes[s.id] = results[i].votes; });
   if (!formOpen()) render();
@@ -61,7 +78,7 @@ async function cast(slotId, lane) {
 
 function header() {
   return h("header", {},
-    h("div", {}, h("h1", {}, "Lane-äänestys"), h("p", { class: "sub" }, "Kumpaan laneen mennään?")),
+    h("div", {}, h("h1", {}, "Lane-äänestys"), h("p", { class: "sub" }, "Kuka menee mihinkin — CityJS Athens")),
     state.name ? h("button", { class: "me", onclick: () => { state.prevName = state.name; state.name = ""; render(); } }, "👤 " + state.name) : null);
 }
 
@@ -79,12 +96,17 @@ function nameCard() {
     h("div", { class: "actions" }, h("button", { class: "primary", onclick: go }, "Jatka")));
 }
 
-function laneButton(slot, key, label, voters, mine, lead) {
-  const cls = ["lane", mine === key && "mine", lead === key && "lead"].filter(Boolean).join(" ");
+function laneButton(slot, key, label, voters, mine) {
+  const t = T(slot[key]);
+  const cls = ["lane", mine === key && "mine"].filter(Boolean).join(" ");
   return h("button", { class: cls, "data-k": key, onclick: () => cast(slot.id, mine === key ? "none" : key) },
     h("span", { class: "lane-label" }, label),
     h("span", { class: "count" }, String(voters.length)),
-    h("span", { class: "talk" }, slot[key] || "—"),
+    h("span", { class: "talkbox" },
+      t.img ? h("img", { class: "face", src: t.img + (t.img.includes("ctfassets") ? "?w=96&h=96&fit=thumb&f=face" : ""), alt: "", loading: "lazy" }) : null,
+      h("span", { class: "talktext" },
+        h("span", { class: "talk" }, t.title || "? — täydennä ✎"),
+        t.speaker ? h("span", { class: "speaker" }, t.speaker) : null)),
     h("span", { class: "who" }, voters.join(", ")));
 }
 
@@ -93,35 +115,34 @@ function slotCard(slot) {
   const voters = { a: [], b: [] };
   for (const [name, lane] of Object.entries(v)) voters[lane]?.push(name);
   const mine = v[state.name];
-  const lead = voters.a.length === voters.b.length ? null : voters.a.length > voters.b.length ? "a" : "b";
   return h("section", { class: "slot" },
     h("div", { class: "slot-head" },
       h("span", { class: "time" }, slot.time),
       h("button", { class: "edit", "aria-label": "Muokkaa slottia", onclick: () => { state.editing = slot.id; render(); } }, "✎")),
     h("div", { class: "lanes" },
-      laneButton(slot, "a", "Lane 1", voters.a, mine, lead),
-      laneButton(slot, "b", "Lane 2", voters.b, mine, lead)));
+      laneButton(slot, "a", "Track 1", voters.a, mine),
+      laneButton(slot, "b", "Track 2", voters.b, mine)));
 }
 
 function slotForm(slot) {
   const day = h("input", { type: "date", value: slot?.day || today() });
   const time = h("input", { type: "time", value: slot?.time || "" });
-  const a = h("input", { type: "text", placeholder: "Puhe / puhuja", maxLength: 200, value: slot?.a || "" });
-  const b = h("input", { type: "text", placeholder: "Puhe / puhuja", maxLength: 200, value: slot?.b || "" });
+  const a = h("input", { type: "text", placeholder: "Puhe / puhuja", maxLength: 200, value: T(slot?.a).title || "" });
+  const b = h("input", { type: "text", placeholder: "Puhe / puhuja", maxLength: 200, value: T(slot?.b).title || "" });
   const close = () => { state.adding = false; state.editing = null; render(); };
   const store = async (data) => {
     const { kept, reason } = await saveSlot(state.name, data);
     if (!kept) { state.status = msg(reason); render(); return false; }
-    state.slots = state.slots.filter((s) => s.id !== data.id);
-    if (!data.deleted) state.slots.push(data);
-    state.slots.sort((x, y) => (x.day + x.time).localeCompare(y.day + y.time));
+    state.board = state.board.filter((s) => s.id !== data.id).concat(data);
+    merge();
     state.status = "";
     close();
     return true;
   };
   const save = () => {
     if (!time.value) return time.focus();
-    store({ id: slot?.id || newId(), day: day.value || today(), time: time.value, a: a.value.trim(), b: b.value.trim() });
+    const talk = (old, v) => { const o = T(old); v = v.trim(); return !v ? null : v === o.title ? o : { title: v }; };
+    store({ id: slot?.id || newId(), day: day.value || today(), time: time.value, a: talk(slot?.a, a.value), b: talk(slot?.b, b.value) });
   };
   let armed = false;
   const del = slot && h("button", { class: "danger", onclick: () => {
@@ -131,8 +152,8 @@ function slotForm(slot) {
   setTimeout(() => (slot ? a : time).focus(), 0);
   return h("div", { class: "card" },
     h("div", { class: "row" }, h("label", {}, "Päivä", day), h("label", {}, "Aika", time)),
-    h("label", {}, "Lane 1", a),
-    h("label", {}, "Lane 2", b),
+    h("label", {}, "Track 1", a),
+    h("label", {}, "Track 2", b),
     h("div", { class: "actions" },
       h("button", { class: "primary", onclick: save }, "Tallenna"),
       h("button", { class: "ghost", onclick: close }, "Peru"),
@@ -164,6 +185,6 @@ function render() {
 }
 
 render();
-refresh();
+loadSeed().then(refresh);
 setInterval(refresh, REFRESH_MS);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });

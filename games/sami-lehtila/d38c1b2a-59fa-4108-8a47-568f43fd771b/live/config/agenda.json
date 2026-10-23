@@ -1,0 +1,26 @@
+{
+  "_shape": "slots[]: { id, day: YYYY-MM-DD, time: HH:MM, a: Track 1, b: Track 2 }, talk = { title, speaker, img } tai null",
+  "slots": [
+    { "id": "d3-0945", "day": "2026-10-23", "time": "09:45",
+      "a": { "title": "Taste: A Deep Dive", "speaker": "Tejas Kumar", "img": "https://images.ctfassets.net/ny6tjshv9xhe/4sOSeeOsCUN0fKVV68kNrJ/fbd52329b05060edd140b81aacc03b88/tejaskumar.png" },
+      "b": null },
+    { "id": "d3-1015", "day": "2026-10-23", "time": "10:15",
+      "a": null,
+      "b": { "title": "The Ultimate Guide to Browser-Based AI", "speaker": "Maxim Salnikov", "img": "https://images.ctfassets.net/ny6tjshv9xhe/4wW2tZTiFLIKCXVzp2hcHC/c6a010b57dbd40fa57b58fb2f9000e57/maxim.salnikov_-_Maxim_Salnikov.webp" } },
+    { "id": "d3-1045", "day": "2026-10-23", "time": "10:45",
+      "a": { "title": "WebMCP in Practice: Shipping MCP Servers in the Browser (track ?)", "speaker": "Tamas Piros", "img": "https://images.ctfassets.net/ny6tjshv9xhe/23CtGkuFxXesu5w85XkXZ8/7ad54255d39770a0bcc73e2ac085c3e4/tamas-piros.webp" },
+      "b": null },
+    { "id": "d3-1120", "day": "2026-10-23", "time": "11:20",
+      "a": null,
+      "b": { "title": "Beyond Linting: AI Code Reviewer Grounded in Architectural Mental Models", "speaker": "Evangelia Mitsopoulou", "img": "https://images.ctfassets.net/ny6tjshv9xhe/7Jb85kQe3Qhaz9OfHx3Yh0/e85ee4383083ab9385ea764535d3f299/1747987888064.webp" } },
+    { "id": "d3-1145", "day": "2026-10-23", "time": "11:45",
+      "a": null,
+      "b": { "title": "AI patterns in Angular", "speaker": "Aristeidis Bampakos", "img": "https://images.ctfassets.net/ny6tjshv9xhe/5CyxS7slPMECA8XVoFLbng/65510c5df22d10dd1f3620afbcf8d4e0/ul1hc90lt2libtu08bqngqeb6f._UX300_.webp" } },
+    { "id": "d3-1430", "day": "2026-10-23", "time": "14:30",
+      "a": { "title": "Who you gonna call? Slop-busters!", "speaker": "Dan Neciu", "img": "https://images.ctfassets.net/ny6tjshv9xhe/2smSd4zkmLB8GoUZCcU7Cu/8b03adde11bf965e74fa54b237c24094/daneneciu.webp" },
+      "b": null },
+    { "id": "d3-1645", "day": "2026-10-23", "time": "16:45",
+      "a": { "title": "How AI changes Supply Chain Security", "speaker": "Stella Varvarigou", "img": "https://images.ctfassets.net/ny6tjshv9xhe/3iDUsUuXlHMNFYIKlFd28G/18ee5aec8e64e581050d2c495c583fb0/w.webp" },
+      "b": null }
+  ]
+}
