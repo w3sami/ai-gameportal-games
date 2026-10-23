@@ -83,7 +83,12 @@ async function detect() {
       const maxBuf = adapter.limits?.maxBufferSize;
       if (maxBuf) items.push(check("ok", "Suurin puskuri", `— ${(maxBuf / 2 ** 20).toFixed(0)} Mt`));
     } catch {
-      items.push(check("bad", "WebGPU-adapteria ei saatu", "— kehys tai selain voi estää sen."));
+      // Linuxin Chrome antaa navigator.gpu:n, mutta adapterin vain sallituille näytönohjaimille.
+      const linux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+      items.push(check("bad", "WebGPU-adapteria ei saatu", linux
+        ? "— Linuxin Chromessa WebGPU on useimmille näytönohjaimille pois päältä. Avaa chrome://flags, " +
+          "kytke päälle \"Unsafe WebGPU Support\" ja \"Vulkan\", ja käynnistä Chrome uudelleen. Tilan näkee osoitteesta chrome://gpu."
+        : "— selain tai näytönohjaimen ajuri ei anna sitä. Katso chrome://gpu."));
     }
   }
   if (navigator.deviceMemory) items.push(check("ok", "Muistia laitteessa", `— vähintään ${navigator.deviceMemory} Gt`));
