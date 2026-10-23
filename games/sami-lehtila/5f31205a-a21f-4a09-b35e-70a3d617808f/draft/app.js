@@ -20,6 +20,11 @@ const WEBLLM_MODELS = [
   ["Qwen2.5-Coder-7B-Instruct", "Paras koodiin, raskas"],
 ];
 const BUILTIN = "chrome-builtin";
+const MOBILE = navigator.userAgentData?.mobile ?? /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+// Puhelimessa näytönohjain jakaa muistin muun järjestelmän kanssa: pienempi konteksti = pienempi KV-välimuisti.
+const MOBILE_CONTEXT = 2048;
+// Näin WebGPU kertoo, että laite hävisi alta (yleensä muisti loppui) — malli on silloin käyttökelvoton.
+const GPU_LOST = /unmapped|device (was )?lost|mapAsync|GPUBuffer|out of memory|OOM|DXGI|instance reference/i;
 
 const MODES = {
   chat: {
@@ -140,8 +145,7 @@ async function fillModels() {
   markCached(opts);
   // Oletukseksi pieni koodimalli: kelpaa molempiin tiloihin eikä lataus ole kohtuuton.
   // Puhelimessa muisti loppuu nopeammin, joten siellä aloitetaan pienimmästä.
-  const mobile = navigator.userAgentData?.mobile ?? /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-  const pick = opts.find((o) => o.value.startsWith(mobile ? "Qwen3-0.6B" : "Qwen2.5-Coder-1.5B"));
+  const pick = opts.find((o) => o.value.startsWith(MOBILE ? "Llama-3.2-1B" : "Qwen2.5-Coder-1.5B"));
   if (pick) ui.model.value = pick.value;
   ui.load.disabled = !ui.model.value;
   describeModel();
@@ -155,7 +159,7 @@ function describeModel() {
     return;
   }
   const rec = webllm.prebuiltAppConfig.model_list.find((m) => m.model_id === id);
-  const ctx = rec?.overrides?.context_window_size;
+  const ctx = MOBILE ? MOBILE_CONTEXT : rec?.overrides?.context_window_size;
   ui.modelInfo.textContent = `${id}${ctx ? ` · konteksti ${ctx} tokenia` : ""}. Ensimmäinen lataus voi kestää minuutteja; sen jälkeen malli on selaimen välimuistissa.`;
 }
 
@@ -174,7 +178,7 @@ async function loadModel() {
       const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
       state.engine = await webllm.CreateWebWorkerMLCEngine(worker, id, {
         initProgressCallback: (r) => progress(r.progress, r.text),
-      });
+      }, MOBILE ? { context_window_size: MOBILE_CONTEXT } : undefined);
       state.kind = "webllm";
     }
     state.modelId = id;
@@ -313,7 +317,13 @@ async function send() {
       else addMsg("err", "Vastauksesta ei löytynyt HTML-tiedostoa. Pyydä uudelleen tai kokeile isompaa mallia.");
     }
   } catch (err) {
-    if (err?.name !== "AbortError") addMsg("err", "Virhe: " + (err?.message || err));
+    const m = String(err?.message || err);
+    if (GPU_LOST.test(m)) {
+      addMsg("err", `Näytönohjain keskeytti laskennan (${m}). Yleensä muisti loppui. ` +
+        "Malli vapautettiin — lataa se uudelleen tai valitse pienempi, esim. Llama-3.2-1B.");
+      await unloadModel();
+      progress(0, "Malli vapautettu GPU-virheen jälkeen.");
+    } else if (err?.name !== "AbortError") addMsg("err", "Virhe: " + m);
   } finally {
     setBusy(false);
     ui.log.scrollTop = ui.log.scrollHeight;
