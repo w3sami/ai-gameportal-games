@@ -1,0 +1,169 @@
+import { loadSlots, saveSlot, loadVotes, vote } from "./store.js";
+
+const REFRESH_MS = 30000;
+const app = document.getElementById("app");
+const state = { name: readName(), prevName: "", slots: [], votes: {}, editing: null, adding: false, status: "" };
+
+function readName() { try { return localStorage.getItem("lv-name") || ""; } catch { return ""; } }
+function writeName(n) { try { localStorage.setItem("lv-name", n); } catch {} }
+
+const MSG = {
+  offline: "Ei verkkoyhteyttä — yritetään uudelleen pian.",
+  busy: "Liikaa pyyntöjä juuri nyt — yritä hetken päästä.",
+  server: "Portaalilla on hetki menossa — yritä hetken päästä.",
+  full: "Taulu on täynnä.",
+};
+const msg = (r) => (r ? MSG[r] || `Ei onnistunut (${r}).` : "");
+
+function h(tag, props = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else if (k.includes("-")) el.setAttribute(k, v);
+    else el[k] = v;
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) el.append(c);
+  return el;
+}
+
+const pad = (n) => String(n).padStart(2, "0");
+function today() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+const newId = () => "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+function dayLabel(day) {
+  const d = new Date(day + "T12:00:00");
+  return isNaN(d) ? day : d.toLocaleDateString("fi-FI", { weekday: "short", day: "numeric", month: "numeric" });
+}
+const formOpen = () => state.adding || state.editing;
+
+async function refresh() {
+  const { slots, reason } = await loadSlots();
+  state.status = msg(reason);
+  if (!reason) state.slots = slots;
+  const results = await Promise.all(state.slots.map((s) => loadVotes(s.id)));
+  state.slots.forEach((s, i) => { if (!results[i].reason) state.votes[s.id] = results[i].votes; });
+  if (!formOpen()) render();
+}
+
+async function cast(slotId, lane) {
+  const box = (state.votes[slotId] ||= {});
+  const prev = box[state.name];
+  if (lane === "none") delete box[state.name]; else box[state.name] = lane;
+  render();
+  const { kept, reason } = await vote(state.name, slotId, lane);
+  if (!kept) {
+    if (prev) box[state.name] = prev; else delete box[state.name];
+    state.status = msg(reason);
+    render();
+  }
+}
+
+function header() {
+  return h("header", {},
+    h("div", {}, h("h1", {}, "Lane-äänestys"), h("p", { class: "sub" }, "Kumpaan laneen mennään?")),
+    state.name ? h("button", { class: "me", onclick: () => { state.prevName = state.name; state.name = ""; render(); } }, "👤 " + state.name) : null);
+}
+
+function nameCard() {
+  const input = h("input", { type: "text", placeholder: "Nimesi", maxLength: 24, value: state.prevName });
+  const go = () => {
+    const n = input.value.trim();
+    if (!n) return input.focus();
+    state.name = n; writeName(n); render();
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  setTimeout(() => input.focus(), 0);
+  return h("div", { class: "card" },
+    h("label", {}, "Kuka äänestää? Nimi näkyy muille.", input),
+    h("div", { class: "actions" }, h("button", { class: "primary", onclick: go }, "Jatka")));
+}
+
+function laneButton(slot, key, label, voters, mine, lead) {
+  const cls = ["lane", mine === key && "mine", lead === key && "lead"].filter(Boolean).join(" ");
+  return h("button", { class: cls, "data-k": key, onclick: () => cast(slot.id, mine === key ? "none" : key) },
+    h("span", { class: "lane-label" }, label),
+    h("span", { class: "count" }, String(voters.length)),
+    h("span", { class: "talk" }, slot[key] || "—"),
+    h("span", { class: "who" }, voters.join(", ")));
+}
+
+function slotCard(slot) {
+  const v = state.votes[slot.id] || {};
+  const voters = { a: [], b: [] };
+  for (const [name, lane] of Object.entries(v)) voters[lane]?.push(name);
+  const mine = v[state.name];
+  const lead = voters.a.length === voters.b.length ? null : voters.a.length > voters.b.length ? "a" : "b";
+  return h("section", { class: "slot" },
+    h("div", { class: "slot-head" },
+      h("span", { class: "time" }, slot.time),
+      h("button", { class: "edit", "aria-label": "Muokkaa slottia", onclick: () => { state.editing = slot.id; render(); } }, "✎")),
+    h("div", { class: "lanes" },
+      laneButton(slot, "a", "Lane 1", voters.a, mine, lead),
+      laneButton(slot, "b", "Lane 2", voters.b, mine, lead)));
+}
+
+function slotForm(slot) {
+  const day = h("input", { type: "date", value: slot?.day || today() });
+  const time = h("input", { type: "time", value: slot?.time || "" });
+  const a = h("input", { type: "text", placeholder: "Puhe / puhuja", maxLength: 200, value: slot?.a || "" });
+  const b = h("input", { type: "text", placeholder: "Puhe / puhuja", maxLength: 200, value: slot?.b || "" });
+  const close = () => { state.adding = false; state.editing = null; render(); };
+  const store = async (data) => {
+    const { kept, reason } = await saveSlot(state.name, data);
+    if (!kept) { state.status = msg(reason); render(); return false; }
+    state.slots = state.slots.filter((s) => s.id !== data.id);
+    if (!data.deleted) state.slots.push(data);
+    state.slots.sort((x, y) => (x.day + x.time).localeCompare(y.day + y.time));
+    state.status = "";
+    close();
+    return true;
+  };
+  const save = () => {
+    if (!time.value) return time.focus();
+    store({ id: slot?.id || newId(), day: day.value || today(), time: time.value, a: a.value.trim(), b: b.value.trim() });
+  };
+  let armed = false;
+  const del = slot && h("button", { class: "danger", onclick: () => {
+    if (!armed) { armed = true; del.textContent = "Varmasti?"; return; }
+    store({ ...slot, deleted: true });
+  } }, "Poista");
+  setTimeout(() => (slot ? a : time).focus(), 0);
+  return h("div", { class: "card" },
+    h("div", { class: "row" }, h("label", {}, "Päivä", day), h("label", {}, "Aika", time)),
+    h("label", {}, "Lane 1", a),
+    h("label", {}, "Lane 2", b),
+    h("div", { class: "actions" },
+      h("button", { class: "primary", onclick: save }, "Tallenna"),
+      h("button", { class: "ghost", onclick: close }, "Peru"),
+      del));
+}
+
+function slotList() {
+  if (!state.slots.length && !state.adding)
+    return h("p", { class: "empty" }, "Ei vielä slotteja. Lisää ensimmäinen: aika ja kummankin lanen puhe.");
+  const out = [];
+  let lastDay = null;
+  for (const slot of state.slots) {
+    if (slot.day !== lastDay) { out.push(h("h2", { class: "day" }, dayLabel(slot.day))); lastDay = slot.day; }
+    out.push(state.editing === slot.id ? slotForm(slot) : slotCard(slot));
+  }
+  return out;
+}
+
+function render() {
+  app.replaceChildren(...[
+    header(),
+    state.status && h("p", { class: "status" }, state.status),
+    !state.name ? nameCard() : [
+      slotList(),
+      state.adding ? slotForm(null)
+        : !state.editing && h("button", { class: "add", onclick: () => { state.adding = true; render(); } }, "+ Lisää slotti"),
+    ],
+  ].flat(2).filter(Boolean));
+}
+
+render();
+refresh();
+setInterval(refresh, REFRESH_MS);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
