@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Selain-AI-testi</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app">
+  <header>
+    <div>
+      <h1>Selain-AI-testi</h1>
+      <p class="sub">Kielimalli pyörii omassa selaimessasi — ei palvelinta, ei avaimia.</p>
+    </div>
+  </header>
+
+  <section class="card" id="env">
+    <h2>Ympäristö</h2>
+    <ul class="checks" id="checks"><li>Tarkistetaan…</li></ul>
+  </section>
+
+  <section class="card">
+    <h2>Malli</h2>
+    <label class="field">Moottori ja malli
+      <select id="model"></select>
+    </label>
+    <p class="hint" id="modelInfo"></p>
+    <div class="actions">
+      <button class="primary" id="load">Lataa malli</button>
+      <button class="ghost" id="unload" hidden>Vapauta</button>
+    </div>
+    <div class="progress" id="progressBox" hidden>
+      <div class="bar"><span id="bar"></span></div>
+      <p class="hint" id="progressText"></p>
+    </div>
+  </section>
+
+  <section class="card" id="chatCard">
+    <div class="tabs" role="tablist">
+      <button role="tab" class="tab on" data-mode="chat" aria-selected="true">Chatti</button>
+      <button role="tab" class="tab" data-mode="game" aria-selected="false">Tee peli</button>
+    </div>
+    <div id="log" class="log" aria-live="polite"></div>
+    <div class="composer">
+      <textarea id="prompt" rows="3" placeholder="Kirjoita viesti… (Ctrl+Enter lähettää)" disabled></textarea>
+      <div class="actions">
+        <button class="primary" id="send" disabled>Lähetä</button>
+        <button class="ghost" id="stop" hidden>Pysäytä</button>
+        <button class="ghost" id="clear">Tyhjennä</button>
+        <span class="stats" id="stats"></span>
+      </div>
+      <div class="examples" id="examples"></div>
+    </div>
+  </section>
+
+  <section class="card" id="previewCard" hidden>
+    <div class="preview-head">
+      <h2>Esikatselu</h2>
+      <div class="actions">
+        <button class="ghost" id="rerun">Aja uudelleen</button>
+        <button class="ghost" id="copy">Kopioi HTML</button>
+      </div>
+    </div>
+    <iframe id="preview" sandbox="allow-scripts" title="Mallin tekemä peli"></iframe>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

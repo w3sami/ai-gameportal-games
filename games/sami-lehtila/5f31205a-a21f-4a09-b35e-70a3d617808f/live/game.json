@@ -1,0 +1,9 @@
+{
+  "title": "Selain-AI-testi",
+  "tags": [
+    "tool",
+    "ai",
+    "webgpu"
+  ],
+  "description": "Kielimalli pyörii omassa selaimessasi WebGPU:lla (WebLLM) tai Chromen sisäänrakennetulla Gemini Nanolla. Chattaa tai pyydä mallia tekemään pieni peli ja aja se heti."
+}
