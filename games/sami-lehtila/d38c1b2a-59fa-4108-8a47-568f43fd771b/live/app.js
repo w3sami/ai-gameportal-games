@@ -14,9 +14,15 @@ async function loadSeed() {
   } catch { state.seed = []; }
 }
 
+// Taululle tallennettu slotti voi olla vanhempi kuin kuvaukset: täydennetään desc agendasta, jos otsikko on sama.
+const fillDesc = (t, o) => (t && typeof t === "object" && !t.desc && o?.desc && o.title === t.title ? { ...t, desc: o.desc } : t);
+
 function merge() {
   const map = new Map(state.seed.map((s) => [s.id, s]));
-  for (const s of state.board) map.set(s.id, s);
+  for (const s of state.board) {
+    const seed = map.get(s.id);
+    map.set(s.id, seed ? { ...s, a: fillDesc(s.a, seed.a), b: fillDesc(s.b, seed.b) } : s);
+  }
   state.slots = [...map.values()].filter((s) => !s.deleted).sort(byTime);
 }
 
@@ -37,7 +43,7 @@ function h(tag, props = {}, ...kids) {
     if (v == null || v === false) continue;
     if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (k === "class") el.className = v;
-    else if (k.includes("-")) el.setAttribute(k, v);
+    else if (k.includes("-") || k === "role") el.setAttribute(k, v);
     else el[k] = v;
   }
   for (const c of kids.flat()) if (c != null && c !== false) el.append(c);
@@ -52,6 +58,7 @@ function dayLabel(day) {
   return isNaN(d) ? day : d.toLocaleDateString("fi-FI", { weekday: "short", day: "numeric", month: "numeric" });
 }
 const formOpen = () => state.adding || state.editing;
+const thumb = (img, px) => img + (img.includes("ctfassets") ? `?w=${px}&h=${px}&fit=thumb&f=face` : "");
 
 async function refresh() {
   const { slots, reason } = await loadSlots();
@@ -76,6 +83,24 @@ async function cast(slotId, lane) {
   }
 }
 
+// Kuvaus modaalissa; dialog elää bodyssa, joten 30 s päivitys ei sulje sitä.
+function showTalk(t, key, label) {
+  const dlg = h("dialog", { class: "modal", "data-k": key,
+    onclose: () => dlg.remove(),
+    onclick: (e) => { if (e.target === dlg) dlg.close(); } },
+    h("div", { class: "modal-body" },
+      h("div", { class: "modal-head" },
+        t.img ? h("img", { class: "face big", src: thumb(t.img, 160), alt: "" }) : null,
+        h("div", { class: "talktext" },
+          h("span", { class: "lane-label" }, label),
+          h("h3", {}, t.title),
+          t.speaker ? h("span", { class: "speaker" }, t.speaker) : null)),
+      h("div", { class: "desc" }, (t.desc || "").split(/\n{2,}/).map((p) => h("p", {}, p))),
+      h("div", { class: "actions" }, h("button", { class: "primary", onclick: () => dlg.close() }, "Sulje"))));
+  document.body.append(dlg);
+  dlg.showModal();
+}
+
 function header() {
   return h("header", {},
     h("div", {}, h("h1", {}, "Lane-äänestys"), h("p", { class: "sub" }, "Kuka menee mihinkin — CityJS Athens")),
@@ -96,17 +121,23 @@ function nameCard() {
     h("div", { class: "actions" }, h("button", { class: "primary", onclick: go }, "Jatka")));
 }
 
+// Lane on div eikä button, jotta sen sisällä voi olla oma kuvausnappi.
 function laneButton(slot, key, label, voters, mine) {
   const t = T(slot[key]);
   const cls = ["lane", mine === key && "mine"].filter(Boolean).join(" ");
-  return h("button", { class: cls, "data-k": key, onclick: () => cast(slot.id, mine === key ? "none" : key) },
+  const pick = () => cast(slot.id, mine === key ? "none" : key);
+  return h("div", { class: cls, "data-k": key, role: "button", tabIndex: 0, onclick: pick,
+    onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } } },
     h("span", { class: "lane-label" }, label),
     h("span", { class: "count" }, String(voters.length)),
     h("span", { class: "talkbox" },
-      t.img ? h("img", { class: "face", src: t.img + (t.img.includes("ctfassets") ? "?w=96&h=96&fit=thumb&f=face" : ""), alt: "", loading: "lazy" }) : null,
+      t.img ? h("img", { class: "face", src: thumb(t.img, 96), alt: "", loading: "lazy" }) : null,
       h("span", { class: "talktext" },
         h("span", { class: "talk" }, t.title || "? — täydennä ✎"),
-        t.speaker ? h("span", { class: "speaker" }, t.speaker) : null)),
+        t.speaker ? h("span", { class: "speaker" }, t.speaker) : null,
+        t.desc ? h("button", { class: "info",
+          onclick: (e) => { e.stopPropagation(); showTalk(t, key, label); },
+          onkeydown: (e) => e.stopPropagation() }, "Kuvaus ›") : null)),
     h("span", { class: "who" }, voters.join(", ")));
 }
 
@@ -115,13 +146,15 @@ function slotCard(slot) {
   const voters = { a: [], b: [] };
   for (const [name, lane] of Object.entries(v)) voters[lane]?.push(name);
   const mine = v[state.name];
+  // Piilota lane, jolla ei ole puhetta — paitsi tyhjässä slotissa, jota ollaan vasta täyttämässä.
+  const keys = [slot.a && "a", slot.b && "b"].filter(Boolean);
+  const shown = keys.length ? keys : ["a", "b"];
   return h("section", { class: "slot" },
     h("div", { class: "slot-head" },
       h("span", { class: "time" }, slot.time),
       h("button", { class: "edit", "aria-label": "Muokkaa slottia", onclick: () => { state.editing = slot.id; render(); } }, "✎")),
-    h("div", { class: "lanes" },
-      laneButton(slot, "a", "Track 1", voters.a, mine),
-      laneButton(slot, "b", "Track 2", voters.b, mine)));
+    h("div", { class: shown.length === 1 ? "lanes single" : "lanes" },
+      shown.map((k) => laneButton(slot, k, k === "a" ? "Track 1" : "Track 2", voters[k], mine))));
 }
 
 function slotForm(slot) {
