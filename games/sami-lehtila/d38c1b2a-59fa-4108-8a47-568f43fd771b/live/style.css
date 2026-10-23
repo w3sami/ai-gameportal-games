@@ -53,3 +53,8 @@ input{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1p
 .desc p{margin:0 0 10px;font-size:.95rem;white-space:pre-line}
 .desc p:last-child{margin:0}
 .tools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.who{display:flex;flex-wrap:wrap;gap:4px}
+.badge{font-size:.75rem;line-height:1.5;padding:0 8px;border-radius:999px;background:hsl(var(--h) 75% 90%);color:hsl(var(--h) 55% 25%);white-space:nowrap}
+.badge.me{font-weight:700;box-shadow:inset 0 0 0 1.5px currentColor}
+@media (prefers-color-scheme:dark){.badge{background:hsl(var(--h) 35% 26%);color:hsl(var(--h) 80% 86%)}}
+.lane.mine .badge{background:rgba(255,255,255,.22);color:#fff}

@@ -7,7 +7,7 @@
 //                  uusin rivi per nimi voittaa; "ab" = molemmat, "none" = ääni peruttu.
 import { submit, top, setName } from "https://plugins.game.bigbools.fi/leaderboard/1.1.1/index.js";
 
-const LANES = new Set(["a", "b", "ab"]);
+const LANES = new Set(["a", "b", "ab", "none"]);
 const now = () => Math.floor(Date.now() / 1000);
 const newer = (e, cur) =>
   e.score > cur.score || (e.score === cur.score && (e.id ?? 0) > (cur.id ?? 0));
@@ -26,7 +26,8 @@ function latestBy(entries, keyOf) {
 export async function loadSlots() {
   const { entries = [], reason } = await top({ board: "slots", limit: 100 });
   // Palauttaa myös poistetut, jotta poisto voi peittää config/agenda.jsonin slotin.
-  const slots = [...latestBy(entries, (e) => e.data?.id).values()].map((e) => e.data);
+  // savedAt kertoo, onko muokkaus tehty ennen vai jälkeen agendan viimeisimmän päivityksen.
+  const slots = [...latestBy(entries, (e) => e.data?.id).values()].map((e) => ({ ...e.data, savedAt: e.score }));
   return { slots, reason };
 }
 
@@ -35,8 +36,10 @@ export async function saveSlot(name, slot) {
   return submit({ board: "slots", score: now(), data: slot });
 }
 
-export async function loadVotes(slotId) {
-  const { entries = [], reason } = await top({ board: "votes", level: slotId, limit: 100 });
+// Kunkin äänestäjän uusin valinta yhdellä tasolla, "none" mukaan lukien: peruttu ääni
+// on tieto siinä missä annettukin, kun vanhoja ääniä siirretään uuteen slottiin.
+export async function loadVotes(level) {
+  const { entries = [], reason } = await top({ board: "votes", level, limit: 100 });
   const votes = {};
   for (const [name, e] of latestBy(entries, (e) => e.name)) {
     const lane = e.data?.lane;

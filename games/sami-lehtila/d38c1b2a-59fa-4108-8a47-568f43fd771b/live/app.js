@@ -2,7 +2,8 @@ import { loadSlots, saveSlot, loadVotes, vote } from "./store.js";
 
 const REFRESH_MS = 30000;
 const app = document.getElementById("app");
-const state = { name: readName(), prevName: "", seed: [], board: [], slots: [], votes: {}, editing: null, adding: false, status: "" };
+// raw: tason (slotin id) äänet sellaisinaan, "none" mukaan lukien. Slotin näytettävät äänet lasketaan votesOf():lla.
+const state = { name: readName(), prevName: "", seed: [], board: [], slots: [], raw: {}, editing: null, adding: false, status: "" };
 
 const T = (x) => (typeof x === "string" ? { title: x } : x || {});
 const byTime = (x, y) => (x.day + x.time).localeCompare(y.day + y.time);
@@ -10,7 +11,9 @@ const byTime = (x, y) => (x.day + x.time).localeCompare(y.day + y.time);
 async function loadSeed() {
   try {
     const r = await fetch("config/agenda.json", { cache: "no-store" });
-    state.seed = (await r.json()).slots || [];
+    const agenda = await r.json();
+    state.seed = agenda.slots || [];
+    state.seedAt = agenda.updatedAt || 0;
   } catch { state.seed = []; }
 }
 
@@ -21,6 +24,8 @@ function merge() {
   const map = new Map(state.seed.map((s) => [s.id, s]));
   for (const s of state.board) {
     const seed = map.get(s.id);
+    // Agendan päivitys virallisesta ohjelmasta voittaa sitä vanhemmat käsin tehdyt muokkaukset.
+    if (seed && (s.savedAt ?? 0) < state.seedAt) continue;
     map.set(s.id, seed ? { ...s, a: fillDesc(s.a, seed.a), b: fillDesc(s.b, seed.b) } : s);
   }
   state.slots = [...map.values()].filter((s) => !s.deleted).sort(byTime);
@@ -65,19 +70,37 @@ async function refresh() {
   state.status = msg(reason);
   if (!reason) state.board = slots;
   merge();
-  const results = await Promise.all(state.slots.map((s) => loadVotes(s.id)));
-  state.slots.forEach((s, i) => { if (!results[i].reason) state.votes[s.id] = results[i].votes; });
+  const levels = [...new Set(state.slots.flatMap((s) => [s.id, ...(s.carry || []).map((c) => c.from)]))];
+  const results = await Promise.all(levels.map((l) => loadVotes(l)));
+  levels.forEach((l, i) => { if (!results[i].reason) state.raw[l] = results[i].votes; });
   if (!formOpen()) render();
 }
 
+// Slotin äänet. Kun ohjelma muuttuu ja puhe vaihtaa paria, agendan carry kertoo mistä slotista ja
+// lanelta sen vanhat äänet luetaan: ääni seuraa puhetta, ei kellonaikaa. Slotin omat äänet ovat
+// aina uudempia kuin siirretyt, joten ne voittavat — myös "none", joka peruu siirretyn äänen.
+function votesOf(slot) {
+  const carried = {};
+  for (const c of slot.carry || [])
+    for (const [name, lane] of Object.entries(state.raw[c.from] || {}))
+      if (lane !== "none" && lane.includes(c.lane)) (carried[name] ||= new Set()).add(c.to);
+  const out = {};
+  for (const [name, set] of Object.entries(carried)) out[name] = ["a", "b"].filter((k) => set.has(k)).join("");
+  for (const [name, lane] of Object.entries(state.raw[slot.id] || {})) {
+    if (lane === "none") delete out[name]; else out[name] = lane;
+  }
+  return out;
+}
+
 async function cast(slotId, lane) {
-  const box = (state.votes[slotId] ||= {});
+  // "none" jää talteen: se peittää slottiin siirretyn vanhan äänen.
+  const box = (state.raw[slotId] ||= {});
   const prev = box[state.name];
-  if (lane === "none") delete box[state.name]; else box[state.name] = lane;
+  box[state.name] = lane;
   render();
   const { kept, reason } = await vote(state.name, slotId, lane);
   if (!kept) {
-    if (prev) box[state.name] = prev; else delete box[state.name];
+    if (prev !== undefined) box[state.name] = prev; else delete box[state.name];
     state.status = msg(reason);
     render();
   }
@@ -160,11 +183,19 @@ function laneButton(slot, key, label, voters, mine) {
         t.desc ? h("button", { class: "info",
           onclick: (e) => { e.stopPropagation(); showTalk(t, key, label); },
           onkeydown: (e) => e.stopPropagation() }, "Kuvaus ›") : null)),
-    h("span", { class: "who" }, voters.join(", ")));
+    h("span", { class: "who" }, voters.map((n) =>
+      h("span", { class: n === state.name ? "badge me" : "badge", style: `--h:${hue(n)}` }, n))));
+}
+
+// Sama nimi saa aina saman värin, jotta kaverin löytää listoista silmäilemällä.
+function hue(name) {
+  let x = 0;
+  for (const ch of name.toLowerCase()) x = (x * 31 + ch.codePointAt(0)) >>> 0;
+  return x % 360;
 }
 
 function slotCard(slot) {
-  const v = state.votes[slot.id] || {};
+  const v = votesOf(slot);
   const voters = { a: [], b: [] };
   for (const [name, lane] of Object.entries(v)) for (const k of lane) voters[k]?.push(name);
   const mine = v[state.name];
@@ -188,7 +219,7 @@ function slotForm(slot) {
   const store = async (data) => {
     const { kept, reason } = await saveSlot(state.name, data);
     if (!kept) { state.status = msg(reason); render(); return false; }
-    state.board = state.board.filter((s) => s.id !== data.id).concat(data);
+    state.board = state.board.filter((s) => s.id !== data.id).concat({ ...data, savedAt: Math.floor(Date.now() / 1000) });
     merge();
     state.status = "";
     close();
@@ -197,7 +228,9 @@ function slotForm(slot) {
   const save = () => {
     if (!time.value) return time.focus();
     const talk = (old, v) => { const o = T(old); v = v.trim(); return !v ? null : v === o.title ? o : { title: v }; };
-    store({ id: slot?.id || newId(), day: day.value || today(), time: time.value, a: talk(slot?.a, a.value), b: talk(slot?.b, b.value) });
+    // carry kulkee mukana, ettei muokkaus irrota slottia sen siirretyistä äänistä.
+    store({ id: slot?.id || newId(), day: day.value || today(), time: time.value, a: talk(slot?.a, a.value), b: talk(slot?.b, b.value),
+      ...(slot?.carry && { carry: slot.carry }) });
   };
   let armed = false;
   const del = slot && h("button", { class: "danger", onclick: () => {
