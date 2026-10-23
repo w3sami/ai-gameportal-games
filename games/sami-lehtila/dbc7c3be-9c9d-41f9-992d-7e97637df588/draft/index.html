@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Robotin ohjelma</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <button class="icon-btn" id="btn-levels" title="Tasot">☰</button>
+  <div class="title">
+    <span class="lvl-no" id="lvl-no"></span>
+    <span class="lvl-name" id="lvl-name"></span>
+  </div>
+  <button class="icon-btn" id="btn-sound" title="Äänet">🔊</button>
+  <button class="icon-btn" id="btn-help" title="Ohjeet">?</button>
+</header>
+
+<main class="layout">
+  <section class="stage">
+    <div class="board-wrap" id="board-wrap">
+      <div class="board" id="board"></div>
+    </div>
+    <p class="status" id="status"></p>
+  </section>
+
+  <aside class="side">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Ohjelma</h2>
+        <span class="meta" id="prog-meta"></span>
+      </div>
+      <div class="prog" id="prog"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Kerätyt kortit</h2>
+        <span class="meta" id="hand-meta"></span>
+      </div>
+      <div class="hand" id="hand"></div>
+    </div>
+  </aside>
+</main>
+
+<nav class="controls">
+  <button id="btn-reset" title="Alkuun (Home)"><span>⏮</span>Alkuun</button>
+  <button id="btn-undo" title="Kumoa (Z / Backspace)"><span>↶</span>Kumoa</button>
+  <button id="btn-step" class="primary" title="Askel (välilyönti)"><span>▶</span>Askel</button>
+  <button id="btn-run" title="Aja loppuun (Enter)"><span>⏩</span>Aja</button>
+</nav>
+
+<div class="overlay" id="ov-win" hidden>
+  <div class="dialog">
+    <h2>Perillä!</h2>
+    <div class="stars" id="win-stars"></div>
+    <p id="win-text"></p>
+    <div class="row">
+      <button id="win-retry">Uudestaan</button>
+      <button id="win-next" class="primary">Seuraava taso</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-levels" hidden>
+  <div class="dialog wide">
+    <h2>Tasot</h2>
+    <div class="level-grid" id="level-grid"></div>
+    <button id="btn-random" class="primary block">🎲 Satunnainen taso</button>
+    <button class="close" data-close>Sulje</button>
+  </div>
+</div>
+
+<div class="overlay" id="ov-help" hidden>
+  <div class="dialog">
+    <h2>Näin pelaat</h2>
+    <p>Robotti tottelee ohjelmaa käsky kerrallaan. Ohjelma on melkein oikein – sinun tehtäväsi on korjata se, jotta robotti pääsee maaliin <span class="goal-chip"></span>.</p>
+    <ul>
+      <li><b>Askel</b> suorittaa seuraavan käskyn, <b>Aja</b> loput.</li>
+      <li>Kun robotti ajaa kortin <span class="card-chip">↑</span> yli, kortti siirtyy käteesi.</li>
+      <li>Napauta kädessä olevaa korttia ja sitten <b>+</b>-kohtaa ohjelmassa. Kortin voi lisätä vain vielä suorittamattomaan osaan.</li>
+      <li>Lisätyn, suorittamattoman kortin saa takaisin käteen napauttamalla sitä.</li>
+      <li><b>Kumoa</b> peruu askeleen tai lisäyksen – aina alkuun asti.</li>
+    </ul>
+    <p class="ops-legend">
+      <span><b>↑</b> Eteen</span><span><b>↓</b> Taakse</span><span><b>↺</b> Vasen</span><span><b>↻</b> Oikea</span><span><b>⚡</b> Aktivoi</span>
+    </p>
+    <p>Aktivoi kääntää robotin edessä olevaa vipua. Vipu avaa ja sulkee ovet sekä laskee ja nostaa sillat. Kuiluun ei kannata ajaa.</p>
+    <p>Tähdet tulevat siitä, kuinka vähällä korttimäärällä selviät.</p>
+    <button class="close primary" data-close>Selvä</button>
+  </div>
+</div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
