@@ -550,5 +550,26 @@
     "sizeBytes": 29437,
     "createdAt": "2026-10-21T15:22:21.717Z",
     "updatedAt": "2026-10-21T15:28:43.811Z"
+  },
+  {
+    "id": "d38c1b2a-59fa-4108-8a47-568f43fd771b",
+    "slug": "lane-vote",
+    "title": "Lane-äänestys",
+    "description": "Porukan äänestys: kumpaan laneen mennään kussakin konferenssin slotissa.",
+    "descriptions": {},
+    "author": "Sami Lehtilä",
+    "tags": [
+      "tool",
+      "vote",
+      "conference"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 188,
+    "createdAt": "2026-10-23T06:17:52.454Z",
+    "updatedAt": "2026-10-23T06:17:52.493Z"
   }
 ]
