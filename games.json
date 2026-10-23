@@ -598,5 +598,27 @@
     "sizeBytes": 23320,
     "createdAt": "2026-10-23T08:12:18.782Z",
     "updatedAt": "2026-10-23T08:27:20.434Z"
+  },
+  {
+    "id": "dbc7c3be-9c9d-41f9-992d-7e97637df588",
+    "slug": "robotin-ohjelma",
+    "title": "Robotin ohjelma",
+    "description": "Ohjelmointiaiheinen pulmapeli: korjaa robotin ohjelma kentältä kerätyillä käskykorteilla.",
+    "descriptions": {},
+    "author": "Sami Lehtilä",
+    "tags": [
+      "pulma",
+      "ohjelmointi",
+      "robotti",
+      "mobiili"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 226,
+    "createdAt": "2026-10-23T13:40:04.661Z",
+    "updatedAt": "2026-10-23T13:40:04.690Z"
   }
 ]
