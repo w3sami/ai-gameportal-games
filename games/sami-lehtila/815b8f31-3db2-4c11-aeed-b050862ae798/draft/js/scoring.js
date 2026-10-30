@@ -62,9 +62,53 @@
   const upperBase = (six) => (six ?? sixMode) ? 4 : 3;   /* 0-pohjaisen pari: montako samaa = 0 */
   const bonusLimit= (six) => (six ?? sixMode) ? 84 : 63; /* 4×(1+…+6)=84 */
 
+  /* PIKAJATSI: vuorolla heitetään kerran QUICK_DICE noppaa, ja rivi lasketaan
+     niistä parhaalla pickCount(six) nopan valinnalla (5, tai 6 nopan säännöillä
+     6). Valinta tehdään automaattisesti rivikohtaisesti — sama heitto voi siis
+     antaa Suureen suoraan eri nopat kuin Kuutosiin. */
+  const QUICK_DICE = 10;
+  const pickCount = (six) => (six ?? sixMode) ? 6 : 5;
+
   function counts(d) { const c = [0,0,0,0,0,0,0]; d.forEach(v=>c[v]++); return c; }
 
-  function scoreCat(id, dice) {
+  /* Tavallisen pelin 5 tai 6 noppaa lasketaan sellaisenaan. Vain kun noppia
+     on enemmän kuin 6 (pikajatsi), käydään läpi valinnat — tämä raja eikä
+     pickCount, koska vanhat kutsujat eivät välitä `six`-lippua ja 6 nopan
+     tavallisessa pelissä parametriton kutsu valitsisi muuten 5 parasta. */
+  function scoreCat(id, dice, six) {
+    if (dice.length <= 6) return scoreDice(id, dice);
+    return bestPick(id, dice, pickCount(six));
+  }
+
+  /* Paras k nopan valinta. Käydään läpi silmälukujakaumat (montako kutakin
+     silmälukua otetaan), ei indeksiosajoukkoja: 10 nopasta jakaumia on
+     muutama sata, ja tulos riippuu vain jakaumasta. Muistetaan, koska
+     taulukko kysyy samaa heittoa jokaiselle riville ja sarakkeelle. */
+  const bestCache = new Map();
+  function bestPick(id, dice, k) {
+    const c = counts(dice);
+    const key = id + ':' + k + ':' + c.join('');
+    const hit = bestCache.get(key);
+    if (hit !== undefined) return hit;
+    const left = [0,0,0,0,0,0,0,0]; /* left[v] = silmälukujen v…6 noppia yhteensä */
+    for (let v = 6; v >= 1; v--) left[v] = left[v + 1] + c[v];
+    const pick = [];
+    let best = 0;
+    (function rec(v, need) {
+      if (need === 0) { const s = scoreDice(id, pick); if (s > best) best = s; return; }
+      if (v > 6 || left[v] < need) return;
+      for (let n = Math.min(c[v], need); n >= 0; n--) {
+        for (let i = 0; i < n; i++) pick.push(v);
+        rec(v + 1, need - n);
+        pick.length -= n;
+      }
+    })(1, k);
+    if (bestCache.size > 5000) bestCache.clear();
+    bestCache.set(key, best);
+    return best;
+  }
+
+  function scoreDice(id, dice) {
     const c = counts(dice), sum = dice.reduce((a,b)=>a+b,0);
     const up = UPPER.find(u=>u.id===id);
     if (up) return c[up.n]*up.n;
@@ -119,9 +163,9 @@
   const playerTotal = (p, six) => p.scs.reduce((a,s)=>a+totalOf(s, six),0);
 
   const api = {
-    UPPER, LOWER, LOWER6,
+    UPPER, LOWER, LOWER6, QUICK_DICE,
     setSixMode, getSixMode,
-    lowerCats, allCats, upperBase, bonusLimit, bonusValue,
+    lowerCats, allCats, upperBase, bonusLimit, bonusValue, pickCount,
     counts, scoreCat, upperSum, bonusOf, totalOf, scFull, playerTotal,
   };
 
