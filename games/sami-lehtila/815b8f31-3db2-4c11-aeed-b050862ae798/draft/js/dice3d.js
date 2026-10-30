@@ -24,6 +24,9 @@ window.Dice3D = (function () {
   let renderer, scene, camera, world, wrap, fxC, fxG;
   const CAM_POS = new THREE.Vector3(0, 11.5, 7.2);
   const dice = [];
+  /* Noppia luodaan kerran tämän verran; peli käyttää niistä gameDiceCount
+     ensimmäistä (5, 6 tai pikajatsin 10). */
+  const MAX_DICE = 10;
   let gameDiceCount = 5;
   let settleCb = null;
   let recordTickCb = null;
@@ -70,6 +73,17 @@ window.Dice3D = (function () {
   const MAX_THROW_POWER = 2.2;
   const GRAVITY_Y = 24; /* world.gravity.set(0,-GRAVITY_Y,0) — sama arvo, nimettynä koska
     jumiutuneen nopan korjausheilautus laskee tarvittavan pystynopeuden tästä (ks. checkSettle). */
+
+  /* Nopan paikka lepo-, lataus- ja heittoriveissä. Enintään 6 noppaa on
+     yhdessä rivissä kuten ennenkin; pikajatsin 10 noppaa kahdessa rivissä,
+     joista jälkimmäinen on 1.4 kauempana kamerasta (dz < 0). n = noppien
+     määrä rivistössä, slot = nopan järjestysnumero siinä. */
+  function slotXZ(slot, n) {
+    if (n <= 6) return { x: -3.75 + slot * 1.5, dz: 0 };
+    const perRow = Math.ceil(n / 2);
+    const row = Math.floor(slot / perRow), col = slot % perRow;
+    return { x: -(perRow - 1) * .75 + col * 1.5, dz: -row * 1.4 };
+  }
 
   function feltTexture() {
     const c = document.createElement('canvas'); c.width=c.height=256;
@@ -244,7 +258,7 @@ window.Dice3D = (function () {
     wallBody(-1,0, TRAY_W/2);
 
     const dieMats = [3,4,1,6,2,5].map(n=>new THREE.MeshStandardMaterial({map:pipTexture(n), roughness:.35, metalness:.05}));
-    for(let i=0;i<6;i++){
+    for(let i=0;i<MAX_DICE;i++){
       const mesh=new THREE.Mesh(new THREE.BoxGeometry(DIE,DIE,DIE), dieMats.map(m=>m.clone()));
       mesh.castShadow=mesh.receiveShadow=true;
       scene.add(mesh);
@@ -286,6 +300,7 @@ window.Dice3D = (function () {
   const activeDice = () => dice.slice(0, gameDiceCount);
 
   function setActiveDiceCount(n) {
+    n = Math.max(1, Math.min(n, MAX_DICE));
     gameDiceCount = n;
     dice.forEach((d,i)=>{
       const on=i<n;
@@ -294,8 +309,9 @@ window.Dice3D = (function () {
       const b=d.body;
       b.velocity.setZero(); b.angularVelocity.setZero();
       if(on){
+        const s=slotXZ(i,n);
         b.type=CANNON.Body.DYNAMIC; b.mass=1; b.updateMassProperties();
-        b.position.set(-3.75+i*1.5, HALF, 2.4);
+        b.position.set(s.x, HALF, 2.4+s.dz);
         b.quaternion.set(0,0,0,1);
       } else {
         b.type=CANNON.Body.STATIC; b.mass=0; b.updateMassProperties();
@@ -531,9 +547,10 @@ window.Dice3D = (function () {
       if(d.held) return;
       d.value=0;
       const b=d.body;
+      const s=slotXZ(slot, gameDiceCount);
       b.type=CANNON.Body.DYNAMIC; b.mass=1; b.updateMassProperties();
       b.wakeUp();
-      b.position.set(-3.75+slot*1.5+(Math.random()-.5)*.5, 4.5+Math.random()*1.5, TRAY_D/2-1.2);
+      b.position.set(s.x+(Math.random()-.5)*.5, 4.5+Math.random()*1.5, TRAY_D/2-1.2+s.dz);
       slot++;
       b.quaternion.setFromEuler(Math.random()*6.3,Math.random()*6.3,Math.random()*6.3);
       b.velocity.set((Math.random()-.5)*4*P, -1-Math.random()*2, (-7-Math.random()*4)*P);
@@ -558,10 +575,11 @@ window.Dice3D = (function () {
       if(d.held) return;
       d.value=0;
       const b=d.body;
+      const s=slotXZ(slot, gameDiceCount);
       b.type=CANNON.Body.KINEMATIC;
       b.velocity.setZero(); b.angularVelocity.setZero(); b.wakeUp();
       d.hover={
-        ax:-3.75+slot*1.5, ay:3.1, az:.4,
+        ax:s.x, ay:3.1, az:.4+s.dz,
         p1:Math.random()*6.3, p2:Math.random()*6.3,
         sx:Math.random()-.5+.05, sy:Math.random()-.5, sz:Math.random()-.5
       };
