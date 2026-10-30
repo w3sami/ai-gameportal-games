@@ -113,10 +113,15 @@ window.MpGame = (function () {
   function isMyTurn(state) {
     return !!(state && state.status === 'playing' && state.players[state.current] && state.players[state.current].userId === me.id);
   }
+  /* Heittoja vuorolla ennen pankkia. Vanha palvelin ei lähetä maxRolls-
+     kenttää, joten varalla johdetaan säännöistä (pikajatsi 1, muuten 3). */
+  function maxRolls(state) {
+    return state.maxRolls || (state.variant && state.variant.quick ? 1 : 3);
+  }
   function canRollNow() {
     if (!lastState || !isMyTurn(lastState)) return false;
     if (myRollInFlight || window.Dice3D.isRolling() || window.Dice3D.isCharging()) return false;
-    return lastState.rollsUsed < 3 || lastState.bankAvailable;
+    return lastState.rollsUsed < maxRolls(lastState) || lastState.bankAvailable;
   }
 
   /* Käynnistää OMAN paikallisen fysiikkaheiton NAUHOITTAEN sen (ei
@@ -157,6 +162,10 @@ window.MpGame = (function () {
       const mine = (lastState.spectators || []).find((s) => s.userId === me.id);
       hintEl.textContent = mine && mine.admitted ? 'Katsot peliä • pääset mukaan seuraavaan peliin'
         : 'Katsot peliä • isäntä voi päästää sinut seuraavaan peliin';
+      hintEl.classList.remove('nudge');
+    } else if (lastState && lastState.variant && lastState.variant.quick) {
+      const pick = window.Scoring ? window.Scoring.pickCount(lastState.variant.sixDice) : 5;
+      hintEl.textContent = `Pikajatsi: yksi heitto • rivi lasketaan ${pick} parhaasta nopasta`;
       hintEl.classList.remove('nudge');
     } else {
       hintEl.textContent = 'Heitä nopat • napauta noppaa lukitaksesi sen';
@@ -279,7 +288,7 @@ window.MpGame = (function () {
     rollBtn.addEventListener('click', () => {
       if (window.Dice3D.isRolling() || window.Dice3D.isCharging()) return;
       if (!lastState || !isMyTurn(lastState)) return;
-      if (lastState.rollsUsed >= 3 && !lastState.bankAvailable) return;
+      if (lastState.rollsUsed >= maxRolls(lastState) && !lastState.bankAvailable) return;
       if (lastState.variant.rollMode === 'shake' && !armed) { armShake(); return; }
     });
     const shakePrompt = document.getElementById('shakePrompt');
@@ -363,8 +372,9 @@ window.MpGame = (function () {
       const state = lastState;
       /* Kolmannen heiton jälkeen lukita saa vain jos pankissa on heittoja —
          muuten pankkiheitto heittäisi aina kaikki nopat. Sama ehto kuin
-         sääntöjen hold():ssa (js/room-rules.js). */
-      if (!isMyTurn(state) || state.rollsUsed === 0 || (state.rollsUsed >= 3 && !state.bankAvailable)) return;
+         sääntöjen hold():ssa (js/room-rules.js). Pikajatsissa ei lukita. */
+      if (!isMyTurn(state) || state.variant.quick || state.rollsUsed === 0 ||
+          (state.rollsUsed >= maxRolls(state) && !state.bankAvailable)) return;
       const i = window.Dice3D.hitTestDie(ev.clientX, ev.clientY);
       if (i < 0) return;
       socket.emit('game:hold', { roomId: currentRoomId, index: i }, (res) => { if (!res.ok) err(res.error); });
@@ -409,8 +419,8 @@ window.MpGame = (function () {
   function maybeCelebrate(state) {
     const S = window.Scoring, UI = window.UI, D3 = window.Dice3D;
     const six = state.variant.sixDice;
-    const big = six ? S.scoreCat('yatzy6', state.diceValues) : 0;
-    const pts = S.scoreCat('yatzy', state.diceValues);
+    const big = six ? S.scoreCat('yatzy6', state.diceValues, six) : 0;
+    const pts = S.scoreCat('yatzy', state.diceValues, six);
     if (big >= 100) { UI.showBanner('SUUR-YATZY!'); UI.sndYatzy(); UI.burst(260, true); D3.shakeCamera(18); }
     else if (pts >= 50) { UI.showBanner('YATZY!'); UI.sndYatzy(); UI.burst(200, true); D3.shakeCamera(14); }
   }
@@ -485,6 +495,6 @@ window.MpGame = (function () {
   return {
     connect, disconnect, onLobby, onRoomState, onRoomError, onRejoin, onDeleted, onBlocked, onNotice,
     createRoom, joinRoom, watchRoom, admin, guest, setSeatColor, reorder, leaveRoom, localCreate, localResume, undo, startGame, rematch, deleteRoom, scoreCategory,
-    getMe: () => me, getRoomId: () => currentRoomId,
+    getMe: () => me, getRoomId: () => currentRoomId, maxRolls,
   };
 })();
