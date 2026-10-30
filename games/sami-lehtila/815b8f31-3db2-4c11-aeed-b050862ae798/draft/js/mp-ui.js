@@ -2,13 +2,17 @@
 /* ============================================================
    mp-ui.js — moninpelin pistetaulukko, pelaajalista ja ohjaimet.
    Lukee suoraan palvelimen auktoritatiivisen tilan, mukaan lukien
-   huoneen variantti (state.variant: twoCol/sixDice/bank/rollMode) —
+   huoneen variantti (state.variant: twoCol/sixDice/bank/quick/rollMode) —
    sama Scoring-moduuli kuin yksinpelissä, `six`-parametri välitettynä
-   eksplisiittisesti (ks. js/scoring.js).
+   eksplisiittisesti (ks. js/scoring.js). Pikajatsin 10 nopasta Scoring
+   valitsee itse parhaat 5 (6) jokaiselle riville.
    ============================================================ */
 window.MpUI = (function () {
   const S = () => window.Scoring;
   const esc = window.UI ? window.UI.esc : (s => s);
+  /* Heittoja vuorolla: säännöistä, ei state.maxRolls-kentästä, koska vanha
+     palvelin ei sitä lähetä (ja silloin quick puuttuu myös → 3). */
+  const maxRollsOf = (state) => window.RoomRules.maxRollsFor(state.variant || {});
 
   /* Varmistusikkuna pelin omana näkymänä: confirm() ei toimi portaalin
      hiekkalaatikossa. Ilman onOk-kutsua pelkkä ilmoitus OK-napilla. */
@@ -31,6 +35,7 @@ window.MpUI = (function () {
 
   function variantBadges(variant) {
     const tags = [];
+    if (variant.quick) tags.push('Pikajatsi');
     if (variant.twoCol) tags.push('Tuplasarake');
     if (variant.sixDice) tags.push('6 noppaa');
     if (variant.bank) tags.push('Pankki');
@@ -288,7 +293,7 @@ window.MpUI = (function () {
         const fade = hideUsedNow && e.p.seatId === myPlayer.seatId ? ' fadeUsed' : '';
         return `<td class="filled ${v === 0 && !devMode ? 'zero' : ''}${fade}">${disp}</td>`;
       } else if (e.pi === state.current && state.status === 'playing' && isMyTurn && hasRolled) {
-        const pot = S_.scoreCat(cat.id, diceValues);
+        const pot = S_.scoreCat(cat.id, diceValues, six);
         const disp = devMode ? sgn(pot - B * cat.n) : (pot > 0 ? pot : '');
         const cls = cat.n
           ? (pot - B * cat.n >= 0 ? 'avail' : 'availzero')
@@ -318,7 +323,7 @@ window.MpUI = (function () {
             const t = devUpper ? sgn(v - B * u.n) : (v === 0 ? '—' : v);
             return `<div class="ug filled${hideUsedNow ? ' fadeUsed' : ''}"><span class="n">${u.n}:</span><span>${t}</span></div>`;
           } else if (e.pi === state.current && state.status === 'playing' && isMyTurn && hasRolled) {
-            const pot = S_.scoreCat(u.id, diceValues);
+            const pot = S_.scoreCat(u.id, diceValues, six);
             const t = devUpper ? sgn(pot - B * u.n) : (pot > 0 ? pot : '');
             const cls = pot - B * u.n >= 0 ? 'avail' : 'availzero';
             return `<div class="ug ${cls}" data-cat="${u.id}" data-col="${e.ci}"><span class="n">${u.n}:</span><span>${t}</span></div>`;
@@ -381,7 +386,7 @@ window.MpUI = (function () {
     const ord = (id) => id === 'yatzy6' ? 0 : id === 'yatzy' ? 1 : lowerOrder[id];
     S_.lowerCats(six).forEach((c) => {
       if (c.id === 'chance') return;
-      const pts = S_.scoreCat(c.id, diceValues);
+      const pts = S_.scoreCat(c.id, diceValues, six);
       if (pts <= 0) return;
       p.scs.forEach((sc, ci) => {
         if (sc[c.id] !== undefined) return;
@@ -389,7 +394,7 @@ window.MpUI = (function () {
       });
     });
     S_.UPPER.forEach((u) => {
-      const pts = S_.scoreCat(u.id, diceValues);
+      const pts = S_.scoreCat(u.id, diceValues, six);
       const d = pts - B * u.n;
       if (pts <= 0 || d < 0) return;
       const val = devUpper ? (d > 0 ? '+' : '') + d : pts;
@@ -426,18 +431,20 @@ window.MpUI = (function () {
     const isMyTurn = state.status === 'playing' && state.players[state.current] && state.players[state.current].userId === myUserId;
     const bank = isMyTurn && state.bankAvailable;
     const watching = !state.players.some((p) => p.userId === myUserId);
+    const maxR = maxRollsOf(state);
+    const quick = !!(state.variant && state.variant.quick);
     /* Sama tarkistus kuin yksinpelin updateControls (js/ui.js): nappi ei saa
        näyttää "valmiilta" kesken paikallisen heiton/latauksen animaation,
        vaikka palvelimen tila (vuoro, heittojen määrä) jo sallisi seuraavan
        heiton — muuten klikkaus ei tekisi mitään ja ulkoasu valehtelisi. */
     const busy = window.Dice3D && (window.Dice3D.isRolling() || window.Dice3D.isCharging());
-    rollBtn.disabled = !isMyTurn || busy || (state.rollsUsed >= 3 && !bank);
+    rollBtn.disabled = !isMyTurn || busy || (state.rollsUsed >= maxR && !bank);
     rollBtn.textContent = watching ? 'KATSOT' : busy ? '…' :
-      state.rollsUsed === 0 ? 'HEITÄ NOPAT' :
-      state.rollsUsed >= 3 ? (bank ? `PANKKIHEITTO 💰${state.players[state.current].bank}` : 'VALITSE RIVI') :
+      state.rollsUsed === 0 ? (quick ? `HEITÄ ${state.diceCount || 10} NOPPAA` : 'HEITÄ NOPAT') :
+      state.rollsUsed >= maxR ? (bank ? `PANKKIHEITTO 💰${state.players[state.current].bank}` : 'VALITSE RIVI') :
       'HEITÄ UUDELLEEN';
     rollsEl.innerHTML = '';
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < maxR; i++) {
       const dot = document.createElement('div');
       dot.className = 'rollDot' + (i < state.rollsUsed ? ' used' : '');
       rollsEl.appendChild(dot);
