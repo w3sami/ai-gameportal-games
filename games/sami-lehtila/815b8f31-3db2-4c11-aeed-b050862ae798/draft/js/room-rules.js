@@ -19,6 +19,10 @@
    VARIANTIT: säännöt valitaan huoneen luonnissa (room.variant), ja jokainen
    Scoring-kutsu saa `sixDice`-lipun parametrina eikä luota Scoring-moduulin
    jaettuun tilaan — palvelin ajaa useita eri sääntöjen huoneita yhtä aikaa.
+
+   PIKAJATSI (variant.quick): vuorolla yksi heitto 10 nopalla, ei lukitusta
+   eikä pankkia. Pöytäkirja on tavallinen 5 tai 6 nopan pöytäkirja, ja rivi
+   lasketaan heiton parhaalla 5 (6) nopan valinnalla (ks. scoring.js).
    ============================================================ */
 (function (root) {
   const Scoring = (typeof module !== 'undefined' && module.exports)
@@ -32,15 +36,21 @@
   /** Siivoa/rajaa pyydetty variantti turvalliseksi, tunnetuksi muodoksi. */
   function sanitizeVariant(v) {
     v = v || {};
+    const quick = !!v.quick;
     return {
       twoCol: !!v.twoCol,
       sixDice: !!v.sixDice,
-      bank: !!v.bank,
+      /* Pikajatsissa on vuorolla yksi heitto, joten pankkiin ei kertyisi mitään. */
+      bank: !!v.bank && !quick,
+      quick,
       rollMode: ROLL_MODES.includes(v.rollMode) ? v.rollMode : 'charge',
     };
   }
 
-  function diceCountFor(variant) { return variant.sixDice ? 6 : 5; }
+  function diceCountFor(variant) { return variant.quick ? Scoring.QUICK_DICE : variant.sixDice ? 6 : 5; }
+  /* Heittoja vuorolla ennen pankkia. Vanhat tallennetut huoneet ilman
+     quick-kenttää ovat tavallisia (3). */
+  function maxRollsFor(variant) { return variant.quick ? 1 : 3; }
   function colsFor(variant) { return variant.twoCol ? 2 : 1; }
   function emptyScs(variant) { return Array.from({ length: colsFor(variant) }, () => ({})); }
 
@@ -174,7 +184,7 @@
     if (room.status !== 'playing') throw new Error('Peli ei ole käynnissä.');
     requireTurn(room, userId);
     const diceCount = diceCountFor(room.variant);
-    const useBank = room.rollsUsed >= 3;
+    const useBank = room.rollsUsed >= maxRollsFor(room.variant);
     if (useBank && !bankAvailable(room)) throw new Error('Heitot käytetty — valitse rivi.');
     if (
       !Array.isArray(diceValues) ||
@@ -192,10 +202,11 @@
   function hold(room, userId, index) {
     if (room.status !== 'playing') throw new Error('Peli ei ole käynnissä.');
     requireTurn(room, userId);
+    if (room.variant.quick) throw new Error('Pikajatsissa nopat heitetään kerran — lukitusta ei ole.');
     const diceCount = diceCountFor(room.variant);
     if (!Number.isInteger(index) || index < 0 || index >= diceCount) throw new Error('Virheellinen noppa.');
     if (room.rollsUsed === 0) throw new Error('Heitä ensin.');
-    if (room.rollsUsed >= 3 && !bankAvailable(room)) throw new Error('Ei enää heittoja tällä vuorolla.');
+    if (room.rollsUsed >= maxRollsFor(room.variant) && !bankAvailable(room)) throw new Error('Ei enää heittoja tällä vuorolla.');
     room.held[index] = !room.held[index];
   }
 
@@ -262,9 +273,9 @@
     const colIdx = room.variant.twoCol ? (col === 1 ? 1 : 0) : 0;
     if (!p.scs[colIdx]) throw new Error('Virheellinen sarake.');
     if (p.scs[colIdx][categoryId] !== undefined) throw new Error('Rivi on jo merkitty.');
-    const pts = Scoring.scoreCat(categoryId, room.diceValues);
+    const pts = Scoring.scoreCat(categoryId, room.diceValues, six);
     p.scs[colIdx][categoryId] = pts;
-    if (room.variant.bank) p.bank = (p.bank || 0) + Math.max(0, 3 - room.rollsUsed);
+    if (room.variant.bank) p.bank = (p.bank || 0) + Math.max(0, maxRollsFor(room.variant) - room.rollsUsed);
     resetTurn(room);
     room.current = (room.current + 1) % room.players.length;
     advanceIfCurrentFinished(room);
@@ -289,6 +300,7 @@
       maxPlayers: room.maxPlayers,
       variant: room.variant,
       diceCount: diceCountFor(room.variant),
+      maxRolls: maxRollsFor(room.variant),
       current: room.current,
       rollsUsed: room.rollsUsed,
       diceValues: room.diceValues,
@@ -308,7 +320,7 @@
 
   const api = {
     PALETTE, MAX_PLAYERS, ROLL_MODES,
-    sanitizeVariant, diceCountFor, colsFor, emptyScs,
+    sanitizeVariant, diceCountFor, maxRollsFor, colsFor, emptyScs,
     accountSeatId, accountSeat, seatsOf, nameTaken, freeColor, newSeat, dropSeats, setSeatColor, reorderSeats,
     startGame, resetForRematch, currentPlayer, requireTurn, bankAvailable,
     roll, hold, resetTurn, score, rankings, publicState,
