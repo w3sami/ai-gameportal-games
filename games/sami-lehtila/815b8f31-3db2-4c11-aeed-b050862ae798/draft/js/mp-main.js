@@ -22,6 +22,10 @@
   let amIPlayer = false; // false = katsotaan huonetta
   let lastState0 = null; // viimeisin huoneen tila missä tahansa vaiheessa (henkilölistalle)
   let shownLocalGame = null; // offline-peli jonka tulostaulu on jo lähetetty ja piirretty
+  /* Luodun verkkohuoneen pyydetty pikajatsi-valinta, kunnes huoneen
+     ensimmäinen tila on nähty: palvelin, joka ei vielä tunne pikajatsia,
+     siivoaa lipun pois (sanitizeVariant), ja siitä kerrotaan pelaajalle. */
+  let requestedQuick = null;
 
   if (window.MpSettings) {
     window.MpSettings.load();
@@ -37,6 +41,19 @@
 
   function setAuthError(msg) { document.getElementById('authError').textContent = msg || ''; }
   function setLobbyError(msg) { document.getElementById('lobbyError').textContent = msg || ''; }
+
+  /* Pikajatsissa on yksi heitto vuorolla, joten heittopankki ei ole
+     käytössä: sen ruutu harmaantuu ja tyhjenee, kun pikajatsi valitaan.
+     Sama sääntö on room-rules.js:n sanitizeVariantissa. */
+  function syncQuickBank(quickId, bankId) {
+    const quick = document.getElementById(quickId).checked;
+    const bank = document.getElementById(bankId);
+    if (quick) bank.checked = false;
+    bank.disabled = quick;
+    bank.parentElement.style.opacity = quick ? .45 : '';
+  }
+  [['variantQuick', 'variantBank'], ['rematchQuick', 'rematchBank']].forEach(([q, b]) =>
+    document.getElementById(q).addEventListener('change', () => syncQuickBank(q, b)));
 
   /* Tila muistetaan; ensikäynnillä offline, koska se ei vaadi tiliä. */
   function boot() {
@@ -144,10 +161,12 @@
     document.getElementById('offShuffle').style.display = setup.players.length > 1 ? '' : 'none';
     document.getElementById('offShuffle').textContent = setup.players.length > 2 ? '🎲 Arvo järjestys' : '🎲 Arvo aloittaja';
     const v = setup.variant || {};
+    document.getElementById('offQuick').checked = !!v.quick;
     document.getElementById('offTwoCol').checked = !!v.twoCol;
     document.getElementById('offSixDice').checked = !!v.sixDice;
     document.getElementById('offBank').checked = !!v.bank;
     document.getElementById('offRollMode').value = v.rollMode || 'charge';
+    syncQuickBank('offQuick', 'offBank');
     const saved = window.LocalRoom.savedGame();
     const resume = document.getElementById('offResumeBtn');
     resume.style.display = saved ? 'block' : 'none';
@@ -155,7 +174,9 @@
   }
 
   function readOfflineVariant() {
+    syncQuickBank('offQuick', 'offBank');
     setup.variant = {
+      quick: document.getElementById('offQuick').checked,
       twoCol: document.getElementById('offTwoCol').checked,
       sixDice: document.getElementById('offSixDice').checked,
       bank: document.getElementById('offBank').checked,
@@ -163,7 +184,7 @@
     };
     saveSetup();
   }
-  ['offTwoCol', 'offSixDice', 'offBank', 'offRollMode'].forEach((id) =>
+  ['offQuick', 'offTwoCol', 'offSixDice', 'offBank', 'offRollMode'].forEach((id) =>
     document.getElementById(id).addEventListener('change', readOfflineVariant));
   document.getElementById('offShuffle').addEventListener('click', () => {
     setup.players = window.MpUI.shuffled(setup.players);
@@ -368,13 +389,15 @@
     const name = document.getElementById('roomNameInput').value.trim() || (me.username + ' peli');
     const max = parseInt(document.getElementById('roomMaxInput').value, 10);
     const variant = {
+      quick: document.getElementById('variantQuick').checked,
       twoCol: document.getElementById('variantTwoCol').checked,
       sixDice: document.getElementById('variantSixDice').checked,
       bank: document.getElementById('variantBank').checked,
       rollMode: document.getElementById('variantRollMode').value,
     };
+    requestedQuick = variant.quick;
     window.MpGame.createRoom(name, max, variant, (res) => {
-      if (!res.ok) { setLobbyError(res.error); return; }
+      if (!res.ok) { requestedQuick = null; setLobbyError(res.error); return; }
       showView('room');
     });
   });
@@ -383,6 +406,15 @@
     roomStatus = state.status;
     lastState0 = state;
     renderPeopleList(state);
+    if (requestedQuick !== null && !state.local) {
+      if (requestedQuick && !(state.variant && state.variant.quick)) {
+        window.MpUI.dialog({
+          title: 'Pikajatsi ei vielä verkossa',
+          text: 'Palvelin ei tunne pikajatsia, joten huone luotiin tavallisilla säännöillä. Pikajatsia voi pelata jo tällä laitteella.',
+        });
+      }
+      requestedQuick = null;
+    }
     amIPlayer = state.players.some((p) => p.userId === me.id);
     document.getElementById('leaveRoomBtn').title = state.local ? 'Takaisin aloitukseen — peli säilyy'
       : !amIPlayer ? 'Lopeta katsominen'
@@ -462,8 +494,8 @@
   function celebrateScore(state, categoryId, el) {
     const S = window.Scoring, UI = window.UI, D3 = window.Dice3D;
     if (!UI || !el) return;
-    const pts = S.scoreCat(categoryId, state.diceValues);
-    const bankAdded = state.variant.bank ? Math.max(0, 3 - state.rollsUsed) : 0;
+    const pts = S.scoreCat(categoryId, state.diceValues, state.variant.sixDice);
+    const bankAdded = state.variant.bank ? Math.max(0, window.RoomRules.maxRollsFor(state.variant) - state.rollsUsed) : 0;
     const r = el.getBoundingClientRect();
     if (bankAdded > 0) UI.popScore('💰+' + bankAdded, r.left + r.width / 2, r.top - 34);
     if (pts <= 0) return;
@@ -529,10 +561,12 @@
     document.getElementById('rematchBtn').style.display = amIHost ? 'block' : 'none';
     document.getElementById('mpWaitRematchMsg').style.display = amIHost ? 'none' : 'block';
     if (amIHost) {
+      document.getElementById('rematchQuick').checked = !!state.variant.quick;
       document.getElementById('rematchTwoCol').checked = !!state.variant.twoCol;
       document.getElementById('rematchSixDice').checked = !!state.variant.sixDice;
       document.getElementById('rematchBank').checked = !!state.variant.bank;
       document.getElementById('rematchRollMode').value = state.variant.rollMode || 'charge';
+      syncQuickBank('rematchQuick', 'rematchBank');
     }
 
     if (announcedFinishedRoomId !== state.id) {
@@ -570,6 +604,7 @@
   });
   document.getElementById('rematchBtn').addEventListener('click', () => {
     const variant = {
+      quick: document.getElementById('rematchQuick').checked,
       twoCol: document.getElementById('rematchTwoCol').checked,
       sixDice: document.getElementById('rematchSixDice').checked,
       bank: document.getElementById('rematchBank').checked,
