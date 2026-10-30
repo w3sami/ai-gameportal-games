@@ -9,10 +9,11 @@
 
    Tulostaulu on olemassa vain portaalissa: plugin päättelee pelin
    osoitteesta, joten jatsi.bigbools.fi:ssä sitä ei ladata lainkaan.
-   Yksi taulu `pisteet`, kentät noppamäärästä ja sarakkeista (levelFor).
-   Muut variantit (pankki, ravistus) ja koko pelin tulos kulkevat rivin
-   datassa ja näkyvät rivillä, ja niillä voi suodattaa. Oma lista top():n
-   päälle eikä valmis <leaderboard-panel>, koska paneeli ei näytä dataa.
+   Yksi taulu `pisteet`, kentät pelityypistä, noppamäärästä ja sarakkeista
+   (levelFor). Muut variantit (pankki, ravistus) ja koko pelin tulos
+   kulkevat rivin datassa ja näkyvät rivillä, ja niillä voi suodattaa. Oma
+   lista top():n päälle eikä valmis <leaderboard-panel>, koska paneeli ei
+   näytä dataa.
    ============================================================ */
 window.JatsiPortal = (function () {
   const ON_PORTAL = /\.game\.bigbools\.fi$/.test(location.hostname);
@@ -63,33 +64,37 @@ window.JatsiPortal = (function () {
     return lbModule;
   }
 
-  /* Kenttä säännöistä: noppamäärä ja sarakkeet muuttavat pistetason niin
-     paljon, ettei niitä voi järjestää samaan listaan. Tunnukset `5`,
-     `5-tupla`, `6`, `6-tupla` ovat pysyviä (rivit viittaavat niihin) ja
-     SAMAT kuin server/leaderboard.js:ssä. */
-  function levelFor({ sixDice, twoCol }) {
-    return (sixDice ? '6' : '5') + (twoCol ? '-tupla' : '');
+  /* Kenttä säännöistä: pelityyppi, noppamäärä ja sarakkeet muuttavat
+     pistetason niin paljon, ettei niitä voi järjestää samaan listaan.
+     Tunnukset `5`, `5-tupla`, `6`, `6-tupla` ja pikajatsin `pika-5`,
+     `pika-5-tupla`, `pika-6`, `pika-6-tupla` ovat pysyviä (rivit viittaavat
+     niihin) ja SAMAT kuin server/leaderboard.js:ssä. */
+  function levelFor({ sixDice, twoCol, quick }) {
+    return (quick ? 'pika-' : '') + (sixDice ? '6' : '5') + (twoCol ? '-tupla' : '');
   }
 
   /* Rivin data, sama muoto yksin- ja moninpelissä (moninpelin kirjoittaa
      palvelin, ks. server/leaderboard.js):
-       { v: { six, tupla, pankki, ravistus }, mode: 'offline'|'verkossa',
+       { v: { six, tupla, pankki, ravistus, pika }, mode: 'offline'|'verkossa',
          place, of, game: [{ n, s }] }   — game on koko pelin tulos. */
   function rowData({ variant, mode, players, me }) {
     const game = players.map((p) => ({ n: p.name, s: p.score })).sort((a, b) => b.s - a.s);
     return {
-      v: { six: !!variant.sixDice, tupla: !!variant.twoCol, pankki: !!variant.bank, ravistus: variant.rollMode === 'shake' },
+      v: { six: !!variant.sixDice, tupla: !!variant.twoCol, pankki: !!variant.bank, ravistus: variant.rollMode === 'shake', pika: !!variant.quick },
       mode, place: game.findIndex((g) => g.n === me.name && g.s === me.score) + 1, of: game.length, game,
     };
   }
 
-  /* Tagit joka rivillä. Kenttää määräävät (noppamäärä, tuplasarake) ovat
-     kaikilla kentän riveillä samat, joten niillä ei suodateta. */
+  /* Tagit joka rivillä. Kenttää määräävät (pelityyppi, noppamäärä,
+     tuplasarake) ovat kaikilla kentän riveillä samat, joten niillä ei
+     suodateta. */
   /* Varhaiset rivit kantavat nimet yksin/moninpeli; samat tagit kuin nyt. */
   const MODE_TAG = { yksin: 'offline', moninpeli: 'verkossa' };
   function variantTags(d) {
     const v = (d && d.v) || {};
-    const tags = [v.six ? '6 noppaa' : '5 noppaa'];
+    const tags = [];
+    if (v.pika) tags.push('pikajatsi');
+    tags.push(v.six ? '6 noppaa' : '5 noppaa');
     if (v.tupla) tags.push('tuplasarake');
     if (v.pankki) tags.push('heittopankki');
     if (v.ravistus) tags.push('ravistus');
@@ -108,24 +113,27 @@ window.JatsiPortal = (function () {
   /* Tag-suodatin: yksi tagirivi, jossa jokainen tagi on aina valittavissa,
      kuinka monta tahansa kerralla. Tagit ovat ryhmissä: saman ryhmän valitut
      tarkoittavat "mikä tahansa näistä" ja eri ryhmät rajaavat yhdessä;
-     ryhmä ilman valintoja ei rajaa. Noppamäärä ja sarakkeet ovat taulun
-     kenttiä, joten niiden valinnat ratkaisevat mitkä kentät haetaan
-     (enintään 4); muut suodattavat haettuja rivejä selaimessa, koska
+     ryhmä ilman valintoja ei rajaa. Pelityyppi, noppamäärä ja sarakkeet ovat
+     taulun kenttiä, joten niiden valinnat ratkaisevat mitkä kentät haetaan
+     (enintään 8); muut suodattavat haettuja rivejä selaimessa, koska
      palvelimen top() ei suodata datalla — siksi kentästä haetaan kaikki
      rivit (enintään 100 × 2 kt). Sija lasketaan näytetyn listan sisällä.
      Rivin tagit ovat pelkkää tietoa; valinnat tehdään tagiriviltä. */
-  const TAGS = ['5 noppaa', '6 noppaa', 'yksi sarake', 'tuplasarake', 'heittopankki', 'ravistus', 'offline', 'verkossa'];
+  const TAGS = ['tavallinen', 'pikajatsi', '5 noppaa', '6 noppaa', 'yksi sarake', 'tuplasarake', 'heittopankki', 'ravistus', 'offline', 'verkossa'];
   const TAG_GROUP = {
+    tavallinen: 'kind', pikajatsi: 'kind',
     '5 noppaa': 'dice', '6 noppaa': 'dice', 'yksi sarake': 'cols', tuplasarake: 'cols',
     offline: 'mode', verkossa: 'mode',
   };
   const sel = new Set();
   const cache = new Map(); // kenttä -> { entries, reason }
 
-  /* Rivin tagit suodatusta varten: myös "yksi sarake", jota rivillä ei näytetä. */
+  /* Rivin tagit suodatusta varten: myös "yksi sarake" ja "tavallinen",
+     joita rivillä ei näytetä. */
   function matchTags(d) {
     const t = variantTags(d);
     if (!(d && d.v && d.v.tupla)) t.push('yksi sarake');
+    if (!(d && d.v && d.v.pika)) t.push('tavallinen');
     return t;
   }
   function matches(entry) {
@@ -135,12 +143,14 @@ window.JatsiPortal = (function () {
     return Object.values(groups).every((any) => any.some((f) => t.includes(f)));
   }
   function levelsToFetch() {
+    const kind = ['tavallinen', 'pikajatsi'].filter((t) => sel.has(t));
     const six = ['5 noppaa', '6 noppaa'].filter((t) => sel.has(t));
     const cols = ['yksi sarake', 'tuplasarake'].filter((t) => sel.has(t));
     const out = [];
-    (six.length ? six : ['5 noppaa', '6 noppaa']).forEach((d) =>
-      (cols.length ? cols : ['yksi sarake', 'tuplasarake']).forEach((c) =>
-        out.push(levelFor({ sixDice: d === '6 noppaa', twoCol: c === 'tuplasarake' }))));
+    (kind.length ? kind : ['tavallinen', 'pikajatsi']).forEach((k) =>
+      (six.length ? six : ['5 noppaa', '6 noppaa']).forEach((d) =>
+        (cols.length ? cols : ['yksi sarake', 'tuplasarake']).forEach((c) =>
+          out.push(levelFor({ quick: k === 'pikajatsi', sixDice: d === '6 noppaa', twoCol: c === 'tuplasarake' })))));
     return out;
   }
 
@@ -201,10 +211,11 @@ window.JatsiPortal = (function () {
     });
   }
 
-  /* Pelin lopussa taulu avautuu pelin omilla säännöillä: noppamäärä ja
-     sarakkeet valitaan pelin mukaan, muut valinnat säilyvät. */
+  /* Pelin lopussa taulu avautuu pelin omilla säännöillä: pelityyppi,
+     noppamäärä ja sarakkeet valitaan pelin mukaan, muut valinnat säilyvät. */
   function openOn(wrap, variant, highlightId) {
-    ['5 noppaa', '6 noppaa', 'yksi sarake', 'tuplasarake'].forEach((t) => sel.delete(t));
+    ['tavallinen', 'pikajatsi', '5 noppaa', '6 noppaa', 'yksi sarake', 'tuplasarake'].forEach((t) => sel.delete(t));
+    sel.add(variant.quick ? 'pikajatsi' : 'tavallinen');
     sel.add(variant.sixDice ? '6 noppaa' : '5 noppaa');
     sel.add(variant.twoCol ? 'tuplasarake' : 'yksi sarake');
     return render(wrap, highlightId);
