@@ -20,6 +20,10 @@ window.JatsiPortal = (function () {
   const LB_URL = 'https://plugins.game.bigbools.fi/leaderboard/v1/index.js';
   const BOARD = 'pisteet';
   const SENT_KEY = 'jatsi.lb.sent';
+  /* Pikajatsin heitettävien noppien määrä (scoring.js:n QUICK_DICE). Se on
+     kentän nimessä, koska määrää voidaan vielä säätää: eri noppamäärällä
+     pelatut tulokset eivät ole vertailukelpoisia eivätkä sekoitu. */
+  const quickDice = () => (window.Scoring && window.Scoring.QUICK_DICE) || 10;
 
   /* ---------- koko näyttö ---------- */
   const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -66,35 +70,45 @@ window.JatsiPortal = (function () {
 
   /* Kenttä säännöistä: pelityyppi, noppamäärä ja sarakkeet muuttavat
      pistetason niin paljon, ettei niitä voi järjestää samaan listaan.
-     Tunnukset `5`, `5-tupla`, `6`, `6-tupla` ja pikajatsin `pika-5`,
-     `pika-5-tupla`, `pika-6`, `pika-6-tupla` ovat pysyviä (rivit viittaavat
-     niihin) ja SAMAT kuin server/leaderboard.js:ssä. */
+     Tunnukset `5`, `5-tupla`, `6`, `6-tupla` ja pikajatsin `pika<N>-5`,
+     `pika<N>-5-tupla`, `pika<N>-6`, `pika<N>-6-tupla` (N = heitettävät
+     nopat, nyt 10) ovat pysyviä (rivit viittaavat niihin) ja SAMAT kuin
+     server/leaderboard.js:ssä. */
   function levelFor({ sixDice, twoCol, quick }) {
-    return (quick ? 'pika-' : '') + (sixDice ? '6' : '5') + (twoCol ? '-tupla' : '');
+    return (quick ? `pika${quickDice()}-` : '') + (sixDice ? '6' : '5') + (twoCol ? '-tupla' : '');
   }
 
   /* Rivin data, sama muoto yksin- ja moninpelissä (moninpelin kirjoittaa
      palvelin, ks. server/leaderboard.js):
        { v: { six, tupla, pankki, ravistus, pika }, mode: 'offline'|'verkossa',
-         place, of, game: [{ n, s }] }   — game on koko pelin tulos. */
+         place, of, game: [{ n, s }] }   — game on koko pelin tulos.
+     pika on pikajatsissa heitettyjen noppien määrä, muuten false. */
   function rowData({ variant, mode, players, me }) {
     const game = players.map((p) => ({ n: p.name, s: p.score })).sort((a, b) => b.s - a.s);
     return {
-      v: { six: !!variant.sixDice, tupla: !!variant.twoCol, pankki: !!variant.bank, ravistus: variant.rollMode === 'shake', pika: !!variant.quick },
+      v: {
+        six: !!variant.sixDice, tupla: !!variant.twoCol, pankki: !!variant.bank, ravistus: variant.rollMode === 'shake',
+        pika: variant.quick ? quickDice() : false,
+      },
       mode, place: game.findIndex((g) => g.n === me.name && g.s === me.score) + 1, of: game.length, game,
     };
   }
 
   /* Tagit joka rivillä. Kenttää määräävät (pelityyppi, noppamäärä,
      tuplasarake) ovat kaikilla kentän riveillä samat, joten niillä ei
-     suodateta. */
+     suodateta. Pikajatsin rivillä noppatagi kertoo pöytäkirjan
+     ("paras 5"), koska heitettyjä noppia on enemmän. */
   /* Varhaiset rivit kantavat nimet yksin/moninpeli; samat tagit kuin nyt. */
   const MODE_TAG = { yksin: 'offline', moninpeli: 'verkossa' };
   function variantTags(d) {
     const v = (d && d.v) || {};
     const tags = [];
-    if (v.pika) tags.push('pikajatsi');
-    tags.push(v.six ? '6 noppaa' : '5 noppaa');
+    if (v.pika) {
+      tags.push(typeof v.pika === 'number' ? `pikajatsi ${v.pika} noppaa` : 'pikajatsi');
+      tags.push(v.six ? 'paras 6' : 'paras 5');
+    } else {
+      tags.push(v.six ? '6 noppaa' : '5 noppaa');
+    }
     if (v.tupla) tags.push('tuplasarake');
     if (v.pankki) tags.push('heittopankki');
     if (v.ravistus) tags.push('ravistus');
@@ -118,6 +132,7 @@ window.JatsiPortal = (function () {
      (enintään 8); muut suodattavat haettuja rivejä selaimessa, koska
      palvelimen top() ei suodata datalla — siksi kentästä haetaan kaikki
      rivit (enintään 100 × 2 kt). Sija lasketaan näytetyn listan sisällä.
+     Pikajatsista haetaan vain nykyisen noppamäärän kentät.
      Rivin tagit ovat pelkkää tietoa; valinnat tehdään tagiriviltä. */
   const TAGS = ['tavallinen', 'pikajatsi', '5 noppaa', '6 noppaa', 'yksi sarake', 'tuplasarake', 'heittopankki', 'ravistus', 'offline', 'verkossa'];
   const TAG_GROUP = {
@@ -128,12 +143,14 @@ window.JatsiPortal = (function () {
   const sel = new Set();
   const cache = new Map(); // kenttä -> { entries, reason }
 
-  /* Rivin tagit suodatusta varten: myös "yksi sarake" ja "tavallinen",
-     joita rivillä ei näytetä. */
+  /* Rivin tagit suodatusta varten: näytettyjen lisäksi tagirivin nimet
+     (pelityyppi, pöytäkirjan noppamäärä, "yksi sarake"). */
   function matchTags(d) {
+    const v = (d && d.v) || {};
     const t = variantTags(d);
-    if (!(d && d.v && d.v.tupla)) t.push('yksi sarake');
-    if (!(d && d.v && d.v.pika)) t.push('tavallinen');
+    if (!v.tupla) t.push('yksi sarake');
+    t.push(v.pika ? 'pikajatsi' : 'tavallinen');
+    t.push(v.six ? '6 noppaa' : '5 noppaa');
     return t;
   }
   function matches(entry) {
