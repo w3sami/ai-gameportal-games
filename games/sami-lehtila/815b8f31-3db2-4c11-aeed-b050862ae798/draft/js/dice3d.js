@@ -571,9 +571,12 @@ window.Dice3D = (function () {
     if (record) beginRecording(); else recording = false;
   }
 
-  function startCharge() {
+  /* record: nauhoitus alkaa jo latauksesta, jotta muut näkevät noppien
+     nousun käteen ja pyörityksen; releaseCharge jatkaa samaa nauhoitusta. */
+  function startCharge(record) {
     if(charging || rolling) return;
     charging=true; chargeT=0;
+    if (record) beginRecording();
     if(cfg.parkHeld){
       const held=activeDice().filter(d=>d.held);
       held.forEach((d,i)=>{
@@ -614,7 +617,8 @@ window.Dice3D = (function () {
       randSpin(b,P);
     });
     settleFrames=0; rollStart=performance.now(); nudges=0;
-    if (record) beginRecording(); else recording = false;
+    if (!record) recording = false;
+    else if (!recording) beginRecording();
   }
 
   function cancelCharge() {
