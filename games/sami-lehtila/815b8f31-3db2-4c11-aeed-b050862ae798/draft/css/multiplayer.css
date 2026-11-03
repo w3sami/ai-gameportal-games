@@ -82,6 +82,8 @@
 .mpPlayerChip.disconnected { opacity:.45; }
 .mpPlayerChip.spectator { border-style:dashed;color:var(--dim); }
 .mpPlayerChip.clickable { cursor:pointer; }
+.mpPlayerChip.lastMark { border-style:dotted;color:var(--dim); }
+.mpPlayerChip.lastMark b { color:var(--gold-bright); }
 /* Odotushuoneen vuorojärjestys */
 #mpPlayersPre { flex-direction:column;align-items:stretch;width:100%;max-width:340px;gap:4px; }
 .mpOrderRow { display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;

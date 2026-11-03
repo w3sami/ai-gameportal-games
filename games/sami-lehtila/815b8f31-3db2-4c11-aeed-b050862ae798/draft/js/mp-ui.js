@@ -69,6 +69,26 @@ window.MpUI = (function () {
     (state.spectators || []).forEach((s) => {
       chip(' spectator', `👁 ${esc(s.username)}` + (s.userId === myUserId ? ' (sinä)' : ''));
     });
+    const m = lastMarkText(state);
+    if (m) {
+      const c = document.createElement('div');
+      c.className = 'mpPlayerChip lastMark';
+      c.title = 'Viimeisin merkintä';
+      c.innerHTML = m;
+      el.appendChild(c);
+    }
+  }
+
+  /* Viimeisin merkintä luettavana: "● leo: Kuutoset 24" (tuplasarakkeessa
+     sarake perään, yliviivattu rivi "—"). */
+  function lastMarkText(state) {
+    const m = state.lastMark;
+    if (!m || state.status === 'open') return '';
+    const p = state.players.find((x) => x.seatId === m.seatId);
+    const cat = S().allCats(state.variant.sixDice).find((c) => c.id === m.categoryId);
+    if (!p || !cat) return '';
+    const col = state.variant.twoCol ? (m.col === 1 ? ' II' : ' I') : '';
+    return `<span class="pdot" style="background:${p.color}"></span>${esc(p.username)}: ${esc(cat.name)}${col} <b>${m.pts === 0 ? '—' : m.pts}</b>`;
   }
 
   /* Odotushuoneen vuorojärjestys: numeroitu lista; isännälle ↑↓ ja arvonta.
@@ -239,6 +259,19 @@ window.MpUI = (function () {
     const hasRolled = state.rollsUsed > 0;
     const B = S_.upperBase(six);
     const sgn = (x) => (x > 0 ? '+' : '') + x;
+    const lm = state.lastMark;
+    const isLast = (e, id) => !!lm && lm.seatId === e.p.seatId && lm.col === e.ci && lm.categoryId === id;
+    /* Juokseva erotus bonustahtiin: merkityt yläkerran rivit verrattuna
+       upperBase-kappaleeseen kutakin (3, 6 nopalla 4). */
+    const upperDiff = (sc) => {
+      const done = S_.UPPER.filter((u) => sc[u.id] !== undefined);
+      return done.length ? done.reduce((a, u) => a + sc[u.id] - B * u.n, 0) : null;
+    };
+    const diffTag = (sc) => {
+      const d = upperDiff(sc);
+      if (d === null) return '';
+      return ` <span class="devTag ${d >= 0 ? 'pos' : 'neg'}">${d === 0 ? '±0' : sgn(d)}</span>`;
+    };
     /* "Piilota käytetyt" (🙈) ja "vain omat sarakkeet" (👤) ovat tämän
        laitteen paikallisia asetuksia, ja ne koskevat laitteen omaa paikkaa:
        vuorossa olevaa, jos se on tämän laitteen (offline aina, verkossa
@@ -291,7 +324,8 @@ window.MpUI = (function () {
       if (v !== undefined) {
         const disp = devMode ? sgn(v - B * cat.n) : (v === 0 ? '—' : v);
         const fade = hideUsedNow && e.p.seatId === myPlayer.seatId ? ' fadeUsed' : '';
-        return `<td class="filled ${v === 0 && !devMode ? 'zero' : ''}${fade}">${disp}</td>`;
+        const last = isLast(e, cat.id) ? ' lastMark' : '';
+        return `<td class="filled ${v === 0 && !devMode ? 'zero' : ''}${fade}${last}">${disp}</td>`;
       } else if (e.pi === state.current && state.status === 'playing' && isMyTurn && hasRolled) {
         const pot = S_.scoreCat(cat.id, diceValues, six);
         const disp = devMode ? sgn(pot - B * cat.n) : (pot > 0 ? pot : '');
@@ -321,7 +355,7 @@ window.MpUI = (function () {
           const v = e.sc[u.id];
           if (v !== undefined) {
             const t = devUpper ? sgn(v - B * u.n) : (v === 0 ? '—' : v);
-            return `<div class="ug filled${hideUsedNow ? ' fadeUsed' : ''}"><span class="n">${u.n}:</span><span>${t}</span></div>`;
+            return `<div class="ug filled${hideUsedNow ? ' fadeUsed' : ''}${isLast(e, u.id) ? ' lastMark' : ''}"><span class="n">${u.n}:</span><span>${t}</span></div>`;
           } else if (e.pi === state.current && state.status === 'playing' && isMyTurn && hasRolled) {
             const pot = S_.scoreCat(u.id, diceValues, six);
             const t = devUpper ? sgn(pot - B * u.n) : (pot > 0 ? pot : '');
@@ -336,7 +370,7 @@ window.MpUI = (function () {
     } else {
       S_.UPPER.forEach((c) => h += row(c));
     }
-    h += `<tr class="sumRow"><td>Summa</td>${entries.map((e) => `<td>${S_.upperSum(e.sc)} / ${S_.bonusLimit(six)}</td>`).join('')}</tr>`;
+    h += `<tr class="sumRow"><td>Summa</td>${entries.map((e) => `<td>${S_.upperSum(e.sc)} / ${S_.bonusLimit(six)}${diffTag(e.sc)}</td>`).join('')}</tr>`;
     h += `<tr class="bonusRow"><td>Bonus (+${S_.bonusValue(six)})</td>${entries.map((e) => `<td>${S_.bonusOf(e.sc, six) || '–'}</td>`).join('')}</tr>`;
     h += `<tr class="section"><th>Alakerta</th>${entries.map(() => '<td></td>').join('')}</tr>`;
     S_.lowerCats(six).forEach((c) => h += row(c));

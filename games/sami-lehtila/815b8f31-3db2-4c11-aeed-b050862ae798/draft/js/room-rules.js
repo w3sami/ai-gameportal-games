@@ -143,6 +143,7 @@
     room.diceValues = new Array(diceCount).fill(0);
     room.held = new Array(diceCount).fill(false);
     room.lastScore = null;
+    room.lastMark = null;
     room.players.forEach(p => { p.scs = emptyScs(room.variant); p.bank = 0; });
   }
 
@@ -282,8 +283,11 @@
       current: room.current, rollsUsed: room.rollsUsed,
       diceValues: room.diceValues.slice(), held: room.held.slice(),
       seats: room.players.map(x => x.seatId).join(','),
+      prevMark: room.lastMark || null,
     };
     p.scs[colIdx][categoryId] = pts;
+    /* Viimeisin merkintä kaikille näkyviin seuraavaan merkintään asti. */
+    room.lastMark = { seatId: p.seatId, col: colIdx, categoryId, pts };
     if (room.variant.bank) p.bank = (p.bank || 0) + Math.max(0, maxRollsFor(room.variant) - room.rollsUsed);
     resetTurn(room);
     room.current = (room.current + 1) % room.players.length;
@@ -316,6 +320,7 @@
     room.rollsUsed = u.rollsUsed;
     room.diceValues = u.diceValues.slice();
     room.held = u.held.slice();
+    room.lastMark = u.prevMark || null;
     room.lastScore = null;
   }
 
@@ -344,6 +349,8 @@
       bankAvailable: bankAvailable(room),
       /* Laite (userId), joka voi perua viimeisimmän merkinnän. */
       undoBy: room.status === 'playing' && room.lastScore ? room.lastScore.userId : null,
+      /* Viimeisin merkintä: { seatId, col, categoryId, pts } tai null. */
+      lastMark: room.lastMark || null,
       players: room.players.map(p => ({
         seatId: p.seatId, guest: !!p.guest,
         userId: p.userId, username: p.username, color: p.color,

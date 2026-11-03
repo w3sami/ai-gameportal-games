@@ -209,6 +209,8 @@
   .devTag{font-size:.82em;font-weight:700;margin-left:3px}
   .devTag.pos{color:var(--ok)}
   .devTag.neg{color:#d98b7f}
+  /* viimeisin merkintä (kenen tahansa) */
+  td.lastMark,.ug.lastMark{box-shadow:inset 0 0 0 2px var(--gold-bright)}
   tr.totalRow td{font-weight:800;color:var(--gold-bright);font-size:1rem;background:rgba(224,169,61,.07)}
   td.justScored{animation:cellFlash 1s ease-out}
   @keyframes cellFlash{0%{background:rgba(255,214,107,.7);color:#241a08}100%{background:transparent}}
