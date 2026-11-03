@@ -479,6 +479,7 @@
     document.getElementById('undoBtn').classList.toggle('show', state.status === 'playing' && state.undoBy === me.id);
     const amIHost = state.hostId === me.id;
     const preGame = state.status === 'open';
+    if (preGame) document.getElementById('turnBadge').textContent = 'Odotetaan aloitusta';
     document.getElementById('mpPreGame').style.display = preGame ? 'flex' : 'none';
     document.getElementById('controls').style.display = preGame ? 'none' : 'flex';
     document.getElementById('mpPlayers').style.display = preGame ? 'none' : 'flex';
@@ -622,6 +623,7 @@
     const amIHost = state.hostId === me.id;
     document.getElementById('rematchVariantRow').style.display = amIHost ? 'block' : 'none';
     document.getElementById('rematchBtn').style.display = amIHost ? 'block' : 'none';
+    document.getElementById('rematchNewBtn').style.display = amIHost ? 'block' : 'none';
     document.getElementById('mpWaitRematchMsg').style.display = amIHost ? 'none' : 'block';
     if (amIHost) {
       document.getElementById('rematchQuick').checked = !!state.variant.quick;
@@ -665,15 +667,28 @@
   document.getElementById('closeWin').addEventListener('click', () => {
     document.getElementById('winnerOverlay').style.display = 'none';
   });
+  const rematchVariant = () => ({
+    quick: document.getElementById('rematchQuick').checked,
+    twoCol: document.getElementById('rematchTwoCol').checked,
+    sixDice: document.getElementById('rematchSixDice').checked,
+    bank: document.getElementById('rematchBank').checked,
+    rollMode: document.getElementById('rematchRollMode').value,
+  });
+  /* Samat pelaajat: uusi peli alkaa heti. */
   document.getElementById('rematchBtn').addEventListener('click', () => {
-    const variant = {
-      quick: document.getElementById('rematchQuick').checked,
-      twoCol: document.getElementById('rematchTwoCol').checked,
-      sixDice: document.getElementById('rematchSixDice').checked,
-      bank: document.getElementById('rematchBank').checked,
-      rollMode: document.getElementById('rematchRollMode').value,
-    };
-    window.MpGame.rematch(variant, (res) => { if (!res.ok) setLobbyError(res.error); });
+    window.MpGame.rematch(rematchVariant(), true, (res) => { if (!res.ok) setLobbyError(res.error); });
+  });
+  /* Uudet pelaajat: verkossa huoneen odotustilaan (päästä, vieraat, järjestys),
+     offline pelaajien valintaan. */
+  document.getElementById('rematchNewBtn').addEventListener('click', () => {
+    if (mode === 'offline') {
+      document.getElementById('winnerOverlay').style.display = 'none';
+      announcedFinishedRoomId = null;
+      renderOfflineSetup();
+      showView('offline');
+      return;
+    }
+    window.MpGame.rematch(rematchVariant(), false, (res) => { if (!res.ok) setLobbyError(res.error); });
   });
   /* Kesken pelin ✕ vie vain aulaan: paikka ja vuoro säilyvät, ja aulan
      "Jatka" palauttaa huoneeseen. Aiemmin se poisti pelistä pysyvästi yhdellä

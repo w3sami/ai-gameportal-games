@@ -570,8 +570,9 @@ window.MpGame = (function () {
   function startGame(cb) {
     socket.emit('room:start', { roomId: currentRoomId }, (res) => cb && cb(res));
   }
-  function rematch(variant, cb) {
-    socket.emit('room:rematch', { roomId: currentRoomId, variant }, (res) => cb && cb(res));
+  /* start: peli alkaa heti samoilla pelaajilla; muuten odotushuoneeseen. */
+  function rematch(variant, start, cb) {
+    socket.emit('room:rematch', { roomId: currentRoomId, variant, start }, (res) => cb && cb(res));
   }
   function deleteRoom(roomId, cb) {
     socket.emit('room:delete', { roomId: roomId || currentRoomId }, (res) => cb && cb(res));
