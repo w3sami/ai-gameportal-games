@@ -306,7 +306,7 @@ window.MpGame = (function () {
       playedRollId = id || null;
       window.Dice3D.playTrajectory(trajectory, diceValues, id);
     }
-    if (lastState) maybeCelebrate({ variant: lastState.variant, diceValues });
+    if (lastState) maybeCelebrate(lastState, diceValues);
   }
 
   /* ---------- Heittopainike: paina&pidä (oletus) ---------- */
@@ -462,11 +462,17 @@ window.MpGame = (function () {
     if (listeners.roomState) listeners.roomState(state, me);
   }
 
-  function maybeCelebrate(state) {
+  /* Heiton juhlinta: vain kun heittäjällä (vuorossa oleva paikka) on
+     vastaava rivi vielä auki jossain sarakkeessa. Merkitty Yatzy ei juhli
+     uudestaan; merkinnän oma juhlinta on mp-main.js:n scoreCategoryssa. */
+  function maybeCelebrate(state, diceValues) {
     const S = window.Scoring, UI = window.UI, D3 = window.Dice3D;
+    const roller = state.players && state.players[state.current];
+    if (!roller) return;
+    const open = (id) => roller.scs.some((sc) => sc[id] === undefined);
     const six = state.variant.sixDice;
-    const big = six ? S.scoreCat('yatzy6', state.diceValues, six) : 0;
-    const pts = S.scoreCat('yatzy', state.diceValues, six);
+    const big = six && open('yatzy6') ? S.scoreCat('yatzy6', diceValues, six) : 0;
+    const pts = open('yatzy') ? S.scoreCat('yatzy', diceValues, six) : 0;
     if (big >= 100) { UI.showBanner('SUUR-YATZY!'); UI.sndYatzy(); UI.burst(260, true); D3.shakeCamera(18); }
     else if (pts >= 50) { UI.showBanner('YATZY!'); UI.sndYatzy(); UI.burst(200, true); D3.shakeCamera(14); }
   }
