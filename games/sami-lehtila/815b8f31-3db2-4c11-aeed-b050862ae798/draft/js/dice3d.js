@@ -30,6 +30,7 @@ window.Dice3D = (function () {
   let gameDiceCount = 5;
   let settleCb = null;
   let recordTickCb = null;
+  let streamStallCb = null;
   let cfg = { nudge:false, parkHeld:true, sound:true };
 
   /* ---------- tila ---------- */
@@ -58,7 +59,14 @@ window.Dice3D = (function () {
      tästä yhdestä kohdasta jos toisto näyttää nykiseltä tai liian raskaalta. */
   const RECORD_HZ = 10, RECORD_DT = 1 / RECORD_HZ;
   let recording = false, recFrames = [], recStart = 0, recAccum = 0;
-  let playback = null; /* {frames, startTime, diceValues} */
+  let playback = null; /* {frames, startTime, diceValues, heldMask, live, streamId, lastChunkAt} */
+  /* Striimattu toisto: heittäjä lähettää kehyksiä heiton aikana, ja toisto
+     alkaa kun puskurissa on STREAM_LEAD_MS heittoa — noin sekunti heiton
+     alusta, kun mukaan lasketaan lähetysväli ja verkko. Jos kehykset
+     loppuvat kesken, toiston kello odottaa viimeisellä kehyksellä. Jos
+     uusia ei tule STREAM_STALL_MS:ään (heittäjä katosi), toisto päättyy
+     siihen ja palvelimen tila näyttää nopat. */
+  const STREAM_LEAD_MS = 700, STREAM_STALL_MS = 4000;
 
   function configure(c) { Object.assign(cfg, c); }
 
@@ -520,6 +528,9 @@ window.Dice3D = (function () {
     }
   }
   function onRecordTick(cb) { recordTickCb = cb; }
+  function onStreamStall(cb) { streamStallCb = cb; }
+  /* Striimattu toisto käynnissä eikä lopputulos ole vielä tullut. */
+  function isStreaming() { return !!(playback && playback.live); }
   function beginRecording() {
     recording = true; recFrames = []; recStart = performance.now(); recAccum = 0;
     captureFrame(0);
@@ -695,7 +706,17 @@ window.Dice3D = (function () {
      silti LOPULLISEN fysiikkatilan (STATIC/DYNAMIC) asettamiseen kun
      toisto päättyy, jotta mahdollinen kesken toiston tullut pito
      tulee oikein voimaan heti toiston valmistuttua. */
-  function playTrajectory(trajectory, values) {
+  function playTrajectory(trajectory, values, streamId) {
+    /* Striimattu toisto on jo käynnissä tälle heitolle: lopullinen nauhoitus
+       korvaa kertyneet kehykset (samat kehykset, vähintään yhtä monta), ja
+       toisto saa päättyä kun se ehtii loppuun. Vanha palvelin ei välitä
+       streamId:tä, joten sen puuttuessa käynnissä oleva striimi on tämä. */
+    if (playback && playback.live && (streamId === undefined || streamId === playback.streamId)) {
+      if (Array.isArray(trajectory) && trajectory.length >= playback.frames.length) playback.frames = trajectory;
+      playback.diceValues = values.slice();
+      playback.live = false;
+      return;
+    }
     if (!Array.isArray(trajectory) || !trajectory.length) {
       /* ei nauhoitusta saatavilla (esim. myöhässä liittynyt pelaaja) —
          näytä lopputulos suoraan ilman animaatiota */
@@ -711,19 +732,65 @@ window.Dice3D = (function () {
     }
     rolling = true; settled = false;
     const heldMask = activeDice().map(d => d.held);
-    playback = { frames: trajectory, startTime: performance.now(), diceValues: values.slice(), heldMask };
+    beginPlayback({ frames: trajectory, startTime: performance.now(), diceValues: values.slice(), heldMask, live: false });
+  }
+  function beginPlayback(pb) {
+    playback = pb;
     activeDice().forEach((d, idx) => {
-      if (heldMask[idx]) return;
+      if (pb.heldMask[idx]) return;
       d.body.type = CANNON.Body.KINEMATIC;
       d.body.velocity.setZero(); d.body.angularVelocity.setZero();
       d.body.wakeUp();
     });
   }
 
+  /* Heiton aikana saapuva pala kehyksiä: `from` on palan ensimmäisen kehyksen
+     järjestysnumero heitossa. from 0 aloittaa uuden toiston; saman heiton
+     (streamId) myöhemmät palat jatkavat, ja päällekkäiset kehykset (heittäjä
+     lähettää kaiken alusta sivun päivityksen jälkeen) ohitetaan. Aukon jälkeen
+     tuleva pala hylätään — lopullinen nauhoitus (playTrajectory) korjaa. */
+  function streamFrames(streamId, from, frames) {
+    if (!Array.isArray(frames) || !frames.length || !Number.isInteger(from) || from < 0) return;
+    if (playback && playback.live && playback.streamId === streamId) {
+      const have = playback.frames.length;
+      if (from > have) return;
+      const tail = frames.slice(have - from);
+      if (tail.length) playback.frames.push(...tail);
+      playback.lastChunkAt = performance.now();
+      return;
+    }
+    if (from !== 0) return;
+    /* Edellisen heiton toisto voi olla vielä kesken, kun heittäjä jo heittää
+       uudestaan (katsoja on ~0,7 s jäljessä): se päätetään lopputulokseensa. */
+    if (playback && !playback.live) finishPlayback(playback.diceValues);
+    rolling = true; settled = false;
+    beginPlayback({
+      frames: frames.slice(), startTime: null, diceValues: null,
+      heldMask: activeDice().map(d => d.held), live: true, streamId,
+      lastChunkAt: performance.now(),
+    });
+  }
+
   function updatePlayback() {
     if (!playback) return;
-    const elapsed = performance.now() - playback.startTime;
+    const now = performance.now();
     const frames = playback.frames;
+    const lastT = frames[frames.length - 1].t;
+    if (playback.live && now - playback.lastChunkAt > STREAM_STALL_MS) {
+      finishPlayback(null);
+      if (streamStallCb) streamStallCb();
+      return;
+    }
+    if (playback.startTime === null) {
+      if (playback.live && lastT < STREAM_LEAD_MS) return;
+      playback.startTime = now;
+    }
+    let elapsed = now - playback.startTime;
+    if (playback.live && elapsed > lastT) {
+      /* Puskuri loppui: kello odottaa, jottei seuraava pala hyppää eteenpäin. */
+      playback.startTime += elapsed - lastT;
+      elapsed = lastT;
+    }
     const heldMask = playback.heldMask;
     let i = 0;
     while (i < frames.length - 1 && frames[i + 1].t <= elapsed) i++;
@@ -752,26 +819,30 @@ window.Dice3D = (function () {
       d.mesh.position.copy(d.body.position);
       d.mesh.quaternion.copy(d.body.quaternion);
     });
-    const lastT = frames[frames.length - 1].t;
-    if (elapsed >= lastT) {
-      const finalValues = playback.diceValues;
-      activeDice().forEach((d, idx) => {
-        if (!heldMask[idx]) d.value = finalValues[idx] !== undefined ? finalValues[idx] : d.value;
-        /* lopullinen fysiikkatila LIVE d.held-lipun mukaan — voi olla eri
-           kuin heldMask[idx] jos pelaaja piti tämän nopan kesken toiston */
-        if (d.held) {
-          snapUpright(d);
-          d.body.type = CANNON.Body.STATIC; d.body.mass = 0; d.body.updateMassProperties();
-        } else {
-          d.body.type = CANNON.Body.DYNAMIC; d.body.mass = 1; d.body.updateMassProperties();
-          d.body.velocity.setZero(); d.body.angularVelocity.setZero();
-        }
-      });
-      diceValues = activeDice().map(d => d.value);
-      rolling = false; settled = true;
-      playback = null;
-      if (settleCb) settleCb(diceValues.slice());
-    }
+    if (!playback.live && elapsed >= lastT) finishPlayback(playback.diceValues);
+  }
+
+  /* Toiston loppu. finalValues null = striimi katkesi ennen lopputulosta:
+     silmäluvut jäävät ennalleen, ja onStreamStall-kuuntelija palauttaa nopat
+     palvelimen tilaan. Jos heitto vielä valmistuu, se toistetaan alusta. */
+  function finishPlayback(finalValues) {
+    const heldMask = playback.heldMask;
+    activeDice().forEach((d, idx) => {
+      if (!heldMask[idx] && finalValues) d.value = finalValues[idx] !== undefined ? finalValues[idx] : d.value;
+      /* lopullinen fysiikkatila LIVE d.held-lipun mukaan — voi olla eri
+         kuin heldMask[idx] jos pelaaja piti tämän nopan kesken toiston */
+      if (d.held) {
+        snapUpright(d);
+        d.body.type = CANNON.Body.STATIC; d.body.mass = 0; d.body.updateMassProperties();
+      } else {
+        d.body.type = CANNON.Body.DYNAMIC; d.body.mass = 1; d.body.updateMassProperties();
+        d.body.velocity.setZero(); d.body.angularVelocity.setZero();
+      }
+    });
+    diceValues = activeDice().map(d => d.value);
+    rolling = false; settled = true;
+    playback = null;
+    if (settleCb) settleCb(diceValues.slice());
   }
 
   function shakeCamera(a) { if(REDUCED) return; shakeAmp=a*.02; shakeT=.6; }
@@ -865,7 +936,7 @@ window.Dice3D = (function () {
     getHeld, setHeld, toggleHeld, hitTestDie, nudgeAt, isNudgeAvailable,
     getValues, isRolling, isSettled, isCharging, onSettle, restoreDisplay, resumeFrom, onRecordTick,
     throwDice, startCharge, releaseCharge, cancelCharge,
-    playTrajectory, setPhysicsActive,
+    playTrajectory, streamFrames, isStreaming, onStreamStall, setPhysicsActive,
     shakeCamera, resize,
   };
 })();

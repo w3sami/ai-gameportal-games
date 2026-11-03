@@ -122,6 +122,7 @@
        pöydältä. */
     const before = room.players.slice(0, room.current).filter(match).length;
     room.players = room.players.filter(p => !match(p));
+    room.lastScore = null;
     if (room.players.length === 0) return;
     if (!accountSeat(room, room.hostId)) room.hostId = (room.players.find(p => !p.guest) || room.players[0]).userId;
     if (!playing) return;
@@ -141,6 +142,7 @@
     room.rollsUsed = 0;
     room.diceValues = new Array(diceCount).fill(0);
     room.held = new Array(diceCount).fill(false);
+    room.lastScore = null;
     room.players.forEach(p => { p.scs = emptyScs(room.variant); p.bank = 0; });
   }
 
@@ -194,6 +196,7 @@
       throw new Error('Virheelliset noppien arvot.');
     }
     room.diceValues = diceValues.slice();
+    room.lastScore = null;
     if (useBank) currentPlayer(room).bank--;
     else room.rollsUsed++;
     return room.diceValues;
@@ -274,13 +277,46 @@
     if (!p.scs[colIdx]) throw new Error('Virheellinen sarake.');
     if (p.scs[colIdx][categoryId] !== undefined) throw new Error('Rivi on jo merkitty.');
     const pts = Scoring.scoreCat(categoryId, room.diceValues, six);
+    const undo = {
+      userId: p.userId, seatId: p.seatId, col: colIdx, categoryId, bank: p.bank || 0,
+      current: room.current, rollsUsed: room.rollsUsed,
+      diceValues: room.diceValues.slice(), held: room.held.slice(),
+      seats: room.players.map(x => x.seatId).join(','),
+    };
     p.scs[colIdx][categoryId] = pts;
     if (room.variant.bank) p.bank = (p.bank || 0) + Math.max(0, maxRollsFor(room.variant) - room.rollsUsed);
     resetTurn(room);
     room.current = (room.current + 1) % room.players.length;
     advanceIfCurrentFinished(room);
     checkTurnOrder(room, 'score');
+    /* Pelin päättänyttä merkintää ei voi perua: tulos on jo historiassa ja
+       tulostaulussa. */
+    room.lastScore = room.status === 'playing' ? undo : null;
     return pts;
+  }
+
+  /* PERUMINEN: merkinnän tehnyt laite (userId; laitteen kaikki paikat) voi
+     perua viimeisimmän merkinnän, kunnes seuraava heitto tehdään. Vuoro
+     palaa samoihin noppiin, heittoihin ja pankkiin, joten vuoroa voi jatkaa
+     heittämällä (myös pankista) tai merkitä toisen rivin. Pelaajien
+     muuttuminen välissä (poistuminen, poisto) estää perumisen, koska vuoro
+     on indeksi pelaajalistaan. */
+  function undoScore(room, userId) {
+    const u = room.lastScore;
+    if (room.status !== 'playing' || !u) throw new Error('Ei peruttavaa.');
+    if (u.userId !== userId) throw new Error('Vain merkinnän tehnyt voi perua sen.');
+    const p = room.players.find(x => x.seatId === u.seatId);
+    if (!p || room.players.map(x => x.seatId).join(',') !== u.seats) {
+      room.lastScore = null;
+      throw new Error('Pelaajat ovat vaihtuneet, joten merkintää ei voi enää perua.');
+    }
+    delete p.scs[u.col][u.categoryId];
+    p.bank = u.bank;
+    room.current = u.current;
+    room.rollsUsed = u.rollsUsed;
+    room.diceValues = u.diceValues.slice();
+    room.held = u.held.slice();
+    room.lastScore = null;
   }
 
   function rankings(room) {
@@ -306,6 +342,8 @@
       diceValues: room.diceValues,
       held: room.held,
       bankAvailable: bankAvailable(room),
+      /* Laite (userId), joka voi perua viimeisimmän merkinnän. */
+      undoBy: room.status === 'playing' && room.lastScore ? room.lastScore.userId : null,
       players: room.players.map(p => ({
         seatId: p.seatId, guest: !!p.guest,
         userId: p.userId, username: p.username, color: p.color,
@@ -323,7 +361,7 @@
     sanitizeVariant, diceCountFor, maxRollsFor, colsFor, emptyScs,
     accountSeatId, accountSeat, seatsOf, nameTaken, freeColor, newSeat, dropSeats, setSeatColor, reorderSeats,
     startGame, resetForRematch, currentPlayer, requireTurn, bankAvailable,
-    roll, hold, resetTurn, score, rankings, publicState,
+    roll, hold, resetTurn, score, undoScore, rankings, publicState,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

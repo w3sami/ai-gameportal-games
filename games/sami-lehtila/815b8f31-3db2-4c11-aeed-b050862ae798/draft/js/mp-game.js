@@ -30,6 +30,14 @@ window.MpGame = (function () {
   let socket = null, me = null, currentRoomId = null, diceReady = false;
   let lastState = null;
   let myRollInFlight = false; // true kun OMA paikallinen heitto on käynnissä/lähetetty, kunnes kaiku saapuu
+  let remote = false; // yhteys palvelimelle (offline-huoneelle ei striimata)
+  /* Oman heiton striimi: tunniste ja montako kehystä on jo lähetetty. */
+  let streamId = null, streamSent = 0;
+  const STREAM_CHUNK = 3; // kehystä palassa: 10 Hz:llä pala 0,3 s välein
+  /* Viimeisin muun heitto, joka on toistettu lopputulokseen asti. Palvelin
+     lähettää huoneeseen palaavalle vuoron viimeisen heiton (server/
+     roll-memory.js); jo nähtyä ei toisteta uudestaan. */
+  let playedRollId = null;
   let armed = false; // ravistustila viritetty
   let motionEnabled = false, shakeSamples = [], shakePeakAcc = 0;
   const listeners = { lobby: null, roomState: null, roomError: null, rejoin: null, deleted: null, blocked: null, notice: null };
@@ -58,6 +66,7 @@ window.MpGame = (function () {
        (ks. mp-api.js); omalla palvelimella sama origin ja istuntoeväste. */
     const api = window.MpApi;
     socket = transport || (api.base ? io(api.base, { auth: { token: api.token() } }) : io());
+    remote = !transport;
     socket.on('lobby:update', (rooms) => listeners.lobby && listeners.lobby(rooms));
     socket.on('room:state', (state) => handleRoomState(state));
     socket.on('room:rejoin', (state) => {
@@ -74,7 +83,9 @@ window.MpGame = (function () {
             vaikka peli on jo kesken). */
       if (state.status === 'playing' && window.Dice3D) {
         const resumed = tryResumeInFlightRoll(state);
-        if (!resumed) window.Dice3D.restoreDisplay(state.diceValues, state.held);
+        /* Kesken oleva striimattu toisto jatkuu: palvelin lähettää perään
+           heiton kehykset tai lopputuloksen (roll-memory.js). */
+        if (!resumed && !window.Dice3D.isStreaming()) window.Dice3D.restoreDisplay(state.diceValues, state.held);
       }
       if (listeners.rejoin) listeners.rejoin(state);
     });
@@ -96,6 +107,16 @@ window.MpGame = (function () {
       if (listeners.notice) listeners.notice(message);
     });
     socket.on('game:rollPlayback', (payload) => handleRollPlayback(payload));
+    /* Merkintä peruttiin: nopat takaisin merkintää edeltäneisiin. */
+    socket.on('game:undone', ({ diceValues, held } = {}) => {
+      if (!diceReady || !Array.isArray(diceValues)) return;
+      window.Dice3D.restoreDisplay(diceValues, held);
+      refreshControls();
+    });
+    socket.on('game:rollStream', ({ rollerId, id, from, frames } = {}) => {
+      if (!diceReady || rollerId === me.id || id === playedRollId) return;
+      window.Dice3D.streamFrames(id, from, frames);
+    });
     socket.on('connect_error', (e) => {
       if (e.message === 'AUTH_REQUIRED') {
         window.MpApi.clearToken();
@@ -131,6 +152,8 @@ window.MpGame = (function () {
   function startMyRoll(launch) {
     if (!currentRoomId || myRollInFlight) return;
     myRollInFlight = true;
+    streamId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    streamSent = 0;
     launch();
     updateHint();
     refreshControls();
@@ -191,9 +214,19 @@ window.MpGame = (function () {
      toisto ei koskaan nauhoita, ks. dice3d.js:n throwDice/releaseCharge
      record-parametri), joten tälle ei tarvita erillistä "kenen heitto"
      -tarkistusta täällä — jos recording on käynnissä, se on omamme. */
+  /* Oman heiton kehykset muille heiton aikana, STREAM_CHUNK kehystä kerrallaan
+     (ks. dice3d.js:n streamFrames). Viimeinen vajaa pala jää lähettämättä:
+     lopullinen nauhoitus game:rollissa kattaa sen. */
+  function streamRoll(frames) {
+    if (!remote || !socket || !streamId || !Array.isArray(frames)) return;
+    if (frames.length - streamSent < STREAM_CHUNK) return;
+    socket.emit('game:rollStream', { roomId: currentRoomId, id: streamId, from: streamSent, frames: frames.slice(streamSent) });
+    streamSent = frames.length;
+  }
   function inFlightKey(roomId) { return 'yatzy-mp-inflight:' + roomId; }
   function persistInFlightRoll(snap) {
     if (!myRollInFlight || !currentRoomId || !lastState) return;
+    streamRoll(snap.frames);
     try {
       localStorage.setItem(inFlightKey(currentRoomId), JSON.stringify({
         userId: me.id,
@@ -201,6 +234,7 @@ window.MpGame = (function () {
         diceCount: lastState.diceCount,
         dice: snap.dice,
         frames: snap.frames,
+        streamId,
         ts: Date.now(),
       }));
     } catch (e) { /* localStorage voi olla poissa käytöstä (yksityinen selaus tms.) — ei kriittistä */ }
@@ -223,6 +257,10 @@ window.MpGame = (function () {
       Array.isArray(snap.dice) && snap.dice.length === state.diceCount;
     if (!valid) { clearInFlightRoll(); return false; }
     myRollInFlight = true;
+    /* Striimi jatkuu samalla tunnisteella kaikki kehykset alusta: katsojat
+       ohittavat jo saamansa, ja tyhjästä aloittava saa koko heiton. */
+    streamId = snap.streamId || Date.now().toString(36);
+    streamSent = 0;
     window.Dice3D.resumeFrom(snap);
     return true;
   }
@@ -242,7 +280,7 @@ window.MpGame = (function () {
       refreshControls();
       return;
     }
-    socket.emit('game:roll', { roomId: currentRoomId, diceValues, trajectory: trajectory || [] }, (res) => {
+    socket.emit('game:roll', { roomId: currentRoomId, diceValues, trajectory: trajectory || [], streamId }, (res) => {
       /* Palvelin on nyt joko hyväksynyt TAI hylännyt tämän heiton — kummassa
          tapauksessa tahansa paikallinen "kesken oleva heitto" -tallenne
          (localStorage) on käynyt tarpeettomaksi: onnistuessa palvelin
@@ -259,12 +297,14 @@ window.MpGame = (function () {
      Jos heitto oli OMA, fysiikka pyöri jo livenä eikä sitä toisteta —
      muille asiakkaille tämä on ainoa paikka joka koskaan liikuttaa
      noppia tälle heitolle (ei omaa simulaatiota, ks. tiedoston alkukommentti). */
-  function handleRollPlayback({ diceValues, trajectory, rollerId }) {
+  function handleRollPlayback({ diceValues, trajectory, rollerId, streamId: id }) {
     if (!diceReady) return;
     if (rollerId === me.id) {
       myRollInFlight = false;
     } else {
-      window.Dice3D.playTrajectory(trajectory, diceValues);
+      if (id && id === playedRollId) return;
+      playedRollId = id || null;
+      window.Dice3D.playTrajectory(trajectory, diceValues, id);
     }
     if (lastState) maybeCelebrate({ variant: lastState.variant, diceValues });
   }
@@ -351,6 +391,12 @@ window.MpGame = (function () {
     if (window.MpSettings) window.MpSettings.load(); // lataa+soveltaa pelaajan omat asetukset (nudge/sound/parkHeld)
     window.Dice3D.onSettle(onMySettle);
     window.Dice3D.onRecordTick(persistInFlightRoll);
+    /* Muun heiton striimi katkesi eikä lopputulosta tullut: nopat palvelimen
+       tilaan (heitto ei ole palvelimella, joten tila on heittoa edeltävä). */
+    window.Dice3D.onStreamStall(() => {
+      if (lastState) window.Dice3D.restoreDisplay(lastState.diceValues, lastState.held);
+      refreshControls();
+    });
     diceReady = true;
     wireRollButton();
     document.getElementById('canvasWrap').addEventListener('pointerdown', (ev) => {
@@ -477,7 +523,7 @@ window.MpGame = (function () {
     socket.emit('local:resume', {}, (res) => cb && cb(res));
   }
   function undo(cb) {
-    socket.emit('local:undo', {}, (res) => cb && cb(res));
+    socket.emit('game:undo', { roomId: currentRoomId }, (res) => cb && cb(res));
   }
   function startGame(cb) {
     socket.emit('room:start', { roomId: currentRoomId }, (res) => cb && cb(res));

@@ -216,16 +216,10 @@
   document.getElementById('offStartBtn').addEventListener('click', startOffline);
   document.getElementById('offResumeBtn').addEventListener('click', () => window.MpGame.localResume());
 
-  /* Offline: viimeisimmän merkinnän peruminen. Nopat palaavat merkintää
-     edeltäneisiin silmälukuihin. */
+  /* Viimeisimmän merkinnän peruminen: näkyy merkinnän tehneellä laitteella
+     seuraavaan heittoon asti. Nopat palauttaa game:undone (mp-game.js). */
   document.getElementById('undoBtn').addEventListener('click', () => {
-    window.MpGame.undo((res) => {
-      if (!res.ok) return;
-      setTimeout(() => {
-        const st = lastRenderedState;
-        if (st && window.Dice3D) window.Dice3D.restoreDisplay(st.diceValues, st.held);
-      }, 0);
-    });
+    window.MpGame.undo((res) => { if (!res.ok) setLobbyError(res.error); });
   });
 
   /* Pelaajan oma väri (avatar) — tilikohtainen, ks. server/auth.js:n
@@ -420,7 +414,7 @@
       : !amIPlayer ? 'Lopeta katsominen'
       : state.status === 'playing' ? 'Takaisin aulaan — paikka säilyy' : 'Poistu huoneesta';
 
-    document.getElementById('undoBtn').classList.toggle('show', !!(state.local && state.status === 'playing' && state.canUndo));
+    document.getElementById('undoBtn').classList.toggle('show', state.status === 'playing' && state.undoBy === me.id);
     const amIHost = state.hostId === me.id;
     const preGame = state.status === 'open';
     document.getElementById('mpPreGame').style.display = preGame ? 'flex' : 'none';

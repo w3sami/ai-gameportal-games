@@ -34,7 +34,7 @@ window.LocalRoom = (function () {
 
   function stateOf(data) {
     return Object.assign(R().publicState(data.room), {
-      local: true, gameKey: data.room.gameKey, canUndo: !!data.undo, spectators: [], blocked: [],
+      local: true, gameKey: data.room.gameKey, spectators: [], blocked: [],
     });
   }
 
@@ -71,7 +71,7 @@ window.LocalRoom = (function () {
 
     const actions = {
       'local:create'({ players, variant }) {
-        data = { room: buildRoom(players || [], variant), undo: null };
+        data = { room: buildRoom(players || [], variant) };
         start(data.room);
         commit();
         later(() => fire('room:rejoin', stateOf(data)));
@@ -83,7 +83,6 @@ window.LocalRoom = (function () {
       'room:rematch'({ variant }) {
         R().resetForRematch(data.room, variant);
         start(data.room);
-        data.undo = null;
         commit(); broadcast();
       },
       'game:roll'({ diceValues }) {
@@ -97,18 +96,15 @@ window.LocalRoom = (function () {
         commit(); broadcast();
       },
       'game:score'({ categoryId, col }) {
-        const before = JSON.stringify(data.room);
         R().score(data.room, LOCAL_USER.id, categoryId, col);
-        data.undo = before;
         commit(); broadcast();
       },
-      /* Peruu viimeisimmän merkinnän: huone palaa merkintää edeltäneeseen
-         tilaan, eli samoille nopille ja heitoille. */
-      'local:undo'() {
-        if (!data.undo) throw new Error('Ei peruttavaa.');
-        data.room = JSON.parse(data.undo);
-        data.undo = null;
+      /* Viimeisimmän merkinnän peruminen, samat säännöt kuin verkossa. */
+      'game:undo'() {
+        R().undoScore(data.room, LOCAL_USER.id);
         commit(); broadcast();
+        const { diceValues, held } = data.room;
+        later(() => fire('game:undone', { diceValues: diceValues.slice(), held: held.slice() }));
       },
       'room:color'({ seatId, color }) {
         R().setSeatColor(data.room, LOCAL_USER.id, seatId, color);
