@@ -150,14 +150,15 @@ window.Dice3D = (function () {
      (esim. myöhässä liittynyt/uudelleenyhdistynyt pelaaja, joka ei ollut
      paikalla heiton tapahtuessa) — silloin näytetään suoraan lopputulos
      ilman että kukaan yrittää arvata miltä tuntematon tumppaus näytti. */
-  function forceFaceUp(d, value) {
+  /* spin: satunnainen kierto pystyakselin ympäri, ettei jokainen heitto näytä
+     identtiseltä. Lukittu noppa asetetaan ilman sitä, suoraan reunojen
+     suuntaan, kuten snapUpright lukitessa. */
+  function forceFaceUp(d, value, spin = true) {
     const target = FACE_AXES.find(([,v])=>v===value)[0];
     const from = target.clone();
     const to = new THREE.Vector3(0,1,0);
     const q = new THREE.Quaternion().setFromUnitVectors(from, to);
-    /* pieni satunnainen kierto pystyakselin ympäri, ettei jokainen heitto näytä identtiseltä */
-    const spin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), Math.random()*Math.PI*2);
-    q.premultiply(spin);
+    if (spin) q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), Math.random()*Math.PI*2));
     d.body.quaternion.set(q.x,q.y,q.z,q.w);
     d.body.position.y = HALF;
     d.body.velocity.setZero(); d.body.angularVelocity.setZero();
@@ -367,7 +368,7 @@ window.Dice3D = (function () {
       b.mass = d.held ? 0 : 1;
       b.updateMassProperties();
       const v = values && values[i];
-      if (v) { forceFaceUp(d, v); d.value = v; } else { d.value = 0; }
+      if (v) { forceFaceUp(d, v, !d.held); d.value = v; } else { d.value = 0; }
       d.mesh.position.copy(b.position);
       d.mesh.quaternion.copy(b.quaternion);
       d.ring.visible = d.held;
