@@ -298,7 +298,7 @@ window.MpGame = (function () {
       return;
     }
     streamOpen = false;
-    socket.emit('game:roll', { roomId: currentRoomId, diceValues, trajectory: trajectory || [], streamId }, (res) => {
+    socket.emit('game:roll', { roomId: currentRoomId, diceValues, trajectory: trajectory || [], streamId, lock: window.Dice3D.heldMask() }, (res) => {
       /* Palvelin on nyt joko hyväksynyt TAI hylännyt tämän heiton — kummassa
          tapauksessa tahansa paikallinen "kesken oleva heitto" -tallenne
          (localStorage) on käynyt tarpeettomaksi: onnistuessa palvelin
@@ -432,6 +432,12 @@ window.MpGame = (function () {
     document.getElementById('canvasWrap').addEventListener('pointerdown', (ev) => {
       if (!currentRoomId || window.Dice3D.isCharging()) return;
       if (window.Dice3D.isRolling()) {
+        /* Oman heiton aikana pysähtyneen nopan napautus lukitsee sen heti
+           (ei kaadu muiden tönäisyistä); lukitus lähtee heiton mukana. */
+        if (myRollInFlight && window.Dice3D.lockResting(ev.clientX, ev.clientY) >= 0) {
+          if (window.UI) window.UI.sndHold();
+          return;
+        }
         /* Tälli: vain OMAN käynnissä olevan heiton fysiikkaan voi koskea —
            toisen pelaajan toistoa (playTrajectory) ei voi nudata, koska se
            toistaa jo tallennettua, valmista liikerataa. */

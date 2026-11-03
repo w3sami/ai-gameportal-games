@@ -474,6 +474,25 @@ window.Dice3D = (function () {
     return dice.findIndex(d=>d.mesh===hit.object);
   }
 
+  /* Kesken OMAN heiton (oma fysiikka, ei toisto): napautettu noppa, joka on
+     jo pysähtynyt suoraan pöytään, lukittuu heti. Lukittu noppa on staattinen,
+     joten muiden noppien korjaustönäisyt eivät kaada sitä. Palauttaa nopan
+     indeksin tai -1. */
+  function lockResting(clientX, clientY) {
+    if (!rolling || playback || charging) return -1;
+    const i = hitTestDie(clientX, clientY);
+    const d = dice[i];
+    if (!d || d.held) return -1;
+    const b = d.body;
+    if (b.velocity.length() > .12 || b.angularVelocity.length() > .15) return -1;
+    if (b.position.y > HALF + 0.06 || topFace(d.mesh).dot < .98) return -1;
+    toggleHeld(i);
+    d.value = topFace(d.mesh).val;
+    return i;
+  }
+  /* Lukitut nopat (aktiiviset), heiton tuloksen mukana palvelimelle. */
+  function heldMask() { return activeDice().map(d => !!d.held); }
+
   function nudgeAt(clientX, clientY) {
     if(!cfg.nudge || !nudgeAvailable) return false;
     nudgeAvailable=false;
@@ -940,7 +959,7 @@ window.Dice3D = (function () {
     getHeld, setHeld, toggleHeld, hitTestDie, nudgeAt, isNudgeAvailable,
     getValues, isRolling, isSettled, isCharging, onSettle, restoreDisplay, resumeFrom, onRecordTick,
     throwDice, startCharge, releaseCharge, cancelCharge,
-    playTrajectory, streamFrames, isStreaming, onStreamStall, setPhysicsActive,
+    playTrajectory, streamFrames, isStreaming, onStreamStall, setPhysicsActive, lockResting, heldMask,
     shakeCamera, resize,
   };
 })();

@@ -85,8 +85,8 @@ window.LocalRoom = (function () {
         start(data.room);
         commit(); broadcast();
       },
-      'game:roll'({ diceValues }) {
-        R().roll(data.room, LOCAL_USER.id, diceValues);
+      'game:roll'({ diceValues, lock }) {
+        R().roll(data.room, LOCAL_USER.id, diceValues, lock);
         commit(); broadcast();
         const dv = data.room.diceValues.slice();
         later(() => fire('game:rollPlayback', { diceValues: dv, trajectory: [], rollerId: LOCAL_USER.id }));
