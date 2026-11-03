@@ -115,7 +115,9 @@ window.MpGame = (function () {
     });
     socket.on('game:rollStream', ({ rollerId, id, from, frames } = {}) => {
       if (!diceReady || rollerId === me.id || id === playedRollId) return;
+      const wasRolling = window.Dice3D.isRolling();
       window.Dice3D.streamFrames(id, from, frames);
+      if (!wasRolling && window.Dice3D.isRolling()) rerender();
     });
     socket.on('connect_error', (e) => {
       if (e.message === 'AUTH_REQUIRED') {
@@ -167,6 +169,12 @@ window.MpGame = (function () {
      näyttämään "valmiina" koko animaation ajan vaikka klikkaus ei tekisi
      mitään. Kutsutaan tätä eksplisiittisesti heti kun heitto TODELLA
      alkaa, jotta ulkoasu vastaa heti sitä mitä klikkaus oikeasti sallii. */
+  /* Huoneen näkymä uudestaan samalla tilalla: muiden heiton toisto alkoi tai
+     päättyi, ja pikavalinnat piiloutuvat tai tulevat näkyviin. */
+  function rerender() {
+    if (lastState && listeners.roomState) listeners.roomState(lastState, me);
+  }
+
   function refreshControls() {
     if (lastState && window.MpUI) window.MpUI.updateControls(lastState, me.id);
   }
@@ -276,8 +284,10 @@ window.MpGame = (function () {
          -näköiseksi jos vuoro vaihtuu KESKEN toisen pelaajan viimeisen
          heiton toiston (room:state "sinun vuorosi nyt" saattaa saapua ennen
          kuin toisto ehtii täällä valmistua), koska mikään muu tapahtuma ei
-         enää päivitä ohjaimia sen jälkeen kun toisto itsestään loppuu. */
+         enää päivitä ohjaimia sen jälkeen kun toisto itsestään loppuu.
+         Uudelleenpiirto tuo katsojan pikavalinnat näkyviin. */
       refreshControls();
+      rerender();
       return;
     }
     socket.emit('game:roll', { roomId: currentRoomId, diceValues, trajectory: trajectory || [], streamId }, (res) => {
@@ -304,9 +314,11 @@ window.MpGame = (function () {
     } else {
       if (id && id === playedRollId) return;
       playedRollId = id || null;
+      const wasRolling = window.Dice3D.isRolling();
       window.Dice3D.playTrajectory(trajectory, diceValues, id);
+      if (!wasRolling && window.Dice3D.isRolling()) rerender();
     }
-    if (lastState) maybeCelebrate({ variant: lastState.variant, diceValues });
+    if (lastState) maybeCelebrate(lastState, diceValues);
   }
 
   /* ---------- Heittopainike: paina&pidä (oletus) ---------- */
@@ -462,11 +474,17 @@ window.MpGame = (function () {
     if (listeners.roomState) listeners.roomState(state, me);
   }
 
-  function maybeCelebrate(state) {
+  /* Heiton juhlinta: vain kun heittäjällä (vuorossa oleva paikka) on
+     vastaava rivi vielä auki jossain sarakkeessa. Merkitty Yatzy ei juhli
+     uudestaan; merkinnän oma juhlinta on mp-main.js:n scoreCategoryssa. */
+  function maybeCelebrate(state, diceValues) {
     const S = window.Scoring, UI = window.UI, D3 = window.Dice3D;
+    const roller = state.players && state.players[state.current];
+    if (!roller) return;
+    const open = (id) => roller.scs.some((sc) => sc[id] === undefined);
     const six = state.variant.sixDice;
-    const big = six ? S.scoreCat('yatzy6', state.diceValues, six) : 0;
-    const pts = S.scoreCat('yatzy', state.diceValues, six);
+    const big = six && open('yatzy6') ? S.scoreCat('yatzy6', diceValues, six) : 0;
+    const pts = open('yatzy') ? S.scoreCat('yatzy', diceValues, six) : 0;
     if (big >= 100) { UI.showBanner('SUUR-YATZY!'); UI.sndYatzy(); UI.burst(260, true); D3.shakeCamera(18); }
     else if (pts >= 50) { UI.showBanner('YATZY!'); UI.sndYatzy(); UI.burst(200, true); D3.shakeCamera(14); }
   }

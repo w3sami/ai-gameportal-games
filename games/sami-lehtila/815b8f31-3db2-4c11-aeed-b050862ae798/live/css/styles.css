@@ -75,6 +75,12 @@
   .qp.blink{animation:qpBlink 1s ease-in-out infinite}
   @keyframes qpBlink{50%{box-shadow:0 0 16px rgba(255,214,107,.95);border-color:var(--gold-bright);background:rgba(224,169,61,.35)}}
   @media (prefers-reduced-motion: reduce){.qp.blink{animation:none;border-color:var(--gold-bright)}}
+  /* muiden vuorolla: näkyy, mutta ei valittavissa */
+  .qp.watch{cursor:default;opacity:.7;border-style:dashed;color:var(--gold);background:rgba(20,15,9,.6)}
+  .qp.watch:active{background:rgba(20,15,9,.6);color:var(--gold)}
+  /* valittu pallura (merkintä): syttyy ja häipyy */
+  .qp.chosen{pointer-events:none;animation:qpChosen 1.25s ease-out forwards}
+  @keyframes qpChosen{0%{transform:scale(1)}20%{transform:scale(1.18);background:var(--gold-bright);color:#241a08;box-shadow:0 0 22px rgba(255,214,107,.95)}60%{opacity:1;background:var(--gold);color:#241a08}100%{opacity:0;transform:scale(1.05) translateY(-14px)}}
   #shakePrompt{
     position:absolute;inset:0;display:none;flex-direction:column;gap:10px;
     align-items:center;justify-content:center;cursor:pointer;
@@ -209,6 +215,8 @@
   .devTag{font-size:.82em;font-weight:700;margin-left:3px}
   .devTag.pos{color:var(--ok)}
   .devTag.neg{color:#d98b7f}
+  /* viimeisin merkintä (kenen tahansa) */
+  td.lastMark,.ug.lastMark{box-shadow:inset 0 0 0 2px var(--gold-bright)}
   tr.totalRow td{font-weight:800;color:var(--gold-bright);font-size:1rem;background:rgba(224,169,61,.07)}
   td.justScored{animation:cellFlash 1s ease-out}
   @keyframes cellFlash{0%{background:rgba(255,214,107,.7);color:#241a08}100%{background:transparent}}

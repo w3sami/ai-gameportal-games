@@ -397,6 +397,66 @@
   });
 
   function renderRoom(state) {
+    /* Toisen laitteen uusi merkintä: valitun palluran paikka otetaan talteen
+       ennen kuin piirto vaihtaa pallurat, ja animaatio ajetaan piirron jälkeen. */
+    const otherMark = newMarkByOther(lastRenderedState, state);
+    const anchor = otherMark ? markAnchor(otherMark.mark) : null;
+    renderRoomNow(state);
+    if (otherMark) animateMark(state, otherMark, anchor);
+  }
+
+  /* Uusi merkintä, jonka teki joku muu kuin tämä laite: rivi oli edellisessä
+     tilassa tyhjä ja on nyt merkitty. Peruminen tyhjentää rivin, joten se ei
+     animoi; oma merkintä animoituu jo klikatessa (onPick). */
+  function newMarkByOther(prev, state) {
+    const m = state.lastMark;
+    if (!prev || !m || prev.id !== state.id || state.status === 'open') return null;
+    const seat = state.players.find((p) => p.seatId === m.seatId);
+    const before = prev.players.find((p) => p.seatId === m.seatId);
+    if (!seat || !before || seat.userId === me.id) return null;
+    if (!before.scs[m.col] || before.scs[m.col][m.categoryId] !== undefined) return null;
+    if (!seat.scs[m.col] || seat.scs[m.col][m.categoryId] === undefined) return null;
+    const bankAdded = state.variant.bank ? Math.max(0, (seat.bank || 0) - (before.bank || 0)) : 0;
+    return { mark: m, bankAdded };
+  }
+
+  function markAnchor(m) {
+    const qp = document.querySelector(`#quickPicks .qp[data-cat="${m.categoryId}"][data-col="${m.col}"]`);
+    return qp && qp.offsetParent ? { rect: qp.getBoundingClientRect(), html: qp.innerHTML } : null;
+  }
+
+  /* Merkinnän animaatio muille: sama valittu pallura korostuu ja pisteet
+     ponnahtavat sen kohdalta. Ilman palluraa (rivi ei ollut pikavalinta)
+     animaatio lähtee pistelistan solusta, ja jos sarake on piilossa,
+     pikavalintojen kohdalta. */
+  function animateMark(state, { mark, bankAdded }, anchor) {
+    let rect = anchor && anchor.rect;
+    if (anchor) chosenPick(anchor.html, rect);
+    if (!rect) {
+      const cell = document.querySelector('#mpScoreTable .lastMark');
+      if (cell && cell.offsetParent) {
+        cell.classList.add('justScored');
+        rect = cell.getBoundingClientRect();
+      }
+    }
+    if (!rect) {
+      const area = document.getElementById('quickPicks').parentElement.getBoundingClientRect();
+      rect = { left: area.left + area.width / 2 - 20, top: area.bottom - 60, width: 40, height: 30 };
+    }
+    celebrateAt(rect, mark.categoryId, mark.pts, bankAdded);
+  }
+
+  /* Valittu pallura: kopio vanhan paikan päälle, joka syttyy ja häipyy. */
+  function chosenPick(html, rect) {
+    const el = document.createElement('div');
+    el.className = 'qp chosen';
+    el.innerHTML = html;
+    Object.assign(el.style, { position: 'fixed', left: rect.left + 'px', top: rect.top + 'px', margin: '0', zIndex: 40 });
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1300);
+  }
+
+  function renderRoomNow(state) {
     roomStatus = state.status;
     lastState0 = state;
     renderPeopleList(state);
@@ -486,11 +546,18 @@
      palvelimen kaiku (room:state) päivittää taulukon joka tapauksessa
      auktoritatiivisesti heti perään. */
   function celebrateScore(state, categoryId, el) {
-    const S = window.Scoring, UI = window.UI, D3 = window.Dice3D;
-    if (!UI || !el) return;
-    const pts = S.scoreCat(categoryId, state.diceValues, state.variant.sixDice);
+    if (!el) return;
+    const pts = window.Scoring.scoreCat(categoryId, state.diceValues, state.variant.sixDice);
     const bankAdded = state.variant.bank ? Math.max(0, window.RoomRules.maxRollsFor(state.variant) - state.rollsUsed) : 0;
     const r = el.getBoundingClientRect();
+    if (el.classList.contains('qp')) chosenPick(el.innerHTML, r);
+    celebrateAt(r, categoryId, pts, bankAdded);
+  }
+
+  /* Merkinnän ponnahdus, äänet ja konfetti kohdassa r (merkitsijälle ja muille sama). */
+  function celebrateAt(r, categoryId, pts, bankAdded) {
+    const UI = window.UI, D3 = window.Dice3D;
+    if (!UI) return;
     if (bankAdded > 0) UI.popScore('💰+' + bankAdded, r.left + r.width / 2, r.top - 34);
     if (pts <= 0) return;
     UI.popScore('+' + pts, r.left + r.width / 2, r.top);
