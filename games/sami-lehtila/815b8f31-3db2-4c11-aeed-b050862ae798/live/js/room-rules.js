@@ -183,7 +183,10 @@
      ole tämän rennon kaveripelin huolenaihe. Kaikki muu tarkistetaan: vuoro,
      heittoja jäljellä (tai pankki), ja että arvot ovat muodollisesti
      järkeviä, ettei rikkinäinen data kaada pisteytystä myöhemmin. */
-  function roll(room, userId, diceValues) {
+  /* lock: heittäjän kesken heiton lukitsemat nopat (pysähtyneet, ks.
+     dice3d.js:n lockResting). Ne vain lisäävät lukittuja, eivät vapauta,
+     ja vain kun vuorossa on vielä heitettävää; pikajatsissa ei lukita. */
+  function roll(room, userId, diceValues, lock) {
     if (room.status !== 'playing') throw new Error('Peli ei ole käynnissä.');
     requireTurn(room, userId);
     const diceCount = diceCountFor(room.variant);
@@ -200,6 +203,10 @@
     room.lastScore = null;
     if (useBank) currentPlayer(room).bank--;
     else room.rollsUsed++;
+    if (Array.isArray(lock) && !room.variant.quick &&
+        (room.rollsUsed < maxRollsFor(room.variant) || bankAvailable(room))) {
+      lock.slice(0, diceCount).forEach((h, i) => { if (h === true) room.held[i] = true; });
+    }
     return room.diceValues;
   }
 

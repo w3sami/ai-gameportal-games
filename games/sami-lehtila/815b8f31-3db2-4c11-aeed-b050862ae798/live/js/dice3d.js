@@ -150,14 +150,15 @@ window.Dice3D = (function () {
      (esim. myöhässä liittynyt/uudelleenyhdistynyt pelaaja, joka ei ollut
      paikalla heiton tapahtuessa) — silloin näytetään suoraan lopputulos
      ilman että kukaan yrittää arvata miltä tuntematon tumppaus näytti. */
-  function forceFaceUp(d, value) {
+  /* spin: satunnainen kierto pystyakselin ympäri, ettei jokainen heitto näytä
+     identtiseltä. Lukittu noppa asetetaan ilman sitä, suoraan reunojen
+     suuntaan, kuten snapUpright lukitessa. */
+  function forceFaceUp(d, value, spin = true) {
     const target = FACE_AXES.find(([,v])=>v===value)[0];
     const from = target.clone();
     const to = new THREE.Vector3(0,1,0);
     const q = new THREE.Quaternion().setFromUnitVectors(from, to);
-    /* pieni satunnainen kierto pystyakselin ympäri, ettei jokainen heitto näytä identtiseltä */
-    const spin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), Math.random()*Math.PI*2);
-    q.premultiply(spin);
+    if (spin) q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), Math.random()*Math.PI*2));
     d.body.quaternion.set(q.x,q.y,q.z,q.w);
     d.body.position.y = HALF;
     d.body.velocity.setZero(); d.body.angularVelocity.setZero();
@@ -367,7 +368,7 @@ window.Dice3D = (function () {
       b.mass = d.held ? 0 : 1;
       b.updateMassProperties();
       const v = values && values[i];
-      if (v) { forceFaceUp(d, v); d.value = v; } else { d.value = 0; }
+      if (v) { forceFaceUp(d, v, !d.held); d.value = v; } else { d.value = 0; }
       d.mesh.position.copy(b.position);
       d.mesh.quaternion.copy(b.quaternion);
       d.ring.visible = d.held;
@@ -474,6 +475,25 @@ window.Dice3D = (function () {
     return dice.findIndex(d=>d.mesh===hit.object);
   }
 
+  /* Kesken OMAN heiton (oma fysiikka, ei toisto): napautettu noppa, joka on
+     jo pysähtynyt suoraan pöytään, lukittuu heti. Lukittu noppa on staattinen,
+     joten muiden noppien korjaustönäisyt eivät kaada sitä. Palauttaa nopan
+     indeksin tai -1. */
+  function lockResting(clientX, clientY) {
+    if (!rolling || playback || charging) return -1;
+    const i = hitTestDie(clientX, clientY);
+    const d = dice[i];
+    if (!d || d.held) return -1;
+    const b = d.body;
+    if (b.velocity.length() > .12 || b.angularVelocity.length() > .15) return -1;
+    if (b.position.y > HALF + 0.06 || topFace(d.mesh).dot < .98) return -1;
+    toggleHeld(i);
+    d.value = topFace(d.mesh).val;
+    return i;
+  }
+  /* Lukitut nopat (aktiiviset), heiton tuloksen mukana palvelimelle. */
+  function heldMask() { return activeDice().map(d => !!d.held); }
+
   function nudgeAt(clientX, clientY) {
     if(!cfg.nudge || !nudgeAvailable) return false;
     nudgeAvailable=false;
@@ -547,7 +567,8 @@ window.Dice3D = (function () {
     nudgeAvailable = cfg.nudge;
     const P=Number.isFinite(power)?Math.min(Math.max(power,1),MAX_THROW_POWER):1;
     if(cfg.parkHeld){
-      const held=activeDice().filter(d=>d.held);
+      /* lukitut alareunaan suuruusjärjestyksessä vasemmalta oikealle */
+      const held=activeDice().filter(d=>d.held).sort((a,b)=>a.value-b.value);
       held.forEach((d,i)=>{
         const x=-(held.length-1)*.75+i*1.5;
         d.parkTarget={x, y:HALF, z:TRAY_D/2-.85};
@@ -571,11 +592,15 @@ window.Dice3D = (function () {
     if (record) beginRecording(); else recording = false;
   }
 
-  function startCharge() {
+  /* record: nauhoitus alkaa jo latauksesta, jotta muut näkevät noppien
+     nousun käteen ja pyörityksen; releaseCharge jatkaa samaa nauhoitusta. */
+  function startCharge(record) {
     if(charging || rolling) return;
     charging=true; chargeT=0;
+    if (record) beginRecording();
     if(cfg.parkHeld){
-      const held=activeDice().filter(d=>d.held);
+      /* lukitut alareunaan suuruusjärjestyksessä vasemmalta oikealle */
+      const held=activeDice().filter(d=>d.held).sort((a,b)=>a.value-b.value);
       held.forEach((d,i)=>{
         const x=-(held.length-1)*.75+i*1.5;
         d.parkTarget={x, y:HALF, z:TRAY_D/2-.85};
@@ -614,7 +639,8 @@ window.Dice3D = (function () {
       randSpin(b,P);
     });
     settleFrames=0; rollStart=performance.now(); nudges=0;
-    if (record) beginRecording(); else recording = false;
+    if (!record) recording = false;
+    else if (!recording) beginRecording();
   }
 
   function cancelCharge() {
@@ -936,7 +962,7 @@ window.Dice3D = (function () {
     getHeld, setHeld, toggleHeld, hitTestDie, nudgeAt, isNudgeAvailable,
     getValues, isRolling, isSettled, isCharging, onSettle, restoreDisplay, resumeFrom, onRecordTick,
     throwDice, startCharge, releaseCharge, cancelCharge,
-    playTrajectory, streamFrames, isStreaming, onStreamStall, setPhysicsActive,
+    playTrajectory, streamFrames, isStreaming, onStreamStall, setPhysicsActive, lockResting, heldMask,
     shakeCamera, resize,
   };
 })();
