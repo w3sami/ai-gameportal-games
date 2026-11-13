@@ -81,12 +81,13 @@
         "#@...o...o...#",
         "#..o.ovoooo..#",
         "#..ooooooo.o.#",
-        "#..oooo+oooo.#",
-        "#..xoo.ooooo.#",
+        "#..oooo+o.oo.#",
+        "#..xoo.ooo.o.#",
         "#...oo+o+ooo.#",
         "#..oooo.+ooo.#",
         "##############"
-      ]
+      ],
+      "edited": true
     },
     {
       "key": "v1001",
