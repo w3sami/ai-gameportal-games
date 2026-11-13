@@ -87,6 +87,16 @@ $('restart').addEventListener('click', (e) => { game.restart(); e.currentTarget.
 
 window.rykelma = { T, LEVELS, load, game: null };
 let now = 0, last = performance.now(), menuRepeat = 0;
+let board = null;   // where the board was last drawn: { S, ox, oy }
+
+// the cell under the mouse as row,column counted from the top left wall (0,0),
+// so a level can be talked about cell by cell
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || !board || !view) return;
+  const x = Math.floor((e.clientX - board.ox) / board.S), y = Math.floor((e.clientY - board.oy) / board.S);
+  $('coord').textContent = x >= 0 && y >= 0 && x < view.w && y < view.h ? `${y},${x}` : '';
+});
+canvas.addEventListener('pointerleave', () => { $('coord').textContent = ''; });
 load((parseInt(new URLSearchParams(location.search).get('level'), 10) || 1) - 1);
 
 function frame(t) {
@@ -116,7 +126,7 @@ function frame(t) {
   }
 
   view = game.view();
-  renderer.draw(view, now, dt);
+  board = renderer.draw(view, now, dt);
   $('gems').textContent = view.gems;
   $('steps').textContent = view.steps;
   if (msgUntil && now > msgUntil) { $('msg').hidden = true; msgUntil = 0; }
