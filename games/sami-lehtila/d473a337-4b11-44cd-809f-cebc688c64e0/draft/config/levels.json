@@ -1,0 +1,75 @@
+{
+  "levels": [
+    {
+      "key": "kolme",
+      "name": "Kolme jaksaa",
+      "hint": "Kerää vihreät. Kolme laatikkoa jaksat työntää, neljää et.",
+      "rows": [
+        "###########",
+        "#@...#....#",
+        "#...oooo..#",
+        "#....#..+.#",
+        "###########"
+      ]
+    },
+    {
+      "key": "jumi",
+      "name": "Jumissa",
+      "hint": "Oranssi kide liukuu kun sitä työntää. Kun se ei enää liiku, se irtoaa.",
+      "rows": [
+        "#########",
+        "#@.*....#",
+        "#.#######",
+        "#.*ooo..#",
+        "#########"
+      ]
+    },
+    {
+      "key": "kosketa",
+      "name": "Kosketus",
+      "hint": "Vihreän saa koskettamalla, mutta laatikko työntää sitä mukanaan.",
+      "rows": [
+        "#########",
+        "#@......#",
+        "#.......#",
+        "#..ooo..#",
+        "#..o+o..#",
+        "#..ooo..#",
+        "#.......#",
+        "#########"
+      ]
+    },
+    {
+      "key": "ahdas",
+      "name": "Ahdas",
+      "rows": [
+        "########",
+        "#..*o..#",
+        "#.+#+o.#",
+        "#.#.#.x#",
+        "#oooo.##",
+        "#....@.#",
+        "########"
+      ]
+    },
+    {
+      "key": "vahti",
+      "name": "Vahti",
+      "hint": "Hidas työntö vie aikaa. Odota että vahti on ohi.",
+      "rows": [
+        "#############",
+        "#@.........+#",
+        "#...........#",
+        "#...........#",
+        "###.####.####",
+        "#e..........#",
+        "###o####.####",
+        "#..o...#....#",
+        "#..o.+.#..+.#",
+        "#......#.*..#",
+        "#......#....#",
+        "#############"
+      ]
+    }
+  ]
+}
