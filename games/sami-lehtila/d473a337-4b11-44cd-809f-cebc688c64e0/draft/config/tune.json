@@ -1,0 +1,14 @@
+{
+  "walk": 0.13,
+  "push": [
+    0.16,
+    0.42,
+    0.9
+  ],
+  "collect": 0.13,
+  "bump": 0.1,
+  "enemyStep": 0.3,
+  "touch": 0.62,
+  "deadPause": 1.1,
+  "winPause": 1.4
+}
