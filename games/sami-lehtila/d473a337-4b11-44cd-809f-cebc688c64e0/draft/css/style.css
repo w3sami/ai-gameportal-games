@@ -4,6 +4,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1d1a26; fon
 
 #bar { position: fixed; left: 16px; right: 16px; top: 12px; display: flex; align-items: center; gap: 18px; font-size: 17px; font-weight: 700; pointer-events: none; text-shadow: 0 1px 3px #000; }
 #name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#coord { font: 600 14px/1 ui-monospace, monospace; opacity: .7; }
 .stat { display: inline-flex; align-items: center; gap: 6px; font: 700 16px/1 ui-monospace, monospace; }
 .stat i { display: inline-block; width: 14px; height: 14px; }
 .gem { background: #5ce08a; border-radius: 50%; box-shadow: 0 0 6px #5ce08a; }
