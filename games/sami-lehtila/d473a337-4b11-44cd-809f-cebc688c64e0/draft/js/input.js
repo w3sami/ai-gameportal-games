@@ -21,6 +21,8 @@ export function createInput(canvas) {
       { id: 'down', label: L('Alas', 'Down'), type: 'digital', keys: ['ArrowDown', 'KeyS'], pad: ['LS-Down', 'Down'] },
       { id: 'ok', label: L('Valitse', 'Select'), type: 'digital', keys: ['Space', 'Enter'], pad: ['A'] },
       { id: 'reset', label: L('Alusta', 'Restart'), type: 'digital', keys: ['KeyR'], pad: ['Back', 'X'] },
+      { id: 'next', label: L('Seuraava kenttä', 'Next level'), type: 'digital', keys: ['KeyN'], pad: ['RB'] },
+      { id: 'prev', label: L('Edellinen kenttä', 'Previous level'), type: 'digital', keys: ['KeyP'], pad: ['LB'] },
       { id: 'controls', label: L('Ohjainasetukset', 'Controls'), type: 'digital', keys: ['KeyC'], pad: ['Y'] },
       { id: 'menu', label: L('Kentät', 'Levels'), type: 'digital', keys: ['KeyM', 'Escape'], pad: ['Start'] },
     ],

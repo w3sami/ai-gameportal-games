@@ -109,6 +109,8 @@ function frame(t) {
     if (input.pressed('ok')) { load(menuPick); openMenu(false); }
   } else {
     if (input.pressed('reset')) game.restart();
+    if (input.pressed('next')) load(index + 1);
+    if (input.pressed('prev')) load(index - 1);
     game.update(dt, input.isOpen() ? null : input.dir());
     if (game.state === 'won' && game.view().timer >= T.winPause) load(index + 1);
   }
