@@ -1,7 +1,8 @@
 {
   "title": "Rykelmä",
-  "tags": [
-    "puzzle"
-  ],
-  "description": "Laatikoiden työntöpulma: kolme jaksaa, neljä ei."
+  "tags": ["puzzle"],
+  "description": {
+    "fi": "Laatikoiden työntöpulma: kolmen rivin jaksaa työntää, neljän ei. Kerää kivet laatikkorykelmien keskeltä.",
+    "en": "A box-pushing puzzle: a row of three moves, a row of four does not. Collect the gems from inside the box clusters."
+  }
 }
