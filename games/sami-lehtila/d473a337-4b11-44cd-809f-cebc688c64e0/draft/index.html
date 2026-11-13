@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rykelmä</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="bar">
+  <span id="name"></span>
+  <span class="stat" title="Kiviä jäljellä"><i class="gem"></i><b id="gems">0</b></span>
+  <span class="stat" title="Askeleet"><i class="foot"></i><b id="steps">0</b></span>
+</div>
+<div id="hint">Nuolet: liiku ja työnnä · enintään kolme kerralla · R alusta · M kentät · C ohjaimet</div>
+<div id="msg" hidden></div>
+<button id="restart" title="Alusta (R)" aria-label="Alusta"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg></button>
+<button id="menu" title="Kentät (M)" aria-label="Kentät"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 6h14M5 12h14M5 18h14"/></svg></button>
+<div id="levels" hidden>
+  <div class="box">
+    <h2>Kentät</h2>
+    <ol></ol>
+    <p>Nuolet: valitse · välilyönti: aloita · M: sulje</p>
+    <button class="close">Sulje</button>
+  </div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
