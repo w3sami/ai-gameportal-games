@@ -190,6 +190,9 @@ window.JatsiPortal = (function () {
   /* Rivin tagit suodatusta varten: kentän tagit ja rivin omat vivut. */
   function matches(row) {
     const v = (row.entry.data && row.entry.data.v) || {};
+    /* Heittopankki nostaa pisteitä, joten sen rivit eivät ole vertailukelpoisia
+       muiden kanssa: ne näkyvät vain, kun heittopankki on valittuna. */
+    if (v.pankki && !sel.has('heittopankki')) return false;
     const t = row.src.tags.concat(v.pankki ? ['heittopankki'] : [], v.ravistus ? ['ravistus'] : [], modeOf(row.entry.data) || []);
     return [...sel].every((f) => t.includes(f));
   }
