@@ -1,0 +1,178 @@
+"use strict";
+/* ============================================================
+   scoring.js — Yatzy-pisteytys (pohjoismainen)
+   Puhdas moduuli: ei DOM-riippuvuuksia, ei fysiikkaa.
+   Käytössä sekä selaimessa (globaali <script>) että
+   palvelimella (require()) — palvelin laskee pisteet itse
+   eikä luota asiakkaan lähettämiin lukuihin.
+   ============================================================ */
+(function (root) {
+
+  /* ---------- Kategoriat ---------- */
+  const UPPER = [
+    {id:'ones',   name:'Ykköset',  n:1},
+    {id:'twos',   name:'Kakkoset', n:2},
+    {id:'threes', name:'Kolmoset', n:3},
+    {id:'fours',  name:'Neloset',  n:4},
+    {id:'fives',  name:'Viitoset', n:5},
+    {id:'sixes',  name:'Kuutoset', n:6},
+  ];
+  const LOWER = [
+    {id:'pair',     name:'Pari'},
+    {id:'twopairs', name:'Kaksi paria'},
+    {id:'three',    name:'Kolme samaa'},
+    {id:'four',     name:'Neljä samaa'},
+    {id:'small',    name:'Pieni suora'},
+    {id:'large',    name:'Suuri suora'},
+    {id:'full',     name:'Täyskäsi'},
+    {id:'chance',   name:'Sattuma'},
+    {id:'yatzy',    name:'YATZY'},
+  ];
+  /* 6 nopan variantin voittoluokat */
+  const LOWER6 = [
+    {id:'pair',       name:'Pari'},
+    {id:'twopairs',   name:'Kaksi paria'},
+    {id:'threepairs', name:'3× pari'},
+    {id:'three',      name:'Kolme samaa'},
+    {id:'twotriples', name:'2× kolme samaa'},
+    {id:'four',       name:'Neljä samaa'},
+    {id:'small',      name:'Pieni suora'},
+    {id:'large',      name:'Suuri suora'},
+    {id:'straight6',  name:'Täyssuora 1–6'},
+    {id:'full',       name:'Täyskäsi'},
+    {id:'bighouse',   name:'Iso mökki (4+2)'},
+    {id:'chance',     name:'Sattuma'},
+    {id:'yatzy',      name:'YATZY (5)'},
+    {id:'yatzy6',     name:'SUUR-YATZY (6)'},
+  ];
+
+  /* moduulin sisäinen tila: kumpi variantti on voimassa OLETUKSENA.
+     Parametriton kutsu nojaa tähän jaettuun tilaan (setSixMode/getSixMode).
+     Huoneen säännöt (room-rules.js) sen sijaan välittää `six`-parametrin EKSPLISIITTISESTI
+     joka kutsussa, koska sama Node-prosessi ajaa useita huoneita YHTÄAIKAA,
+     joilla voi olla eri variantti — jaettuun moduulitilaan ei silloin voi
+     luottaa (se aiheuttaisi huoneiden välistä sääntövuotoa). `six ?? sixMode`
+     tekee tästä taaksepäin yhteensopivan: parametri voitettaessa jaettu tila. */
+  let sixMode = false;
+  function setSixMode(v) { sixMode = !!v; }
+  function getSixMode() { return sixMode; }
+
+  const lowerCats = (six) => (six ?? sixMode) ? LOWER6 : LOWER;
+  const allCats   = (six) => [...UPPER, ...lowerCats(six)];
+  const upperBase = (six) => (six ?? sixMode) ? 4 : 3;   /* 0-pohjaisen pari: montako samaa = 0 */
+  const bonusLimit= (six) => (six ?? sixMode) ? 84 : 63; /* 4×(1+…+6)=84 */
+
+  /* PIKAJATSI: vuorolla heitetään kerran QUICK_DICE noppaa, ja rivi lasketaan
+     niistä parhaalla pickCount(six) nopan valinnalla (5, tai 6 nopan säännöillä
+     6). Valinta tehdään automaattisesti rivikohtaisesti — sama heitto voi siis
+     antaa Suureen suoraan eri nopat kuin Kuutosiin. */
+  const QUICK_DICE = 10;
+  const pickCount = (six) => (six ?? sixMode) ? 6 : 5;
+
+  function counts(d) { const c = [0,0,0,0,0,0,0]; d.forEach(v=>c[v]++); return c; }
+
+  /* Tavallisen pelin 5 tai 6 noppaa lasketaan sellaisenaan. Vain kun noppia
+     on enemmän kuin 6 (pikajatsi), käydään läpi valinnat — tämä raja eikä
+     pickCount, koska vanhat kutsujat eivät välitä `six`-lippua ja 6 nopan
+     tavallisessa pelissä parametriton kutsu valitsisi muuten 5 parasta. */
+  function scoreCat(id, dice, six) {
+    if (dice.length <= 6) return scoreDice(id, dice);
+    return bestPick(id, dice, pickCount(six));
+  }
+
+  /* Paras k nopan valinta. Käydään läpi silmälukujakaumat (montako kutakin
+     silmälukua otetaan), ei indeksiosajoukkoja: 10 nopasta jakaumia on
+     muutama sata, ja tulos riippuu vain jakaumasta. Muistetaan, koska
+     taulukko kysyy samaa heittoa jokaiselle riville ja sarakkeelle. */
+  const bestCache = new Map();
+  function bestPick(id, dice, k) {
+    const c = counts(dice);
+    const key = id + ':' + k + ':' + c.join('');
+    const hit = bestCache.get(key);
+    if (hit !== undefined) return hit;
+    const left = [0,0,0,0,0,0,0,0]; /* left[v] = silmälukujen v…6 noppia yhteensä */
+    for (let v = 6; v >= 1; v--) left[v] = left[v + 1] + c[v];
+    const pick = [];
+    let best = 0;
+    (function rec(v, need) {
+      if (need === 0) { const s = scoreDice(id, pick); if (s > best) best = s; return; }
+      if (v > 6 || left[v] < need) return;
+      for (let n = Math.min(c[v], need); n >= 0; n--) {
+        for (let i = 0; i < n; i++) pick.push(v);
+        rec(v + 1, need - n);
+        pick.length -= n;
+      }
+    })(1, k);
+    if (bestCache.size > 5000) bestCache.clear();
+    bestCache.set(key, best);
+    return best;
+  }
+
+  function scoreDice(id, dice) {
+    const c = counts(dice), sum = dice.reduce((a,b)=>a+b,0);
+    const up = UPPER.find(u=>u.id===id);
+    if (up) return c[up.n]*up.n;
+    switch(id){
+      case 'pair': for(let v=6;v>=1;v--) if(c[v]>=2) return v*2; return 0;
+      case 'twopairs': {
+        const pairs=[]; for(let v=6;v>=1;v--) if(c[v]>=2) pairs.push(v);
+        return pairs.length>=2 ? pairs[0]*2+pairs[1]*2 : 0;
+      }
+      case 'three': for(let v=6;v>=1;v--) if(c[v]>=3) return v*3; return 0;
+      case 'four':  for(let v=6;v>=1;v--) if(c[v]>=4) return v*4; return 0;
+      case 'small': return [1,2,3,4,5].every(v=>c[v]>=1) ? 15 : 0;
+      case 'large': return [2,3,4,5,6].every(v=>c[v]>=1) ? 20 : 0;
+      case 'full': {
+        let t=0,p=0;
+        for(let v=6;v>=1;v--){ if(c[v]>=3 && !t) t=v; }
+        for(let v=6;v>=1;v--){ if(v!==t && c[v]>=2) p=v; }
+        return (t&&p) ? t*3+p*2 : 0;
+      }
+      case 'chance': return sum;
+      case 'yatzy': for(let v=1;v<=6;v++) if(c[v]>=5) return 50; return 0;
+      case 'yatzy6': for(let v=1;v<=6;v++) if(c[v]===6) return 100; return 0;
+      case 'straight6': return [1,2,3,4,5,6].every(v=>c[v]>=1) ? 21 : 0;
+      /* Ryhmät ovat aina eri silmälukuja: neljä tai kuusi samaa ei ole kaksi
+         tai kolme paria, eikä kuusi samaa ole 2× kolme samaa tai iso mökki.
+         Samat nopat käyvät vain "N samaa" -luokkiin ja Yatzyyn. */
+      case 'threepairs': {
+        const pr=[]; for(let v=6;v>=1;v--) if(c[v]>=2) pr.push(v);
+        return pr.length>=3 ? (pr[0]+pr[1]+pr[2])*2 : 0;
+      }
+      case 'twotriples': {
+        const tr=[]; for(let v=6;v>=1;v--) if(c[v]>=3) tr.push(v);
+        return tr.length>=2 ? (tr[0]+tr[1])*3 : 0;
+      }
+      case 'bighouse': {
+        for(let f=6;f>=1;f--){
+          if(c[f]>=4) for(let p=6;p>=1;p--) if(p!==f && c[p]>=2) return f*4+p*2;
+        }
+        return 0;
+      }
+    }
+    return 0;
+  }
+
+  const upperSum = sc => UPPER.reduce((a,u)=>a+(sc[u.id]??0),0);
+  /* 6 nopalla yläkerran raja on 84 (4 × 1…6), ja bonus on sen mukaisesti
+     100 — 50 olisi suhteessa pienempi palkinto kovemmasta tavoitteesta. */
+  const bonusValue= (six) => (six ?? sixMode) ? 100 : 50;
+  const bonusOf  = (sc, six) => upperSum(sc)>=bonusLimit(six) ? bonusValue(six) : 0;
+  const totalOf  = (sc, six) => allCats(six).reduce((a,k)=>a+(sc[k.id]??0),0) + bonusOf(sc, six);
+  const scFull   = (sc, six) => allCats(six).every(c=>sc[c.id]!==undefined);
+  const playerTotal = (p, six) => p.scs.reduce((a,s)=>a+totalOf(s, six),0);
+
+  const api = {
+    UPPER, LOWER, LOWER6, QUICK_DICE,
+    setSixMode, getSixMode,
+    lowerCats, allCats, upperBase, bonusLimit, bonusValue, pickCount,
+    counts, scoreCat, upperSum, bonusOf, totalOf, scFull, playerTotal,
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api; /* Node (server) */
+  } else {
+    root.Scoring = api;   /* selain (globaali) */
+  }
+
+})(typeof window !== 'undefined' ? window : globalThis);
