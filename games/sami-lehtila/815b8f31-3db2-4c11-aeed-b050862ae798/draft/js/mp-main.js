@@ -620,7 +620,7 @@
     if (pts <= 0) return;
     UI.popScore('+' + pts, r.left + r.width / 2, r.top);
     const eff = pts + bankAdded * 10;
-    if (categoryId === 'yatzy6' && pts === 100) { UI.showBanner('SUUR-YATZY! +100'); UI.sndYatzy(); UI.burst(Math.min(200 + eff, 320), true); D3.shakeCamera(18); }
+    if (categoryId === 'yatzy6' && pts === 100) { UI.showBanner('ISO YATZY! +100'); UI.sndYatzy(); UI.burst(Math.min(200 + eff, 320), true); D3.shakeCamera(18); }
     else if (categoryId === 'yatzy' && pts >= 50) { UI.showBanner('YATZY! +50'); UI.sndYatzy(); UI.burst(Math.min(140 + eff, 260), true); D3.shakeCamera(14); }
     else if (eff >= 20) { UI.sndBig(); UI.burst(Math.min(15 + eff, 110), false); }
     else UI.sndScore();
