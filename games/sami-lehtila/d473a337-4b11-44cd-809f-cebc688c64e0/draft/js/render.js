@@ -10,6 +10,7 @@ const C = {
   box: '#c98a4b', boxDark: '#8f5a2c', boxLight: '#e7b27a',
   lock: '#ff7a45', lockDark: '#b53d1a', lockLight: '#ffd0a8',
   touch: '#5ce08a', touchDark: '#1f8a4a', touchLight: '#d6ffe4',
+  anchor: '#5aa9ff', anchorDark: '#1d4f9e', anchorLight: '#d4e9ff',
   player: '#ffd84a', playerDark: '#c99a10',
   enemy: '#b35cff', enemyDark: '#6b23b0',
 };
@@ -155,6 +156,21 @@ export function createRenderer(canvas) {
       ctx.beginPath();
       ctx.moveTo(cx, cy - r * 0.8); ctx.lineTo(cx + r * 0.45, cy - r * 0.2); ctx.lineTo(cx, cy + r * 0.1); ctx.lineTo(cx - r * 0.45, cy - r * 0.2);
       ctx.closePath(); ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1;
+      return;
+    }
+    if (o.kind === 'anchor') {
+      // a blue crystal sunk in a heavy square socket: it never moves
+      const cx = px + S / 2, cy = py + S / 2, r = S * 0.3;
+      rr(px + m * 1.2, py + m * 1.2, S - 2.4 * m, S - 2.4 * m, S * 0.1);
+      ctx.fillStyle = C.anchorDark; ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 1.15); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r * 1.15); ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+      ctx.fillStyle = C.anchor; ctx.fill();
+      ctx.lineWidth = Math.max(1, S * 0.04); ctx.strokeStyle = C.anchorLight; ctx.stroke();
+      ctx.fillStyle = C.anchorLight; ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.moveTo(cx, cy - r * 1.15); ctx.lineTo(cx + r * 0.45, cy - r * 0.1); ctx.lineTo(cx - r * 0.2, cy - r * 0.1); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
       return;
     }
     if (o.kind === 'touch') {
