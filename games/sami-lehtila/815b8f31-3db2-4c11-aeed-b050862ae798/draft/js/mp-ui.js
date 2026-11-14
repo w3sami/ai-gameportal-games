@@ -505,7 +505,11 @@ window.MpUI = (function () {
         cands.push({ id: u.id, label: u.n + ': ' + val, pts, ci, ord: 10 + u.n, blinkExtra: d > 0 });
       });
     });
-    cands.sort((a, b) => a.ord - b.ord || a.ci - b.ci);
+    /* Järjestys: Yatzyt ensin, sitten yläkerta silmäluvun mukaan, ja muut
+       alakerran rivit suurimmasta pistemäärästä pienimpään (tasapisteissä
+       pöytäkirjan järjestys). */
+    const grp = (c) => (c.ord < 10 ? 0 : c.ord < 100 ? 1 : 2);
+    cands.sort((a, b) => grp(a) - grp(b) || (grp(a) === 2 ? b.pts - a.pts : 0) || a.ord - b.ord || a.ci - b.ci);
     if (!cands.length) { if (hintEl) hintEl.style.display = ''; return; }
     const FULLUSE = new Set(['small', 'large', 'straight6', 'full', 'bighouse', 'twotriples', 'threepairs', 'yatzy', 'yatzy6']);
     cands.forEach((c) => {
