@@ -48,6 +48,8 @@ function onEvent(type, e) {
     const c = renderer.colors;
     renderer.burst(e.at[0] + 0.5, e.at[1] + 0.5, c[e.kind] || c.touch);
   }
+  if (type === 'smash') renderer.burst(e.at[0] + 0.5, e.at[1] + 0.5, renderer.colors.box);
+  if (type === 'tool') say('Sait vasaran! Välilyönti tai A lyö edessä olevan laatikon rikki.', 3.5);
   if (type === 'won') {
     const key = LEVELS[index].key, prev = best[key];
     if (!prev || e.steps < prev) best[key] = e.steps;
@@ -119,6 +121,7 @@ function frame(t) {
     if (input.pressed('ok')) { load(menuPick); openMenu(false); }
   } else {
     if (input.pressed('reset')) game.restart();
+    if (input.pressed('ok')) game.hammer();
     if (input.pressed('next')) load(index + 1);
     if (input.pressed('prev')) load(index - 1);
     game.update(dt, input.isOpen() ? null : input.dir());
@@ -129,6 +132,10 @@ function frame(t) {
   board = renderer.draw(view, now, dt);
   $('gems').textContent = view.gems;
   $('steps').textContent = view.steps;
+  // hammers: shown once the level has any; in hand, and the count for the next
+  const hasTools = view.tools || view.next !== null || LEVELS[index].powers?.length;
+  $('toolStat').hidden = !hasTools;
+  if (hasTools) $('tools').textContent = view.tools + (view.next !== null ? ` · ${view.got}/${view.next}` : '');
   if (msgUntil && now > msgUntil) { $('msg').hidden = true; msgUntil = 0; }
   requestAnimationFrame(frame);
 }
