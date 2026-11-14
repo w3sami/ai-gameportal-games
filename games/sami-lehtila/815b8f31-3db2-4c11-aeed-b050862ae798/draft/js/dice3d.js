@@ -998,10 +998,12 @@ window.Dice3D = (function () {
     return Math.max(x / tanH, y / tanV, near) - along;
   }
 
-  /* Pöydän ulkoreunat (kehyksen kulmat pöydän ja kehyksen yläreunan tasolla). */
+  /* Pöydän sisälaidat (pelialueen kulmat pöydän ja kehyksen yläreunan tasolla).
+     Kehyksen ulkoreuna saa rajautua pois: kapealla ruudulla sen mahduttaminen
+     vei kameran turhan kauas ja pöytä jäi pieneksi. */
   const TRAY_CORNERS = [];
   [0, WALL_H].forEach(y => [-1, 1].forEach(sx => [-1, 1].forEach(sz =>
-    TRAY_CORNERS.push(new THREE.Vector3(sx * (TRAY_W / 2 + .5), y, sz * (TRAY_D / 2 + .5))))));
+    TRAY_CORNERS.push(new THREE.Vector3(sx * (TRAY_W / 2), y, sz * (TRAY_D / 2))))));
   function fitDistance() {
     return Math.max(CAM_DIST, ...TRAY_CORNERS.map(c => distanceFor(c, 0, 0)));
   }
@@ -1013,7 +1015,13 @@ window.Dice3D = (function () {
   const FOLLOW_MAX = 2, FOLLOW_RISE = 4, FOLLOW_FALL = .6;
   function followExtra(dt) {
     let need = 0;
-    activeDice().forEach(d => { need = Math.max(need, distanceFor(d.mesh.position, DIE_PAD, MIN_DIE_DIST) - baseDist); });
+    activeDice().forEach(d => {
+      /* Pelialueella laitojen korkeuden alapuolella oleva noppa näkyy jo
+         perusetäisyydeltä (fitDistance), joten se ei vedä kameraa kauemmas. */
+      const p = d.mesh.position;
+      if (Math.abs(p.x) <= TRAY_W / 2 && Math.abs(p.z) <= TRAY_D / 2 && p.y + HALF <= WALL_H) return;
+      need = Math.max(need, distanceFor(p, DIE_PAD, MIN_DIE_DIST) - baseDist);
+    });
     need = Math.min(need, baseDist * (FOLLOW_MAX - 1));
     followDist += (need - followDist) * Math.min(1, dt * (need > followDist ? FOLLOW_RISE : FOLLOW_FALL));
     if (followDist < .001) followDist = 0;
