@@ -177,6 +177,13 @@ window.MpGame = (function () {
   function maxRolls(state) {
     return state.maxRolls || (state.variant && state.variant.quick ? 1 : 3);
   }
+  const isFiveK = (state) => !!(state && state.variant && state.variant.fiveK);
+  /* Onko vuorossa heitettävää: heittoja jäljellä tai pankissa; 5000:ssa
+     ensimmäinen heitto tai kelvollinen sivuun siirto (state.fiveK.canRoll). */
+  function rollAllowed(state) {
+    if (isFiveK(state)) return state.rollsUsed === 0 || !!(state.fiveK && state.fiveK.canRoll);
+    return state.rollsUsed < maxRolls(state) || state.bankAvailable;
+  }
   function canRollNow() {
     if (!lastState || !isMyTurn(lastState) || pausedRoll) return false;
     /* Itsekorjaus: "heitto kesken" -lippu ilman liikkuvia noppia ja ilman
@@ -186,7 +193,14 @@ window.MpGame = (function () {
       myRollInFlight = false; rollCtx = null; sentAt = 0;
     }
     if (myRollInFlight || window.Dice3D.isRolling() || window.Dice3D.isCharging()) return false;
-    return lastState.rollsUsed < maxRolls(lastState) || lastState.bankAvailable;
+    return rollAllowed(lastState);
+  }
+  /* 5000: kun sivuun siirto käyttää kaikki nopat, seuraava heitto heittää
+     ne kaikki. Nopat vapautetaan ennen latausta, koska moottori heittää
+     vain vapaat nopat; palvelin vapauttaa samat heiton saapuessa. */
+  function prepareThrow() {
+    if (!isFiveK(lastState) || !lastState.fiveK || !lastState.fiveK.hot || lastState.rollsUsed === 0) return;
+    for (let i = 0; i < lastState.diceCount; i++) window.Dice3D.setHeld(i, false);
   }
 
   /* ---------- Heiton lähtötilanne ja sen vertailu huoneen tilaan ---------- */
@@ -237,6 +251,7 @@ window.MpGame = (function () {
     myRollInFlight = true;
     if (!rollCtx) rollCtx = ctxOf(lastState);
     if (!streamOpen) openStream();
+    prepareThrow();
     launch();
     updateHint();
     refreshControls();
@@ -279,6 +294,9 @@ window.MpGame = (function () {
       const mine = (lastState.spectators || []).find((s) => s.userId === me.id);
       hintEl.textContent = mine && mine.admitted ? 'Katsot peliä • pääset mukaan seuraavaan peliin'
         : 'Katsot peliä • isäntä voi päästää sinut seuraavaan peliin';
+      hintEl.classList.remove('nudge');
+    } else if (isFiveK(lastState)) {
+      hintEl.textContent = 'Napauta pisteitä tuottavat nopat sivuun • heitä loput tai vie potti pankkiin';
       hintEl.classList.remove('nudge');
     } else if (lastState && lastState.variant && lastState.variant.quick) {
       const pick = window.Scoring ? window.Scoring.pickCount(lastState.variant.sixDice) : 5;
@@ -499,6 +517,9 @@ window.MpGame = (function () {
     if (rollerId === me.id) {
       myRollInFlight = false;
       sentAt = 0;
+      /* 5000: heiton aikana saapunut tila jätti sivussa olevat nopat
+         moottorin tilaan (ks. handleRoomState); nyt ne palvelimen tilaan. */
+      if (isFiveK(lastState)) lastState.held.forEach((h, i) => window.Dice3D.setHeld(i, h));
       refreshControls();
     } else {
       if (id && id === playedRollId) return;
@@ -522,6 +543,7 @@ window.MpGame = (function () {
       try { rollBtn.setPointerCapture(ev.pointerId); } catch (e) { /* vanha selain */ }
       rollCtx = ctxOf(lastState);
       openStream();
+      prepareThrow();
       window.Dice3D.startCharge(true); // nauhoitus ja striimi alkavat jo latauksesta
       syncUndo();
     });
@@ -541,7 +563,7 @@ window.MpGame = (function () {
     rollBtn.addEventListener('click', () => {
       if (window.Dice3D.isRolling() || window.Dice3D.isCharging()) return;
       if (!lastState || !isMyTurn(lastState) || pausedRoll) return;
-      if (lastState.rollsUsed >= maxRolls(lastState) && !lastState.bankAvailable) return;
+      if (!rollAllowed(lastState)) return;
       if (lastState.variant.rollMode === 'shake' && !armed) { armShake(); return; }
     });
     const shakePrompt = document.getElementById('shakePrompt');
@@ -625,7 +647,7 @@ window.MpGame = (function () {
       if (window.Dice3D.isRolling()) {
         /* Oman heiton aikana pysähtyneen nopan napautus lukitsee sen heti
            (ei kaadu muiden tönäisyistä); lukitus lähtee heiton mukana. */
-        if (myRollInFlight && window.Dice3D.lockResting(ev.clientX, ev.clientY) >= 0) {
+        if (myRollInFlight && !isFiveK(lastState) && window.Dice3D.lockResting(ev.clientX, ev.clientY) >= 0) {
           if (window.UI) window.UI.sndHold();
           return;
         }
@@ -647,9 +669,11 @@ window.MpGame = (function () {
          muuten pankkiheitto heittäisi aina kaikki nopat. Sama ehto kuin
          sääntöjen hold():ssa (js/room-rules.js). Pikajatsissa ei lukita. */
       if (!isMyTurn(state) || state.variant.quick || state.rollsUsed === 0 ||
-          (state.rollsUsed >= maxRolls(state) && !state.bankAvailable)) return;
+          (!isFiveK(state) && state.rollsUsed >= maxRolls(state) && !state.bankAvailable)) return;
       const i = window.Dice3D.hitTestDie(ev.clientX, ev.clientY);
       if (i < 0) return;
+      /* 5000: aiemmalla heitolla sivuun siirretty noppa pysyy sivussa. */
+      if (isFiveK(state) && state.fiveK && state.fiveK.locked[i]) return;
       socket.emit('game:hold', { roomId: currentRoomId, index: i }, (res) => { if (!res.ok) err(res.error); });
       if (window.UI) window.UI.sndHold();
     });
@@ -677,7 +701,10 @@ window.MpGame = (function () {
       const cur = state.players[state.current];
       if (cur) window.Dice3D.applyColor(cur.color);
       if (lost) suspendMyRoll(keep, state.diceValues, state.held);
-      state.held.forEach((h, i) => window.Dice3D.setHeld(i, h));
+      /* 5000: oman latauksen ja heiton aikana nopat ovat moottorin tilassa
+         (prepareThrow vapautti ne), ei palvelimen edellisessä. */
+      const midThrow = isFiveK(state) && !lost && (myRollInFlight || window.Dice3D.isCharging());
+      if (!midThrow) state.held.forEach((h, i) => window.Dice3D.setHeld(i, h));
       /* Fysiikka (world.step) ajetaan VAIN vuorossa olevalla pelaajalla —
          muut ovat aina puhtaassa toistotilassa (ks. dice3d.js:n
          setPhysicsActive-kommentti). Pitää simuloinnin ja toiston
@@ -708,7 +735,7 @@ window.MpGame = (function () {
   function maybeCelebrate(state, diceValues) {
     const S = window.Scoring, UI = window.UI, D3 = window.Dice3D;
     const roller = state.players && state.players[state.current];
-    if (!roller) return;
+    if (!roller || isFiveK(state)) return;
     const open = (id) => roller.scs.some((sc) => sc[id] === undefined);
     const six = state.variant.sixDice;
     const big = six && open('yatzy6') ? S.scoreCat('yatzy6', diceValues, six) : 0;
@@ -787,13 +814,17 @@ window.MpGame = (function () {
   function deleteRoom(roomId, cb) {
     socket.emit('room:delete', { roomId: roomId || currentRoomId }, (res) => cb && cb(res));
   }
+  /* 5000: vuoron potti omaan summaan. */
+  function bank(cb) {
+    socket.emit('game:bank', { roomId: currentRoomId }, (res) => cb && cb(res));
+  }
   function scoreCategory(categoryId, col, cb) {
     socket.emit('game:score', { roomId: currentRoomId, categoryId, col }, (res) => cb && cb(res));
   }
 
   return {
     connect, disconnect, onLobby, onRoomState, onRoomError, onRejoin, onDeleted, onBlocked, onNotice,
-    createRoom, joinRoom, watchRoom, admin, guest, setSeatColor, reorder, leaveRoom, localCreate, localResume, undo, startGame, rematch, deleteRoom, scoreCategory,
+    createRoom, joinRoom, watchRoom, admin, guest, setSeatColor, reorder, leaveRoom, localCreate, localResume, undo, startGame, rematch, deleteRoom, scoreCategory, bank,
     canUndo,
     getMe: () => me, getRoomId: () => currentRoomId, maxRolls,
   };

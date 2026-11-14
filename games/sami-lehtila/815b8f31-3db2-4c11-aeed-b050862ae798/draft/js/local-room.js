@@ -95,6 +95,10 @@ window.LocalRoom = (function () {
         R().hold(data.room, LOCAL_USER.id, index);
         commit(); broadcast();
       },
+      'game:bank'() {
+        R().bank(data.room, LOCAL_USER.id);
+        commit(); broadcast();
+      },
       'game:score'({ categoryId, col }) {
         R().score(data.room, LOCAL_USER.id, categoryId, col);
         commit(); broadcast();

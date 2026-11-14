@@ -23,6 +23,18 @@
    PIKAJATSI (variant.quick): vuorolla yksi heitto 10 nopalla, ei lukitusta
    eikä pankkia. Pöytäkirja on tavallinen 5 tai 6 nopan pöytäkirja, ja rivi
    lasketaan heiton parhaalla 5 (6) nopan valinnalla (ks. scoring.js).
+
+   5000 (variant.fiveK): oma pelityyppinsä 5 tai 6 nopalla, ilman
+   pöytäkirjaa. Paikalla on summa (seat.total) ja pelatut vuorot
+   (seat.turns), vuorolla potti (room.pot). Heiton jälkeen pelaaja siirtää
+   sivuun pisteitä tuottavia noppia (hold) ja joko heittää loput (roll) tai
+   vie potin summaansa (bank). room.held = sivussa olevat nopat, room.locked
+   = niistä aiemmilla heitoilla siirretyt, joita ei voi enää palauttaa.
+   Heitto ilman pisteitä tuottavaa noppaa nollaa potin ja päättää vuoron.
+   Kun kaikki nopat ovat sivussa, ne heitetään kaikki uudestaan samaan
+   pottiin. Ensimmäinen pankitus vaatii FIVEK.OPEN pistettä yhdellä
+   vuorolla. Kun joku on saavuttanut FIVEK.TARGET:n, kierros pelataan
+   loppuun ja suurin summa voittaa.
    ============================================================ */
 (function (root) {
   const Scoring = (typeof module !== 'undefined' && module.exports)
@@ -36,12 +48,16 @@
   /** Siivoa/rajaa pyydetty variantti turvalliseksi, tunnetuksi muodoksi. */
   function sanitizeVariant(v) {
     v = v || {};
-    const quick = !!v.quick;
+    const fiveK = !!v.fiveK;
+    const quick = !!v.quick && !fiveK;
     return {
-      twoCol: !!v.twoCol,
+      /* 5000:ssa ei ole pöytäkirjaa eikä heittomäärää, joten pikajatsi,
+         sarakkeet ja heittopankki eivät koske sitä. */
+      fiveK,
+      twoCol: !!v.twoCol && !fiveK,
       sixDice: !!v.sixDice,
       /* Pikajatsissa on vuorolla yksi heitto, joten pankkiin ei kertyisi mitään. */
-      bank: !!v.bank && !quick,
+      bank: !!v.bank && !quick && !fiveK,
       quick,
       rollMode: ROLL_MODES.includes(v.rollMode) ? v.rollMode : 'charge',
     };
@@ -51,6 +67,10 @@
   /* Heittoja vuorolla ennen pankkia. Vanhat tallennetut huoneet ilman
      quick-kenttää ovat tavallisia (3). */
   function maxRollsFor(variant) { return variant.quick ? 1 : 3; }
+  /* Paikan pisteet: 5000:ssa summa, muuten pöytäkirjan loppusumma. */
+  function seatTotal(variant, p) {
+    return variant.fiveK ? (p.total || 0) : Scoring.playerTotal(p, variant.sixDice);
+  }
   function colsFor(variant) { return variant.twoCol ? 2 : 1; }
   function emptyScs(variant) { return Array.from({ length: colsFor(variant) }, () => ({})); }
 
@@ -81,6 +101,8 @@
       disconnectedAt: null,
       scs: emptyScs(room.variant),
       bank: 0,
+      total: 0,
+      turns: 0,
     };
   }
 
@@ -144,7 +166,10 @@
     room.held = new Array(diceCount).fill(false);
     room.lastScore = null;
     room.lastMark = null;
-    room.players.forEach(p => { p.scs = emptyScs(room.variant); p.bank = 0; });
+    room.pot = 0;
+    room.locked = new Array(diceCount).fill(false);
+    room.rollSeq = 0;
+    room.players.forEach(p => { p.scs = emptyScs(room.variant); p.bank = 0; p.total = 0; p.turns = 0; });
   }
 
   function startGame(room, minPlayers) {
@@ -189,6 +214,7 @@
   function roll(room, userId, diceValues, lock) {
     if (room.status !== 'playing') throw new Error('Peli ei ole käynnissä.');
     requireTurn(room, userId);
+    if (room.variant.fiveK) return rollFiveK(room, diceValues);
     const diceCount = diceCountFor(room.variant);
     const useBank = room.rollsUsed >= maxRollsFor(room.variant);
     if (useBank && !bankAvailable(room)) throw new Error('Heitot käytetty — valitse rivi.');
@@ -213,6 +239,7 @@
   function hold(room, userId, index) {
     if (room.status !== 'playing') throw new Error('Peli ei ole käynnissä.');
     requireTurn(room, userId);
+    if (room.variant.fiveK) return holdFiveK(room, index);
     if (room.variant.quick) throw new Error('Pikajatsissa nopat heitetään kerran — lukitusta ei ole.');
     const diceCount = diceCountFor(room.variant);
     if (!Number.isInteger(index) || index < 0 || index >= diceCount) throw new Error('Virheellinen noppa.');
@@ -226,10 +253,113 @@
     room.rollsUsed = 0;
     room.held = new Array(diceCount).fill(false);
     room.diceValues = new Array(diceCount).fill(0);
+    room.pot = 0;
+    room.locked = new Array(diceCount).fill(false);
   }
 
   function filledCount(p) {
     return p.scs.reduce((n, sc) => n + Object.keys(sc).length, 0);
+  }
+
+  /* ---------- 5000 ---------- */
+  const FK = Scoring.FIVEK;
+  const isValues = (dv, n) => Array.isArray(dv) && dv.length === n && dv.every(v => Number.isInteger(v) && v >= 1 && v <= 6);
+  /* Viimeisimmän heiton nopat (ei aiemmin sivuun siirretyt) ja niistä nyt
+     sivuun valitut. */
+  function fkThrown(room) { return room.diceValues.filter((v, i) => !room.locked[i]); }
+  function fkSelected(room) { return room.diceValues.filter((v, i) => room.held[i] && !room.locked[i]); }
+
+  /* Vuoron tilanne: mitä valinta tuottaa ja mitä pelaaja saa tehdä. Ilman
+     valintaa koko heitto siirtyy sivuun, jos sen jokainen noppa tuottaa
+     pisteitä (auto). hot = seuraava heitto heittää kaikki nopat. */
+  function fkTurn(room) {
+    const n = diceCountFor(room.variant);
+    const p = currentPlayer(room);
+    const out = { pot: room.pot || 0, sel: 0, auto: false, hot: false, canRoll: true, bankValue: 0, canBank: false };
+    if (room.status !== 'playing' || !p || room.rollsUsed === 0) return out;
+    const sel = fkSelected(room);
+    const thrown = fkThrown(room);
+    out.sel = Scoring.fkScoreSet(sel, n);
+    if (!sel.length) { out.sel = Scoring.fkScoreSet(thrown, n); out.auto = out.sel > 0; }
+    out.canRoll = out.sel > 0;
+    out.hot = out.auto || (out.sel > 0 && room.held.every(Boolean));
+    out.bankValue = out.pot + Scoring.fkBest(thrown, n).pts;
+    out.canBank = (p.total || 0) > 0 || out.bankValue >= FK.OPEN;
+    return out;
+  }
+
+  function fkGameOver(room) {
+    const t = room.players[0].turns || 0;
+    return room.players.some(p => (p.total || 0) >= FK.TARGET) && room.players.every(p => (p.turns || 0) === t);
+  }
+
+  /* Vuoro päättyy pankitukseen tai tyhjään heittoon. Silmäluvut jäävät
+     näkyviin seuraavaan heittoon asti. */
+  function fkEndTurn(room, mark) {
+    const n = diceCountFor(room.variant);
+    const p = currentPlayer(room);
+    p.turns = (p.turns || 0) + 1;
+    room.lastMark = Object.assign({ seatId: p.seatId, n: room.rollSeq }, mark);
+    room.pot = 0;
+    room.rollsUsed = 0;
+    room.held = new Array(n).fill(false);
+    room.locked = new Array(n).fill(false);
+    room.current = (room.current + 1) % room.players.length;
+    advanceIfCurrentFinished(room);
+    checkTurnOrder(room, '5000');
+  }
+
+  function rollFiveK(room, diceValues) {
+    const n = diceCountFor(room.variant);
+    if (!isValues(diceValues, n)) throw new Error('Virheelliset noppien arvot.');
+    if (room.rollsUsed > 0) {
+      const t = fkTurn(room);
+      if (!t.canRoll) throw new Error('Siirrä ensin sivuun pisteitä tuottavia noppia.');
+      room.pot = t.pot + t.sel;
+      if (t.hot) { room.held.fill(false); room.locked.fill(false); }
+      else room.locked = room.held.slice();
+    }
+    room.diceValues = diceValues.map((v, i) => (room.locked[i] ? room.diceValues[i] : v));
+    room.rollsUsed++;
+    room.rollSeq = (room.rollSeq || 0) + 1;
+    room.lastScore = null;
+    if (Scoring.fkBest(fkThrown(room), n).pts === 0) fkEndTurn(room, { bust: true, pts: 0, lost: room.pot });
+    return room.diceValues;
+  }
+
+  /* Nopan siirto sivuun tai takaisin. Ykkönen ja vitonen siirtyvät yksin;
+     muu silmäluku siirtyy koko ryhmänä (kolme tai useampi samaa), ja noppa
+     joka tuottaa pisteitä vain koko heiton yhdistelmässä (suora, kolme
+     paria) vie mukanaan koko heiton. */
+  function holdFiveK(room, index) {
+    const n = diceCountFor(room.variant);
+    if (!Number.isInteger(index) || index < 0 || index >= n) throw new Error('Virheellinen noppa.');
+    if (room.rollsUsed === 0) throw new Error('Heitä ensin.');
+    if (room.locked[index]) throw new Error('Noppa on siirretty sivuun jo aiemmalla heitolla.');
+    const on = !room.held[index];
+    const v = room.diceValues[index];
+    const free = room.diceValues.map((x, i) => !room.locked[i]);
+    const same = room.diceValues.filter((x, i) => free[i] && x === v).length;
+    const thrownIdx = room.diceValues.map((x, i) => i).filter(i => free[i]);
+    const best = Scoring.fkBest(thrownIdx.map(i => room.diceValues[i]), n);
+    if (on && !best.mask[thrownIdx.indexOf(index)]) throw new Error('Tämä noppa ei tuota pisteitä.');
+    const group = (v === 1 || v === 5) && same < 3 ? (i) => i === index
+      : same >= 3 ? (i) => room.diceValues[i] === v
+      : () => true;
+    for (let i = 0; i < n; i++) if (free[i] && group(i)) room.held[i] = on;
+  }
+
+  function bank(room, userId) {
+    if (room.status !== 'playing') throw new Error('Peli ei ole käynnissä.');
+    requireTurn(room, userId);
+    if (!room.variant.fiveK) throw new Error('Pankitus kuuluu vain 5000-peliin.');
+    if (room.rollsUsed === 0) throw new Error('Heitä ensin.');
+    const t = fkTurn(room);
+    if (!t.canBank) throw new Error(`Avaukseen tarvitaan vähintään ${FK.OPEN} pistettä yhdellä vuorolla.`);
+    const p = currentPlayer(room);
+    p.total = (p.total || 0) + t.bankValue;
+    fkEndTurn(room, { bank: true, pts: t.bankValue });
+    return t.bankValue;
   }
 
   /* Vuorojärjestyksen tarkistus. Jokainen vuoro merkitsee tasan yhden rivin,
@@ -240,10 +370,11 @@
      kesken jäänyt vuoro alkaa alusta, koska sen heitot eivät ole hänen. */
   function expectedCurrent(room) {
     const six = room.variant.sixDice;
+    const fiveK = room.variant.fiveK;
     let best = -1, min = Infinity;
     room.players.forEach((p, i) => {
-      if (p.scs.every(sc => Scoring.scFull(sc, six))) return;
-      const n = filledCount(p);
+      if (!fiveK && p.scs.every(sc => Scoring.scFull(sc, six))) return;
+      const n = fiveK ? (p.turns || 0) : filledCount(p);
       if (n < min) { min = n; best = i; }
     });
     return best;
@@ -262,6 +393,10 @@
      ohittaa ne jotka ovat jo valmiita. */
   function advanceIfCurrentFinished(room) {
     if (room.players.length === 0) return;
+    if (room.variant.fiveK) {
+      if (fkGameOver(room)) room.status = 'finished';
+      return;
+    }
     const six = room.variant.sixDice;
     if (room.players.every(p => p.scs.every(sc => Scoring.scFull(sc, six)))) {
       room.status = 'finished';
@@ -276,6 +411,7 @@
   function score(room, userId, categoryId, col) {
     if (room.status !== 'playing') throw new Error('Peli ei ole käynnissä.');
     requireTurn(room, userId);
+    if (room.variant.fiveK) throw new Error('5000-pelissä ei merkitä rivejä.');
     if (room.rollsUsed === 0) throw new Error('Heitä ensin.');
     const six = room.variant.sixDice;
     const validId = Scoring.allCats(six).some(c => c.id === categoryId);
@@ -332,9 +468,11 @@
   }
 
   function rankings(room) {
-    const six = room.variant.sixDice;
     return [...room.players]
-      .map(p => ({ seatId: p.seatId, userId: p.userId, username: p.username, guest: !!p.guest, total: Scoring.playerTotal(p, six) }))
+      .map(p => ({
+        seatId: p.seatId, userId: p.userId, username: p.username, guest: !!p.guest,
+        total: seatTotal(room.variant, p), turns: p.turns || 0,
+      }))
       .sort((a, b) => b.total - a.total);
   }
 
@@ -348,7 +486,11 @@
       maxPlayers: room.maxPlayers,
       variant: room.variant,
       diceCount: diceCountFor(room.variant),
-      maxRolls: maxRollsFor(room.variant),
+      /* 5000:ssa heittoja ei ole rajattu (0); vuoron tilanne on fiveK-kentässä. */
+      maxRolls: room.variant.fiveK ? 0 : maxRollsFor(room.variant),
+      fiveK: room.variant.fiveK ? Object.assign(fkTurn(room), {
+        locked: room.locked || [], target: FK.TARGET, open: FK.OPEN, rollSeq: room.rollSeq || 0,
+      }) : null,
       current: room.current,
       rollsUsed: room.rollsUsed,
       diceValues: room.diceValues,
@@ -356,12 +498,13 @@
       bankAvailable: bankAvailable(room),
       /* Laite (userId), joka voi perua viimeisimmän merkinnän. */
       undoBy: room.status === 'playing' && room.lastScore ? room.lastScore.userId : null,
-      /* Viimeisin merkintä: { seatId, col, categoryId, pts } tai null. */
+      /* Viimeisin merkintä: { seatId, col, categoryId, pts } tai null.
+         5000:ssa vuoron loppu: { seatId, n, pts, bank } tai { seatId, n, bust, lost }. */
       lastMark: room.lastMark || null,
       players: room.players.map(p => ({
         seatId: p.seatId, guest: !!p.guest,
         userId: p.userId, username: p.username, color: p.color,
-        scs: p.scs, bank: p.bank || 0, connected: p.connected !== false,
+        scs: p.scs, bank: p.bank || 0, total: p.total || 0, turns: p.turns || 0, connected: p.connected !== false,
       })),
       pendingGuests: (room.pendingGuests || []).map(g => ({ seatId: g.seatId, userId: g.userId, username: g.username, color: g.color })),
       played: !!room.played || room.status !== 'open',
@@ -372,10 +515,10 @@
 
   const api = {
     PALETTE, MAX_PLAYERS, ROLL_MODES,
-    sanitizeVariant, diceCountFor, maxRollsFor, colsFor, emptyScs,
+    sanitizeVariant, diceCountFor, maxRollsFor, seatTotal, colsFor, emptyScs,
     accountSeatId, accountSeat, seatsOf, nameTaken, freeColor, newSeat, dropSeats, setSeatColor, reorderSeats,
     startGame, resetForRematch, currentPlayer, requireTurn, bankAvailable,
-    roll, hold, resetTurn, score, undoScore, rankings, publicState,
+    roll, hold, bank, resetTurn, score, undoScore, rankings, publicState,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
