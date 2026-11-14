@@ -129,6 +129,18 @@ window.JatsiPortal = (function () {
     const others = d.game.filter((g, i) => i !== d.place - 1).map((g) => `${g.n} ${g.s}`);
     return `${d.place}./${d.of} · ${d.place === 1 ? 'voitti' : 'vastassa'} ${others.join(', ')}`;
   }
+  /* 5000: rivin tulos on vuorot; pelaajan oma summa on pelin tuloksessa
+     (data.game) hänen sijallaan. Vanhalta riviltä se voi puuttua. Sama
+     vuoromäärä järjestetään summan mukaan, suurin ensin. */
+  function ptsOf(entry) {
+    const d = entry.data || {};
+    const g = Array.isArray(d.game) ? d.game[d.place - 1] : null;
+    return g && Number.isFinite(g.s) ? g.s : null;
+  }
+  function fiveKScore(entry) {
+    const pts = ptsOf(entry);
+    return (pts === null ? '' : `${pts} p · `) + `${entry.score} vuoroa`;
+  }
 
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
@@ -212,7 +224,7 @@ window.JatsiPortal = (function () {
     }));
     const turns = sel.has('5000');
     const rows = srcs.flatMap((s) => cache.get(key(s)).entries.map((entry) => ({ entry, src: s })))
-      .sort((x, y) => (turns ? x.entry.score - y.entry.score : y.entry.score - x.entry.score));
+      .sort((x, y) => (turns ? x.entry.score - y.entry.score || (ptsOf(y.entry) || 0) - (ptsOf(x.entry) || 0) : y.entry.score - x.entry.score));
     const reason = srcs.some((s) => cache.get(key(s)).reason) && !rows.length ? 'error' : null;
     wrap.style.display = '';
     wrap.innerHTML = '';
@@ -241,7 +253,7 @@ window.JatsiPortal = (function () {
       const top = el('div', 'lbTop');
       top.appendChild(el('span', 'lbRank', (i + 1) + '.'));
       top.appendChild(el('span', 'lbName', e.name));
-      top.appendChild(el('span', 'lbScore', turns ? `${e.score} vuoroa` : String(e.score)));
+      top.appendChild(el('span', 'lbScore', turns ? fiveKScore(e) : String(e.score)));
       li.appendChild(top);
       const meta = el('div', 'lbMeta');
       const tags = el('span', 'lbTags');
