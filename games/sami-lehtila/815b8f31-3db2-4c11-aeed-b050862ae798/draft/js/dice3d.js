@@ -422,6 +422,23 @@ window.Dice3D = (function () {
     return true;
   }
 
+  /* Keskeyttää OMAN käynnissä olevan heiton tai latauksen: nauhoitus loppuu,
+     nopat pysähtyvät paikoilleen eikä onSettle laukea. Muiden heiton toistoon
+     ei kosketa. Kutsuja asettaa nopat haluamaansa tilaan restoreDisplay:llä.
+     Palauttaa true, jos jotain keskeytettiin. */
+  function stopRoll() {
+    recording = false; recFrames = []; recAccum = 0;
+    if (playback || (!rolling && !charging)) return false;
+    charging = false; rolling = false; settled = true; nudgeAvailable = false;
+    activeDice().forEach(d => {
+      delete d.hover; d.parkTarget = null;
+      const b = d.body;
+      b.velocity.setZero(); b.angularVelocity.setZero();
+      if (!d.held) { b.type = CANNON.Body.DYNAMIC; b.mass = 1; b.updateMassProperties(); }
+    });
+    return true;
+  }
+
   function snapUpright(d) {
     const q=d.mesh.quaternion, e=new THREE.Euler().setFromQuaternion(q);
     const s=Math.PI/2;
@@ -986,7 +1003,7 @@ window.Dice3D = (function () {
   return {
     init, configure, setActiveDiceCount, applyColor, resetHeld,
     getHeld, setHeld, toggleHeld, hitTestDie, nudgeAt, isNudgeAvailable,
-    getValues, isRolling, isSettled, isCharging, onSettle, restoreDisplay, resumeFrom, onRecordTick,
+    getValues, isRolling, isSettled, isCharging, onSettle, restoreDisplay, resumeFrom, stopRoll, onRecordTick,
     throwDice, startCharge, releaseCharge, cancelCharge,
     playTrajectory, streamFrames, isStreaming, onStreamStall, setPhysicsActive, lockResting, heldMask,
     shakeCamera, resize,
