@@ -63,6 +63,19 @@ window.Dice3D = (function () {
      tästä yhdestä kohdasta jos toisto näyttää nykiseltä tai liian raskaalta. */
   const RECORD_HZ = 10, RECORD_DT = 1 / RECORD_HZ;
   let recording = false, recFrames = [], recStart = 0, recAccum = 0;
+  /* Nauhoituksen äänet: nopan kolahdukset [aika ms nauhoituksen alusta,
+     voimakkuus] edellisen kehyksen jälkeen. Ne kulkevat seuraavan kehyksen
+     mukana (kehyksen kenttä `s`), ja toisto soittaa ne samalla hetkellä. */
+  let recSounds = [], lastRecSound = 0;
+  const SOUND_GAP_MS = 40; /* sama harvennus kuin UI.clackissa */
+  function clack(strength) {
+    if (window.UI) window.UI.clack(strength);
+    if (!recording) return;
+    const t = performance.now() - recStart;
+    if (t - lastRecSound < SOUND_GAP_MS) return;
+    lastRecSound = t;
+    recSounds.push([Math.round(t), Math.round(strength * 10) / 10]);
+  }
   let playback = null; /* {frames, startTime, diceValues, heldMask, live, streamId, lastChunkAt} */
   /* Striimattu toisto: heittäjä lähettää kehyksiä heiton aikana, ja toisto
      alkaa kun puskurissa on STREAM_LEAD_MS heittoa — noin sekunti heiton
@@ -287,7 +300,7 @@ window.Dice3D = (function () {
       body.sleepSpeedLimit=.12;
       body.addEventListener('collide', e=>{
         const v=e.contact.getImpactVelocityAlongNormal();
-        if(Math.abs(v)>1.2 && rolling && window.UI) window.UI.clack(Math.abs(v));
+        if(Math.abs(v)>1.2 && rolling) clack(Math.abs(v));
       });
       world.addBody(body);
       dice.push({mesh, body, ring, held:false, value:0});
@@ -540,13 +553,15 @@ window.Dice3D = (function () {
 
   /* ---------- Nauhoitus ---------- */
   function captureFrame(t) {
-    recFrames.push({
+    const frame = {
       t,
       dice: activeDice().map(d => ({
         p: [d.body.position.x, d.body.position.y, d.body.position.z],
         q: [d.body.quaternion.x, d.body.quaternion.y, d.body.quaternion.z, d.body.quaternion.w],
       })),
-    });
+    };
+    if (recSounds.length) { frame.s = recSounds; recSounds = []; }
+    recFrames.push(frame);
     /* Sama ~10Hz nauhoitustahti kelpaa myös "keskeneräisen heiton" tilan
        jatkuvaan talteenottoon (localStorage) reilun heiton varmistamiseksi —
        ks. mp-game.js:n onRecordTick-käyttö. Ei uutta erillistä ajastinta,
@@ -574,6 +589,7 @@ window.Dice3D = (function () {
   function isStreaming() { return !!(playback && playback.live); }
   function beginRecording() {
     recording = true; recFrames = []; recStart = performance.now(); recAccum = 0;
+    recSounds = []; lastRecSound = 0;
     captureFrame(0);
   }
 
@@ -761,7 +777,7 @@ window.Dice3D = (function () {
       d.body.applyImpulse(new CANNON.Vec3(kx, up, kz), d.body.position);
       randSpin(d.body, MAX_THROW_POWER);
       d.stuckT = 0;
-      if(onTop && window.UI) window.UI.clack(4);
+      if(onTop) clack(4);
     });
     settleT=0;
   }
@@ -871,6 +887,18 @@ window.Dice3D = (function () {
     let i = 0;
     while (i < frames.length - 1 && frames[i + 1].t <= elapsed) i++;
     const fa = frames[i], fb = frames[Math.min(i + 1, frames.length - 1)];
+    /* Äänet: kehyksen `s` kantaa sitä edeltäneen välin kolahdukset, joten
+       seuraavan kehyksen äänet otetaan jonoon heti kun kehys on saatavilla
+       ja soitetaan, kun toiston kello ohittaa niiden hetken. */
+    const upTo = Math.min(i + 1, frames.length - 1);
+    for (let k = playback.soundFrame || 0; k <= upTo; k++) {
+      if (Array.isArray(frames[k].s)) (playback.sounds = playback.sounds || []).push(...frames[k].s.slice(0, 8));
+    }
+    playback.soundFrame = upTo + 1;
+    while (playback.sounds && playback.sounds.length && playback.sounds[0][0] <= elapsed) {
+      const snd = playback.sounds.shift();
+      if (window.UI && Number.isFinite(snd[1])) window.UI.clack(snd[1]);
+    }
     const span = fb.t - fa.t;
     const frac = span > 0 ? Math.min(1, Math.max(0, (elapsed - fa.t) / span)) : 1;
     activeDice().forEach((d, idx) => {
