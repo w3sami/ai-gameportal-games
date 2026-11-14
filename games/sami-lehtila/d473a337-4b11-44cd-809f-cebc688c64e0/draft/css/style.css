@@ -8,6 +8,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1d1a26; fon
 .stat { display: inline-flex; align-items: center; gap: 6px; font: 700 16px/1 ui-monospace, monospace; }
 .stat i { display: inline-block; width: 14px; height: 14px; }
 .gem { background: #5ce08a; border-radius: 50%; box-shadow: 0 0 6px #5ce08a; }
+.stat[hidden] { display: none; }
+.hammer { background: linear-gradient(#b8bec9 0 45%, transparent 45%), linear-gradient(90deg, transparent 40%, #c98a4b 40% 60%, transparent 60%); }
 .foot { background: #ffd84a; border-radius: 50% 50% 45% 45%; transform: scale(.85); }
 
 #hint { position: fixed; left: 16px; bottom: calc(12px + env(safe-area-inset-bottom)); font-size: 13px; opacity: .55; pointer-events: none; text-shadow: 0 1px 3px #000; padding-right: 120px; }
