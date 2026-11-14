@@ -26,6 +26,7 @@
      ensimmäinen tila on nähty: palvelin, joka ei vielä tunne pikajatsia,
      siivoaa lipun pois (sanitizeVariant), ja siitä kerrotaan pelaajalle. */
   let requestedQuick = null;
+  let requestedFiveK = null; // sama 5000-pelille
 
   if (window.MpSettings) {
     window.MpSettings.load();
@@ -42,18 +43,43 @@
   function setAuthError(msg) { document.getElementById('authError').textContent = msg || ''; }
   function setLobbyError(msg) { document.getElementById('lobbyError').textContent = msg || ''; }
 
-  /* Pikajatsissa on yksi heitto vuorolla, joten heittopankki ei ole
-     käytössä: sen ruutu harmaantuu ja tyhjenee, kun pikajatsi valitaan.
-     Sama sääntö on room-rules.js:n sanitizeVariantissa. */
-  function syncQuickBank(quickId, bankId) {
-    const quick = document.getElementById(quickId).checked;
-    const bank = document.getElementById(bankId);
-    if (quick) bank.checked = false;
-    bank.disabled = quick;
-    bank.parentElement.style.opacity = quick ? .45 : '';
+  /* Sääntöruudut, jotka eivät sovi yhteen, harmaantuvat ja tyhjenevät:
+     pikajatsissa on yksi heitto vuorolla, joten heittopankkia ei ole, ja
+     5000:ssa ei ole pöytäkirjaa, joten pikajatsi, tuplasarake ja
+     heittopankki eivät koske sitä. Sama sääntö on room-rules.js:n
+     sanitizeVariantissa. pre = ruutujen tunnisteen alku (off, variant,
+     rematch). */
+  function syncVariantBoxes(pre) {
+    const box = (name) => document.getElementById(pre + name);
+    const off = (el, on) => {
+      if (on) el.checked = false;
+      el.disabled = on;
+      el.parentElement.style.opacity = on ? .45 : '';
+    };
+    const fiveK = box('FiveK').checked;
+    off(box('Quick'), fiveK);
+    off(box('TwoCol'), fiveK);
+    off(box('Bank'), fiveK || box('Quick').checked);
   }
-  [['variantQuick', 'variantBank'], ['rematchQuick', 'rematchBank']].forEach(([q, b]) =>
-    document.getElementById(q).addEventListener('change', () => syncQuickBank(q, b)));
+  const readVariant = (pre) => ({
+    fiveK: document.getElementById(pre + 'FiveK').checked,
+    quick: document.getElementById(pre + 'Quick').checked,
+    twoCol: document.getElementById(pre + 'TwoCol').checked,
+    sixDice: document.getElementById(pre + 'SixDice').checked,
+    bank: document.getElementById(pre + 'Bank').checked,
+    rollMode: document.getElementById(pre + 'RollMode').value,
+  });
+  const fillVariant = (pre, v) => {
+    document.getElementById(pre + 'FiveK').checked = !!v.fiveK;
+    document.getElementById(pre + 'Quick').checked = !!v.quick;
+    document.getElementById(pre + 'TwoCol').checked = !!v.twoCol;
+    document.getElementById(pre + 'SixDice').checked = !!v.sixDice;
+    document.getElementById(pre + 'Bank').checked = !!v.bank;
+    document.getElementById(pre + 'RollMode').value = v.rollMode || 'charge';
+    syncVariantBoxes(pre);
+  };
+  ['variant', 'rematch'].forEach((pre) => ['FiveK', 'Quick'].forEach((n) =>
+    document.getElementById(pre + n).addEventListener('change', () => syncVariantBoxes(pre))));
 
   /* Tila muistetaan; ensikäynnillä offline, koska se ei vaadi tiliä. */
   function boot() {
@@ -160,13 +186,7 @@
     document.getElementById('offAddPlayer').style.display = setup.players.length < window.RoomRules.MAX_PLAYERS ? '' : 'none';
     document.getElementById('offShuffle').style.display = setup.players.length > 1 ? '' : 'none';
     document.getElementById('offShuffle').textContent = setup.players.length > 2 ? '🎲 Arvo järjestys' : '🎲 Arvo aloittaja';
-    const v = setup.variant || {};
-    document.getElementById('offQuick').checked = !!v.quick;
-    document.getElementById('offTwoCol').checked = !!v.twoCol;
-    document.getElementById('offSixDice').checked = !!v.sixDice;
-    document.getElementById('offBank').checked = !!v.bank;
-    document.getElementById('offRollMode').value = v.rollMode || 'charge';
-    syncQuickBank('offQuick', 'offBank');
+    fillVariant('off', setup.variant || {});
     const saved = window.LocalRoom.savedGame();
     const resume = document.getElementById('offResumeBtn');
     resume.style.display = saved ? 'block' : 'none';
@@ -174,17 +194,11 @@
   }
 
   function readOfflineVariant() {
-    syncQuickBank('offQuick', 'offBank');
-    setup.variant = {
-      quick: document.getElementById('offQuick').checked,
-      twoCol: document.getElementById('offTwoCol').checked,
-      sixDice: document.getElementById('offSixDice').checked,
-      bank: document.getElementById('offBank').checked,
-      rollMode: document.getElementById('offRollMode').value,
-    };
+    syncVariantBoxes('off');
+    setup.variant = readVariant('off');
     saveSetup();
   }
-  ['offQuick', 'offTwoCol', 'offSixDice', 'offBank', 'offRollMode'].forEach((id) =>
+  ['offFiveK', 'offQuick', 'offTwoCol', 'offSixDice', 'offBank', 'offRollMode'].forEach((id) =>
     document.getElementById(id).addEventListener('change', readOfflineVariant));
   document.getElementById('offShuffle').addEventListener('click', () => {
     setup.players = window.MpUI.shuffled(setup.players);
@@ -382,16 +396,11 @@
     setLobbyError('');
     const name = document.getElementById('roomNameInput').value.trim() || (me.username + ' peli');
     const max = parseInt(document.getElementById('roomMaxInput').value, 10);
-    const variant = {
-      quick: document.getElementById('variantQuick').checked,
-      twoCol: document.getElementById('variantTwoCol').checked,
-      sixDice: document.getElementById('variantSixDice').checked,
-      bank: document.getElementById('variantBank').checked,
-      rollMode: document.getElementById('variantRollMode').value,
-    };
+    const variant = readVariant('variant');
     requestedQuick = variant.quick;
+    requestedFiveK = variant.fiveK;
     window.MpGame.createRoom(name, max, variant, (res) => {
-      if (!res.ok) { requestedQuick = null; setLobbyError(res.error); return; }
+      if (!res.ok) { requestedQuick = requestedFiveK = null; setLobbyError(res.error); return; }
       showView('room');
     });
   });
@@ -399,10 +408,42 @@
   function renderRoom(state) {
     /* Toisen laitteen uusi merkintä: valitun palluran paikka otetaan talteen
        ennen kuin piirto vaihtaa pallurat, ja animaatio ajetaan piirron jälkeen. */
-    const otherMark = newMarkByOther(lastRenderedState, state);
+    const turnEnd = fiveKTurnEnd(lastRenderedState, state);
+    const otherMark = turnEnd ? null : newMarkByOther(lastRenderedState, state);
     const anchor = otherMark ? markAnchor(otherMark.mark) : null;
     renderRoomNow(state);
     if (otherMark) animateMark(state, otherMark, anchor);
+    if (turnEnd) announceTurnEnd(state, turnEnd);
+  }
+
+  /* 5000: vuoro päättyi (pankitus tai tyhjä heitto) edellisen tilan jälkeen. */
+  function fiveKTurnEnd(prev, state) {
+    const m = state.lastMark;
+    if (!state.variant || !state.variant.fiveK || !m || !prev || prev.id !== state.id) return null;
+    if (prev.lastMark && prev.lastMark.n === m.n && prev.lastMark.seatId === m.seatId) return null;
+    return m;
+  }
+
+  /* Ilmoitus kaikille samana; muilla vasta kun heiton toisto on päättynyt,
+     ettei tulos paljastu ennen noppia. */
+  function announceTurnEnd(state, m) {
+    const UI = window.UI, D3 = window.Dice3D;
+    const seat = state.players.find((p) => p.seatId === m.seatId);
+    if (!UI || !seat) return;
+    let tries = 0;
+    const show = () => {
+      if (D3 && D3.isRolling() && tries++ < 60) { setTimeout(show, 150); return; }
+      if (m.bust) {
+        UI.showBanner(m.lost ? `TYHJÄ HEITTO −${m.lost}` : 'TYHJÄ HEITTO');
+        if (D3) D3.shakeCamera(6);
+        return;
+      }
+      UI.showBanner(`${seat.username} +${m.pts}`);
+      if (m.pts >= 1000) { UI.sndYatzy(); UI.burst(160, true); }
+      else if (m.pts >= 500) { UI.sndBig(); UI.burst(60, false); }
+      else UI.sndScore();
+    };
+    show();
   }
 
   /* Uusi merkintä, jonka teki joku muu kuin tämä laite: rivi oli edellisessä
@@ -462,6 +503,16 @@
     roomStatus = state.status;
     lastState0 = state;
     renderPeopleList(state);
+    if (requestedFiveK !== null && !state.local) {
+      if (requestedFiveK && !(state.variant && state.variant.fiveK)) {
+        window.MpUI.dialog({
+          title: '5000 ei vielä verkossa',
+          text: 'Palvelin ei tunne 5000-peliä, joten huone luotiin tavallisilla säännöillä. 5000:ta voi pelata jo tällä laitteella.',
+        });
+        requestedQuick = null;
+      }
+      requestedFiveK = null;
+    }
     if (requestedQuick !== null && !state.local) {
       if (requestedQuick && !(state.variant && state.variant.quick)) {
         window.MpUI.dialog({
@@ -520,6 +571,10 @@
       const hideUsed = window.MpSettings ? window.MpSettings.settings.hideUsed : false;
       const ownCols = window.MpSettings ? window.MpSettings.settings.ownCols : false;
       const onPick = (categoryId, col, el) => {
+        if (state.variant.fiveK) {
+          window.MpGame.bank((res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); });
+          return;
+        }
         celebrateScore(state, categoryId, el);
         window.MpGame.scoreCategory(categoryId, col, (res) => { if (!res.ok) setLobbyError(res.error); });
       };
@@ -580,7 +635,9 @@
     document.getElementById('winnerName').textContent = ranked[0].username;
     document.getElementById('winnerScore').textContent = ranked[0].total + ' pistettä';
     let listHtml;
-    if (state.variant.twoCol) {
+    if (state.variant.fiveK) {
+      listHtml = ranked.map((p, i) => `${i + 1}. ${esc(p.username)} — <b>${p.total}</b> · ${p.turns} vuoroa`).join('<br>');
+    } else if (state.variant.twoCol) {
       let best = { t: -1 };
       state.players.forEach((p) => p.scs.forEach((sc, ci) => {
         const t = S.totalOf(sc, six);
@@ -607,7 +664,7 @@
         shownLocalGame = state.gameKey;
         window.JatsiPortal.submitLocalGame(document.getElementById('lbWrap'), {
           gameKey: state.gameKey, variant: state.variant,
-          players: ranked.map((p) => ({ name: p.username, score: p.total })),
+          players: ranked.map((p) => ({ name: p.username, score: p.total, turns: p.turns })),
         });
       }
     } else {
@@ -625,14 +682,7 @@
     document.getElementById('rematchBtn').style.display = amIHost ? 'block' : 'none';
     document.getElementById('rematchNewBtn').style.display = amIHost ? 'block' : 'none';
     document.getElementById('mpWaitRematchMsg').style.display = amIHost ? 'none' : 'block';
-    if (amIHost) {
-      document.getElementById('rematchQuick').checked = !!state.variant.quick;
-      document.getElementById('rematchTwoCol').checked = !!state.variant.twoCol;
-      document.getElementById('rematchSixDice').checked = !!state.variant.sixDice;
-      document.getElementById('rematchBank').checked = !!state.variant.bank;
-      document.getElementById('rematchRollMode').value = state.variant.rollMode || 'charge';
-      syncQuickBank('rematchQuick', 'rematchBank');
-    }
+    if (amIHost) fillVariant('rematch', state.variant);
 
     if (announcedFinishedRoomId !== state.id) {
       announcedFinishedRoomId = state.id;
@@ -667,13 +717,7 @@
   document.getElementById('closeWin').addEventListener('click', () => {
     document.getElementById('winnerOverlay').style.display = 'none';
   });
-  const rematchVariant = () => ({
-    quick: document.getElementById('rematchQuick').checked,
-    twoCol: document.getElementById('rematchTwoCol').checked,
-    sixDice: document.getElementById('rematchSixDice').checked,
-    bank: document.getElementById('rematchBank').checked,
-    rollMode: document.getElementById('rematchRollMode').value,
-  });
+  const rematchVariant = () => readVariant('rematch');
   /* Samat pelaajat: uusi peli alkaa heti. */
   document.getElementById('rematchBtn').addEventListener('click', () => {
     window.MpGame.rematch(rematchVariant(), true, (res) => { if (!res.ok) setLobbyError(res.error); });

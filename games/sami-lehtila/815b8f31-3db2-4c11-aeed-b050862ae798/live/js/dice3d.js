@@ -36,7 +36,11 @@ window.Dice3D = (function () {
   /* ---------- tila ---------- */
   let rolling = false, settled = false, charging = false, chargeT = 0;
   let diceValues = [0,0,0,0,0,0];
-  let nudgeAvailable = false, settleFrames = 0, rollStart = 0, nudges = 0;
+  /* settleT ja rollT ovat SIMULOITUA aikaa (sekunteja, jotka fysiikka on
+     edennyt), eivät seinäkelloa: hitaalla laitteella ruutu kestää pidempään
+     kuin fysiikka sen aikana etenee (dt on rajattu, ks. loop), joten
+     seinäkello ehtisi aikarajaan noppien vielä pyöriessä. */
+  let nudgeAvailable = false, settleT = 0, rollT = 0, nudges = 0;
   let shakeT = 0, shakeAmp = 0;
   let last = performance.now();
 
@@ -410,7 +414,7 @@ window.Dice3D = (function () {
       d.ring.visible = d.held;
     });
     diceValues = activeDice().map(d => d.value);
-    settleFrames = 0; nudges = 0; rollStart = performance.now(); activeDice().forEach(d => { d.stuckT = 0; });
+    settleT = 0; nudges = 0; rollT = 0; activeDice().forEach(d => { d.stuckT = 0; });
     /* Jatka SAMAA nauhoitusta (recFrames) alkuperäisestä taulukosta —
        recStart siirretään taaksepäin niin että seuraava captureFrame
        laskee ajan jatkuvasti siitä mihin viimeinen tallennettu kehys jäi. */
@@ -529,7 +533,7 @@ window.Dice3D = (function () {
       const f=3.5/Math.max(len,.8);
       d.body.applyImpulse(new CANNON.Vec3(dx/len*f, 3.2+Math.random(), dz/len*f), d.body.position);
     });
-    settleFrames=0;
+    settleT=0;
     return true;
   }
   function isNudgeAvailable() { return nudgeAvailable; }
@@ -605,7 +609,7 @@ window.Dice3D = (function () {
       b.velocity.set((Math.random()-.5)*4*P, -1-Math.random()*2, (-7-Math.random()*4)*P);
       randSpin(b,P);
     });
-    settleFrames=0; rollStart=performance.now(); nudges=0; activeDice().forEach(d=>{ d.stuckT=0; });
+    settleT=0; rollT=0; nudges=0; activeDice().forEach(d=>{ d.stuckT=0; });
     if (record) beginRecording(); else recording = false;
   }
 
@@ -655,7 +659,7 @@ window.Dice3D = (function () {
       b.velocity.set((Math.random()-.5)*4*P, -1-Math.random()*2, (-6-Math.random()*4)*P);
       randSpin(b,P);
     });
-    settleFrames=0; rollStart=performance.now(); nudges=0; activeDice().forEach(d=>{ d.stuckT=0; });
+    settleT=0; rollT=0; nudges=0; activeDice().forEach(d=>{ d.stuckT=0; });
     if (!record) recording = false;
     else if (!recording) beginRecording();
   }
@@ -669,9 +673,11 @@ window.Dice3D = (function () {
      Sellainen tönäistään heti, kun se on liikkunut vain vähän STUCK_NUDGE_S
      yhtäjaksoisesti, vaikka muut nopat tai se itse värisisi yli
      pysähtymisrajan (.12/.15) — muuten tönäisy odottaisi koko aikarajan
-     (SETTLE_TIMEOUT_MS). Rajat STUCK_V/STUCK_AV ovat väljemmät kuin
+     (SETTLE_TIMEOUT_S). Rajat STUCK_V/STUCK_AV ovat väljemmät kuin
      pysähtymisen: jumissa olevan nopan värinä on mitattuna 0,02–0,3. */
-  const STUCK_NUDGE_S = 1, STUCK_V = 0.45, STUCK_AV = 0.6, SETTLE_TIMEOUT_MS = 6500;
+  const STUCK_NUDGE_S = 1, STUCK_V = 0.45, STUCK_AV = 0.6, SETTLE_TIMEOUT_S = 6.5;
+  /* Heitto on asettunut, kun mikään vapaa noppa ei ole liikkunut tähän aikaan. */
+  const SETTLE_REST_S = 25/60;
   const REST_Y = HALF + 0.06;
   function isStuckPose(d) {
     return topFace(d.mesh).dot < .98 || d.body.position.y > REST_Y;
@@ -683,7 +689,8 @@ window.Dice3D = (function () {
     const moving = free.some(d=>
       d.body.velocity.length()>.12 || d.body.angularVelocity.length()>.15
     );
-    if(!moving) settleFrames++; else settleFrames=0;
+    rollT += dt;
+    settleT = moving ? 0 : settleT + dt;
     free.forEach(d=>{
       const slow = d.body.velocity.length()<STUCK_V && d.body.angularVelocity.length()<STUCK_AV;
       d.stuckT = slow && isStuckPose(d) ? (d.stuckT||0)+dt : 0;
@@ -694,8 +701,8 @@ window.Dice3D = (function () {
       nudgeStuck(stuck);
       return;
     }
-    const timeout = performance.now()-rollStart>SETTLE_TIMEOUT_MS;
-    if(settleFrames>=25 || timeout){
+    const timeout = rollT>SETTLE_TIMEOUT_S;
+    if(settleT>=SETTLE_REST_S || timeout){
       const bad = free.filter(isStuckPose);
       if(bad.length && nudges<8){
         nudges++;
@@ -719,7 +726,7 @@ window.Dice3D = (function () {
   }
 
   function nudgeStuck(bad) {
-    rollStart=performance.now();
+    rollT=0;
     /* Jumiutuneen (pinossa/vinossa levänneen) nopan korjausheilautus —
        vaakasuora "tönäisy" on n. 10x aiempaa vahvempi (aiempi versio oli
        liian heikko näyttämään tarkoitukselliselta) PLUS sama maksimikierre
@@ -756,7 +763,7 @@ window.Dice3D = (function () {
       d.stuckT = 0;
       if(onTop && window.UI) window.UI.clack(4);
     });
-    settleFrames=0;
+    settleT=0;
   }
 
   /* ---------- Toisto (muut asiakkaat kuin heittäjä) ----------

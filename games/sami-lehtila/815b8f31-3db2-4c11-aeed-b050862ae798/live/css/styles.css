@@ -215,6 +215,10 @@
   .devTag{font-size:.82em;font-weight:700;margin-left:3px}
   .devTag.pos{color:var(--ok)}
   .devTag.neg{color:#d98b7f}
+  /* 5000: matka tavoitteeseen summan alla, ja pisteytysrivit himmeämpinä */
+  .fkBar{height:5px;border-radius:3px;background:#3a3128;margin-top:4px;overflow:hidden}
+  .fkBar i{display:block;height:100%;background:var(--gold);border-radius:3px}
+  .fkRule td{color:var(--dim);font-size:.9em}
   /* viimeisin merkintä (kenen tahansa) */
   td.lastMark,.ug.lastMark{box-shadow:inset 0 0 0 2px var(--gold-bright)}
   tr.totalRow td{font-weight:800;color:var(--gold-bright);font-size:1rem;background:rgba(224,169,61,.07)}

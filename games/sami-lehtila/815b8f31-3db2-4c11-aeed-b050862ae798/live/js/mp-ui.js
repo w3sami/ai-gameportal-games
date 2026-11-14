@@ -35,6 +35,7 @@ window.MpUI = (function () {
 
   function variantBadges(variant) {
     const tags = [];
+    if (variant.fiveK) tags.push('5000');
     if (variant.quick) tags.push('Pikajatsi');
     if (variant.twoCol) tags.push('Tuplasarake');
     if (variant.sixDice) tags.push('6 noppaa');
@@ -85,6 +86,11 @@ window.MpUI = (function () {
     const m = state.lastMark;
     if (!m || state.status === 'open') return '';
     const p = state.players.find((x) => x.seatId === m.seatId);
+    if (state.variant.fiveK) {
+      if (!p) return '';
+      const what = m.bust ? `tyhjä heitto${m.lost ? ` <b>−${m.lost}</b>` : ''}` : `pankkiin <b>+${m.pts}</b>`;
+      return `<span class="pdot" style="background:${p.color}"></span>${esc(p.username)}: ${what}`;
+    }
     const cat = S().allCats(state.variant.sixDice).find((c) => c.id === m.categoryId);
     if (!p || !cat) return '';
     const col = state.variant.twoCol ? (m.col === 1 ? ' II' : ' I') : '';
@@ -254,6 +260,7 @@ window.MpUI = (function () {
     const S_ = S();
     const tableEl = document.getElementById('mpScoreTable');
     const six = state.variant.sixDice;
+    if (state.variant.fiveK) { tableEl.innerHTML = fiveKTable(state); return; }
     const twoCol = state.variant.twoCol;
     const isMyTurn = state.status === 'playing' && state.players[state.current] && state.players[state.current].userId === myUserId;
     const hasRolled = state.rollsUsed > 0;
@@ -401,6 +408,59 @@ window.MpUI = (function () {
     if (ownBtn && onToggleOwnCols) ownBtn.addEventListener('click', onToggleOwnCols);
   }
 
+  /* 5000:n tilannetaulu: pelaajien summat, vuorot ja matka tavoitteeseen,
+     ja alla pisteytys. Pöytäkirjaa ei ole. */
+  function fiveKTable(state) {
+    const K = S().FIVEK;
+    const six = state.variant.sixDice;
+    const playing = state.status === 'playing';
+    const lm = state.lastMark;
+    let h = '<thead><tr><th>5000</th><th>Summa</th><th>Vuorot</th></tr></thead><tbody>';
+    state.players.forEach((p, i) => {
+      const cur = playing && i === state.current;
+      const pct = Math.min(100, Math.round((p.total || 0) / K.TARGET * 100));
+      const note = !p.total ? ' <span class="devTag neg">ei avattu</span>'
+        : p.total >= K.TARGET ? ' <span class="devTag pos">maalissa</span>' : '';
+      h += `<tr class="fkRow${cur ? ' cur' : ''}"><td><span class="pdot" style="background:${p.color}"></span>${esc(p.username)}${cur ? ' · vuorossa' : ''}</td>` +
+        `<td class="filled${lm && lm.seatId === p.seatId ? ' lastMark' : ''}"><b>${p.total || 0}</b>${note}<div class="fkBar"><i style="width:${pct}%"></i></div></td>` +
+        `<td>${p.turns || 0}</td></tr>`;
+    });
+    if (playing && state.players.some((p) => (p.total || 0) >= K.TARGET)) {
+      h += '<tr class="section"><th colspan="3">Loppukierros — jokainen pelaa yhtä monta vuoroa</th></tr>';
+    }
+    const rule = (name, pts) => `<tr class="fkRule"><td colspan="2">${name}</td><td>${pts}</td></tr>`;
+    h += '<tr class="section"><th colspan="3">Pisteet</th></tr>';
+    h += rule('Ykkönen', K.ONE) + rule('Vitonen', K.FIVE);
+    h += rule('Kolme samaa', 'silmäluku × 100') + rule('Kolme ykköstä', 1000);
+    h += rule(`Neljäs${six ? ', viides ja kuudes' : ' ja viides'} sama`, 'tuplaa');
+    h += rule(`Suora ${six ? '1–6' : '1–5 tai 2–6'} yhdellä heitolla`, six ? K.STRAIGHT6 : K.STRAIGHT5);
+    if (six) h += rule('Kolme paria yhdellä heitolla', K.THREE_PAIRS);
+    h += rule('Avaus: ensimmäinen pankitus vähintään', K.OPEN);
+    h += rule('Tyhjä heitto', 'potti nollautuu');
+    return h + '</tbody>';
+  }
+
+  /* 5000:n vuoron tilanne pikavalintojen paikalla: potti, valinnan pisteet
+     ja pankitusnappi. Muille kuin vuorossa olevalle samat tiedot ilman
+     nappia, heiton toiston päätyttyä. */
+  function fiveKPicks(state, isMyTurn, rolling, qpEl, hintEl, onPick) {
+    const f = state.fiveK;
+    if (state.status !== 'playing' || !f || state.rollsUsed === 0 || (!isMyTurn && rolling)) { if (hintEl) hintEl.style.display = ''; return; }
+    const pill = (text, cls) => { const e = document.createElement('button'); e.className = 'qp ' + cls; e.textContent = text; qpEl.appendChild(e); return e; };
+    const info = pill(`Potti ${f.pot}` + (f.sel ? ` + ${f.sel}` : ''), 'watch');
+    info.disabled = true; info.tabIndex = -1;
+    if (f.canBank) {
+      const b = pill(`💰 Pankkiin ${f.bankValue}`, isMyTurn ? 'blink' : 'watch');
+      if (isMyTurn) b.addEventListener('click', () => onPick('bank', 0, b));
+      else { b.disabled = true; b.tabIndex = -1; }
+    } else {
+      const o = pill(`Avaukseen ${f.open} · nyt ${f.bankValue}`, 'watch');
+      o.disabled = true; o.tabIndex = -1;
+    }
+    qpEl.classList.add('show');
+    if (hintEl) hintEl.style.display = 'none';
+  }
+
   /* ---------- Pikavalinnat (ks. yksinpelin js/ui.js:n renderQuickPicks — sama logiikka) ---------- */
   /* Pikavalinnat näkyvät myös muille kuin vuorossa olevalle (katsoville
      pelaajille ja katsojille), mutta vasta kun heiton toisto on päättynyt,
@@ -417,6 +477,7 @@ window.MpUI = (function () {
     const isMyTurn = state.status === 'playing' && state.players[state.current] && state.players[state.current].userId === myUserId;
     const rolling = !!(window.Dice3D && window.Dice3D.isRolling && window.Dice3D.isRolling());
     const watch = !isMyTurn;
+    if (state.variant.fiveK) { fiveKPicks(state, isMyTurn, rolling, qpEl, hintEl, onPick); return; }
     if (state.status !== 'playing' || state.rollsUsed === 0 || (watch && rolling)) { if (hintEl) hintEl.style.display = ''; return; }
     const six = state.variant.sixDice;
     const p = state.players[state.current];
@@ -482,13 +543,24 @@ window.MpUI = (function () {
        vaikka palvelimen tila (vuoro, heittojen määrä) jo sallisi seuraavan
        heiton — muuten klikkaus ei tekisi mitään ja ulkoasu valehtelisi. */
     const busy = window.Dice3D && (window.Dice3D.isRolling() || window.Dice3D.isCharging());
+    const f = state.variant && state.variant.fiveK ? (state.fiveK || {}) : null;
+    if (f) {
+      /* 5000: heittoja ei ole rajattu; nappi kertoo montako noppaa lähtee. */
+      const first = state.rollsUsed === 0;
+      const left = state.held.filter((h) => !h).length;
+      rollBtn.disabled = !isMyTurn || busy || !(first || f.canRoll);
+      rollBtn.textContent = watching ? 'KATSOT' : busy ? '…' : first ? 'HEITÄ NOPAT'
+        : !f.canRoll ? 'SIIRRÄ NOPPIA SIVUUN' : f.hot ? 'HEITÄ KAIKKI UUDESTAAN'
+        : `HEITÄ ${left} ${left === 1 ? 'NOPPA' : 'NOPPAA'}`;
+    } else {
     rollBtn.disabled = !isMyTurn || busy || (state.rollsUsed >= maxR && !bank);
     rollBtn.textContent = watching ? 'KATSOT' : busy ? '…' :
       state.rollsUsed === 0 ? (quick ? `HEITÄ ${state.diceCount || 10} NOPPAA` : 'HEITÄ NOPAT') :
       state.rollsUsed >= maxR ? (bank ? `PANKKIHEITTO 💰${state.players[state.current].bank}` : 'VALITSE RIVI') :
       'HEITÄ UUDELLEEN';
+    }
     rollsEl.innerHTML = '';
-    for (let i = 0; i < maxR; i++) {
+    for (let i = 0; i < (f ? 0 : maxR); i++) {
       const dot = document.createElement('div');
       dot.className = 'rollDot' + (i < state.rollsUsed ? ' used' : '');
       rollsEl.appendChild(dot);

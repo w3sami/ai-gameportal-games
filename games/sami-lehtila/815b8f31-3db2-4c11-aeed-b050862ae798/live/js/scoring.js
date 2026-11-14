@@ -162,7 +162,58 @@
   const scFull   = (sc, six) => allCats(six).every(c=>sc[c.id]!==undefined);
   const playerTotal = (p, six) => p.scs.reduce((a,s)=>a+totalOf(s, six),0);
 
+  /* ---------- 5000 ----------
+     Oma pelityyppinsä samoilla nopilla: ei pöytäkirjaa, vaan pisteitä
+     tuottavia noppia siirretään sivuun ja loput heitetään uudestaan
+     (ks. room-rules.js). Pisteet:
+       ykkönen 100, vitonen 50
+       kolme samaa silmäluku × 100 (ykköset 1000); jokainen lisänoppa tuplaa
+       suora kaikilla nopilla yhdellä heitolla: 5 noppaa 500, 6 noppaa 1500
+       kolme eri paria (6 noppaa, yhdellä heitolla) 750 */
+  const FIVEK = { TARGET: 5000, OPEN: 350, ONE: 100, FIVE: 50, STRAIGHT5: 500, STRAIGHT6: 1500, THREE_PAIRS: 750 };
+  const fkKind = (v, n) => (v === 1 ? 1000 : v * 100) * (1 << (n - 3));
+
+  /* Koko heiton yhdistelmä (suora, kolme paria): kaikki `total` noppaa. */
+  function fkFullCombo(dice, total) {
+    if (dice.length !== total) return 0;
+    const c = counts(dice);
+    let best = 0;
+    if (total === 5 && ([1,2,3,4,5].every(v=>c[v]===1) || [2,3,4,5,6].every(v=>c[v]===1))) best = FIVEK.STRAIGHT5;
+    if (total === 6 && [1,2,3,4,5,6].every(v=>c[v]===1)) best = FIVEK.STRAIGHT6;
+    if (total === 6 && c.filter(n=>n===2).length === 3) best = Math.max(best, FIVEK.THREE_PAIRS);
+    return best;
+  }
+
+  /* Sivuun siirrettävän joukon pisteet, kun JOKAINEN sen noppa tuottaa
+     pisteitä; muuten 0. total = pelin noppamäärä (5 tai 6). */
+  function fkScoreSet(dice, total) {
+    if (!dice.length) return 0;
+    const c = counts(dice);
+    let sum = 0, ok = true;
+    for (let v = 1; v <= 6; v++) {
+      const n = c[v];
+      if (!n) continue;
+      if (n >= 3) sum += fkKind(v, n);
+      else if (v === 1) sum += n * FIVEK.ONE;
+      else if (v === 5) sum += n * FIVEK.FIVE;
+      else ok = false;
+    }
+    return Math.max(fkFullCombo(dice, total), ok ? sum : 0);
+  }
+
+  /* Heiton paras tulos: { pts, mask }, mask[i] = noppa i tuottaa pisteitä.
+     pts 0 = tyhjä heitto. */
+  function fkBest(dice, total) {
+    const c = counts(dice);
+    const scores = (v) => c[v] >= 3 || v === 1 || v === 5;
+    const mask = dice.map(scores);
+    const part = fkScoreSet(dice.filter(scores), total);
+    const full = fkFullCombo(dice, total);
+    return full > part ? { pts: full, mask: dice.map(() => true) } : { pts: part, mask };
+  }
+
   const api = {
+    FIVEK, fkScoreSet, fkBest,
     UPPER, LOWER, LOWER6, QUICK_DICE,
     setSixMode, getSixMode,
     lowerCats, allCats, upperBase, bonusLimit, bonusValue, pickCount,
