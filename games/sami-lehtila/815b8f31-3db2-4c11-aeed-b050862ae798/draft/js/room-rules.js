@@ -29,7 +29,9 @@
    (seat.turns), vuorolla potti (room.pot). Heiton jälkeen pelaaja siirtää
    sivuun pisteitä tuottavia noppia (hold) ja joko heittää loput (roll) tai
    vie potin summaansa (bank). room.held = sivussa olevat nopat, room.locked
-   = niistä aiemmilla heitoilla siirretyt, joita ei voi enää palauttaa.
+   = niistä aiemmilla heitoilla siirretyt, joita ei voi enää palauttaa,
+   room.batch = monennenko heiton jälkeen kukin niistä siirrettiin (nopat
+   näytetään sivussa heittokohtaisina ryhminä).
    Heitto ilman pisteitä tuottavaa noppaa nollaa potin ja päättää vuoron.
    Kun kaikki nopat ovat sivussa, ne heitetään kaikki uudestaan samaan
    pottiin. Ensimmäinen pankitus vaatii FIVEK.OPEN pistettä yhdellä
@@ -168,6 +170,7 @@
     room.lastMark = null;
     room.pot = 0;
     room.locked = new Array(diceCount).fill(false);
+    room.batch = new Array(diceCount).fill(0);
     room.rollSeq = 0;
     room.players.forEach(p => { p.scs = emptyScs(room.variant); p.bank = 0; p.total = 0; p.turns = 0; });
   }
@@ -255,6 +258,7 @@
     room.diceValues = new Array(diceCount).fill(0);
     room.pot = 0;
     room.locked = new Array(diceCount).fill(false);
+    room.batch = new Array(diceCount).fill(0);
   }
 
   function filledCount(p) {
@@ -304,6 +308,7 @@
     room.rollsUsed = 0;
     room.held = new Array(n).fill(false);
     room.locked = new Array(n).fill(false);
+    room.batch = new Array(n).fill(0);
     room.current = (room.current + 1) % room.players.length;
     advanceIfCurrentFinished(room);
     checkTurnOrder(room, '5000');
@@ -316,8 +321,12 @@
       const t = fkTurn(room);
       if (!t.canRoll) throw new Error('Siirrä ensin sivuun pisteitä tuottavia noppia.');
       room.pot = t.pot + t.sel;
-      if (t.hot) { room.held.fill(false); room.locked.fill(false); }
-      else room.locked = room.held.slice();
+      if (t.hot) { room.held.fill(false); room.locked.fill(false); room.batch = new Array(n).fill(0); }
+      else {
+        if (!Array.isArray(room.batch)) room.batch = new Array(n).fill(0);
+        room.held.forEach((h, i) => { if (h && !room.locked[i]) room.batch[i] = room.rollsUsed; });
+        room.locked = room.held.slice();
+      }
     }
     room.diceValues = diceValues.map((v, i) => (room.locked[i] ? room.diceValues[i] : v));
     room.rollsUsed++;
@@ -491,7 +500,7 @@
       /* 5000:ssa heittoja ei ole rajattu (0); vuoron tilanne on fiveK-kentässä. */
       maxRolls: room.variant.fiveK ? 0 : maxRollsFor(room.variant),
       fiveK: room.variant.fiveK ? Object.assign(fkTurn(room), {
-        locked: room.locked || [], target: FK.TARGET, open: FK.OPEN, rollSeq: room.rollSeq || 0,
+        locked: room.locked || [], batch: room.batch || [], target: FK.TARGET, open: FK.OPEN, rollSeq: room.rollSeq || 0,
       }) : null,
       current: room.current,
       rollsUsed: room.rollsUsed,

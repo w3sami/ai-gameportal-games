@@ -593,6 +593,25 @@ window.Dice3D = (function () {
     captureFrame(0);
   }
 
+  /* Lukitut nopat alareunaan vasemmalta oikealle. Ilman ryhmiä ne ovat
+     yhdessä rivissä suuruusjärjestyksessä. Ryhmien kanssa (setParkGroups:
+     nopan indeksi → ryhmän numero) saman ryhmän nopat ovat vierekkäin
+     suuruusjärjestyksessä, ryhmät numerojärjestyksessä ja ryhmien välissä
+     on PARK_GAP. */
+  const PARK_STEP = 1.5, PARK_GAP = .45;
+  let parkGroups = null;
+  function setParkGroups(groups) { parkGroups = Array.isArray(groups) ? groups.slice() : null; }
+  function parkHeldDice() {
+    const groupOf = (d) => (parkGroups ? (parkGroups[dice.indexOf(d)] ?? 0) : 0);
+    const held = activeDice().filter(d=>d.held).sort((a,b)=>groupOf(a)-groupOf(b) || a.value-b.value);
+    const xs = []; let x = 0;
+    held.forEach((d,i)=>{
+      if(i) x += PARK_STEP + (groupOf(d)!==groupOf(held[i-1]) ? PARK_GAP : 0);
+      xs.push(x);
+    });
+    held.forEach((d,i)=>{ d.parkTarget={x: xs[i]-x/2, y:HALF, z:TRAY_D/2-.85}; });
+  }
+
   /* ---------- Heitto ----------
      `record`: true kun TÄMÄ asiakas on vuorossa oleva heittäjä — silloin
      fysiikka nauhoitetaan (ks. beginRecording/captureFrame) ja lopullinen
@@ -603,14 +622,7 @@ window.Dice3D = (function () {
     rolling=true; settled=false;
     nudgeAvailable = cfg.nudge;
     const P=Number.isFinite(power)?Math.min(Math.max(power,1),MAX_THROW_POWER):1;
-    if(cfg.parkHeld){
-      /* lukitut alareunaan suuruusjärjestyksessä vasemmalta oikealle */
-      const held=activeDice().filter(d=>d.held).sort((a,b)=>a.value-b.value);
-      held.forEach((d,i)=>{
-        const x=-(held.length-1)*.75+i*1.5;
-        d.parkTarget={x, y:HALF, z:TRAY_D/2-.85};
-      });
-    }
+    if(cfg.parkHeld) parkHeldDice();
     let slot=0;
     activeDice().forEach(d=>{
       if(d.held) return;
@@ -635,14 +647,7 @@ window.Dice3D = (function () {
     if(charging || rolling) return;
     charging=true; chargeT=0;
     if (record) beginRecording();
-    if(cfg.parkHeld){
-      /* lukitut alareunaan suuruusjärjestyksessä vasemmalta oikealle */
-      const held=activeDice().filter(d=>d.held).sort((a,b)=>a.value-b.value);
-      held.forEach((d,i)=>{
-        const x=-(held.length-1)*.75+i*1.5;
-        d.parkTarget={x, y:HALF, z:TRAY_D/2-.85};
-      });
-    }
+    if(cfg.parkHeld) parkHeldDice();
     let slot=0;
     activeDice().forEach(d=>{
       if(d.held) return;
@@ -1096,7 +1101,7 @@ window.Dice3D = (function () {
     init, configure, setActiveDiceCount, applyColor, resetHeld,
     getHeld, setHeld, toggleHeld, hitTestDie, nudgeAt, isNudgeAvailable,
     getValues, isRolling, isSettled, isCharging, onSettle, restoreDisplay, resumeFrom, stopRoll, onRecordTick,
-    throwDice, startCharge, releaseCharge, cancelCharge,
+    throwDice, startCharge, releaseCharge, cancelCharge, setParkGroups,
     playTrajectory, streamFrames, isStreaming, onStreamStall, setPhysicsActive, lockResting, heldMask,
     shakeCamera, resize,
   };

@@ -195,6 +195,15 @@ window.MpGame = (function () {
     if (myRollInFlight || window.Dice3D.isRolling() || window.Dice3D.isCharging()) return false;
     return rollAllowed(lastState);
   }
+  /* 5000: sivussa olevat nopat näytetään heittokohtaisina ryhminä: aiemmin
+     siirretyt palvelimen kertoman heiton mukaan (fiveK.batch), nyt valitut
+     omana ryhmänään viimeisenä. Muissa peleissä ryhmiä ei ole. */
+  function parkGroupsOf(state) {
+    if (!isFiveK(state) || !state.fiveK) return null;
+    const f = state.fiveK;
+    return state.held.map((h, i) => (f.locked[i] ? (f.batch && f.batch[i]) || 0 : state.rollsUsed));
+  }
+
   /* 5000: kun sivuun siirto käyttää kaikki nopat, seuraava heitto heittää
      ne kaikki. Nopat vapautetaan ennen latausta, koska moottori heittää
      vain vapaat nopat; palvelin vapauttaa samat heiton saapuessa. */
@@ -703,6 +712,7 @@ window.MpGame = (function () {
       if (lost) suspendMyRoll(keep, state.diceValues, state.held);
       /* 5000: oman latauksen ja heiton aikana nopat ovat moottorin tilassa
          (prepareThrow vapautti ne), ei palvelimen edellisessä. */
+      window.Dice3D.setParkGroups(parkGroupsOf(state));
       const midThrow = isFiveK(state) && !lost && (myRollInFlight || window.Dice3D.isCharging());
       if (!midThrow) state.held.forEach((h, i) => window.Dice3D.setHeld(i, h));
       /* Fysiikka (world.step) ajetaan VAIN vuorossa olevalla pelaajalla —
