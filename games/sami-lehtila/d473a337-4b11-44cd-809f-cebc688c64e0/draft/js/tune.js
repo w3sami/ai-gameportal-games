@@ -6,6 +6,7 @@ export const DEFAULTS = {
   push: [0.16, 0.42, 0.9], // one cell pushing a row of 1, 2 or 3
   collect: 0.13,       // stepping onto a gem as it is picked up
   bump: 0.1,           // a step into something that does not move
+  smash: 0.22,         // a hammer blow
   enemyStep: 0.3,      // an enemy's cell
   touch: 0.62,         // how close (in cells) an enemy may come before it catches the player
   deadPause: 1.1,      // from being caught to the level starting again
