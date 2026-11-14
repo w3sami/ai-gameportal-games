@@ -259,6 +259,18 @@ export function createRenderer(canvas) {
         ctx.fillStyle = '#2a1e00'; ctx.beginPath(); ctx.arc(x + fx * r * 0.07, y + fy * r * 0.07, r * 0.1, 0, Math.PI * 2); ctx.fill();
       }
     }
+    // a hammer blow: the head swings down onto the facing cell
+    if (a && a.kind === 'smash') {
+      const k = Math.min(1, a.k), ang = (1 - Math.sin(k * Math.PI / 2)) * 1.4;
+      const base = Math.atan2(fy, fx);
+      ctx.save();
+      ctx.rotate(base - ang);
+      ctx.fillStyle = '#c98a4b';
+      ctx.fillRect(r * 0.2, -r * 0.08, r * 1.3, r * 0.16);
+      ctx.fillStyle = '#b8bec9';
+      ctx.fillRect(r * 1.3, -r * 0.32, r * 0.42, r * 0.64);
+      ctx.restore();
+    }
     // sweat for a row of three
     if (a && a.kind === 'push' && a.len === 3) {
       const t = (time * 2.5) % 1;

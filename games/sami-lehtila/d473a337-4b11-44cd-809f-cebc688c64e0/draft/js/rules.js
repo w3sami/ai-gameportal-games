@@ -14,6 +14,11 @@
 //
 // A row of up to MAX_CHAIN things moves when the cell beyond it is free
 // floor. The level is done when no gem is left.
+//
+// A level may give hammers: `powers` lists how many gems must be collected
+// for each, e.g. [2, 5]. A hammer breaks the box next to the player in the
+// direction they face (the way they last stepped or bumped); walls, rocks
+// and gems stay.
 
 export const MAX_CHAIN = 3;
 export const DIRS = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
@@ -21,7 +26,7 @@ export const DIRS = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
 const OBJ = { o: 'box', '*': 'lock', '+': 'touch', $: 'anchor' };
 export const isGem = (k) => k === 'lock' || k === 'touch' || k === 'anchor';
 
-export function parseLevel(rows) {
+export function parseLevel(rows, powers = []) {
   const h = rows.length, w = Math.max(...rows.map((r) => r.length));
   const wall = new Uint8Array(w * h);
   const obj = new Array(w * h).fill(null);
@@ -38,7 +43,8 @@ export function parseLevel(rows) {
       else if (c === 'v') enemies.push({ cell: i, axis: 'y' });
     }
   }
-  return { w, h, wall, obj, player, enemies };
+  // got: gems collected; tools: hammers in hand
+  return { w, h, wall, obj, player, enemies, powers, got: 0, tools: 0, facing: 'down' };
 }
 
 export const gemsLeft = (s) => s.obj.reduce((n, k) => n + (isGem(k) ? 1 : 0), 0);
@@ -75,7 +81,12 @@ export function step(s, dir, blocked = () => false) {
 
 // Carry out what step() returned. Mutates s.
 export function apply(s, r, dir) {
-  if (r.kind === 'collect') s.obj[r.to] = null;
+  s.facing = dir;
+  if (r.kind === 'collect') {
+    s.obj[r.to] = null;
+    s.got++;
+    s.tools += s.powers.filter((n) => n === s.got).length;
+  }
   if (r.kind === 'push') {
     const [dx, dy] = DIRS[dir], d = dy * s.w + dx;
     for (let k = r.chain.length - 1; k >= 0; k--) {
@@ -85,6 +96,25 @@ export function apply(s, r, dir) {
     }
   }
   s.player = r.to;
+}
+
+// The cell a hammer would break now, or -1: a box next to the player in
+// the direction they face, and a hammer in hand.
+export function hammerTarget(s) {
+  if (!s.tools) return -1;
+  const [dx, dy] = DIRS[s.facing];
+  const x = (s.player % s.w) + dx, y = ((s.player / s.w) | 0) + dy;
+  if (x < 0 || y < 0 || x >= s.w || y >= s.h) return -1;
+  const i = y * s.w + x;
+  return s.obj[i] === 'box' ? i : -1;
+}
+
+export function useHammer(s) {
+  const i = hammerTarget(s);
+  if (i < 0) return -1;
+  s.obj[i] = null;
+  s.tools--;
+  return i;
 }
 
 export function cloneState(s) {
