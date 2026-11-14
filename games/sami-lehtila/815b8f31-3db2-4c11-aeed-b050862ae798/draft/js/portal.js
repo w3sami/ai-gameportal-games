@@ -262,6 +262,9 @@ window.JatsiPortal = (function () {
     pickTag(variant.fiveK ? '5000' : variant.quick ? 'pikajatsi' : 'tavallinen');
     pickTag(variant.sixDice ? '6 noppaa' : '5 noppaa');
     if (!variant.fiveK) pickTag(variant.twoCol ? 'tuplasarake' : 'yksi sarake');
+    /* Heittopankki pelin mukaan: pankkipelin rivit näkyvät vain se valittuna. */
+    sel.delete('heittopankki');
+    if (variant.bank) pickTag('heittopankki');
     return render(wrap, highlightId);
   }
 
