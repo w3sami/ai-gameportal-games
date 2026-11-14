@@ -476,7 +476,7 @@
       : !amIPlayer ? 'Lopeta katsominen'
       : state.status === 'playing' ? 'Takaisin aulaan — paikka säilyy' : 'Poistu huoneesta';
 
-    document.getElementById('undoBtn').classList.toggle('show', state.status === 'playing' && state.undoBy === me.id);
+    document.getElementById('undoBtn').classList.toggle('show', window.MpGame.canUndo(state));
     const amIHost = state.hostId === me.id;
     const preGame = state.status === 'open';
     if (preGame) document.getElementById('turnBadge').textContent = 'Odotetaan aloitusta';
