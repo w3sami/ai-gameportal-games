@@ -145,8 +145,11 @@ window.JatsiPortal = (function () {
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
   /* Tag-suodatin: yksi tagirivi. Tagit ovat ryhmissä, ja ryhmästä on
-     valittuna enintään yksi: valinta poistaa ryhmän toisen valinnan, ja
-     valitun napautus poistaa sen, jolloin ryhmä ei rajaa. Eri ryhmien
+     valittuna enintään yksi: valinta poistaa ryhmän toisen valinnan. Tulokseen
+     vaikuttavat säännöt eivät sekoitu: pelityypistä, noppamäärästä ja
+     sarakkeista on aina yksi valittuna (oletus tavallinen, 5 noppaa, yksi
+     sarake), ja heittopankin rivit näkyvät vain se valittuna. Ravistus ja
+     offline/verkossa vain rajaavat: valitun napautus poistaa sen. Eri ryhmien
      valinnat rajaavat yhdessä. Valinta poistaa myös tagit, joiden kanssa se
      ei voi esiintyä samalla rivillä (CLASH).
      Pelityyppi, noppamäärä ja sarakkeet ovat taulun kenttiä, joten ne
@@ -175,23 +178,35 @@ window.JatsiPortal = (function () {
     ['pikajatsi', 'heittopankki'],
     ['5000', 'heittopankki'], ['5000', 'yksi sarake'], ['5000', 'tuplasarake'],
   ];
-  const sel = new Set();
+  /* Ryhmät, joista on aina yksi valittuna, ja niiden oletus (ryhmän ensimmäinen). */
+  const REQUIRED = ['kind', 'dice', 'cols'];
+  const sel = new Set(REQUIRED.map((g) => GROUPS[g][0]));
   const cache = new Map(); // taulu/kenttä -> { entries, reason }
 
   function pickTag(tag) {
-    if (sel.has(tag)) { sel.delete(tag); return; }
+    const required = REQUIRED.some((g) => GROUPS[g].includes(tag));
+    if (sel.has(tag)) { if (!required) sel.delete(tag); return; }
     groupOf(tag).forEach((t) => sel.delete(t));
     CLASH.forEach(([a, b]) => { if (a === tag) sel.delete(b); if (b === tag) sel.delete(a); });
     sel.add(tag);
+    fillDefaults();
+  }
+  /* Pakollisen ryhmän tyhjäksi jäänyt valinta (CLASH poisti sen) palaa
+     oletukseen. 5000:ssa ei ole sarakkeita. */
+  function fillDefaults() {
+    REQUIRED.forEach((g) => {
+      if (g === 'cols' && sel.has('5000')) return;
+      if (!GROUPS[g].some((t) => sel.has(t))) sel.add(GROUPS[g][0]);
+    });
   }
 
   /* Haettavat kentät valinnoista: { board, level, tags }, jossa tags ovat
      kentän määräämät tagit (pelityyppi, noppamäärä, sarakkeet). */
   function sources() {
     const chosen = (group) => GROUPS[group].filter((t) => sel.has(t));
-    const kinds = chosen('kind').length ? chosen('kind') : ['tavallinen', 'pikajatsi'];
-    const dice = chosen('dice').length ? chosen('dice') : GROUPS.dice;
-    const cols = chosen('cols').length ? chosen('cols') : GROUPS.cols;
+    const kinds = chosen('kind').length ? chosen('kind') : [GROUPS.kind[0]];
+    const dice = chosen('dice').length ? chosen('dice') : [GROUPS.dice[0]];
+    const cols = chosen('cols').length ? chosen('cols') : [GROUPS.cols[0]];
     const out = [];
     kinds.forEach((k) => dice.forEach((d) => (k === '5000' ? [null] : cols).forEach((c) => {
       const variant = { fiveK: k === '5000', quick: k === 'pikajatsi', sixDice: d === '6 noppaa', twoCol: c === 'tuplasarake' };
@@ -321,7 +336,7 @@ window.JatsiPortal = (function () {
     openOn(wrap, variant, highlightId);
   }
 
-  /* Alkuruudun tulostaulu: kaikki kentät ja aiemmat valinnat. */
+  /* Alkuruudun tulostaulu: aiemmat valinnat, aluksi oletukset. */
   function openBoard(wrap) { return render(wrap, null); }
 
   return { onPortal: ON_PORTAL, openBoard, wireFullscreen, toggleFullscreen, submitLocalGame, showBoard, levelFor };
