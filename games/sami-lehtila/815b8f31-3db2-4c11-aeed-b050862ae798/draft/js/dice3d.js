@@ -375,7 +375,7 @@ window.Dice3D = (function () {
      odotettavaa juuri uudelleenliittymisessä (ks. forceFaceUp-kommentti,
      samaa käytetään playTrajectoryn varatapauksessa myöhässä liittyneelle). */
   function restoreDisplay(values, heldArr) {
-    playback = null; rolling = false; charging = false; settled = true;
+    playback = null; rolling = false; charging = false; settled = true; releasePending = null;
     activeDice().forEach((d, i) => {
       d.held = !!(heldArr && heldArr[i]);
       d.parkTarget = null; delete d.hover;
@@ -406,7 +406,7 @@ window.Dice3D = (function () {
      asti, ei vain uudelleenlatauksen jälkeistä osaa. */
   function resumeFrom(snapshot) {
     if (!snapshot || !Array.isArray(snapshot.dice)) return false;
-    playback = null; charging = false; settled = false; rolling = true;
+    playback = null; charging = false; settled = false; rolling = true; releasePending = null;
     activeDice().forEach((d, i) => {
       const s = snapshot.dice[i];
       if (!s) return;
@@ -446,7 +446,7 @@ window.Dice3D = (function () {
   function stopRoll() {
     recording = false; recFrames = []; recAccum = 0;
     if (playback || (!rolling && !charging)) return false;
-    charging = false; rolling = false; settled = true; nudgeAvailable = false;
+    charging = false; rolling = false; settled = true; nudgeAvailable = false; releasePending = null;
     activeDice().forEach(d => {
       delete d.hover; d.parkTarget = null;
       const b = d.body;
@@ -645,7 +645,7 @@ window.Dice3D = (function () {
      nousun käteen ja pyörityksen; releaseCharge jatkaa samaa nauhoitusta. */
   function startCharge(record) {
     if(charging || rolling) return;
-    charging=true; chargeT=0;
+    charging=true; chargeT=0; releasePending=null;
     if (record) beginRecording();
     if(cfg.parkHeld) parkHeldDice();
     let slot=0;
@@ -665,8 +665,15 @@ window.Dice3D = (function () {
     });
   }
 
+  /* Lataus kestää vähintään MIN_CHARGE_S: nopea napautus jättää nopat
+     pyörimään kädessä siihen asti, jotta ne ehtivät saada vauhtia, ja heitto
+     lähtee itsestään (releasePending, ks. loop). */
+  const MIN_CHARGE_S = .8;
+  let releasePending = null;
   function releaseCharge(record) {
     if(!charging) return;
+    if(chargeT < MIN_CHARGE_S){ releasePending = { record }; return; }
+    releasePending = null;
     charging=false;
     rolling=true; settled=false;
     nudgeAvailable = cfg.nudge;
@@ -687,7 +694,7 @@ window.Dice3D = (function () {
 
   function cancelCharge() {
     /* moninpelissä ei käytetä pito-heittoa, mutta pidetään rajapinta valmiina */
-    charging=false;
+    charging=false; releasePending=null;
   }
 
   /* Jumiutunut noppa: vinossa (yläpinta ei vaakatasossa) tai toisen päällä.
@@ -1022,6 +1029,7 @@ window.Dice3D = (function () {
        hyödyllistä. Kun ei ole oma vuoro eikä toistoa käynnissä, nopat
        lepäävät paikallaan eikä simulaatiota tarvita ollenkaan. */
     if (physicsActive && !playback) world.step(1/60, dt, 4);
+    if(charging && releasePending && chargeT >= MIN_CHARGE_S) releaseCharge(releasePending.record);
     if(charging){
       chargeT+=dt;
       const t=now/1000;
