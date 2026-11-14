@@ -378,17 +378,11 @@ window.MpGame = (function () {
   }
 
   /* ---------- Oman heiton keskeytys ja jatko ---------- */
-  /* Pysäyttää paikallisen heiton tai latauksen ja asettaa nopat annettuun
-     tilaan. Dice3D:n nauhoitus loppuu vain heiton asettuessa tai uuden
-     nauhoittamattoman heiton alkaessa, joten nauhoitus katkaistaan
-     tyhjällä nauhoittamattomalla lataus+heitto-parilla, jonka restoreDisplay
-     kumoaa samassa ruudunpäivityksessä (mitään ei ehdi näkyä). */
+  /* Pysäyttää paikallisen heiton tai latauksen (nauhoitus loppuu eikä
+     onSettle laukea) ja asettaa nopat annettuun tilaan. */
   function stopLocalRoll(values, held) {
-    const D = window.Dice3D;
-    D.restoreDisplay(values, held);
-    D.startCharge(false);
-    D.releaseCharge(false);
-    D.restoreDisplay(values, held);
+    window.Dice3D.stopRoll();
+    window.Dice3D.restoreDisplay(values, held);
   }
   /* Vuoro vietiin kesken oman heiton. keep: heitto otetaan talteen
      odottamaan vuoron palaamista (peruminen); muuten se hylätään. Pelkkä
