@@ -960,10 +960,10 @@ window.Dice3D = (function () {
 
      1) Pöytä mahtuu ruutuun: perusetäisyys on vähintään CAM_POS:n etäisyys
         ja niin paljon enemmän kuin kapea ruutu vaatii (fitDistance).
-     2) Noppia seurataan: jokainen noppa pysyy ruudussa ja vähintään
-        MIN_DIE_DIST päässä kamerasta. Korkealle lentävä noppa tulee kohti
-        kameraa, joten kamera vetäytyy sen edeltä ja palaa, kun noppa
-        putoaa (followExtra). */
+     2) Noppia seurataan: kamera vetäytyy, jotta jokainen noppa pysyisi
+        ruudussa ja vähintään MIN_DIE_DIST päässä kamerasta — korkealle
+        lentävä noppa tulee kohti kameraa. Liike on vaimennettu ja rajattu
+        (followExtra). */
   const CAM_TARGET = new THREE.Vector3(0, 0, .4);
   const CAM_FWD = CAM_TARGET.clone().sub(CAM_POS).normalize();
   const CAM_RIGHT = new THREE.Vector3().crossVectors(CAM_FWD, new THREE.Vector3(0, 1, 0)).normalize();
@@ -994,11 +994,16 @@ window.Dice3D = (function () {
     return Math.max(CAM_DIST, ...TRAY_CORNERS.map(c => distanceFor(c, 0, 0)));
   }
 
-  /* Noppien vaatima lisäetäisyys: kasvaa nopeasti, palaa rauhallisesti. */
+  /* Noppien vaatima lisäetäisyys. Kamera nousee pehmeästi ja enintään
+     FOLLOW_MAX-kertaiseksi perusetäisyydestä, joten hyvin korkealle lentävä
+     noppa käy hetken ruudun ulkopuolella. Alas kamera laskeutuu hitaasti
+     omaa tahtiaan eikä nopan mukana. */
+  const FOLLOW_MAX = 2, FOLLOW_RISE = 4, FOLLOW_FALL = .6;
   function followExtra(dt) {
     let need = 0;
     activeDice().forEach(d => { need = Math.max(need, distanceFor(d.mesh.position, DIE_PAD, MIN_DIE_DIST) - baseDist); });
-    followDist += (need - followDist) * Math.min(1, dt * (need > followDist ? 12 : 2.5));
+    need = Math.min(need, baseDist * (FOLLOW_MAX - 1));
+    followDist += (need - followDist) * Math.min(1, dt * (need > followDist ? FOLLOW_RISE : FOLLOW_FALL));
     if (followDist < .001) followDist = 0;
     return followDist;
   }
