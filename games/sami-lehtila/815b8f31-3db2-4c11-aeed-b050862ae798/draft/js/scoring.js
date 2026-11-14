@@ -24,7 +24,7 @@
     {id:'four',     name:'Neljä samaa'},
     {id:'small',    name:'Pieni suora'},
     {id:'large',    name:'Suuri suora'},
-    {id:'full',     name:'Täyskäsi'},
+    {id:'full',     name:'Mökki'},
     {id:'chance',   name:'Sattuma'},
     {id:'yatzy',    name:'YATZY'},
   ];
@@ -38,12 +38,12 @@
     {id:'four',       name:'Neljä samaa'},
     {id:'small',      name:'Pieni suora'},
     {id:'large',      name:'Suuri suora'},
-    {id:'straight6',  name:'Täyssuora 1–6'},
-    {id:'full',       name:'Täyskäsi'},
+    {id:'straight6',  name:'Pitkä suora 1–6'},
+    {id:'full',       name:'Mökki'},
     {id:'bighouse',   name:'Iso mökki (4+2)'},
     {id:'chance',     name:'Sattuma'},
     {id:'yatzy',      name:'YATZY (5)'},
-    {id:'yatzy6',     name:'SUUR-YATZY (6)'},
+    {id:'yatzy6',     name:'ISO YATZY (6)'},
   ];
 
   /* moduulin sisäinen tila: kumpi variantti on voimassa OLETUKSENA.
