@@ -46,7 +46,7 @@ function say(text, secs) {
 function onEvent(type, e) {
   if (type === 'collect') {
     const c = renderer.colors;
-    renderer.burst(e.at[0] + 0.5, e.at[1] + 0.5, e.kind === 'lock' ? c.lock : c.touch);
+    renderer.burst(e.at[0] + 0.5, e.at[1] + 0.5, c[e.kind] || c.touch);
   }
   if (type === 'won') {
     const key = LEVELS[index].key, prev = best[key];
