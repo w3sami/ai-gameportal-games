@@ -750,7 +750,7 @@ window.MpGame = (function () {
     const six = state.variant.sixDice;
     const big = six && open('yatzy6') ? S.scoreCat('yatzy6', diceValues, six) : 0;
     const pts = open('yatzy') ? S.scoreCat('yatzy', diceValues, six) : 0;
-    if (big >= 100) { UI.showBanner('SUUR-YATZY!'); UI.sndYatzy(); UI.burst(260, true); D3.shakeCamera(18); }
+    if (big >= 100) { UI.showBanner('ISO YATZY!'); UI.sndYatzy(); UI.burst(260, true); D3.shakeCamera(18); }
     else if (pts >= 50) { UI.showBanner('YATZY!'); UI.sndYatzy(); UI.burst(200, true); D3.shakeCamera(14); }
   }
 
