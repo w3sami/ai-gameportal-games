@@ -114,6 +114,26 @@
       ]
     },
     {
+      "key": "isku",
+      "name": "Yksi isku",
+      "hint": "Kahdesta kivestä saat vasaran. Sitä on vain yksi.",
+      "powers": [
+        {
+          "kind": "hammer",
+          "at": 2
+        }
+      ],
+      "rows": [
+        "##########",
+        "#+..o$*oo#",
+        "#...ooooo#",
+        "#@..oo++o#",
+        "#...o*ooo#",
+        "#.$.oo.xo#",
+        "##########"
+      ]
+    },
+    {
       "key": "v1000",
       "name": "Vedos 1 · kasa",
       "rows": [

@@ -7,10 +7,10 @@
 // While a step is under way the player can do nothing else: a slow push
 // is a commitment.
 
-import { parseLevel, step, apply, cloneState, gemsLeft, DIRS } from './rules.js';
+import { parseLevel, step, apply, cloneState, gemsLeft, useHammer, DIRS } from './rules.js';
 
 export function createGame(T, level, events = () => {}) {
-  const start = parseLevel(level.rows);
+  const start = parseLevel(level.rows, (level.powers || []).filter((p) => p.kind === 'hammer').map((p) => p.at));
   let s, act, enemies, state, timer, facing, clock, steps;
 
   function restart() {
@@ -30,6 +30,7 @@ export function createGame(T, level, events = () => {}) {
 
   function begin(dir) {
     facing = dir;
+    s.facing = dir;
     const r = step(s, dir, enemyAt);
     const from = s.player;
     if (r.kind === 'bump') {
@@ -43,14 +44,26 @@ export function createGame(T, level, events = () => {}) {
       for (const i of r.chain) moves.push({ kind: s.obj[i], from: i, to: i + d });
       dur = T.push[r.len - 1];
     }
+    const tools = s.tools;
     if (r.kind === 'collect') {
       dur = T.collect;
       events('collect', { kind: s.obj[r.to], at: xy(r.to) });
     }
     apply(s, r, dir);
+    if (s.tools > tools) events('tool', { tools: s.tools });
     steps++;
     act = { kind: r.kind, len: r.len || 0, dir, t: 0, dur, moves };
     if (r.kind === 'push') events('push', { len: r.len });
+  }
+
+  // the hammer: breaks the box the player faces, between steps only
+  function hammer() {
+    if (state !== 'play' || act) return false;
+    const i = useHammer(s);
+    if (i < 0) { events('miss', {}); return false; }
+    events('smash', { at: xy(i) });
+    act = { kind: 'smash', dir: facing, t: 0, dur: T.smash, moves: [] };
+    return true;
   }
 
   // an enemy's next cell: on along its axis, or back if that is taken
@@ -138,8 +151,9 @@ export function createGame(T, level, events = () => {}) {
       player: { pos: playerPos(), facing, act: act && { kind: act.kind, len: act.len, k: act.t / act.dur, dir: act.dir } },
       enemies: enemies.map((e) => ({ pos: enemyPos(e), axis: e.axis, dir: e.dir })),
       state, timer, gems: gemsLeft(s), clock, steps,
+      tools: s.tools, got: s.got, next: s.powers.find((n) => n > s.got) ?? null,
     };
   }
 
-  return { update, view, restart, get state() { return state; }, get grid() { return s; } };
+  return { update, view, restart, hammer, get state() { return state; }, get grid() { return s; } };
 }
