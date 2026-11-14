@@ -100,6 +100,20 @@
       ]
     },
     {
+      "key": "ankkuri",
+      "name": "Ankkuri",
+      "hint": "Sininen ei liiku koskaan. Koske siihen, niin se irtoaa.",
+      "rows": [
+        "##########",
+        "#@.......#",
+        "#..oo$o..#",
+        "#..o*o+..#",
+        "#..$ooo..#",
+        "#........#",
+        "##########"
+      ]
+    },
+    {
       "key": "v1000",
       "name": "Vedos 1 · kasa",
       "rows": [
