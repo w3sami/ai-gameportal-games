@@ -8,7 +8,8 @@
 //   .  floor         *  lock gem: pushed while it can move, collected when it cannot
 //   @  player        +  touch gem: collected when the player touches it,
 //   e  enemy, walks left and right      pushed when something in a row pushes it
-//   v  enemy, walks up and down
+//   v  enemy, walks up and down      $  anchor gem: never moves, a wall to every row;
+//                                       collected when the player touches it
 // Anything else is floor.
 //
 // A row of up to MAX_CHAIN things moves when the cell beyond it is free
@@ -17,8 +18,8 @@
 export const MAX_CHAIN = 3;
 export const DIRS = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
 
-const OBJ = { o: 'box', '*': 'lock', '+': 'touch' };
-export const isGem = (k) => k === 'lock' || k === 'touch';
+const OBJ = { o: 'box', '*': 'lock', '+': 'touch', $: 'anchor' };
+export const isGem = (k) => k === 'lock' || k === 'touch' || k === 'anchor';
 
 export function parseLevel(rows) {
   const h = rows.length, w = Math.max(...rows.map((r) => r.length));
@@ -58,11 +59,11 @@ export function step(s, dir, blocked = () => false) {
   if (to < 0 || s.wall[to]) return { kind: 'bump', to: s.player };
   const first = s.obj[to];
   if (!first) return { kind: 'walk', to };
-  if (first === 'touch') return { kind: 'collect', to };
+  if (first === 'touch' || first === 'anchor') return { kind: 'collect', to };
 
   const chain = [];
   let x = px + dx, y = py + dy, i = to;
-  while (i >= 0 && !s.wall[i] && s.obj[i] && chain.length <= MAX_CHAIN) {
+  while (i >= 0 && !s.wall[i] && s.obj[i] && s.obj[i] !== 'anchor' && chain.length <= MAX_CHAIN) {
     chain.push(i);
     x += dx; y += dy; i = at(x, y);
   }
