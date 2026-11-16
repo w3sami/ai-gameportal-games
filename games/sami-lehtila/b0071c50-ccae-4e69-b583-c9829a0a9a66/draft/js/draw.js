@@ -134,12 +134,43 @@ export function stepAntenna(dt) {
 }
 
 // ---------------------------------------------------------------- drawing
+// The car is drawn in light, like the note ring round it: dark panels with
+// glowing edges. Its neon is one colour at a time, and flash (0..1) is how
+// hard it is lit just now; main.js sets both from the music and the hits.
 const INK = '#1d1b26';
-const PAINT = [255, 92, 64];
-const GLASS = '#bfe9ff';
-const TYRE = '#2c2a36';
-const HUB = '#f5f1e6';
+const PAINT = [70, 44, 96];           // the dark panel colour, before shading
+const GLASS = 'rgba(150, 215, 255, 0.22)';
+const TYRE = '#1b1924';
+const HUB = '#2a2540';
 const SPRING = '#ffd23f';
+const REST_NEON = '#ff5c40';          // the car's own colour when nothing else has lit it
+let neon = REST_NEON;
+let flash = 0;
+export function setCarLight(color, amount) {
+  neon = color || REST_NEON;
+  flash = amount;
+}
+
+// The current path as a neon tube: a wide faint stroke of added light under a thin bright one.
+function neonStroke(width) {
+  ctx.save();
+  ctx.strokeStyle = neon;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.16 + 0.3 * flash;
+  ctx.lineWidth = width * (3.4 + 2 * flash);
+  ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = neon;
+  ctx.lineWidth = width;
+  ctx.stroke();
+}
+function path(points) {
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    if (i) ctx.lineTo(points[i][0], points[i][1]); else ctx.moveTo(points[i][0], points[i][1]);
+  }
+  ctx.closePath();
+}
 
 function poly(points, fill, stroke, width) {
   ctx.beginPath();
@@ -150,6 +181,9 @@ function poly(points, fill, stroke, width) {
   if (fill) { ctx.fillStyle = fill; ctx.fill(); }
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke(); }
 }
+
+// The panes of glass drawn this frame, as screen polygons: the laser show is seen through them.
+let windows = [];
 
 function drawSolid(solid, rgb) {
   const centre = bodyPoint(solid.centre);
@@ -165,10 +199,15 @@ function drawSolid(solid, rgb) {
     if (dot(n, [camPos[0] - mid[0], camPos[1] - mid[1], camPos[2] - mid[2]]) <= 0) continue;
     const shade = 0.7 + 0.3 * Math.max(0, dot(n, LIGHT));
     const fill = `rgb(${rgb.map((ch) => Math.round(ch * shade)).join(',')})`;
-    poly(w.map(project), fill, INK, 3);
+    path(w.map(project));
+    ctx.fillStyle = fill; ctx.fill();
+    neonStroke(2.5);
     if (face.glass) {
       const inset = w.map((p) => project([0, 1, 2].map((k) => mid[k] + (p[k] - mid[k]) * 0.76)));
-      poly(inset, GLASS, INK, 2);
+      path(inset);
+      ctx.fillStyle = GLASS; ctx.fill();
+      ctx.strokeStyle = neon; ctx.lineWidth = 1.5; ctx.stroke();
+      windows.push(inset);
     }
   }
 }
@@ -196,7 +235,11 @@ function drawWheel(i) {
     poly([back[k], back[k2], face[k2], face[k]], TYRE, TYRE, 1);
   }
   poly(face, TYRE, INK, 3);
-  poly(ring(zc + side, 0.52), HUB, INK, 2);
+  path(face);
+  ctx.strokeStyle = neon; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5; ctx.stroke(); ctx.globalAlpha = 1;
+  path(ring(zc + side, 0.52));
+  ctx.fillStyle = HUB; ctx.fill();
+  neonStroke(2.5);
 }
 
 // A coil drawn as a zigzag between the body and the wheel hub.
@@ -242,6 +285,24 @@ function drawShadows() {
   }
 }
 
+// Light thrown on the floor from under the car, in the car's neon.
+function drawUnderglow() {
+  const spread = (grow) => [[-1.8, -0.8], [1.8, -0.8], [1.8, 0.8], [-1.8, 0.8]].map(([x, z]) => {
+    const p = bodyPoint([x * grow, 0, z * grow]);
+    return project([p[0], 0, p[2]]);
+  });
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = neon;
+  const near = 1 / (1 + car.y * 1.2);       // weaker the higher the car is off the floor
+  for (const [grow, alpha] of [[1.5, 0.07], [1.2, 0.1], [0.95, 0.14]]) {
+    path(spread(grow));
+    ctx.globalAlpha = alpha * near * (1 + 1.6 * flash);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawFloor(beat) {
   const whole = Math.floor(beat);
   const frac = beat - whole;
@@ -272,12 +333,110 @@ function drawAntenna() {
   ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
   ctx.beginPath();
   ctx.arc(t[0], t[1], unitPx * 0.075, 0, Math.PI * 2);
-  ctx.fillStyle = SPRING; ctx.fill();
-  ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.fillStyle = neon; ctx.fill();
+  neonStroke(2);
+}
+
+// ---------------------------------------------------------------- the light show
+// Spotlights sweeping the floor and a laser show from inside the car. main.js
+// says which of them are on; both move with the beat.
+const SHOW_COLORS = ['#4dd6ff', '#ff6fae', '#ffd23f', '#8cff6a', '#c78bff', '#ff9d4d'];
+const show = { spots: false, lasers: false, beat: 0 };
+export function setShow(spots, lasers) { show.spots = spots; show.lasers = lasers; }
+
+// Four pools of coloured light wandering round the car, each with a faint cone down to it from above.
+function drawSpots(beat) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 4; i++) {
+    const turn = beat * 0.42 * (i % 2 ? -1 : 1) + i * Math.PI / 2;
+    const out = 2.3 + 0.9 * Math.sin(beat * 0.5 + i * 1.7);
+    const x = Math.cos(turn) * out, z = Math.sin(turn) * out;
+    const pool = [];
+    for (let k = 0; k < 20; k++) {
+      const a = k / 20 * Math.PI * 2;
+      pool.push(project([x + Math.cos(a) * 0.95, 0, z + Math.sin(a) * 0.95]));
+    }
+    ctx.fillStyle = SHOW_COLORS[i];
+    path(pool);
+    ctx.globalAlpha = 0.2;
+    ctx.fill();
+    // The cone: from a lamp high above to the two edges of the pool as seen from here.
+    const lamp = project([x * 0.25, 7.5, z * 0.25]);
+    let left = pool[0], right = pool[0];
+    for (const p of pool) { if (p[0] < left[0]) left = p; if (p[0] > right[0]) right = p; }
+    path([lamp, left, right]);
+    ctx.globalAlpha = 0.055;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// A laser show inside the car: eighteen beams from the cabin floor, seen only
+// through the windows, which cut them off. Six make a figure that changes
+// every bar: a fan opening and closing, a wheel turning, two blades crossing
+// like scissors. The glass fills with a haze of light on every beat.
+function drawLasers(beat) {
+  if (!windows.length) return;
+  const from = project(bodyPoint([-0.2, 0.72, 0]));
+  const reach = unitPx * 3;
+  const figure = ((Math.floor((beat - 4) / 4) % 3) + 3) % 3;
+  const frac = beat - Math.floor(beat);
+  const pulse = 0.6 + 0.4 * (1 - frac) * (1 - frac);
+  ctx.save();
+  ctx.beginPath();
+  for (const pane of windows) {
+    pane.forEach((p, i) => { if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+    ctx.closePath();
+  }
+  ctx.clip();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = SHOW_COLORS[((Math.floor(beat) % 6) + 6) % 6];
+  ctx.globalAlpha = 0.22 * (1 - frac) * (1 - frac);
+  ctx.fillRect(from[0] - reach, from[1] - reach, reach * 2, reach * 2);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 6; i++) {
+    let a;
+    if (figure === 0) a = -Math.PI / 2 + (i - 2.5) * (0.14 + 0.12 * Math.sin(beat * Math.PI / 2));
+    else if (figure === 1) a = beat * 0.9 + i * Math.PI / 3;
+    else a = -Math.PI / 2 + (i % 2 ? 1 : -1) * (0.15 + 0.6 * Math.abs(Math.sin(beat * Math.PI / 4))) + (i - 2.5) * 0.05;
+    const to = [from[0] + Math.cos(a) * reach, from[1] + Math.sin(a) * reach];
+    ctx.strokeStyle = SHOW_COLORS[i];
+    ctx.beginPath(); ctx.moveTo(from[0], from[1]); ctx.lineTo(to[0], to[1]);
+    ctx.globalAlpha = 0.22 * pulse; ctx.lineWidth = unitPx * 0.09; ctx.stroke();
+    ctx.globalAlpha = 0.95 * pulse; ctx.lineWidth = Math.max(1.5, unitPx * 0.022); ctx.stroke();
+  }
+  // Twelve more, aimed at the glass itself so that every one of them shows:
+  // each sweeps to and fro across one pane, corner to opposite corner, at its own pace.
+  for (let j = 0; j < 12; j++) {
+    const pane = windows[j % windows.length];
+    const a = pane[j % pane.length], b = pane[(j + 2) % pane.length];
+    const t = 0.5 + 0.5 * Math.sin(beat * Math.PI * (0.5 + 0.25 * (j % 3)) + j * 1.3);
+    const aim = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    const to = [from[0] + (aim[0] - from[0]) * 1.5, from[1] + (aim[1] - from[1]) * 1.5];
+    ctx.strokeStyle = SHOW_COLORS[(j + 2) % 6];
+    ctx.beginPath(); ctx.moveTo(from[0], from[1]); ctx.lineTo(to[0], to[1]);
+    ctx.globalAlpha = 0.2 * pulse; ctx.lineWidth = unitPx * 0.08; ctx.stroke();
+    ctx.globalAlpha = 0.9 * pulse; ctx.lineWidth = Math.max(1.5, unitPx * 0.02); ctx.stroke();
+  }
+  ctx.restore();
 }
 
 export function drawBackground(beat) {
+  show.beat = beat;
   drawFloor(beat);
+  if (show.spots) drawSpots(beat);
+}
+
+// The cabin with its show: the lasers go on straight after the glass they are seen through.
+function drawCabin() {
+  drawSolid(CABIN, PAINT);
+  if (show.lasers) drawLasers(show.beat);
+}
+
+// Where each wheel meets the floor, on screen, and how high off it the wheel is.
+export function wheelFeet() {
+  return CORNERS.map((c, i) => ({ at: project([c.x, 0, wheelZ(i)]), height: car.wheels[i].h }));
 }
 
 // Legs and wheels on the far side of the car go behind the body, the others in
@@ -285,6 +444,7 @@ export function drawBackground(beat) {
 export function drawCar() {
   ctx.lineJoin = 'round';
   drawShadows();
+  drawUnderglow();
   const corners = [0, 1, 2, 3]
     .map((i) => ({ i, depth: -CORNERS[i].x * camSin + wheelZ(i) * camCos }))
     .sort((a, b) => a.depth - b.depth);
@@ -294,12 +454,16 @@ export function drawCar() {
   const o = bodyPoint([0, 0, 0]), up = bodyPoint([0, 1, 0]);
   const toCam = [camPos[0] - o[0], camPos[1] - o[1], camPos[2] - o[2]];
   const roofFacesCamera = dot([up[0] - o[0], up[1] - o[1], up[2] - o[2]], toCam) > 0;
-  if (!roofFacesCamera) { drawAntenna(); drawSolid(CABIN, PAINT); }
+  windows = [];
+  if (!roofFacesCamera) { drawAntenna(); drawCabin(); }
   drawSolid(BODY, PAINT);
   const nose = bodyPoint([1, 0, 0]);
   if (dot([nose[0] - o[0], nose[1] - o[1], nose[2] - o[2]], toCam) > 0) {
-    poly(LIGHT_BAR.map((p) => project(bodyPoint(p))), '#fff3b0', INK, 2);
+    // The light bar is the brightest thing on the car and jumps with every flash.
+    path(LIGHT_BAR.map((p) => project(bodyPoint(p))));
+    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.75 + 0.25 * flash; ctx.fill(); ctx.globalAlpha = 1;
+    neonStroke(3 + 4 * flash);
   }
-  if (roofFacesCamera) { drawSolid(CABIN, PAINT); drawAntenna(); }
+  if (roofFacesCamera) { drawCabin(); drawAntenna(); }
   for (const c of corners) if (c.depth >= 0) { drawLeg(c.i); drawWheel(c.i); }
 }
