@@ -99,8 +99,8 @@ function readInput() {
   for (const code of keysDown) {
     for (const i of KEY_CORNERS[code] || []) out.corner[i] = true;
   }
-  out.squat = keysDown.has('Space') || padDown.squat;
-  out.stretch = keysDown.has('ShiftLeft') || keysDown.has('ShiftRight') || padDown.stretch;
+  out.squat = keysDown.has('KeyS') || keysDown.has('Space') || padDown.squat;
+  out.stretch = keysDown.has('KeyW') || keysDown.has('ShiftLeft') || keysDown.has('ShiftRight') || padDown.stretch;
   for (let i = 0; i < 4; i++) out.corner[i] = out.corner[i] || padDown.corner[i];
   if (autoDance) {
     const move = autoMove();
