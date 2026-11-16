@@ -1,0 +1,8 @@
+{
+  "title": "Tanssiauto",
+  "tags": ["musiikkipeli", "rytmi", "fysiikka", "tanssi", "trakkeri", "prototyyppi"],
+  "description": {
+    "fi": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat, tanssii trakkerimusiikkiin. Paina nuotit tahtiin sitä mukaa kuin ne tulevat renkaana auton ympärille, katso kun auto tanssii koreografian itse, nauhoita oma koreografiasi tai tanssi vapaasti ja säädä jousitusta. Musiikki: Raspberry Jam, congusbongus (CC0). Prototyyppi, pelataan näppäimistöllä.",
+    "en": "A faceless cartoon car whose four spring legs are its limbs dances to tracker music. Press the notes in time as they close in on a ring around the car, watch the car dance the choreography by itself, record a choreography of your own, or dance freely and tune the suspension. Music: Raspberry Jam by congusbongus (CC0). A prototype, played on a keyboard."
+  }
+}
