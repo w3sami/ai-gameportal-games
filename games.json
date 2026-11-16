@@ -639,5 +639,26 @@
     "sizeBytes": 45867,
     "createdAt": "2026-11-13T21:09:59.232Z",
     "updatedAt": "2026-11-14T14:42:47.019Z"
+  },
+  {
+    "id": "b0071c50-ccae-4e69-b583-c9829a0a9a66",
+    "slug": "tanssiauto",
+    "title": "Tanssiauto",
+    "description": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat. Säädä jalkojen pituutta ja löysyyttä ja tanssita autoa biittiin. Prototyyppi.",
+    "descriptions": {},
+    "author": "Sami Lehtilä",
+    "tags": [
+      "prototyyppi",
+      "fysiikka",
+      "tanssi"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 260,
+    "createdAt": "2026-11-16T18:11:25.285Z",
+    "updatedAt": "2026-11-16T18:11:25.317Z"
   }
 ]
