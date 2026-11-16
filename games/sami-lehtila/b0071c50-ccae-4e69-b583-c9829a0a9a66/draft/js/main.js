@@ -82,14 +82,23 @@ $('notesPick').addEventListener('change', () => {
 });
 
 // Switches for the ring's look.
-for (const btn of document.querySelectorAll('[data-look]')) {
-  const name = btn.dataset.look;
-  btn.classList.toggle('on', ringNotes.settings[name]);
-  btn.addEventListener('click', () => {
-    ringNotes.setLook(name, !ringNotes.settings[name]);
-    btn.classList.toggle('on', ringNotes.settings[name]);
-  });
+const bloomBtn = $('bloomBtn'), rainbowBtn = $('rainbowBtn');
+function showLooks() {
+  const level = ringNotes.BLOOM_LEVELS.find(([value]) => value === ringNotes.settings.bloom);
+  bloomBtn.textContent = `Bloom: ${level[1]}`;
+  bloomBtn.classList.toggle('on', ringNotes.settings.bloom !== 'off');
+  rainbowBtn.classList.toggle('on', ringNotes.settings.rainbow);
 }
+bloomBtn.addEventListener('click', () => {
+  const levels = ringNotes.BLOOM_LEVELS.map(([value]) => value);
+  ringNotes.setLook('bloom', levels[(levels.indexOf(ringNotes.settings.bloom) + 1) % levels.length]);
+  showLooks();
+});
+rainbowBtn.addEventListener('click', () => {
+  ringNotes.setLook('rainbow', !ringNotes.settings.rainbow);
+  showLooks();
+});
+showLooks();
 
 // ---------------------------------------------------------------- charts
 function fillPick(selected) {
