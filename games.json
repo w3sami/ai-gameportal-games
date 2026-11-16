@@ -645,20 +645,23 @@
     "slug": "tanssiauto",
     "title": "Tanssiauto",
     "description": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat. Säädä jalkojen pituutta ja löysyyttä ja tanssita autoa biittiin. Prototyyppi.",
-    "descriptions": {},
+    "descriptions": {
+      "fi": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat. Säädä jalkojen pituutta ja löysyyttä ja tanssita autoa biittiin. Prototyyppi.",
+      "en": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat. Säädä jalkojen pituutta ja löysyyttä ja tanssita autoa biittiin. Prototyyppi."
+    },
     "author": "Sami Lehtilä",
     "tags": [
       "prototyyppi",
       "fysiikka",
       "tanssi"
     ],
-    "status": "draft",
+    "status": "published",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
-    "revision": 0,
+    "revision": 1,
     "sizeBytes": 25549,
     "createdAt": "2026-11-16T18:11:25.285Z",
-    "updatedAt": "2026-11-16T18:11:35.533Z"
+    "updatedAt": "2026-11-16T18:23:14.726Z"
   }
 ]
