@@ -94,7 +94,7 @@ const HELD_BLOOM = 0.2;      // how much of a held note blooms, in ring radii ou
 let bloomCanvas = null, bloomCtx = null;
 // strength: 0..1. The band of a lane between two radii, in its colour.
 function bloomWedge(ctx, view, L, lane, k0, k1, color, strength) {
-  if (settings.bloom === 'off' || strength <= 0.02) return;
+  if (settings.bloom !== 'light' || strength <= 0.02) return;
   const w = Math.ceil(view.w / BLOOM_DIV), h = Math.ceil(view.h / BLOOM_DIV);
   if (!bloomCanvas) {
     bloomCanvas = document.createElement('canvas');
@@ -132,10 +132,40 @@ function bloomWedge(ctx, view, L, lane, k0, k1, color, strength) {
   ctx.restore();
 }
 
+// The full bloom: everything bright in the finished picture glows. The whole
+// frame is copied small, keeping only its bright parts, and blurred there; the
+// copy is laid back over the frame as added light. It is one enlargement of
+// the whole screen every frame, which a graphics card does not notice and a
+// browser drawing without one cannot afford: that is what 'light' is for.
+const FULL_DIV = 6;
+const FULL_BRIGHT = 'brightness(0.75) contrast(2.4)';     // what counts as bright: mid tones and below go to black
+const FULL_BLUR = 3.5;                                    // in the small copy's pixels: 21 on screen
+const FULL_STRENGTH = 0.7;
+let fullCanvas = null, fullCtx = null;
+export function bloomPass(ctx, view) {
+  if (settings.bloom !== 'full') return;
+  if (!fullCanvas) {
+    fullCanvas = document.createElement('canvas');
+    fullCtx = fullCanvas.getContext('2d');
+  }
+  if (typeof fullCtx.filter !== 'string') return;          // a browser without canvas filters gets no full bloom
+  const w = Math.ceil(view.w / FULL_DIV), h = Math.ceil(view.h / FULL_DIV);
+  if (fullCanvas.width !== w || fullCanvas.height !== h) { fullCanvas.width = w; fullCanvas.height = h; }
+  fullCtx.globalCompositeOperation = 'copy';
+  fullCtx.filter = `${FULL_BRIGHT} blur(${FULL_BLUR}px)`;
+  fullCtx.drawImage(ctx.canvas, 0, 0, w, h);
+  ctx.save();
+  // Screen and not plain addition: a big bright area lit by its own glow would burn out to white.
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = FULL_STRENGTH;
+  ctx.drawImage(fullCanvas, 0, 0, view.w, view.h);
+  ctx.restore();
+}
+
 // What the player can switch about the ring's look. Kept in localStorage.
-//   bloom    blurred glow on notes that are hit or held: 'off', 'light' (a held
-//            note glows only by the ring, which a browser without a graphics
-//            card can afford) or 'full' (the whole of a held note glows)
+//   bloom    'off', 'light' (a blurred glow on notes that are hit, and on held
+//            ones by the ring: what a browser without a graphics card can
+//            afford) or 'full' (everything bright on the screen glows)
 //   rainbow  a streak cycles through the colours; otherwise it wears the sectors' own
 const SETTINGS_KEY = 'tanssiauto.ringLook';
 export const BLOOM_LEVELS = [['off', 'pois'], ['light', 'kevyt'], ['full', 'täysi']];
@@ -538,11 +568,9 @@ export function drawHighway(ctx, view, items, beat, heldLanes, touch, streak) {
     if (it.state === 'held') {
       const band = [reach(near), reach(Math.max(far, near + TAP))];
       (glowing[it.lane] = glowing[it.lane] || []).push(band);
-      // In the light bloom only the stretch by the ring glows: laying light
-      // over the whole of a long band costs a box as big as the band.
-      const full = settings.bloom === 'full';
-      bloomWedge(ctx, view, L, it.lane, band[0], full ? band[1] : Math.min(band[1], band[0] + HELD_BLOOM),
-        LANE[it.lane].color, full ? 0.3 : 0.4);
+      // Only the stretch by the ring glows: laying light over the whole of a
+      // long band costs a box as big as the band.
+      bloomWedge(ctx, view, L, it.lane, band[0], Math.min(band[1], band[0] + HELD_BLOOM), LANE[it.lane].color, 0.4);
     }
   }
   drawBursts(ctx, view, L, items, now);
