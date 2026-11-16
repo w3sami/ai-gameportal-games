@@ -7,7 +7,7 @@
 //   free    no chart: the player dances, or lets the car do it
 
 import { car, tune, bindTune, step, STEP } from './car.js';
-import { ctx, view, resize, setStage, setCamera, setPose, stepAntenna, drawBackground, drawCar } from './draw.js';
+import { ctx, view, resize, setStage, setCamera, setCarLight, setShow, setPose, stepAntenna, drawBackground, drawCar, wheelFeet } from './draw.js';
 import { LANES, bindPad, held, onPress, onRelease, setLayout, pressLane, releaseLane } from './input.js';
 import { Music } from './music.js';
 import { loadChart, Run, Recorder } from './chart.js';
@@ -15,6 +15,7 @@ import * as boardNotes from './highway.js';
 import * as ringNotes from './ring.js';
 import { freestyleLanes } from './freestyle.js';
 import { cameraAt, REST } from './camera.js';
+import { spark, stepFx, drawUnderRing, drawOnTop } from './fx.js';
 import { gizmo, gizmoDown, gizmoMove, gizmoUp, gizmoWheel, gizmoReadout, drawGizmo } from './gizmo.js';
 import { loadOwn, saveOwn } from './library.js';
 
@@ -82,12 +83,72 @@ $('notesPick').addEventListener('change', () => {
 });
 
 // Switches for the ring's look.
-const bloomBtn = $('bloomBtn'), rainbowBtn = $('rainbowBtn');
+// A row for each effect: a three-way switch and a slider. The switch follows
+// the slider's streak limit (left), is off (middle) or is on all the time
+// (right), for seeing what an effect looks like and trying combinations
+// without touching the numbers.
+// The rows are put in order of limit, the order the effects join in as a
+// streak grows, when the panel opens and when asked with the button: never by
+// themselves, or a row would jump out from under the pointer.
+const SWITCH_ORDER = ['auto', 'off', 'on'];
+const limitRows = [];
+function sortLimits() {
+  limitRows.sort((a, b) => a.input.value - b.input.value);
+  $('limitRows').append(...limitRows.map((entry) => entry.row));
+}
+for (const [id, label, standard] of ringNotes.UNLOCKS) {
+  const row = document.createElement('div');
+  const name = document.createElement('span');
+  const force = document.createElement('input');
+  const input = document.createElement('input');
+  const value = document.createElement('b');
+  name.textContent = label;
+  force.type = 'range'; force.min = 0; force.max = 2; force.step = 1;
+  force.className = 'switch';
+  force.setAttribute('aria-label', `${label}: luvun mukaan, pois tai päällä`);
+  const STATE_NAMES = { off: 'Pois', auto: 'Luvun mukaan', on: 'Aina päällä' };
+  const showState = () => {
+    const state = ringNotes.stateOf(id);
+    force.value = SWITCH_ORDER.indexOf(state);
+    force.dataset.state = state;
+    force.title = STATE_NAMES[state];
+    row.classList.toggle('off', state === 'off');
+  };
+  force.addEventListener('input', () => { ringNotes.setState(id, SWITCH_ORDER[+force.value]); showState(); });
+  showState();
+  input.type = 'range'; input.min = 0; input.max = 100; input.step = 1;
+  input.value = ringNotes.settings.unlock[id] ?? standard;
+  input.setAttribute('aria-label', `${label}: raja`);
+  value.textContent = input.value;
+  input.addEventListener('input', () => {
+    ringNotes.setUnlock(id, +input.value);
+    value.textContent = input.value;
+  });
+  row.append(name, force, input, value);
+  limitRows.push({ row, input, id, showState });
+}
+sortLimits();
+$('limitSort').addEventListener('click', sortLimits);
+// Every switch to one state at once: all off to start trying from nothing, all back to following the numbers.
+for (const btn of document.querySelectorAll('[data-all]')) {
+  btn.addEventListener('click', () => {
+    for (const entry of limitRows) { ringNotes.setState(entry.id, btn.dataset.all); entry.showState(); }
+  });
+}
+// The streak to try the limits with: -1 on the slider is the real one.
+$('trialStreak').addEventListener('input', () => {
+  const hits = +$('trialStreak').value;
+  ringNotes.setTrialStreak(hits < 0 ? null : hits);
+  $('trialVal').textContent = hits < 0 ? 'oikea' : hits;
+});
+
+const bloomBtn = $('bloomBtn'), rainbowBtn = $('rainbowBtn'), sparksBtn = $('sparksBtn');
 function showLooks() {
   const level = ringNotes.BLOOM_LEVELS.find(([value]) => value === ringNotes.settings.bloom);
   bloomBtn.textContent = `Bloom: ${level[1]}`;
   bloomBtn.classList.toggle('on', ringNotes.settings.bloom !== 'off');
   rainbowBtn.classList.toggle('on', ringNotes.settings.rainbow);
+  sparksBtn.classList.toggle('on', ringNotes.settings.particles);
 }
 bloomBtn.addEventListener('click', () => {
   const levels = ringNotes.BLOOM_LEVELS.map(([value]) => value);
@@ -96,6 +157,10 @@ bloomBtn.addEventListener('click', () => {
 });
 rainbowBtn.addEventListener('click', () => {
   ringNotes.setLook('rainbow', !ringNotes.settings.rainbow);
+  showLooks();
+});
+sparksBtn.addEventListener('click', () => {
+  ringNotes.setLook('particles', !ringNotes.settings.particles);
   showLooks();
 });
 showLooks();
@@ -185,7 +250,14 @@ async function start(next) {
   }
   $('status').textContent = '';
   run = next === 'play' || next === 'watch' ? new Run(chart) : null;
-  if (run) run.onHit = (item, grade) => notes.hitEffect(item.lane, grade, onAccent(grade === 'held' ? item.beat + item.hold : item.beat));
+  if (run) {
+    run.onHit = (item, grade) => {
+      notes.hitEffect(item.lane, grade, onAccent(grade === 'held' ? item.beat + item.hold : item.beat));
+      // The car flashes, and once that effect has joined in, in the colour of the lane that was hit.
+      carNeon = ringNotes.reached('neon') ? LANES.find((lane) => lane.id === item.lane).color : null;
+      carFlash = 1;
+    };
+  }
   recorder = next === 'record' ? new Recorder(builtin.spb) : null;
   setMode(next);
   music.play(next === 'free');
@@ -401,12 +473,15 @@ let pending = 0;
 let airborne = false;
 let fallSpeed = 0;                // fastest fall of the current flight, m/s
 let shake = 0;                    // 0..1, set by a landing and dying away
+let landed = 0;                   // fall speed of a landing that has not thrown its sparks yet
+let carNeon = null;               // the colour the car's neon was last lit in; null is its own
+let carFlash = 0;                 // 0..1, how hard the neon is lit, dying away
 
 function moveCamera(dt, now, beat) {
   // A landing knocks the camera in proportion to how fast the car came down.
   const flying = car.wheels.every((w) => w.h > 0.03);
   if (flying) fallSpeed = Math.max(fallSpeed, -car.vy);
-  if (airborne && !flying) { shake = Math.min(1, fallSpeed / 7); fallSpeed = 0; }
+  if (airborne && !flying) { shake = Math.min(1, fallSpeed / 7); landed = fallSpeed; fallSpeed = 0; }
   airborne = flying;
   shake *= Math.exp(-7 * dt);
 
@@ -442,17 +517,46 @@ function frame(now) {
   pending += dt;
   while (pending >= STEP) { step(STEP, lanes); pending -= STEP; }
   moveCamera(dt, now, beat);
+  // Without a chart to follow the car keeps its own colour and pulses with the beat.
+  carFlash *= Math.exp(-4 * dt);
+  if (!run) {
+    const frac = beat - Math.floor(beat);
+    carNeon = null;
+    carFlash = Math.max(carFlash, 0.5 * (1 - frac) * (1 - frac));
+  }
+  setCarLight(carNeon, carFlash);
+  // The light show follows the streak while a chart is followed. The start
+  // screen runs all of it, as an advertisement; free dance keeps the spotlights.
+  const fxOn = ringNotes.settings.particles;
+  if (run) setShow(ringNotes.reached('spots'), ringNotes.reached('lasers'));
+  else setShow(fxOn, fxOn && (mode === 'menu' || ringNotes.reached('lasers')));
   setPose();
   stepAntenna(dt);
   drawBackground(beat);
+  stepFx(now / 1000);
+  drawUnderRing(ctx, view, (run || recorder) && notesKind === 'ring' ? ringNotes.ringShape(view) : null);
   if (run) notes.drawHighway(ctx, view, run.items, beat, lanes, touch, run.combo);
   if (recorder) {
     notes.drawRecording(ctx, view, recorder.items, beat, lanes, touch);
     notes.drawCaption(ctx, view, `● Nauhoittaa · ${recorder.items.length} painallusta`, '#ff7a6a');
   }
   drawCar();
+  // A landing strikes sparks off the floor under the wheels, more the harder it was.
+  if (landed > 2.5 && ringNotes.settings.particles) {
+    for (const foot of wheelFeet()) {
+      if (foot.height > 0.05) continue;
+      for (let i = 0; i < Math.min(14, landed * 1.6); i++) {
+        const a = Math.PI * (1.1 + 0.8 * Math.random());      // up and out to either side
+        const v = (70 + 60 * landed) * (0.4 + 0.6 * Math.random());
+        spark(foot.at[0], foot.at[1], Math.cos(a) * v, Math.sin(a) * v * 0.7, 0.25 + 0.35 * Math.random(),
+          Math.random() < 0.5 ? '#fff' : '#ffd23f', 1.5 + 2 * Math.random());
+      }
+    }
+  }
+  landed = 0;
   if (run || recorder) notes.drawOverlay(ctx, view, lanes, touch);
-  ringNotes.bloomPass(ctx, view);
+  drawOnTop(ctx);
+  if ($('limits').open) $('streakNow').textContent = ringNotes.streakShown();
   if (gizmo.active) {
     drawGizmo(ctx, view);
     $('gizmoRead').textContent = gizmoReadout(view);
