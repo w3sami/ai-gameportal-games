@@ -275,6 +275,18 @@ function toggleMute() {
   music.setVolume(muted ? 0 : 1);
 }
 muteBtn.addEventListener('click', toggleMute);
+
+// Full screen. The portal's frame hands the permission over; where the
+// browser offers none, as an iPhone does not, there is no button.
+const fullBtn = $('fullBtn');
+if (document.fullscreenEnabled) {
+  fullBtn.hidden = false;
+  fullBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => { /* refused: stay as we are */ });
+  });
+  document.addEventListener('fullscreenchange', () => fullBtn.classList.toggle('on', !!document.fullscreenElement));
+}
 addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (e.code === 'KeyM') toggleMute();
