@@ -94,7 +94,7 @@ const HELD_BLOOM = 0.2;      // how much of a held note blooms, in ring radii ou
 let bloomCanvas = null, bloomCtx = null;
 // strength: 0..1. The band of a lane between two radii, in its colour.
 function bloomWedge(ctx, view, L, lane, k0, k1, color, strength) {
-  if (!settings.bloom || strength <= 0.02) return;
+  if (settings.bloom === 'off' || strength <= 0.02) return;
   const w = Math.ceil(view.w / BLOOM_DIV), h = Math.ceil(view.h / BLOOM_DIV);
   if (!bloomCanvas) {
     bloomCanvas = document.createElement('canvas');
@@ -133,13 +133,17 @@ function bloomWedge(ctx, view, L, lane, k0, k1, color, strength) {
 }
 
 // What the player can switch about the ring's look. Kept in localStorage.
-//   bloom    real blurred glow on notes that are hit or held
+//   bloom    blurred glow on notes that are hit or held: 'off', 'light' (a held
+//            note glows only by the ring, which a browser without a graphics
+//            card can afford) or 'full' (the whole of a held note glows)
 //   rainbow  a streak cycles through the colours; otherwise it wears the sectors' own
 const SETTINGS_KEY = 'tanssiauto.ringLook';
-export const settings = { bloom: true, rainbow: false };
+export const BLOOM_LEVELS = [['off', 'pois'], ['light', 'kevyt'], ['full', 'täysi']];
+export const settings = { bloom: 'light', rainbow: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (err) { /* no storage */ }
-export function setLook(name, on) {
-  settings[name] = !!on;
+if (!BLOOM_LEVELS.some(([value]) => value === settings.bloom)) settings.bloom = 'light';
+export function setLook(name, value) {
+  settings[name] = value;
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (err) { /* no storage */ }
 }
 
@@ -534,9 +538,11 @@ export function drawHighway(ctx, view, items, beat, heldLanes, touch, streak) {
     if (it.state === 'held') {
       const band = [reach(near), reach(Math.max(far, near + TAP))];
       (glowing[it.lane] = glowing[it.lane] || []).push(band);
-      // Only the stretch by the ring blooms: light added over the whole of a
-      // long band burns it white and costs a box as big as the band.
-      bloomWedge(ctx, view, L, it.lane, band[0], Math.min(band[1], band[0] + HELD_BLOOM), LANE[it.lane].color, 0.4);
+      // In the light bloom only the stretch by the ring glows: laying light
+      // over the whole of a long band costs a box as big as the band.
+      const full = settings.bloom === 'full';
+      bloomWedge(ctx, view, L, it.lane, band[0], full ? band[1] : Math.min(band[1], band[0] + HELD_BLOOM),
+        LANE[it.lane].color, full ? 0.3 : 0.4);
     }
   }
   drawBursts(ctx, view, L, items, now);
