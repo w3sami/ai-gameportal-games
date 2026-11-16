@@ -1,7 +1,11 @@
 // Tracker music through chiptune3 (libopenmpt in an AudioWorklet), and the
 // song clock every mode reads. time() is seconds into the song as heard.
+//
+// The player comes from a CDN at a pinned version: libopenmpt is 1.5 MB, and
+// with a song beside it the game would not fit the portal's 2 MB a game.
+// chiptune3 is MIT, the libopenmpt inside it BSD.
 
-import { ChiptuneJsPlayer } from '../lib/chiptune3.js';
+import { ChiptuneJsPlayer } from 'https://cdn.jsdelivr.net/npm/chiptune3@0.8.10/chiptune3.js';
 
 export class Music {
   constructor() {
