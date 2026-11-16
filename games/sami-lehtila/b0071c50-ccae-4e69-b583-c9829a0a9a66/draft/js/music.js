@@ -49,9 +49,11 @@ export class Music {
     }
     await this.player.context.resume();
     if (!this.buffer) {
+      // The song is a tracker module packed into JSON by devtools/pack-song.py.
       const res = await fetch(url);
       if (!res.ok) throw new Error(`song: HTTP ${res.status}`);
-      this.buffer = await res.arrayBuffer();
+      const packed = await res.json();
+      this.buffer = Uint8Array.from(atob(packed.base64), (c) => c.charCodeAt(0)).buffer;
     }
   }
 
