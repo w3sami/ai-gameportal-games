@@ -452,6 +452,7 @@ function frame(now) {
   }
   drawCar();
   if (run || recorder) notes.drawOverlay(ctx, view, lanes, touch);
+  ringNotes.bloomPass(ctx, view);
   if (gizmo.active) {
     drawGizmo(ctx, view);
     $('gizmoRead').textContent = gizmoReadout(view);
