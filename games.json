@@ -644,24 +644,27 @@
     "id": "b0071c50-ccae-4e69-b583-c9829a0a9a66",
     "slug": "tanssiauto",
     "title": "Tanssiauto",
-    "description": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat. Säädä jalkojen pituutta ja löysyyttä ja tanssita autoa biittiin. Prototyyppi.",
+    "description": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat, tanssii trakkerimusiikkiin. Paina nuotit tahtiin sitä mukaa kuin ne tulevat renkaana auton ympärille, katso kun auto tanssii koreografian itse, nauhoita oma koreografiasi tai tanssi vapaasti ja säädä jousitusta. Musiikki: Raspberry Jam, congusbongus (CC0). Prototyyppi, pelataan näppäimistöllä.",
     "descriptions": {
-      "fi": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat. Säädä jalkojen pituutta ja löysyyttä ja tanssita autoa biittiin. Prototyyppi.",
-      "en": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat. Säädä jalkojen pituutta ja löysyyttä ja tanssita autoa biittiin. Prototyyppi."
+      "fi": "Kasvoton piirrosauto, jonka neljä jousijalkaa ovat sen raajat, tanssii trakkerimusiikkiin. Paina nuotit tahtiin sitä mukaa kuin ne tulevat renkaana auton ympärille, katso kun auto tanssii koreografian itse, nauhoita oma koreografiasi tai tanssi vapaasti ja säädä jousitusta. Musiikki: Raspberry Jam, congusbongus (CC0). Prototyyppi, pelataan näppäimistöllä.",
+      "en": "A faceless cartoon car whose four spring legs are its limbs dances to tracker music. Press the notes in time as they close in on a ring around the car, watch the car dance the choreography by itself, record a choreography of your own, or dance freely and tune the suspension. Music: Raspberry Jam by congusbongus (CC0). A prototype, played on a keyboard."
     },
     "author": "Sami Lehtilä",
     "tags": [
-      "prototyyppi",
+      "musiikkipeli",
+      "rytmi",
       "fysiikka",
-      "tanssi"
+      "tanssi",
+      "trakkeri",
+      "prototyyppi"
     ],
     "status": "published",
     "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
     "ownerFolder": "sami-lehtila",
     "entryFile": "index.html",
-    "revision": 1,
+    "revision": 2,
     "sizeBytes": 1008532,
     "createdAt": "2026-11-16T18:11:25.285Z",
-    "updatedAt": "2026-11-16T20:40:23.328Z"
+    "updatedAt": "2026-11-16T20:40:41.521Z"
   }
 ]

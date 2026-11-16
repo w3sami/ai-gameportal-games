@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Tanssiauto</title>
+<style>
+  :root { --ink: #1d1b26; --panel: rgba(24, 19, 48, 0.82); --text: #f5f1e6; --accent: #ffd23f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2b2350; color: var(--text);
+    font: 14px/1.3 system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  [hidden] { display: none !important; }
+
+  .panel { position: fixed; background: var(--panel); border-radius: 12px; padding: 8px 10px; }
+  #tune { top: 8px; left: 8px; width: min(250px, 62vw); z-index: 2; }
+  #tune summary { cursor: pointer; font-weight: 700; }
+  #tune h3 { margin: 8px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+  #tune label { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 6px; font-size: 13px; }
+  #tune input[type=range] { width: 100%; accent-color: var(--accent); touch-action: pan-x; }
+
+  #top { position: fixed; top: 8px; right: 8px; display: flex; gap: 6px; z-index: 2; }
+  button { font: inherit; color: var(--text); background: var(--panel); border: 2px solid transparent;
+    border-radius: 12px; padding: 8px 12px; cursor: pointer; touch-action: none; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+
+  #pad { position: fixed; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+    display: grid; grid-template-columns: repeat(6, minmax(32px, 48px)); gap: 6px; }
+  #pad button { height: 48px; font-size: 20px; font-weight: 700; padding: 0; grid-column: span 2;
+    border-bottom: 4px solid var(--lane); }
+  #pad button.half { grid-column: span 3; }
+  #pad button.wide { font-size: 14px; }
+  #pad button small { display: block; font-size: 11px; font-weight: 400; opacity: .7; }
+  #pad button.on { border-color: var(--lane); color: var(--lane); }
+  #pad button.due { background: var(--lane); color: var(--ink); }
+  #help { position: fixed; left: 8px; bottom: 8px; max-width: 26vw; font-size: 12px; opacity: .65; }
+  @media (max-width: 760px), (pointer: coarse) { #help { display: none; } }
+
+  .sheet { position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; background: rgba(20, 14, 44, 0.55); }
+  .sheet > div { background: var(--panel); border-radius: 18px; padding: 22px 26px; width: min(360px, 90vw); text-align: center; }
+  .sheet h1 { margin: 0 0 14px; font-size: 30px; color: var(--accent); }
+  .sheet button { display: block; width: 100%; margin: 8px 0; padding: 12px; font-size: 17px; font-weight: 700;
+    background: rgba(255, 255, 255, 0.08); }
+  .sheet button small { display: block; font-size: 12px; font-weight: 400; opacity: .75; }
+  .sheet button:hover { border-color: var(--accent); }
+  .sheet p { margin: 10px 0 0; font-size: 12px; opacity: .7; min-height: 1.3em; }
+  .pick { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; text-align: left; font-size: 13px; }
+  .pick select { font: inherit; color: var(--text); background: rgba(255, 255, 255, 0.08); border: 2px solid transparent;
+    border-radius: 10px; padding: 8px; min-width: 0; }
+  .pick option { color: #1d1b26; }
+  .pick { margin-top: 8px; }
+  .pick span { display: flex; align-items: center; gap: 8px; }
+  .pick input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); touch-action: pan-x; }
+  #ownTools, #looks { display: flex; gap: 8px; }
+  #looks button { margin: 8px 0 0; padding: 7px; font-size: 13px; font-weight: 400; }
+  #ownTools button { margin: 8px 0 0; padding: 7px; font-size: 13px; font-weight: 400; }
+  #jsonOut { width: 100%; height: 70px; margin-top: 8px; font: 11px/1.3 monospace; }
+  #gizmoPanel { top: 52px; left: 8px; width: min(330px, 80vw); z-index: 2; font-size: 12px; }
+  #gizmoPanel p { margin: 4px 0; opacity: .85; }
+  #gizmoPanel #gizmoRead { font-weight: 700; opacity: 1; color: var(--accent); }
+  #gizmoPanel div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  #gizmoPanel button { padding: 5px 8px; font-size: 12px; background: rgba(255, 255, 255, 0.08); }
+  #gizmoPanel select { font: inherit; color: var(--text); background: rgba(255, 255, 255, 0.08); border: 0; border-radius: 8px; padding: 4px 6px; }
+  #gizmoPanel option { color: #1d1b26; }
+  #gizmoPanel textarea { width: 100%; height: 60px; margin-top: 6px; font: 11px/1.3 monospace; }
+  #resScore { font-size: 44px; font-weight: 800; }
+  .sheet dl { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin: 10px 0; font-size: 15px; }
+  .sheet dt { text-align: right; opacity: .7; } .sheet dd { margin: 0; text-align: left; font-weight: 700; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<details id="tune" class="panel">
+  <summary>Jousitus</summary>
+  <h3>Etujalat</h3>
+  <label>Pituus <input type="range" id="frontLen" min="0.3" max="1.8" step="0.05" value="0.9"></label>
+  <label>Löysyys <input type="range" id="frontLoose" min="0" max="1" step="0.02" value="0.5"></label>
+  <h3>Takajalat</h3>
+  <label>Pituus <input type="range" id="rearLen" min="0.3" max="1.8" step="0.05" value="0.9"></label>
+  <label>Löysyys <input type="range" id="rearLoose" min="0" max="1" step="0.02" value="0.5"></label>
+  <h3>Voima</h3>
+  <label>Potku <input type="range" id="kick" min="2" max="16" step="0.5" value="6"></label>
+</details>
+
+<div id="top">
+  <button id="autoBtn" class="on" hidden>Tanssi itse</button>
+  <button id="muteBtn" class="on">Musiikki</button>
+  <button id="gizmoBtn" hidden>Kirjaimet</button>
+  <button id="menuBtn" hidden>Valikko</button>
+</div>
+
+<div id="pad">
+  <button data-lane="q">↖<small>Q</small></button>
+  <button data-lane="w" class="wide">Etu ⇔<small>W</small></button>
+  <button data-lane="e">↗<small>E</small></button>
+  <button data-lane="a">↙<small>A</small></button>
+  <button data-lane="s" class="wide">Taka ⇔<small>S</small></button>
+  <button data-lane="d">↘<small>D</small></button>
+  <button data-lane="squat" class="wide half">▼ Kyykky<small>välilyönti</small></button>
+  <button data-lane="stretch" class="wide half">▲ Venytys<small>vaihto</small></button>
+</div>
+
+<div id="help">Q E A D nostaa yhtä kulmaa, nuolet kahta kerralla. W levittää etupyörät sivuille ja S takapyörät. Välilyönti on kyykky ja vaihto venytys; peräkkäin ne ovat hyppy. M = musiikki, Esc = valikko.</div>
+
+<div id="gizmoPanel" class="panel" hidden>
+  <b>Sektorien kirjaimet</b>
+  <p>Vedä kirjainta: paikka. Pyöreä nuppi: kierto. Neliö: koko. Rulla: koko, vaihto + rulla: kierto.</p>
+  <p><label>Asettelu <select id="gizmoPreset"></select></label></p>
+  <p id="gizmoRead"></p>
+  <div>
+    <button id="gizmoMirror" class="on">Peilaa pari</button>
+    <button id="gizmoCopy">Kopioi asetukset</button>
+    <button id="gizmoReset">Palauta asettelu</button>
+    <button id="gizmoDone">Valmis</button>
+  </div>
+  <textarea id="gizmoOut" readonly hidden></textarea>
+</div>
+
+<div id="menu" class="sheet">
+  <div>
+    <h1>Tanssiauto</h1>
+    <label class="pick">Koreografia <select id="chartPick"></select></label>
+    <div id="ownTools" hidden>
+      <button id="copyBtn">Kopioi JSON</button>
+      <button id="deleteBtn">Poista</button>
+    </div>
+    <textarea id="jsonOut" readonly hidden></textarea>
+    <label class="pick">Nuotit <select id="notesPick"><option value="ring">auton ympärillä</option><option value="board">laudalla auton yllä</option></select></label>
+    <div id="looks">
+      <button id="bloomBtn">Bloom</button>
+      <button id="rainbowBtn">Putki sateenkaarena</button>
+    </div>
+    <label class="pick">Ajoituksen siirto <span><input type="range" id="delay" min="-300" max="400" step="10" value="0"> <b id="delayVal">0 ms</b></span></label>
+    <button data-start="play">Pelaa<small>paina napit tahtiin sitä mukaa kuin ne tulevat</small></button>
+    <button data-start="watch">Katso tanssi<small>auto tanssii saman koreografian virheettä</small></button>
+    <button data-start="record">Nauhoita koreografia<small>tanssi biisi läpi, painalluksistasi tulee nuotit</small></button>
+    <button data-start="free">Vapaa tanssi<small>ei nuotteja, säädä jousitus ja tanssi itse</small></button>
+    <p id="status"></p>
+    <p id="credit"></p>
+  </div>
+</div>
+
+<div id="results" class="sheet" hidden>
+  <div>
+    <h1>Biisi loppui</h1>
+    <div id="resScore">0</div>
+    <dl>
+      <dt>Osumatarkkuus</dt><dd id="resAccuracy"></dd>
+      <dt>Pisin putki</dt><dd id="resCombo"></dd>
+    </dl>
+    <p id="resCounts"></p>
+    <p id="resTiming"></p>
+    <button data-start="play">Uudestaan</button>
+    <button id="resMenu">Valikko</button>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
