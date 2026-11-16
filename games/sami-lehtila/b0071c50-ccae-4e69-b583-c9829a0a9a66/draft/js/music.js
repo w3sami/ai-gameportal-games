@@ -49,11 +49,17 @@ export class Music {
     }
     await this.player.context.resume();
     if (!this.buffer) {
-      // The song is a tracker module packed into JSON by devtools/pack-song.py.
+      // The song is a tracker module, gzipped and packed into JSON by devtools/pack-song.py.
       const res = await fetch(url);
       if (!res.ok) throw new Error(`song: HTTP ${res.status}`);
       const packed = await res.json();
-      this.buffer = Uint8Array.from(atob(packed.base64), (c) => c.charCodeAt(0)).buffer;
+      const bytes = Uint8Array.from(atob(packed.base64), (c) => c.charCodeAt(0));
+      if (packed.encoding === 'gzip') {
+        const unpacked = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+        this.buffer = await new Response(unpacked).arrayBuffer();
+      } else {
+        this.buffer = bytes.buffer;
+      }
     }
   }
 
