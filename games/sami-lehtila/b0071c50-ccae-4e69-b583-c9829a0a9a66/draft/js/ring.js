@@ -7,6 +7,7 @@
 // Draws the same things as highway.js, which is the other way to show a chart.
 
 import { LANES, ROW } from './input.js';
+import { spark, shower } from './fx.js';
 
 const AHEAD = 4;             // beats a note takes from the outer edge to the ring
 const FAR = 2.06;            // the outer edge, in ring radii: past the edge of the screen
@@ -82,94 +83,81 @@ function glowStroke(ctx, color, width, halo, core) {
   ctx.globalAlpha = alpha;
   ctx.strokeStyle = core || color; ctx.lineWidth = width; ctx.stroke();
 }
-// Bloom. The glowing shape is painted small, into a layer an eighth of the
-// screen's size and blurred there, where a blur costs next to nothing; the
-// layer is then laid back over the picture enlarged, as added light. Only the
-// box round the shape is laid back: in a browser that draws without a graphics
-// card the enlarging costs about 5 ns a pixel, 10 ms for a whole screen.
+// Bloom. The glowing shapes of a frame are painted small, into a layer an
+// eighth of the screen's size, and that layer is blurred once, where a blur
+// costs next to nothing. It is then laid back over the picture enlarged, as
+// added light, but only inside the boxes round the shapes: in a browser that
+// draws without a graphics card the enlarging costs about 5 ns a pixel, 10 ms
+// for a whole screen. One blur and one enlargement a frame however many
+// shapes there are; a blur and an enlargement per shape cost a quarter of the
+// frame rate even with a graphics card.
 const BLOOM_DIV = 8;
 const BLOOM_BLUR = 1.6;      // blur in the small layer, in its pixels: 13 on screen
-const BLOOM_PAD = 40;        // screen pixels the light may spread past the shape
+const BLOOM_PAD = 40;        // screen pixels the light may spread past a shape
 const HELD_BLOOM = 0.2;      // how much of a held note blooms, in ring radii out from the ring
-let bloomCanvas = null, bloomCtx = null;
+const bloomQueue = [];       // { lane, k0, k1, color, strength } wanted this frame
+let bloomSharp = null, bloomSoft = null;      // the small layer before and after the blur
 // strength: 0..1. The band of a lane between two radii, in its colour.
-function bloomWedge(ctx, view, L, lane, k0, k1, color, strength) {
-  if (settings.bloom !== 'light' || strength <= 0.02) return;
-  const w = Math.ceil(view.w / BLOOM_DIV), h = Math.ceil(view.h / BLOOM_DIV);
-  if (!bloomCanvas) {
-    bloomCanvas = document.createElement('canvas');
-    bloomCtx = bloomCanvas.getContext('2d');
-  }
-  if (bloomCanvas.width !== w || bloomCanvas.height !== h) { bloomCanvas.width = w; bloomCanvas.height = h; }
-  // The box round the band, in the small layer's pixels.
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (let i = 0; i <= 6; i++) {
-    const a = ANGLE[lane] - HALF + 2 * HALF * i / 6;
-    for (const k of [k0, k1]) {
-      const p = point(L, a, k);
-      x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
-    }
-  }
-  const bx0 = Math.max(0, Math.floor((x0 - BLOOM_PAD) / BLOOM_DIV)), by0 = Math.max(0, Math.floor((y0 - BLOOM_PAD) / BLOOM_DIV));
-  const bx1 = Math.min(w, Math.ceil((x1 + BLOOM_PAD) / BLOOM_DIV)), by1 = Math.min(h, Math.ceil((y1 + BLOOM_PAD) / BLOOM_DIV));
-  if (bx1 <= bx0 || by1 <= by0) return;
-  const b = bloomCtx;
-  b.setTransform(1, 0, 0, 1, 0, 0);
-  b.clearRect(bx0, by0, bx1 - bx0, by1 - by0);
-  b.save();
-  b.beginPath(); b.rect(bx0, by0, bx1 - bx0, by1 - by0); b.clip();
-  b.filter = `blur(${BLOOM_BLUR}px)`;
-  b.setTransform(1 / BLOOM_DIV, 0, 0, 1 / BLOOM_DIV, 0, 0);
-  wedge(b, L, lane, k0, k1, 0.02);
-  b.globalAlpha = strength;
-  b.fillStyle = color;
-  b.fill();
-  b.restore();
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.drawImage(bloomCanvas, bx0, by0, bx1 - bx0, by1 - by0,
-    bx0 * BLOOM_DIV, by0 * BLOOM_DIV, (bx1 - bx0) * BLOOM_DIV, (by1 - by0) * BLOOM_DIV);
-  ctx.restore();
+function bloomWedge(lane, k0, k1, color, strength) {
+  if (settings.bloom === 'off' || strength <= 0.02) return;
+  bloomQueue.push({ lane, k0, k1, color, strength });
 }
-
-// The full bloom: everything bright in the finished picture glows. The whole
-// frame is copied small, keeping only its bright parts, and blurred there; the
-// copy is laid back over the frame as added light. It is one enlargement of
-// the whole screen every frame, which a graphics card does not notice and a
-// browser drawing without one cannot afford: that is what 'light' is for.
-const FULL_DIV = 6;
-const FULL_BRIGHT = 'brightness(0.75) contrast(2.4)';     // what counts as bright: mid tones and below go to black
-const FULL_BLUR = 3.5;                                    // in the small copy's pixels: 21 on screen
-const FULL_STRENGTH = 0.7;
-let fullCanvas = null, fullCtx = null;
-export function bloomPass(ctx, view) {
-  if (settings.bloom !== 'full') return;
-  if (!fullCanvas) {
-    fullCanvas = document.createElement('canvas');
-    fullCtx = fullCanvas.getContext('2d');
+function flushBloom(ctx, view, L) {
+  if (!bloomQueue.length) return;
+  const w = Math.ceil(view.w / BLOOM_DIV), h = Math.ceil(view.h / BLOOM_DIV);
+  if (!bloomSharp) {
+    bloomSharp = document.createElement('canvas').getContext('2d');
+    bloomSoft = document.createElement('canvas').getContext('2d');
   }
-  if (typeof fullCtx.filter !== 'string') return;          // a browser without canvas filters gets no full bloom
-  const w = Math.ceil(view.w / FULL_DIV), h = Math.ceil(view.h / FULL_DIV);
-  if (fullCanvas.width !== w || fullCanvas.height !== h) { fullCanvas.width = w; fullCanvas.height = h; }
-  fullCtx.globalCompositeOperation = 'copy';
-  fullCtx.filter = `${FULL_BRIGHT} blur(${FULL_BLUR}px)`;
-  fullCtx.drawImage(ctx.canvas, 0, 0, w, h);
+  for (const layer of [bloomSharp, bloomSoft]) {
+    if (layer.canvas.width !== w || layer.canvas.height !== h) { layer.canvas.width = w; layer.canvas.height = h; }
+  }
+  const a = bloomSharp;
+  a.setTransform(1, 0, 0, 1, 0, 0);
+  a.clearRect(0, 0, w, h);
+  a.setTransform(1 / BLOOM_DIV, 0, 0, 1 / BLOOM_DIV, 0, 0);
   ctx.save();
-  // Screen and not plain addition: a big bright area lit by its own glow would burn out to white.
-  ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = FULL_STRENGTH;
-  ctx.drawImage(fullCanvas, 0, 0, view.w, view.h);
+  ctx.beginPath();
+  for (const q of bloomQueue) {
+    wedge(a, L, q.lane, q.k0, q.k1, 0.02);
+    a.globalAlpha = q.strength;
+    a.fillStyle = q.color;
+    a.fill();
+    // The box round the band, on screen, grown by the reach of the light.
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i <= 6; i++) {
+      const angle = ANGLE[q.lane] - HALF + 2 * HALF * i / 6;
+      for (const k of [q.k0, q.k1]) {
+        const p = point(L, angle, k);
+        x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+      }
+    }
+    ctx.rect(x0 - BLOOM_PAD, y0 - BLOOM_PAD, x1 - x0 + 2 * BLOOM_PAD, y1 - y0 + 2 * BLOOM_PAD);
+  }
+  bloomQueue.length = 0;
+  const b = bloomSoft;
+  b.globalCompositeOperation = 'copy';
+  b.filter = `blur(${BLOOM_BLUR}px)`;
+  b.drawImage(a.canvas, 0, 0);
+  ctx.clip();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.drawImage(b.canvas, 0, 0, view.w, view.h);
   ctx.restore();
 }
 
 // What the player can switch about the ring's look. Kept in localStorage.
-//   bloom    'off', 'light' (a blurred glow on notes that are hit, and on held
-//            ones by the ring: what a browser without a graphics card can
-//            afford) or 'full' (everything bright on the screen glows)
+//   bloom      'off', 'light' (a blurred glow on notes that are hit, and on
+//              held ones by the ring: what a browser without a graphics card
+//              can afford) or 'full' (every note glows as well, all the way in)
+//   unlock     the player's own streak limits for the loose effects, by UNLOCKS id
+//   force      each effect's state where it is not 'auto': 'off' or 'on', by UNLOCKS id
+//   particles  the loose effects: sparks from hits and held notes, tails on
+//              the notes, a shock wave from a hit on a hard beat, and the
+//              shower when a streak reaches a new ten
 //   rainbow  a streak cycles through the colours; otherwise it wears the sectors' own
 const SETTINGS_KEY = 'tanssiauto.ringLook';
 export const BLOOM_LEVELS = [['off', 'pois'], ['light', 'kevyt'], ['full', 'täysi']];
-export const settings = { bloom: 'light', rainbow: false };
+export const settings = { bloom: 'light', rainbow: false, particles: true, unlock: {}, force: {} };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (err) { /* no storage */ }
 if (!BLOOM_LEVELS.some(([value]) => value === settings.bloom)) settings.bloom = 'light';
 export function setLook(name, value) {
@@ -196,21 +184,102 @@ const easeOut = (u) => 1 - (1 - u) ** 3;
 const STREAK_FROM = 10;
 const STREAK_FULL = 30;
 const bursts = [];
+// The longer the streak, the more of the loose effects join in. Hits in a row
+// before each one starts; a streak that breaks takes them all away again.
+// These are the defaults: the player's own limits are in settings.unlock.
+// A label names what the effect is on first, since the panel lists them by
+// limit, in the order they join in, and that order mixes the groups.
+export const UNLOCKS = [
+  ['neon', 'Auto: neonvärit', 0],             // the car lights up in the colour of the lane that was hit (main.js)
+  ['sparks', 'Kehä: kipinät', 4],             // off the ring from hits and held notes
+  ['tails', 'Nuotit: hännät', 8],             // behind the notes on their way in
+  ['spots', 'Lattia: valokeilat', 12],        // spotlights sweeping the floor (drawn in draw.js)
+  ['waves', 'Kehä: väreet', 20],              // a shock wave from a hit on a hard beat
+  ['glow', 'Nuotit: hehku', 24],              // every note glows (with the full bloom)
+  ['glint', 'Sade: tuike', 30],               // small twinkling dots in the showers
+  ['lasers', 'Auto: lasershow', 36],          // beams inside the car (drawn in draw.js)
+  ['stars', 'Sade: tähdet', 50],              // stars in the showers
+  ['drizzle', 'Sade: jatkuva tihku', 60],     // it never quite stops raining
+  ['gunk', 'Sade: roiskeet', 70],             // drops that splat in the showers
+];
+const SHOWER_KINDS = [['glint', 'glint'], ['stars', 'star'], ['gunk', 'gunk']];      // limit -> what falls
+let streakNow = 0;           // the streak as of the last frame drawn
+// A streak to pretend, for trying the limits out: the machine's own streak in
+// the watch mode passes a hundred in a minute, after which every limit has
+// been reached and no slider seems to do anything. null follows the real one.
+let trialStreak = null;
+export function setTrialStreak(hits) { trialStreak = hits; }
+export function streakShown() { return streakNow; }
+function limit(effect) { return settings.unlock[effect] ?? UNLOCKS.find(([id]) => id === effect)[2]; }
+// Each effect is in one of three states: 'off', 'auto' (on once the streak
+// reaches its limit) or 'on' (all the time). Off and on are for trying things
+// out: everything off, then one effect after another, without touching the limits.
+export const STATES = ['off', 'auto', 'on'];
+export function stateOf(effect) { return STATES.includes(settings.force[effect]) ? settings.force[effect] : 'auto'; }
+function unlocked(effect) {
+  if (!settings.particles) return false;
+  const state = stateOf(effect);
+  return state === 'on' || (state === 'auto' && streakNow >= limit(effect));
+}
+// For effects drawn elsewhere: whether the streak has reached one. With no chart
+// being followed there is no streak, and the frame loop decides for itself.
+export function reached(effect) { return unlocked(effect); }
+// What may fall just now, as fx.js kinds.
+function fallingKinds() { return SHOWER_KINDS.filter(([effect]) => unlocked(effect)).map(([, kind]) => kind); }
+export function setUnlock(effect, hits) {
+  settings.unlock[effect] = hits;
+  setLook('unlock', settings.unlock);
+}
+export function setState(effect, state) {
+  settings.force[effect] = state;
+  setLook('force', settings.force);
+}
+const waves = [];            // { lane, at }: shock waves running out from the ring
+const WAVE_TIME = 0.55;      // seconds a wave takes from the ring to the edge
 let glowing = {};            // lane -> [inner, outer] ring radii of each note glowing in it, as of the last frame drawn
 let streakTier = 0;
 let flashAt = -10;
+let drizzleBeat = 0;         // the beat the drizzle last added to
 
 // splash: the hit falls on one of the song's hard beats and gets the big burst.
 export function hitEffect(lane, grade, splash) {
+  if (splash && unlocked('waves')) waves.push({ lane, at: performance.now() / 1000 });
+  if (waves.length > 12) waves.shift();
   bursts.push({ lane, grade, splash, at: performance.now() / 1000 });
   if (bursts.length > 40) bursts.shift();
+}
+
+// A spot on the floor for something falling. Gunk lands on the sectors
+// outside the ring; stars and glints anywhere on the floor, the open middle
+// round the car included.
+function landingSpot(L, kind) {
+  const inner = kind === 'gunk' ? 1.08 : 0.2;
+  for (let tries = 0; tries < 12; tries++) {
+    // The square root spreads the spots evenly over the area and not towards the middle.
+    const k = Math.sqrt(inner * inner + (FAR * FAR - inner * inner) * Math.random());
+    const p = point(L, Math.random() * Math.PI * 2, k);
+    if (p[0] > 0 && p[0] < L.cx * 2 && p[1] > 30 && p[1] < L.cy * 2) return p;
+  }
+  return point(L, Math.random() * Math.PI * 2, kind === 'gunk' ? 1.15 : 0.7);
+}
+// The ring's ellipse on screen.
+export function ringShape(view) {
+  const L = layout(view);
+  return { cx: L.cx, cy: L.cy, rx: L.rx, ry: L.ry };
 }
 
 // A streak lights the ring: it glows, and a wave of colour closes in on it with every beat.
 function drawStreak(ctx, L, streak, now, beat) {
   const tier = Math.floor(streak / 10);
-  if (tier > streakTier) flashAt = now;
+  if (tier > streakTier) {
+    flashAt = now;
+    shower({ w: L.cx * 2, h: L.cy * 2 }, Math.min(90, 24 + 6 * tier), LANES.map((lane) => lane.color), fallingKinds(), (kind) => landingSpot(L, kind));
+  }
   streakTier = tier;
+  // From a long enough streak on it never quite stops raining.
+  const whole = Math.floor(beat);
+  if (unlocked('drizzle') && whole !== drizzleBeat) shower({ w: L.cx * 2, h: L.cy * 2 }, 3, LANES.map((lane) => lane.color), fallingKinds(), (kind) => landingSpot(L, kind));
+  drizzleBeat = whole;
   if (streak < STREAK_FROM) return;
   const level = Math.min(1, streak / STREAK_FULL);
   const hue = (now * 90) % 360;
@@ -263,6 +332,20 @@ function drawStreakFlash(ctx, L, now) {
   ctx.globalAlpha = 1;
 }
 
+// Sparks off the ring out along a lane's sector: a handful from a hit, a lot
+// more from a hit on a hard beat, a thin steady stream from a note being held.
+function throwSparks(L, lane, count, speed, color) {
+  for (let i = 0; i < count; i++) {
+    const a = ANGLE[lane] - HALF + 2 * HALF * Math.random();
+    const p = point(L, a, 1 + 0.03 * Math.random());
+    const q = point(L, a + (Math.random() - 0.5) * 0.5, 2);
+    const d = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    const v = speed * (0.35 + 0.65 * Math.random());
+    spark(p[0], p[1], (q[0] - p[0]) / d * v, (q[1] - p[1]) / d * v,
+      0.35 + 0.55 * Math.random(), Math.random() < 0.35 ? '#fff' : color, 1.5 + 2.5 * Math.random());
+  }
+}
+
 // Hits are drawn with light added on top of the picture, as a steady bloom
 // that fades: nothing flickers. An ordinary hit is quiet: the note stops on
 // the ring and glows for a moment. The big
@@ -279,9 +362,16 @@ function drawBursts(ctx, view, L, items, now) {
     arc(ctx, L, it.lane, 1);
     ctx.globalAlpha = 0.85;
     glowStroke(ctx, LANE[it.lane].color, 10, 22);
+    if (unlocked('sparks') && Math.random() < 0.6) throwSparks(L, it.lane, 1, 260, LANE[it.lane].color);
   }
   for (const b of bursts) {
     const age = now - b.at;
+    if (unlocked('sparks') && !b.thrown) {
+      b.thrown = true;
+      // More of them the longer the streak, up to three times as many.
+      const more = 1 + Math.min(2, streakNow / 30);
+      if (age < 0.1) throwSparks(L, b.lane, Math.round((b.splash ? 16 : 5) * more), b.splash ? 900 : 520, LANE[b.lane].color);
+    }
     if (age > BURST_TIME) continue;
     const u = age / BURST_TIME;
     const moved = easeOut(u), fade = 1 - u;
@@ -297,7 +387,7 @@ function drawBursts(ctx, view, L, items, now) {
       ctx.globalAlpha = 0.55 * fade;
       ctx.fillStyle = '#fff';
       ctx.fill();
-      bloomWedge(ctx, view, L, b.lane, k, k + reach(TAP) - 1, color, 0.9 * fade);
+      bloomWedge(b.lane, k, k + reach(TAP) - 1, color, 0.9 * fade);
       continue;
     }
 
@@ -305,7 +395,7 @@ function drawBursts(ctx, view, L, items, now) {
     ctx.globalAlpha = 0.4 * fade * fade;
     ctx.fillStyle = color;
     ctx.fill();
-    bloomWedge(ctx, view, L, b.lane, 1, 1.12, color, fade);
+    bloomWedge(b.lane, 1, 1.12, color, fade);
 
     const thrown = 1.04 + 0.34 * moved * big;
     wedge(ctx, L, b.lane, thrown, thrown + 0.07 * fade, 0.03);
@@ -326,6 +416,7 @@ function drawBursts(ctx, view, L, items, now) {
     }
   }
   ctx.restore();
+  flushBloom(ctx, view, L);
 }
 
 // ---------------------------------------------------------------- the ring
@@ -346,12 +437,38 @@ function drawSectors(ctx, L, heldLanes, beatRings) {
     ctx.lineWidth = bar ? 2 : 1;
     ctx.stroke();
   }
+  // A shock wave is a bright front crossing its sector, and it pushes the two
+  // dividing lines beside it apart where it passes.
+  const now = performance.now() / 1000;
+  const fronts = [];
+  for (const w of waves) {
+    const u = (now - w.at) / WAVE_TIME;
+    if (u < 0 || u > 1) continue;
+    const k = 1 + (FAR - 1) * (1 - (1 - u) * (1 - u));
+    fronts.push({ lane: w.lane, k, left: 1 - u });
+    arc(ctx, L, w.lane, k);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * (1 - u)})`;
+    ctx.lineWidth = 2 + 6 * (1 - u);
+    ctx.stroke();
+  }
   ctx.strokeStyle = 'rgba(245, 241, 230, 0.4)';
   ctx.lineWidth = 5;
   for (let i = 0; i < 8; i++) {
     const a = Math.PI + i * 2 * HALF;
-    const p = point(L, a, 1), q = point(L, a, FAR);
-    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+    ctx.beginPath();
+    for (let step = 0; step <= 14; step++) {
+      const k = 1 + (FAR - 1) * step / 14;
+      let bend = 0;
+      for (const f of fronts) {
+        const side = Math.atan2(Math.sin(a - ANGLE[f.lane]), Math.cos(a - ANGLE[f.lane]));
+        if (Math.abs(Math.abs(side) - HALF) > 0.01) continue;      // not one of this wave's two lines
+        const near = (k - f.k) / 0.09;
+        bend += Math.sign(side) * 0.07 * f.left * Math.exp(-near * near);
+      }
+      const p = point(L, a + bend, k);
+      if (step) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]);
+    }
+    ctx.stroke();
   }
   ellipse(ctx, L, 1);
   ctx.strokeStyle = 'rgba(245, 241, 230, 0.85)';
@@ -504,8 +621,26 @@ function drawNote(ctx, L, lane, near, far, touch, faded, alive) {
   wedge(ctx, L, lane, k0, k1, 0.035);
   ctx.globalAlpha = faded ? 0.3 : 1;
   ctx.fillStyle = faded ? '#8a86a0' : LANE[lane].color;
+  // The full bloom: the note carries a glow of its own colour. This is the
+  // canvas shadow blur, once for every note on screen, which a graphics card
+  // does not notice and a browser drawing without one cannot afford.
+  if (settings.bloom === 'full' && !faded && unlocked('glow')) {
+    ctx.shadowColor = LANE[lane].color;
+    ctx.shadowBlur = alive ? 46 : 26;
+  }
   ctx.fill();
+  ctx.shadowBlur = 0;
   ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+  // A tail behind a note on its way in: the same band three times over, thinner each time.
+  if (unlocked('tails') && !faded && !alive) {
+    let from = k1;
+    for (const [length, alpha] of [[0.05, 0.38], [0.07, 0.22], [0.1, 0.1]]) {
+      wedge(ctx, L, lane, from, from + length, 0.035);
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+      from += length;
+    }
+  }
   ctx.globalAlpha = 1;
   if (alive) {
     ctx.save();
@@ -544,6 +679,8 @@ function drawTargets(ctx, view, L, heldLanes, touch, now) {
 export function drawHighway(ctx, view, items, beat, heldLanes, touch, streak) {
   const L = layout(view);
   const now = performance.now() / 1000;
+  if (trialStreak !== null) streak = trialStreak;
+  streakNow = streak;
   const rings = [];
   for (let b = Math.ceil(beat); b < beat + AHEAD; b++) rings.push([b - beat, (b - 4) % 4 === 0]);
   drawSectors(ctx, L, heldLanes, rings);
@@ -570,7 +707,7 @@ export function drawHighway(ctx, view, items, beat, heldLanes, touch, streak) {
       (glowing[it.lane] = glowing[it.lane] || []).push(band);
       // Only the stretch by the ring glows: laying light over the whole of a
       // long band costs a box as big as the band.
-      bloomWedge(ctx, view, L, it.lane, band[0], Math.min(band[1], band[0] + HELD_BLOOM), LANE[it.lane].color, 0.4);
+      bloomWedge(it.lane, band[0], Math.min(band[1], band[0] + HELD_BLOOM), LANE[it.lane].color, 0.4);
     }
   }
   drawBursts(ctx, view, L, items, now);
