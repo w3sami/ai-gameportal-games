@@ -14,7 +14,20 @@
 
   .panel { position: fixed; background: var(--panel); border-radius: 12px; padding: 8px 10px; }
   #tune { top: 8px; left: 8px; width: min(250px, 62vw); z-index: 2; }
-  #tune summary { cursor: pointer; font-weight: 700; }
+  #tune summary, #limits summary { cursor: pointer; font-weight: 700; }
+  #limits { top: 8px; left: calc(16px + min(250px, 62vw)); width: min(360px, 84vw); z-index: 2; }
+  #limits p { margin: 6px 0; font-size: 12px; opacity: .75; }
+  #limitRows > div { display: grid; grid-template-columns: 132px 44px 1fr 26px; align-items: center; gap: 6px; font-size: 13px; min-height: 24px; }
+  #limits .switch { width: 44px; accent-color: #8a86a0; }
+  #limits .switch[data-state=auto] { accent-color: var(--accent); }
+  #limits .switch[data-state=on] { accent-color: #8cff6a; }
+  #limitRows > div.off span, #limitRows > div.off b { opacity: .45; }
+  #limits #trial { opacity: 1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  #limits #trial input { flex: 1; min-width: 80px; }
+  #limits #trial b { color: var(--accent); }
+  #limitSort, #limits [data-all] { margin-top: 8px; padding: 5px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); }
+  #limits input[type=range] { width: 100%; accent-color: var(--accent); touch-action: pan-x; }
+  @media (max-width: 560px) { #limits { left: 8px; top: 52px; } }
   #tune h3 { margin: 8px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
   #tune label { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 6px; font-size: 13px; }
   #tune input[type=range] { width: 100%; accent-color: var(--accent); touch-action: pan-x; }
@@ -51,7 +64,7 @@
   .pick { margin-top: 8px; }
   .pick span { display: flex; align-items: center; gap: 8px; }
   .pick input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); touch-action: pan-x; }
-  #ownTools, #looks { display: flex; gap: 8px; }
+  #ownTools, #looks { display: flex; flex-wrap: wrap; gap: 0 8px; }
   #looks button { margin: 8px 0 0; padding: 7px; font-size: 13px; font-weight: 400; }
   #ownTools button { margin: 8px 0 0; padding: 7px; font-size: 13px; font-weight: 400; }
   #jsonOut { width: 100%; height: 70px; margin-top: 8px; font: 11px/1.3 monospace; }
@@ -81,6 +94,17 @@
   <label>Löysyys <input type="range" id="rearLoose" min="0" max="1" step="0.02" value="0.5"></label>
   <h3>Voima</h3>
   <label>Potku <input type="range" id="kick" min="2" max="16" step="0.5" value="6"></label>
+</details>
+
+<details id="limits" class="panel">
+  <summary>Efektien rajat</summary>
+  <p>Kytkin: luvun mukaan (vasen), pois (keski) tai aina päällä (oikea). Luku: montako osumaa putkessa, ennen kuin efekti tulee mukaan.</p>
+  <p id="trial">Putki nyt <b id="streakNow">0</b>. Kokeile putkella
+    <input type="range" id="trialStreak" min="-1" max="100" step="1" value="-1"> <b id="trialVal">oikea</b></p>
+  <div id="limitRows"></div>
+  <button id="limitSort">Järjestä luvun mukaan</button>
+  <button data-all="off">Kaikki pois</button>
+  <button data-all="auto">Kaikki luvun mukaan</button>
 </details>
 
 <div id="top">
@@ -130,6 +154,7 @@
     <label class="pick">Nuotit <select id="notesPick"><option value="ring">auton ympärillä</option><option value="board">laudalla auton yllä</option></select></label>
     <div id="looks">
       <button id="bloomBtn">Bloom</button>
+      <button id="sparksBtn">Efektit</button>
       <button id="rainbowBtn">Putki sateenkaarena</button>
     </div>
     <label class="pick">Ajoituksen siirto <span><input type="range" id="delay" min="-300" max="400" step="10" value="0"> <b id="delayVal">0 ms</b></span></label>
