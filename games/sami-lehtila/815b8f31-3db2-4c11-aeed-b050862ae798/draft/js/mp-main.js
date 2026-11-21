@@ -33,6 +33,22 @@
     window.MpSettings.wire(() => { if (lastRenderedState) renderRoom(lastRenderedState); });
   }
 
+  /* "Arvo järjestys pelin alkaessa": tämän laitteen asetus, sama valinta
+     kaikissa kolmessa paikassa (offline-aloitus, verkkohuoneen odotustila,
+     uuden pelin valinnat). Päällä ollessaan jokainen pelin aloitus ja
+     uusinta sekoittaa pelaajien vuorojärjestyksen. */
+  const SHUFFLE_KEY = 'jatsi.shuffleOnStart';
+  let shuffleOnStart = false;
+  try { shuffleOnStart = localStorage.getItem(SHUFFLE_KEY) === '1'; } catch (e) {}
+  const shuffleBoxes = document.querySelectorAll('.shuffleToggle');
+  const syncShuffleBoxes = () => shuffleBoxes.forEach((b) => { b.checked = shuffleOnStart; });
+  shuffleBoxes.forEach((b) => b.addEventListener('change', () => {
+    shuffleOnStart = b.checked;
+    try { localStorage.setItem(SHUFFLE_KEY, shuffleOnStart ? '1' : '0'); } catch (e) {}
+    syncShuffleBoxes();
+  }));
+  syncShuffleBoxes();
+
   function showView(v) {
     authView.style.display = v === 'auth' ? 'flex' : 'none';
     lobbyView.style.display = v === 'lobby' ? 'flex' : 'none';
@@ -184,8 +200,6 @@
       list.appendChild(row);
     });
     document.getElementById('offAddPlayer').style.display = setup.players.length < window.RoomRules.MAX_PLAYERS ? '' : 'none';
-    document.getElementById('offShuffle').style.display = setup.players.length > 1 ? '' : 'none';
-    document.getElementById('offShuffle').textContent = setup.players.length > 2 ? '🎲 Arvo järjestys' : '🎲 Arvo aloittaja';
     fillVariant('off', setup.variant || {});
     const saved = window.LocalRoom.savedGame();
     const resume = document.getElementById('offResumeBtn');
@@ -200,10 +214,6 @@
   }
   ['offFiveK', 'offQuick', 'offTwoCol', 'offSixDice', 'offBank', 'offRollMode'].forEach((id) =>
     document.getElementById(id).addEventListener('change', readOfflineVariant));
-  document.getElementById('offShuffle').addEventListener('click', () => {
-    setup.players = window.MpUI.shuffled(setup.players);
-    saveSetup(); renderOfflineSetup();
-  });
   document.getElementById('offAddPlayer').addEventListener('click', () => {
     const used = new Set(setup.players.map((p) => p.color));
     setup.players.push({ name: '', color: PALETTE().find((c) => !used.has(c)) || PALETTE()[0] });
@@ -217,9 +227,14 @@
       window.MpUI.dialog({ title: 'Sama nimi kahdesti', text: 'Anna jokaiselle pelaajalle oma nimi.' });
       return;
     }
-    const go = () => window.MpGame.localCreate(
-      setup.players.map((p, i) => ({ name: names[i], color: p.color })), setup.variant,
-      (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); });
+    /* Arvonta koskee vain alkavaa peliä: aloitusnäkymän lista pysyy
+       siinä järjestyksessä, johon pelaajat on kirjoitettu. */
+    const go = () => {
+      let players = setup.players.map((p, i) => ({ name: names[i], color: p.color }));
+      if (shuffleOnStart) players = window.MpUI.shuffled(players);
+      window.MpGame.localCreate(players, setup.variant,
+        (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); });
+    };
     if (window.LocalRoom.savedGame()) {
       window.MpUI.dialog({
         title: 'Aloitetaanko uusi peli?', text: 'Kesken oleva peli häviää.',
@@ -234,6 +249,13 @@
      seuraavaan heittoon asti. Nopat palauttaa game:undone (mp-game.js). */
   document.getElementById('undoBtn').addEventListener('click', () => {
     window.MpGame.undo((res) => { if (!res.ok) setLobbyError(res.error); });
+  });
+
+  /* Päättyneen pelin tulokset uudestaan esiin: voittoikkunan (sijoitukset,
+     tulostaulu, uuden pelin valinnat) saa suljettuaan takaisin poistumatta
+     huoneesta. Nappi on heittonapin paikalla, kun peli on päättynyt. */
+  document.getElementById('resultsBtn').addEventListener('click', () => {
+    if (roomStatus === 'finished') document.getElementById('winnerOverlay').style.display = 'flex';
   });
 
   /* Pelaajan oma väri (avatar) — tilikohtainen, ks. server/auth.js:n
@@ -530,6 +552,13 @@
     document.getElementById('undoBtn').classList.toggle('show', window.MpGame.canUndo(state));
     const amIHost = state.hostId === me.id;
     const preGame = state.status === 'open';
+    /* Päättyneessä pelissä heittonapin paikalla on tulosnappi, josta
+       voittoikkuna (tulostaulu ja isännälle uusi peli) aukeaa uudestaan. */
+    const finished = state.status === 'finished';
+    document.getElementById('rollBtn').style.display = finished ? 'none' : '';
+    const resultsBtn = document.getElementById('resultsBtn');
+    resultsBtn.style.display = finished ? 'block' : 'none';
+    resultsBtn.textContent = amIHost ? '🏆 TULOKSET · UUSI PELI' : '🏆 TULOKSET';
     if (preGame) document.getElementById('turnBadge').textContent = 'Odotetaan aloitusta';
     document.getElementById('mpPreGame').style.display = preGame ? 'flex' : 'none';
     document.getElementById('controls').style.display = preGame ? 'none' : 'flex';
@@ -542,6 +571,7 @@
         window.MpGame.reorder(seatIds, (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); }),
         openPeople);
       document.getElementById('mpStartBtn').style.display = amIHost && state.players.length >= 2 ? 'block' : 'none';
+      document.getElementById('mpShuffleRow').style.display = amIHost && state.players.length >= 2 ? 'block' : 'none';
       document.getElementById('mpDeleteRoomBtn').style.display = amIHost ? 'block' : 'none';
       /* Katsoja pääsee itse pelaajaksi avoimeen huoneeseen jossa on tilaa,
          paitsi jos isäntä on poistanut hänet pelistä. */
@@ -706,8 +736,15 @@
     const roomId = window.MpGame.getRoomId();
     if (roomId) joinRoom(roomId);
   });
+  /* Verkkopelin aloitus: arvonta päällä järjestys sekoitetaan ensin
+     (room:order), ja peli alkaa sen vastauksen jälkeen. Jos sekoitus ei
+     onnistu, peli alkaa silti nykyisellä järjestyksellä. */
   document.getElementById('mpStartBtn').addEventListener('click', () => {
-    window.MpGame.startGame((res) => { if (!res.ok) setLobbyError(res.error); });
+    const start = () => window.MpGame.startGame((res) => { if (!res.ok) setLobbyError(res.error); });
+    const st = lastState0;
+    if (shuffleOnStart && st && st.players.length > 1) {
+      window.MpGame.reorder(window.MpUI.shuffled(st.players.map((p) => p.seatId)), start);
+    } else start();
   });
   document.getElementById('mpDeleteRoomBtn').addEventListener('click', () => window.MpUI.dialog({
     title: 'Poista huone?', text: 'Huone poistuu kaikilta pelaajilta ja katsojilta.',
@@ -718,9 +755,29 @@
     document.getElementById('winnerOverlay').style.display = 'none';
   });
   const rematchVariant = () => readVariant('rematch');
-  /* Samat pelaajat: uusi peli alkaa heti. */
+  /* Samat pelaajat: uusi peli alkaa heti. Arvonta päällä järjestys
+     sekoitetaan ensin: offline uusi peli luodaan samoista pelaajista
+     sekoitettuna; verkossa huone käy odotustilassa (uusinta ilman aloitusta
+     → room:order → aloitus), koska järjestystä voi vaihtaa vain siellä. */
   document.getElementById('rematchBtn').addEventListener('click', () => {
-    window.MpGame.rematch(rematchVariant(), true, (res) => { if (!res.ok) setLobbyError(res.error); });
+    const variant = rematchVariant();
+    const st = lastRenderedState;
+    if (shuffleOnStart && st && st.players.length > 1) {
+      if (mode === 'offline') {
+        const players = window.MpUI.shuffled(st.players.map((p) => ({ name: p.username, color: p.color })));
+        window.MpGame.localCreate(players, variant,
+          (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); });
+        return;
+      }
+      const ids = window.MpUI.shuffled(st.players.map((p) => p.seatId));
+      window.MpGame.rematch(variant, false, (res) => {
+        if (!res.ok) { setLobbyError(res.error); return; }
+        window.MpGame.reorder(ids, () =>
+          window.MpGame.startGame((r) => { if (!r.ok) setLobbyError(r.error); }));
+      });
+      return;
+    }
+    window.MpGame.rematch(variant, true, (res) => { if (!res.ok) setLobbyError(res.error); });
   });
   /* Uudet pelaajat: verkossa huoneen odotustilaan (päästä, vieraat, järjestys),
      offline pelaajien valintaan. */
