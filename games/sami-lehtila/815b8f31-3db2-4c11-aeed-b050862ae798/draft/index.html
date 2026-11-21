@@ -45,7 +45,7 @@
     <div id="offPlayers"></div>
     <div class="offPlayerBtns">
       <button type="button" id="offAddPlayer" class="offAddBtn">+ Pelaaja</button>
-      <button type="button" id="offShuffle" class="offAddBtn">🎲 Arvo järjestys</button>
+      <label class="mpCheck" style="margin:8px 0 0" title="Pelaajien järjestys arvotaan aina kun peli alkaa"><input type="checkbox" class="shuffleToggle"> 🎲 Arvo järjestys pelin alkaessa</label>
     </div>
     <label>Säännöt</label>
     <div class="mpVariantRow">
@@ -150,6 +150,9 @@
   </div>
   <div id="mpPreGame" class="mpPreGame">
     <div id="mpPlayersPre" class="mpPlayers"></div>
+    <div id="mpShuffleRow" style="display:none">
+      <label class="mpCheck" title="Pelaajien järjestys arvotaan aina kun peli alkaa"><input type="checkbox" class="shuffleToggle"> 🎲 Arvo järjestys pelin alkaessa</label>
+    </div>
     <button class="bigBtn" id="mpStartBtn" style="display:none">ALOITA PELI</button>
     <div id="mpGuestRow" class="mpGuestRow" style="display:none">
       <input id="mpGuestName" type="text" maxlength="20" placeholder="Pelaaja tälle laitteelle" autocomplete="off">
@@ -162,6 +165,7 @@
   </div>
   <div id="controls" style="display:none">
     <button id="rollBtn">HEITÄ NOPAT</button>
+    <button id="resultsBtn" class="bigBtn" type="button" style="display:none;flex:1;width:auto;margin-top:0" title="Avaa tulokset, tulostaulu ja uuden pelin valinnat">🏆 TULOKSET</button>
     <button id="undoBtn" title="Peru edellinen merkintä">↩ Peru</button>
     <div id="rollsLeft"></div>
   </div>
@@ -195,6 +199,9 @@
           <option value="charge">Paina &amp; pidä</option>
           <option value="shake">Ravistus</option>
         </select>
+      </div>
+      <div class="mpVariantRow">
+        <label class="mpCheck" style="margin:0" title="Pelaajien järjestys arvotaan aina kun peli alkaa"><input type="checkbox" class="shuffleToggle"> 🎲 Arvo järjestys pelin alkaessa</label>
       </div>
     </div>
     <button class="bigBtn" id="rematchBtn" style="display:none">UUSI PELI (SAMAT PELAAJAT)</button>
