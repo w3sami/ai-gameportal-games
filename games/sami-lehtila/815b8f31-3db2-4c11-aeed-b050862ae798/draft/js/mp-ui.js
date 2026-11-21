@@ -409,12 +409,13 @@ window.MpUI = (function () {
   }
 
   /* 5000:n tilannetaulu: pelaajien summat, vuorot ja matka tavoitteeseen,
-     ja alla pisteytys. Pöytäkirjaa ei ole. */
+     ja alla pisteytys. Pöytäkirjaa ei ole. Viimeisintä merkintää ei
+     korosteta: pelaajalla on vain yksi ruutu, joten korostus ei kerro mitään
+     (merkintä näkyy pelaajarivin sirussa). */
   function fiveKTable(state) {
     const K = S().FIVEK;
     const six = state.variant.sixDice;
     const playing = state.status === 'playing';
-    const lm = state.lastMark;
     let h = '<thead><tr><th>5000</th><th>Summa</th><th>Vuorot</th></tr></thead><tbody>';
     state.players.forEach((p, i) => {
       const cur = playing && i === state.current;
@@ -422,7 +423,7 @@ window.MpUI = (function () {
       const note = !p.total ? ' <span class="devTag neg">ei avattu</span>'
         : p.total >= K.TARGET ? ' <span class="devTag pos">maalissa</span>' : '';
       h += `<tr class="fkRow${cur ? ' cur' : ''}"><td><span class="pdot" style="background:${p.color}"></span>${esc(p.username)}${cur ? ' · vuorossa' : ''}</td>` +
-        `<td class="filled${lm && lm.seatId === p.seatId ? ' lastMark' : ''}"><b>${p.total || 0}</b>${note}<div class="fkBar"><i style="width:${pct}%"></i></div></td>` +
+        `<td class="filled"><b>${p.total || 0}</b>${note}<div class="fkBar"><i style="width:${pct}%"></i></div></td>` +
         `<td>${p.turns || 0}</td></tr>`;
     });
     if (playing && state.players.some((p) => (p.total || 0) >= K.TARGET)) {
@@ -563,10 +564,14 @@ window.MpUI = (function () {
       state.rollsUsed >= maxR ? (bank ? `PANKKIHEITTO 💰${state.players[state.current].bank}` : 'VALITSE RIVI') :
       'HEITÄ UUDELLEEN';
     }
+    /* Heittopallot lasketaan heiton alusta: pelin aikana merkitään myös
+       menossa oleva (seuraavaksi lähtevä) heitto, joten vuoro alkaa 1:stä
+       eikä 0:sta. Viimeisen heiton jälkeen luku pysyy enimmäismäärässä. */
+    const shownRolls = state.status === 'playing' ? Math.min(state.rollsUsed + 1, maxR) : state.rollsUsed;
     rollsEl.innerHTML = '';
     for (let i = 0; i < (f ? 0 : maxR); i++) {
       const dot = document.createElement('div');
-      dot.className = 'rollDot' + (i < state.rollsUsed ? ' used' : '');
+      dot.className = 'rollDot' + (i < shownRolls ? ' used' : '');
       rollsEl.appendChild(dot);
     }
     if (state.status === 'finished') {
