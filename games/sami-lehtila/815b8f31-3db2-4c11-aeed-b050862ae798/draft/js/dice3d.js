@@ -710,6 +710,42 @@ window.Dice3D = (function () {
   function isStuckPose(d) {
     return topFace(d.mesh).dot < .98 || d.body.position.y > REST_Y;
   }
+  /* Tönäistään vain noppaa, joka on vinossa JA nojaa johonkin: seinään tai
+     toiseen noppaan. Yksin keskellä pöytää särmällään keinuva noppa ei ole
+     jumissa (se kaatuu itse), eikä sitä heitetä uudestaan — aiemmin
+     sellainenkin lähti lentoon, koska särmällään olevan nopan keskipiste
+     on korkealla ja se näytti "toisen päällä olevalta".
+     Kosketus mitataan nopan pinnan pisteistä (kulmat ja särmien pisteet):
+     piste on seinän tasossa tai toisen nopan sisällä TOUCH_EPS:n tarkkuudella.
+     Mittaus on geometrinen eikä fysiikan kosketuslistasta, joten se toimii
+     myös nukkuvalle kappaleelle. */
+  const TOUCH_EPS = 0.07;
+  const TOUCH_PTS = (function () {
+    const pts = [], s = [-1, 1];
+    s.forEach(x => s.forEach(y => s.forEach(z => pts.push(new CANNON.Vec3(x*HALF, y*HALF, z*HALF)))));
+    [-.25, 0, .25].forEach(t => s.forEach(a => s.forEach(b => {
+      pts.push(new CANNON.Vec3(t*DIE, a*HALF, b*HALF), new CANNON.Vec3(a*HALF, t*DIE, b*HALF), new CANNON.Vec3(a*HALF, b*HALF, t*DIE));
+    })));
+    return pts;
+  })();
+  function touchPts(d) {
+    return TOUCH_PTS.map(l => { const w = d.body.quaternion.vmult(l); w.vadd(d.body.position, w); return w; });
+  }
+  function insideDie(o, w) {
+    const l = o.body.quaternion.conjugate().vmult(w.vsub(o.body.position));
+    const m = HALF + TOUCH_EPS;
+    return Math.abs(l.x) <= m && Math.abs(l.y) <= m && Math.abs(l.z) <= m;
+  }
+  function touchesSomething(d) {
+    const mine = touchPts(d);
+    if (mine.some(w => Math.abs(w.x) >= TRAY_W/2 - TOUCH_EPS || Math.abs(w.z) >= TRAY_D/2 - TOUCH_EPS)) return true;
+    return activeDice().some(o => {
+      if (o === d) return false;
+      if (o.body.position.distanceTo(d.body.position) > DIE*1.75 + TOUCH_EPS) return false;
+      return mine.some(w => insideDie(o, w)) || touchPts(o).some(w => insideDie(d, w));
+    });
+  }
+  const isNudgeable = (d) => isStuckPose(d) && touchesSomething(d);
 
   function checkSettle(dt) {
     if(!rolling) return;
@@ -721,7 +757,7 @@ window.Dice3D = (function () {
     settleT = moving ? 0 : settleT + dt;
     free.forEach(d=>{
       const slow = d.body.velocity.length()<STUCK_V && d.body.angularVelocity.length()<STUCK_AV;
-      d.stuckT = slow && isStuckPose(d) ? (d.stuckT||0)+dt : 0;
+      d.stuckT = slow && isNudgeable(d) ? (d.stuckT||0)+dt : 0;
     });
     const stuck = free.filter(d=>d.stuckT>=STUCK_NUDGE_S);
     if(stuck.length && nudges<8){
@@ -732,9 +768,12 @@ window.Dice3D = (function () {
     const timeout = rollT>SETTLE_TIMEOUT_S;
     if(settleT>=SETTLE_REST_S || timeout){
       const bad = free.filter(isStuckPose);
-      if(bad.length && nudges<8){
+      /* Vain johonkin nojaavat tönäistään; yksin vinoon jäänyt noppa
+         oikaistaan alla lähimmälle sivulleen (snapUpright). */
+      const leaning = bad.filter(touchesSomething);
+      if(leaning.length && nudges<8){
         nudges++;
-        nudgeStuck(bad);
+        nudgeStuck(leaning);
         return;
       }
       if(bad.length){
