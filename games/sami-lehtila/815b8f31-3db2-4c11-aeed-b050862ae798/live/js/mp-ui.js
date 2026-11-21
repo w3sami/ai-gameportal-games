@@ -411,7 +411,9 @@ window.MpUI = (function () {
   /* 5000:n tilannetaulu: pelaajien summat, vuorot ja matka tavoitteeseen,
      ja alla pisteytys. Pöytäkirjaa ei ole. Viimeisintä merkintää ei
      korosteta: pelaajalla on vain yksi ruutu, joten korostus ei kerro mitään
-     (merkintä näkyy pelaajarivin sirussa). */
+     (merkintä näkyy pelaajarivin sirussa). Vuorot lasketaan vuoron alusta:
+     vuorossa olevan luvussa on mukana menossa oleva vuoro, joten ensimmäinen
+     vuoro näkyy 1:nä eikä 0:na (p.turns kasvaa vasta vuoron päättyessä). */
   function fiveKTable(state) {
     const K = S().FIVEK;
     const six = state.variant.sixDice;
@@ -424,7 +426,7 @@ window.MpUI = (function () {
         : p.total >= K.TARGET ? ' <span class="devTag pos">maalissa</span>' : '';
       h += `<tr class="fkRow${cur ? ' cur' : ''}"><td><span class="pdot" style="background:${p.color}"></span>${esc(p.username)}${cur ? ' · vuorossa' : ''}</td>` +
         `<td class="filled"><b>${p.total || 0}</b>${note}<div class="fkBar"><i style="width:${pct}%"></i></div></td>` +
-        `<td>${p.turns || 0}</td></tr>`;
+        `<td>${(p.turns || 0) + (cur ? 1 : 0)}</td></tr>`;
     });
     if (playing && state.players.some((p) => (p.total || 0) >= K.TARGET)) {
       h += '<tr class="section"><th colspan="3">Loppukierros — jokainen pelaa yhtä monta vuoroa</th></tr>';
@@ -564,14 +566,10 @@ window.MpUI = (function () {
       state.rollsUsed >= maxR ? (bank ? `PANKKIHEITTO 💰${state.players[state.current].bank}` : 'VALITSE RIVI') :
       'HEITÄ UUDELLEEN';
     }
-    /* Heittopallot lasketaan heiton alusta: pelin aikana merkitään myös
-       menossa oleva (seuraavaksi lähtevä) heitto, joten vuoro alkaa 1:stä
-       eikä 0:sta. Viimeisen heiton jälkeen luku pysyy enimmäismäärässä. */
-    const shownRolls = state.status === 'playing' ? Math.min(state.rollsUsed + 1, maxR) : state.rollsUsed;
     rollsEl.innerHTML = '';
     for (let i = 0; i < (f ? 0 : maxR); i++) {
       const dot = document.createElement('div');
-      dot.className = 'rollDot' + (i < shownRolls ? ' used' : '');
+      dot.className = 'rollDot' + (i < state.rollsUsed ? ' used' : '');
       rollsEl.appendChild(dot);
     }
     if (state.status === 'finished') {
