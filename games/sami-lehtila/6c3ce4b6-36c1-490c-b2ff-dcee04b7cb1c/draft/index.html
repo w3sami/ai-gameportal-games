@@ -24,7 +24,34 @@
     <input id="name" maxlength="16" placeholder="Nimesi" autocomplete="off">
     <button id="play" type="button">Pelaa</button>
   </div>
-  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää (tuplahypyllä uudestaan ilmassa) · X, J tai hiiri lyö · ↓ + hyppy pudottaa tason läpi · L avaa viivekokeen<br>Ohjaimella: sauva liikkuu, A hyppää ja aloittaa, X, B tai RT lyö, Back avaa viivekokeen</p>
+  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää (tuplahypyllä uudestaan ilmassa) · X, J tai hiiri lyö · ↓ + hyppy pudottaa tason läpi · L avaa viivekokeen<br>Ohjaimella: sauva liikkuu, A hyppää ja aloittaa, X, B tai RT lyö, Start aloittaa erän aulassa, Back avaa viivekokeen</p>
+</div>
+
+<div id="matchbar" hidden><span id="matchinfo"></span><button id="stopbtn" type="button" hidden>Lopeta erä</button></div>
+
+<div id="lobby" class="card" hidden>
+  <div class="lobbyhead"><h2>Erän säännöt</h2><button id="lobbyhide" type="button">Piilota</button></div>
+  <p class="hint">Kaikki pelaajat näkevät säännöt ja voivat muuttaa niitä. Aulassa voi lämmitellä, mikään ei vielä lasketa.</p>
+  <label>Kesto <output id="o-dur"></output><input id="s-dur" type="range" min="0" max="11" step="1"></label>
+  <label>Timanttitavoite <output id="o-target"></output><input id="s-target" type="range" min="0" max="10" step="1"></label>
+  <label>Elämät <output id="o-lives"></output><input id="s-lives" type="range" min="0" max="10" step="1"></label>
+  <label>Kaatuessa putoaa vähintään <output id="o-dmin"></output><input id="s-dmin" type="range" min="0" max="100" step="10"></label>
+  <label>… ja enintään <output id="o-dmax"></output><input id="s-dmax" type="range" min="0" max="100" step="10"></label>
+  <label>Jokaisesta osumasta putoaa <output id="o-hit"></output><input id="s-hit" type="range" min="0" max="5" step="1"></label>
+  <button id="startbtn" type="button">Aloita erä</button>
+</div>
+<button id="lobbyshow" type="button" hidden>Säännöt</button>
+
+<div id="results" class="card" hidden>
+  <h2 id="r-title"></h2>
+  <p id="r-reason"></p>
+  <ol id="r-list"></ol>
+  <p id="r-next"></p>
+</div>
+
+<div id="confirm" class="card" hidden>
+  <p>Lopetetaanko erä kaikilta? Johtaja voittaa.</p>
+  <div class="row"><button id="c-yes" type="button">Lopeta erä</button><button id="c-no" type="button">Jatka peliä</button></div>
 </div>
 
 <button id="lagtoggle" type="button" title="Viivekoe (L)">ms</button>
