@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Nuijasota</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="net"></div>
+  <ol id="board"></ol>
+</div>
+<div id="status"></div>
+<div id="dead" hidden></div>
+
+<div id="join" class="card">
+  <h1>Nuijasota</h1>
+  <p>Hypi, kerää timantteja ja kopauta muita nuijalla. Kaatunut pudottaa puolet timanteistaan.</p>
+  <div class="row">
+    <input id="name" maxlength="16" placeholder="Nimesi" autocomplete="off">
+    <button id="play" type="button">Pelaa</button>
+  </div>
+  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää · X, J tai hiiri lyö · ↓ + hyppy pudottaa tason läpi · L avaa viivekokeen</p>
+</div>
+
+<button id="lagtoggle" type="button" title="Viivekoe (L)">ms</button>
+<div id="lagpanel" class="card" hidden>
+  <h2>Viivekoe</h2>
+  <p>Lisää omaan yhteyteesi viivettä ja heittelyä. Muut pelaajat eivät huomaa mitään.</p>
+  <label>Lisäviive (edestakaisin) <output id="lagout"></output>
+    <input id="lag" type="range" min="0" max="600" step="10"></label>
+  <label>Heittely <output id="jitterout"></output>
+    <input id="jitter" type="range" min="0" max="400" step="10"></label>
+</div>
+
+<div id="touch">
+  <div class="pad">
+    <button type="button" data-touch="left">◀</button>
+    <button type="button" data-touch="down">▼</button>
+    <button type="button" data-touch="right">▶</button>
+  </div>
+  <div class="pad">
+    <button type="button" data-touch="hit">Lyö</button>
+    <button type="button" data-touch="jump">Hyppy</button>
+  </div>
+</div>
+
+<script type="module" src="game.js"></script>
+</body>
+</html>
