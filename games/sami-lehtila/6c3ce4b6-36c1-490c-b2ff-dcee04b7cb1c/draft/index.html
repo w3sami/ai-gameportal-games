@@ -24,7 +24,7 @@
     <input id="name" maxlength="16" placeholder="Nimesi" autocomplete="off">
     <button id="play" type="button">Pelaa</button>
   </div>
-  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää (tuplahypyllä uudestaan ilmassa) · X, J tai hiiri lyö · ↓ + hyppy pudottaa tason läpi · L avaa viivekokeen<br>Ohjaimella: sauva liikkuu, A hyppää ja aloittaa, X, B tai RT lyö, Start aloittaa erän aulassa, Back avaa viivekokeen</p>
+  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää (tuplahypyllä uudestaan ilmassa) · X, J tai hiiri lyö · C laskee miinan · ↓ + hyppy pudottaa tason läpi · L avaa viivekokeen<br>Ohjaimella: sauva liikkuu, A hyppää ja aloittaa, X, B tai RT lyö, Y laskee miinan, Start aloittaa erän aulassa, Back avaa viivekokeen</p>
 </div>
 
 <div id="matchbar" hidden><span id="matchinfo"></span><button id="stopbtn" type="button" hidden>Lopeta erä</button></div>
@@ -71,6 +71,7 @@
     <button type="button" data-touch="right">▶</button>
   </div>
   <div class="pad">
+    <button type="button" data-touch="mine" class="minebtn">Miina</button>
     <button type="button" data-touch="hit">Lyö</button>
     <button type="button" data-touch="jump">Hyppy</button>
   </div>
