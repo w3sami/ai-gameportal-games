@@ -11,7 +11,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1020; col
 canvas { display: block; width: 100vw; height: 100vh; }
 [hidden] { display: none !important; }
 
-#hud { position: fixed; top: 10px; left: 12px; right: 12px; display: flex; justify-content: space-between;
+#hud { position: fixed; top: 10px; left: 12px; right: 12px; display: flex; justify-content: flex-end;
   align-items: flex-start; pointer-events: none; gap: 12px; }
 #net { background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; padding: 4px 10px;
   font-variant-numeric: tabular-nums; color: var(--muted); }
@@ -44,7 +44,7 @@ button { font: inherit; cursor: pointer; }
 
 #lagtoggle { position: fixed; left: 12px; bottom: 12px; width: 40px; height: 40px; border-radius: 50%; font-size: 13px; font-weight: 700;
   border: 1px solid var(--edge); background: var(--panel); color: var(--ink); }
-#lagpanel { left: 12px; bottom: 58px; width: min(320px, calc(100vw - 32px)); }
+#lagpanel { right: 12px; bottom: 58px; width: min(320px, calc(100vw - 32px)); max-height: calc(100vh - 200px); overflow: auto; }
 #lagpanel h2 { margin: 0 0 4px; font-size: 17px; }
 #lagpanel p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
 #lagpanel label { display: block; margin: 8px 0; font-size: 14px; }
@@ -101,3 +101,11 @@ body.touch #power { bottom: 90px; }
 
 .minebtn { display: none; }
 body.has-mines .minebtn { display: inline-block; }
+
+#lagpanel h2.sub { margin: 14px 0 4px; font-size: 15px; }
+#lagpanel label.check { display: flex; gap: 8px; align-items: center; }
+#lagpanel label.check input { width: auto; }
+
+/* The latency line sits by the test panel's button, clear of the match bar. */
+#net { position: fixed; left: 60px; bottom: 18px; }
+body.touch #net { bottom: auto; top: 54px; left: 60px; }
