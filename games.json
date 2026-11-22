@@ -666,5 +666,26 @@
     "sizeBytes": 467559,
     "createdAt": "2026-11-16T18:11:25.285Z",
     "updatedAt": "2026-11-16T21:59:16.491Z"
+  },
+  {
+    "id": "6c3ce4b6-36c1-490c-b2ff-dcee04b7cb1c",
+    "slug": "nuijasota",
+    "title": "Nuijasota",
+    "description": "2–6 pelaajan nuija-areena verkossa. Hypi tasoilla, kerää timantteja ja kopauta muita nuijalla – kaatunut pudottaa puolet timanteistaan. Viivekoe: vasemman alakulman ms-napista voi lisätä omaan yhteyteen viivettä.",
+    "descriptions": {},
+    "author": "Sami Lehtilä",
+    "tags": [
+      "moninpeli",
+      "toiminta",
+      "tasohyppely"
+    ],
+    "status": "draft",
+    "ownerId": "37e50cb7-b238-4c41-92f2-bf40662fdc40",
+    "ownerFolder": "sami-lehtila",
+    "entryFile": "index.html",
+    "revision": 0,
+    "sizeBytes": 337,
+    "createdAt": "2026-11-22T13:21:49.511Z",
+    "updatedAt": "2026-11-22T13:21:49.559Z"
   }
 ]
