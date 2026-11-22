@@ -1,0 +1,62 @@
+:root {
+  --ink: #f1f3ff;
+  --muted: #b8bfdc;
+  --panel: rgba(16, 20, 40, 0.86);
+  --edge: rgba(255, 255, 255, 0.14);
+  --accent: #ffd43b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1020; color: var(--ink);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; touch-action: none; user-select: none; }
+canvas { display: block; width: 100vw; height: 100vh; }
+[hidden] { display: none !important; }
+
+#hud { position: fixed; top: 10px; left: 12px; right: 12px; display: flex; justify-content: space-between;
+  align-items: flex-start; pointer-events: none; gap: 12px; }
+#net { background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; padding: 4px 10px;
+  font-variant-numeric: tabular-nums; color: var(--muted); }
+#net:empty { display: none; }
+#board { list-style: none; margin: 0; padding: 6px 10px; background: var(--panel); border: 1px solid var(--edge);
+  border-radius: 8px; min-width: 180px; font-variant-numeric: tabular-nums; }
+#board:empty { display: none; }
+#board li { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+#board .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+#board .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+#board .sc { color: var(--accent); white-space: pre; }
+
+#status { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--panel);
+  border: 1px solid var(--edge); border-radius: 8px; padding: 6px 12px; }
+#status:empty { display: none; }
+#dead { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; font-weight: 700;
+  text-shadow: 0 2px 8px #000; pointer-events: none; }
+
+.card { position: fixed; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; padding: 18px 20px; }
+#join { top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 32px)); }
+#join h1 { margin: 0 0 6px; font-size: 28px; color: var(--accent); }
+#join p { margin: 0 0 12px; color: var(--muted); }
+#join .keys { font-size: 13px; margin: 12px 0 0; }
+.row { display: flex; gap: 8px; }
+input#name { flex: 1; min-width: 0; font: inherit; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--edge);
+  background: rgba(255,255,255,0.08); color: var(--ink); user-select: text; }
+button { font: inherit; cursor: pointer; }
+#play { padding: 9px 18px; border-radius: 8px; border: 0; background: var(--accent); color: #1a1a1a; font-weight: 700; }
+#play:disabled { opacity: 0.5; cursor: wait; }
+
+#lagtoggle { position: fixed; left: 12px; bottom: 12px; width: 40px; height: 40px; border-radius: 50%; font-size: 13px; font-weight: 700;
+  border: 1px solid var(--edge); background: var(--panel); color: var(--ink); }
+#lagpanel { left: 12px; bottom: 58px; width: min(320px, calc(100vw - 32px)); }
+#lagpanel h2 { margin: 0 0 4px; font-size: 17px; }
+#lagpanel p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+#lagpanel label { display: block; margin: 8px 0; font-size: 14px; }
+#lagpanel output { float: right; font-variant-numeric: tabular-nums; color: var(--accent); }
+#lagpanel input { width: 100%; }
+
+#touch { display: none; }
+body.touch #touch { display: flex; position: fixed; left: 0; right: 0; bottom: 10px; justify-content: space-between;
+  padding: 0 12px; pointer-events: none; }
+body.touch #lagtoggle { bottom: auto; top: 50px; }
+body.touch #lagpanel { bottom: auto; top: 96px; }
+#touch .pad { display: flex; gap: 10px; pointer-events: auto; }
+#touch button { width: 64px; height: 64px; border-radius: 16px; border: 1px solid var(--edge);
+  background: rgba(16,20,40,0.6); color: var(--ink); font-size: 18px; touch-action: none; }
+#touch button.on { background: rgba(255,212,59,0.35); }
