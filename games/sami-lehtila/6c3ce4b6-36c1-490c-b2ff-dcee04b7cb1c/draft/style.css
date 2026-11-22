@@ -60,3 +60,12 @@ body.touch #lagpanel { bottom: auto; top: 96px; }
 #touch button { width: 64px; height: 64px; border-radius: 16px; border: 1px solid var(--edge);
   background: rgba(16,20,40,0.6); color: var(--ink); font-size: 18px; touch-action: none; }
 #touch button.on { background: rgba(255,212,59,0.35); }
+
+#power { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); min-width: 200px;
+  background: var(--panel); border: 1px solid hsl(var(--power-hue, 0) 70% 55%); border-radius: 10px;
+  padding: 6px 12px 8px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; pointer-events: none; }
+#powername { font-weight: 700; color: hsl(var(--power-hue, 0) 80% 72%); }
+#powerleft { font-variant-numeric: tabular-nums; color: var(--muted); }
+#power .track { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.15); overflow: hidden; }
+#powerbar { height: 100%; background: hsl(var(--power-hue, 0) 80% 60%); }
+body.touch #power { bottom: 90px; }
