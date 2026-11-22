@@ -24,7 +24,7 @@
     <input id="name" maxlength="16" placeholder="Nimesi" autocomplete="off">
     <button id="play" type="button">Pelaa</button>
   </div>
-  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää (tuplahypyllä uudestaan ilmassa) · X, J tai hiiri lyö · C laskee miinan · ↓ + hyppy pudottaa tason läpi · L avaa viivekokeen<br>Ohjaimella: sauva liikkuu, A hyppää ja aloittaa, X, B tai RT lyö, Y laskee miinan, Start aloittaa erän aulassa, Back avaa viivekokeen</p>
+  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää (tuplahypyllä uudestaan ilmassa) · X, J tai hiiri lyö · C laskee miinan · ↓ + hyppy pudottaa tason läpi · L tai Asetukset-nappi avaa viivekokeen ja muiden piirron säädöt<br>Ohjaimella: sauva liikkuu, A hyppää ja aloittaa, X, B tai RT lyö, Y laskee miinan, Start aloittaa erän aulassa, Back avaa viivekokeen</p>
 </div>
 
 <div id="matchbar" hidden><span id="matchinfo"></span><button id="stopbtn" type="button" hidden>Lopeta erä</button></div>
@@ -54,9 +54,10 @@
   <div class="row"><button id="c-yes" type="button">Lopeta erä</button><button id="c-no" type="button">Jatka peliä</button></div>
 </div>
 
-<button id="lagtoggle" type="button" title="Viivekoe (L)">ms</button>
+<button id="lagtoggle" type="button" title="Asetukset (L)">Asetukset</button>
 <div id="lagpanel" class="card" hidden>
-  <h2>Viivekoe</h2>
+  <h2>Asetukset</h2>
+  <h2 class="sub">Viivekoe</h2>
   <p>Lisää omaan yhteyteesi viivettä ja heittelyä. Muut pelaajat eivät huomaa mitään.</p>
   <label>Lisäviive (edestakaisin) <output id="lagout"></output>
     <input id="lag" type="range" min="0" max="600" step="10"></label>
