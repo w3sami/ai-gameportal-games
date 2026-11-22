@@ -42,7 +42,7 @@ button { font: inherit; cursor: pointer; }
 #play { padding: 9px 18px; border-radius: 8px; border: 0; background: var(--accent); color: #1a1a1a; font-weight: 700; }
 #play:disabled { opacity: 0.5; cursor: wait; }
 
-#lagtoggle { position: fixed; left: 12px; bottom: 12px; width: 40px; height: 40px; border-radius: 50%; font-size: 13px; font-weight: 700;
+#lagtoggle { position: fixed; left: 12px; bottom: 12px; height: 34px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 700;
   border: 1px solid var(--edge); background: var(--panel); color: var(--ink); }
 #lagpanel { right: 12px; bottom: 58px; width: min(320px, calc(100vw - 32px)); max-height: calc(100vh - 200px); overflow: auto; }
 #lagpanel h2 { margin: 0 0 4px; font-size: 17px; }
@@ -107,5 +107,5 @@ body.has-mines .minebtn { display: inline-block; }
 #lagpanel label.check input { width: auto; }
 
 /* The latency line sits by the test panel's button, clear of the match bar. */
-#net { position: fixed; left: 60px; bottom: 18px; }
-body.touch #net { bottom: auto; top: 54px; left: 60px; }
+#net { position: fixed; left: 112px; bottom: 15px; }
+body.touch #net { bottom: auto; top: 54px; left: 112px; }
