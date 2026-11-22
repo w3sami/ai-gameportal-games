@@ -98,3 +98,6 @@ body.touch #power { bottom: 90px; }
 #c-yes { background: #c0392b !important; border-color: #c0392b !important; }
 #board .lv { color: #ff8a8a; margin-left: 6px; }
 #board li.outp { opacity: 0.45; }
+
+.minebtn { display: none; }
+body.has-mines .minebtn { display: inline-block; }
