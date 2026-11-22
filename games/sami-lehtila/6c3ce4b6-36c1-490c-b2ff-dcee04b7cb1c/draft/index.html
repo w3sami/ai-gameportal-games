@@ -24,7 +24,7 @@
     <input id="name" maxlength="16" placeholder="Nimesi" autocomplete="off">
     <button id="play" type="button">Pelaa</button>
   </div>
-  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää (tuplahypyllä uudestaan ilmassa) · X, J tai hiiri lyö · C laskee miinan · ↓ + hyppy pudottaa tason läpi · L tai Asetukset-nappi avaa viivekokeen ja muiden piirron säädöt<br>Ohjaimella: sauva liikkuu, A hyppää ja aloittaa, X, B tai RT lyö, Y laskee miinan, Start aloittaa erän aulassa, Back avaa viivekokeen</p>
+  <p class="keys">← → tai A D liikkuu · ↑, W tai välilyönti hyppää (tuplahypyllä uudestaan ilmassa) · X, J tai hiiri lyö (pohjassa pitäminen lataa 3 × iskun) · Z tai Shift torjuu · C laskee miinan · ↓ + hyppy pudottaa tason läpi · L tai Asetukset-nappi avaa viivekokeen ja muiden piirron säädöt<br>Ohjaimella: sauva liikkuu, A hyppää ja aloittaa, X, B tai RT lyö ja lataa, LB tai LT torjuu, Y laskee miinan, Start aloittaa erän aulassa, Back avaa viivekokeen</p>
 </div>
 
 <div id="matchbar" hidden><span id="matchinfo"></span><button id="stopbtn" type="button" hidden>Lopeta erä</button></div>
@@ -38,6 +38,7 @@
   <label>Kaatuessa putoaa vähintään <output id="o-dmin"></output><input id="s-dmin" type="range" min="0" max="100" step="10"></label>
   <label>… ja enintään <output id="o-dmax"></output><input id="s-dmax" type="range" min="0" max="100" step="10"></label>
   <label>Jokaisesta osumasta putoaa <output id="o-hit"></output><input id="s-hit" type="range" min="0" max="5" step="1"></label>
+  <label>Ladatun lyönnin latausaika <output id="o-charge"></output><input id="s-charge" type="range" min="0" max="6" step="1"></label>
   <button id="startbtn" type="button">Aloita erä</button>
 </div>
 <button id="lobbyshow" type="button" hidden>Säännöt</button>
@@ -77,6 +78,7 @@
     <button type="button" data-touch="right">▶</button>
   </div>
   <div class="pad">
+    <button type="button" data-touch="guard">Torju</button>
     <button type="button" data-touch="mine" class="minebtn">Miina</button>
     <button type="button" data-touch="hit">Lyö</button>
     <button type="button" data-touch="jump">Hyppy</button>
