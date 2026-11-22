@@ -69,3 +69,32 @@ body.touch #lagpanel { bottom: auto; top: 96px; }
 #power .track { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.15); overflow: hidden; }
 #powerbar { height: 100%; background: hsl(var(--power-hue, 0) 80% 60%); }
 body.touch #power { bottom: 90px; }
+
+#matchbar { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; padding: 4px 6px 4px 12px;
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+#matchbar button, #lobbyshow, #lobbyhide { font-size: 13px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--edge);
+  background: rgba(255,255,255,0.08); color: var(--ink); }
+#lobby { top: 50px; left: 12px; width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 120px); overflow: auto; }
+.lobbyhead { display: flex; justify-content: space-between; align-items: center; }
+#lobby h2 { margin: 0; font-size: 18px; color: var(--accent); }
+#lobby .hint { margin: 6px 0 8px; color: var(--muted); font-size: 13px; }
+#lobby label { display: block; margin: 8px 0; font-size: 14px; }
+#lobby output { float: right; color: var(--accent); font-variant-numeric: tabular-nums; }
+#lobby input { width: 100%; }
+#startbtn { width: 100%; margin-top: 8px; padding: 10px; border: 0; border-radius: 8px; background: var(--accent); color: #1a1a1a; font-weight: 700; }
+#lobbyshow { position: fixed; top: 50px; left: 12px; }
+#results { top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(380px, calc(100vw - 32px)); text-align: center; }
+#results h2 { margin: 0 0 4px; color: var(--accent); font-size: 24px; }
+#results p { margin: 4px 0; color: var(--muted); }
+#r-list { text-align: left; margin: 10px 0; padding-left: 24px; font-variant-numeric: tabular-nums; }
+#r-list li { padding: 2px 0; }
+#r-list .sc { float: right; color: var(--accent); }
+#r-list .outp { opacity: 0.5; }
+#confirm { top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(320px, calc(100vw - 32px)); text-align: center; }
+#confirm p { margin: 0 0 12px; }
+#confirm .row { justify-content: center; }
+#confirm button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--edge); background: rgba(255,255,255,0.08); color: var(--ink); }
+#c-yes { background: #c0392b !important; border-color: #c0392b !important; }
+#board .lv { color: #ff8a8a; margin-left: 6px; }
+#board li.outp { opacity: 0.45; }
