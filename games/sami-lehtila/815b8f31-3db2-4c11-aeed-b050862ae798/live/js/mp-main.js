@@ -1,0 +1,872 @@
+"use strict";
+/* ============================================================
+   mp-main.js — näkymien vaihto ja DOM-kytkennät. Kaksi tilaa samalla
+   käyttöliittymällä:
+     verkossa  kirjautuminen → aula → pelihuone (palvelin, MpApi)
+     offline   aloitusnäkymä → pelihuone (LocalRoom tässä selaimessa)
+   Pelihuone on kummassakin sama; offline-huoneen tila kantaa
+   `local: true`. Kokoaa MpApi + MpGame + MpUI + LocalRoom yhteen.
+   ============================================================ */
+(function () {
+  const authView = document.getElementById('authView');
+  const lobbyView = document.getElementById('lobbyView');
+  const roomView = document.getElementById('roomView');
+  const offlineView = document.getElementById('offlineView');
+  const MODE_KEY = 'jatsi.mode';
+  let mode = 'offline';   // 'online' | 'offline'
+  let account = null;     // kirjautunut tili (verkossa)
+  let me = null;          // nykyinen identiteetti: tili tai LocalRoom.LOCAL_USER
+  let announcedFinishedRoomId = null;
+  let lastRenderedState = null;
+  let roomStatus = null; // viimeksi piirretyn huoneen tila (open/playing/finished)
+  let amIPlayer = false; // false = katsotaan huonetta
+  let lastState0 = null; // viimeisin huoneen tila missä tahansa vaiheessa (henkilölistalle)
+  let shownLocalGame = null; // offline-peli jonka tulostaulu on jo lähetetty ja piirretty
+  /* Luodun verkkohuoneen pyydetty pikajatsi-valinta, kunnes huoneen
+     ensimmäinen tila on nähty: palvelin, joka ei vielä tunne pikajatsia,
+     siivoaa lipun pois (sanitizeVariant), ja siitä kerrotaan pelaajalle. */
+  let requestedQuick = null;
+  let requestedFiveK = null; // sama 5000-pelille
+
+  if (window.MpSettings) {
+    window.MpSettings.load();
+    window.MpSettings.wire(() => { if (lastRenderedState) renderRoom(lastRenderedState); });
+  }
+
+  /* "Arvo järjestys pelin alkaessa": tämän laitteen asetus, sama valinta
+     kaikissa kolmessa paikassa (offline-aloitus, verkkohuoneen odotustila,
+     uuden pelin valinnat). Päällä ollessaan jokainen pelin aloitus ja
+     uusinta sekoittaa pelaajien vuorojärjestyksen. */
+  const SHUFFLE_KEY = 'jatsi.shuffleOnStart';
+  let shuffleOnStart = false;
+  try { shuffleOnStart = localStorage.getItem(SHUFFLE_KEY) === '1'; } catch (e) {}
+  const shuffleBoxes = document.querySelectorAll('.shuffleToggle');
+  const syncShuffleBoxes = () => shuffleBoxes.forEach((b) => { b.checked = shuffleOnStart; });
+  shuffleBoxes.forEach((b) => b.addEventListener('change', () => {
+    shuffleOnStart = b.checked;
+    try { localStorage.setItem(SHUFFLE_KEY, shuffleOnStart ? '1' : '0'); } catch (e) {}
+    syncShuffleBoxes();
+  }));
+  syncShuffleBoxes();
+
+  function showView(v) {
+    authView.style.display = v === 'auth' ? 'flex' : 'none';
+    lobbyView.style.display = v === 'lobby' ? 'flex' : 'none';
+    roomView.style.display = v === 'room' ? 'flex' : 'none';
+    offlineView.style.display = v === 'offline' ? 'flex' : 'none';
+  }
+
+  function setAuthError(msg) { document.getElementById('authError').textContent = msg || ''; }
+  function setLobbyError(msg) { document.getElementById('lobbyError').textContent = msg || ''; }
+
+  /* Sääntöruudut, jotka eivät sovi yhteen, harmaantuvat ja tyhjenevät:
+     pikajatsissa on yksi heitto vuorolla, joten heittopankkia ei ole, ja
+     5000:ssa ei ole pöytäkirjaa, joten pikajatsi, tuplasarake ja
+     heittopankki eivät koske sitä. Sama sääntö on room-rules.js:n
+     sanitizeVariantissa. pre = ruutujen tunnisteen alku (off, variant,
+     rematch). */
+  function syncVariantBoxes(pre) {
+    const box = (name) => document.getElementById(pre + name);
+    const off = (el, on) => {
+      if (on) el.checked = false;
+      el.disabled = on;
+      el.parentElement.style.opacity = on ? .45 : '';
+    };
+    const fiveK = box('FiveK').checked;
+    off(box('Quick'), fiveK);
+    off(box('TwoCol'), fiveK);
+    off(box('Bank'), fiveK || box('Quick').checked);
+  }
+  const readVariant = (pre) => ({
+    fiveK: document.getElementById(pre + 'FiveK').checked,
+    quick: document.getElementById(pre + 'Quick').checked,
+    twoCol: document.getElementById(pre + 'TwoCol').checked,
+    sixDice: document.getElementById(pre + 'SixDice').checked,
+    bank: document.getElementById(pre + 'Bank').checked,
+    rollMode: document.getElementById(pre + 'RollMode').value,
+  });
+  const fillVariant = (pre, v) => {
+    document.getElementById(pre + 'FiveK').checked = !!v.fiveK;
+    document.getElementById(pre + 'Quick').checked = !!v.quick;
+    document.getElementById(pre + 'TwoCol').checked = !!v.twoCol;
+    document.getElementById(pre + 'SixDice').checked = !!v.sixDice;
+    document.getElementById(pre + 'Bank').checked = !!v.bank;
+    document.getElementById(pre + 'RollMode').value = v.rollMode || 'charge';
+    syncVariantBoxes(pre);
+  };
+  ['variant', 'rematch'].forEach((pre) => ['FiveK', 'Quick'].forEach((n) =>
+    document.getElementById(pre + n).addEventListener('change', () => syncVariantBoxes(pre))));
+
+  /* Tila muistetaan; ensikäynnillä offline, koska se ei vaadi tiliä. */
+  function boot() {
+    let saved = null;
+    try { saved = localStorage.getItem(MODE_KEY); } catch (e) {}
+    switchMode(saved === 'online' ? 'online' : 'offline');
+  }
+
+  function switchMode(m) {
+    mode = m;
+    try { localStorage.setItem(MODE_KEY, m); } catch (e) {}
+    closePeople();
+    document.getElementById('winnerOverlay').style.display = 'none';
+    if (m === 'offline') enterOffline();
+    else enterOnline();
+  }
+  document.querySelectorAll('.modeTab').forEach((b) => b.addEventListener('click', () => switchMode(b.dataset.mode)));
+
+  async function enterOnline() {
+    window.MpGame.disconnect();
+    if (account) { me = account; enterLobby(); return; }
+    showView('auth');
+    try {
+      const { user } = await window.MpApi.me();
+      account = user;
+      if (mode === 'online') { me = account; enterLobby(); }
+    } catch (e) { /* ei kirjautunut — kirjautumisnäkymä jää */ }
+  }
+
+  /* ---------- Offline: aloitusnäkymä ----------
+     Pelaajat ja säännöt muistetaan (SETUP_KEY). Kesken oleva peli jatkuu
+     JATKA PELIÄ -napista; uusi peli sen päälle kysyy ensin. */
+  const SETUP_KEY = 'jatsi.offline.setup';
+  const PALETTE = () => window.RoomRules.PALETTE;
+  let setup = null;
+  function loadSetup() {
+    try { setup = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null'); } catch (e) { setup = null; }
+    if (!setup || !Array.isArray(setup.players) || !setup.players.length) {
+      setup = { players: [{ name: '', color: PALETTE()[0] }, { name: '', color: PALETTE()[1] }], variant: {} };
+    }
+  }
+  function saveSetup() { try { localStorage.setItem(SETUP_KEY, JSON.stringify(setup)); } catch (e) {} }
+
+  function enterOffline() {
+    me = window.LocalRoom.LOCAL_USER;
+    window.MpGame.connect(me, window.LocalRoom.socket());
+    wireRoomEvents();
+    if (!setup) loadSetup();
+    renderOfflineSetup();
+    showView('offline');
+  }
+
+  function renderOfflineSetup() {
+    const list = document.getElementById('offPlayers');
+    list.innerHTML = '';
+    setup.players.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'offPlayerRow';
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'offColor';
+      dot.style.background = p.color;
+      dot.title = 'Vaihda väriä';
+      dot.addEventListener('click', () => {
+        const pal = PALETTE();
+        p.color = pal[(pal.indexOf(p.color) + 1) % pal.length];
+        saveSetup(); renderOfflineSetup();
+      });
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.maxLength = 20;
+      input.placeholder = `Pelaaja ${i + 1}`;
+      input.value = p.name;
+      input.addEventListener('input', () => { p.name = input.value; saveSetup(); });
+      input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') startOffline(); });
+      row.append(dot, input);
+      if (setup.players.length > 1) {
+        [['↑', -1, i === 0], ['↓', 1, i === setup.players.length - 1]].forEach(([t, d, off]) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'mpOrderBtn';
+          b.textContent = t;
+          b.disabled = off;
+          b.title = d < 0 ? 'Aiemmaksi' : 'Myöhemmäksi';
+          b.addEventListener('click', () => {
+            const ps = setup.players;
+            [ps[i], ps[i + d]] = [ps[i + d], ps[i]];
+            saveSetup(); renderOfflineSetup();
+          });
+          row.appendChild(b);
+        });
+      }
+      if (setup.players.length > 1) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'offRemove';
+        del.textContent = '✕';
+        del.title = 'Poista pelaaja';
+        del.addEventListener('click', () => { setup.players.splice(i, 1); saveSetup(); renderOfflineSetup(); });
+        row.appendChild(del);
+      }
+      list.appendChild(row);
+    });
+    document.getElementById('offAddPlayer').style.display = setup.players.length < window.RoomRules.MAX_PLAYERS ? '' : 'none';
+    fillVariant('off', setup.variant || {});
+    const saved = window.LocalRoom.savedGame();
+    const resume = document.getElementById('offResumeBtn');
+    resume.style.display = saved ? 'block' : 'none';
+    if (saved) resume.textContent = 'JATKA PELIÄ · ' + saved.players.map((p) => p.username).join(', ');
+  }
+
+  function readOfflineVariant() {
+    syncVariantBoxes('off');
+    setup.variant = readVariant('off');
+    saveSetup();
+  }
+  ['offFiveK', 'offQuick', 'offTwoCol', 'offSixDice', 'offBank', 'offRollMode'].forEach((id) =>
+    document.getElementById(id).addEventListener('change', readOfflineVariant));
+  document.getElementById('offAddPlayer').addEventListener('click', () => {
+    const used = new Set(setup.players.map((p) => p.color));
+    setup.players.push({ name: '', color: PALETTE().find((c) => !used.has(c)) || PALETTE()[0] });
+    saveSetup(); renderOfflineSetup();
+  });
+
+  function startOffline() {
+    readOfflineVariant();
+    const names = setup.players.map((p, i) => p.name.trim() || `Pelaaja ${i + 1}`);
+    if (new Set(names.map((n) => n.toLowerCase())).size !== names.length) {
+      window.MpUI.dialog({ title: 'Sama nimi kahdesti', text: 'Anna jokaiselle pelaajalle oma nimi.' });
+      return;
+    }
+    /* Arvonta koskee vain alkavaa peliä: aloitusnäkymän lista pysyy
+       siinä järjestyksessä, johon pelaajat on kirjoitettu. */
+    const go = () => {
+      let players = setup.players.map((p, i) => ({ name: names[i], color: p.color }));
+      if (shuffleOnStart) players = window.MpUI.shuffled(players);
+      window.MpGame.localCreate(players, setup.variant,
+        (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); });
+    };
+    if (window.LocalRoom.savedGame()) {
+      window.MpUI.dialog({
+        title: 'Aloitetaanko uusi peli?', text: 'Kesken oleva peli häviää.',
+        okText: 'Uusi peli', danger: true, onOk: go,
+      });
+    } else go();
+  }
+  document.getElementById('offStartBtn').addEventListener('click', startOffline);
+  document.getElementById('offResumeBtn').addEventListener('click', () => window.MpGame.localResume());
+
+  /* Viimeisimmän merkinnän peruminen: näkyy merkinnän tehneellä laitteella
+     seuraavaan heittoon asti. Nopat palauttaa game:undone (mp-game.js). */
+  document.getElementById('undoBtn').addEventListener('click', () => {
+    window.MpGame.undo((res) => { if (!res.ok) setLobbyError(res.error); });
+  });
+
+  /* Päättyneen pelin tulokset uudestaan esiin: voittoikkunan (sijoitukset,
+     tulostaulu, uuden pelin valinnat) saa suljettuaan takaisin poistumatta
+     huoneesta. Nappi on heittonapin paikalla, kun peli on päättynyt. */
+  document.getElementById('resultsBtn').addEventListener('click', () => {
+    if (roomStatus === 'finished') document.getElementById('winnerOverlay').style.display = 'flex';
+  });
+
+  /* Pelaajan oma väri (avatar) — tilikohtainen, ks. server/auth.js:n
+     PALETTE-validointi. Sama 8 värin lista kuin yksinpelin swatch-valitsin
+     (js/ui.js UI.PALETTE), joten "avatar" näyttää samalta kummassakin. */
+  function renderColorPicker() {
+    const dot = document.getElementById('lobbyColorDot');
+    if (dot) dot.style.background = me.color || '#ffffff';
+    const wrap = document.getElementById('colorSwatches');
+    if (!wrap) return;
+    const palette = (window.UI && window.UI.PALETTE) || ['#ffffff','#ff6b5e','#ffab4d','#ffd94d','#7fd98f','#5fd6d0','#6ea8ff','#c58bff'];
+    wrap.innerHTML = '';
+    palette.forEach((col) => {
+      const s = document.createElement('div');
+      s.className = 'sw' + (me.color === col ? ' on' : '');
+      s.style.background = col;
+      s.title = col;
+      s.addEventListener('click', async () => {
+        if (me.color === col) return;
+        try {
+          const { user } = await window.MpApi.setColor(col);
+          me.color = user.color;
+          renderColorPicker();
+        } catch (e) { setLobbyError(e.message); }
+      });
+      wrap.appendChild(s);
+    });
+  }
+
+  function enterLobby() {
+    showView('lobby');
+    document.getElementById('lobbyUsername').textContent = me.username;
+    renderColorPicker();
+    window.MpGame.connect(me);
+    window.MpGame.onLobby((rooms) => {
+      window.MpUI.renderRoomList(document.getElementById('roomList'), rooms, me.id, joinRoom, deleteRoomFromLobby, forfeitRoom, watchRoom);
+    });
+    wireRoomEvents();
+  }
+
+  /* Huoneen tapahtumat; samat kummassakin tilassa. */
+  function wireRoomEvents() {
+    window.MpGame.onRoomState((state) => renderRoom(state));
+    window.MpGame.onRoomError((msg) => setLobbyError(msg));
+    /* Palvelin liittää automaattisesti takaisin kesken olevaan peliin jos
+       ollaan jo sen pelaaja (esim. sivu päivitettiin) — vaihdetaan näkymä
+       suoraan huoneeseen sen sijaan että jäätäisiin lobbyyn. */
+    window.MpGame.onRejoin((state) => {
+      showView('room');
+      renderRoom(state);
+      /* Dice3D.init() (kutsutaan room:rejoin-käsittelijän sisällä, ennen
+         tätä) mittasi canvasWrapin koon SILLOIN kun #roomView oli vielä
+         display:none — three.js-renderer jäi siis nollakokoiseksi eikä
+         mikään pakota uutta mittausta ennen kuin ikkunaa oikeasti muutetaan
+         (klassinen "kanvas tyhjä kunnes resize" -bugi). Nyt kun näkymä on
+         juuri asetettu näkyväksi, pakotetaan uusi mittaus eksplisiittisesti
+         sen sijaan että odotettaisiin oikeaa window-resize-tapahtumaa. */
+      if (window.Dice3D) window.Dice3D.resize(true);
+    });
+    window.MpGame.onDeleted(() => { closePeople(); showView('lobby'); setLobbyError('Isäntä poisti huoneen.'); });
+    window.MpGame.onBlocked(() => {
+      announcedFinishedRoomId = null;
+      closePeople();
+      document.getElementById('winnerOverlay').style.display = 'none';
+      showView('lobby');
+      setLobbyError('Isäntä esti sinut huoneesta.');
+    });
+    window.MpGame.onNotice((message) => window.MpUI.dialog({ title: 'Huoneessa', text: message }));
+  }
+
+  function deleteRoomFromLobby(roomId) {
+    setLobbyError('');
+    window.MpGame.deleteRoom(roomId, (res) => { if (!res.ok) setLobbyError(res.error); });
+  }
+
+  function forfeitRoom(roomId) {
+    setLobbyError('');
+    window.MpGame.leaveRoom((res) => { if (res && !res.ok) setLobbyError(res.error); }, roomId);
+  }
+
+  function watchRoom(roomId) {
+    setLobbyError('');
+    window.MpGame.watchRoom(roomId, (res) => {
+      if (!res.ok) { setLobbyError(res.error); return; }
+      showView('room');
+      /* Sama nollakokoisen kanvaksen korjaus kuin onRejoinissa: Dice3D
+         alustettiin kun huonenäkymä oli vielä piilossa. */
+      if (window.Dice3D) window.Dice3D.resize(true);
+    });
+  }
+
+  /* ---------- Huoneen ihmiset ----------
+     Lista on auki niin kauan kuin käyttäjä sen sulkee, ja piirtyy
+     uudelleen jokaisesta huoneen tilasta. Pelistä poisto ja esto ovat
+     muihin kohdistuvia, joten ne kysyvät ikkunassa. */
+  const peopleOverlay = document.getElementById('peopleOverlay');
+  function openPeople() {
+    peopleOverlay.style.display = 'flex';
+    if (lastState0) renderPeopleList(lastState0);
+  }
+  function closePeople() { peopleOverlay.style.display = 'none'; }
+  function renderPeopleList(state) {
+    if (peopleOverlay.style.display === 'none') return;
+    window.MpUI.renderPeople(document.getElementById('peopleList'), state, me.id, peopleAction);
+  }
+  function peopleAction(action, person) {
+    const done = (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); };
+    const name = person.username;
+    if (action === 'color') {
+      window.MpGame.setSeatColor(person.seatId, person.color, (res) => {
+        done(res);
+        if (res.ok && !person.guest && account && person.userId === account.id) { account.color = person.color; }
+      });
+      return;
+    }
+    if (action === 'removeGuest' || action === 'admitGuest') {
+      const run = () => (action === 'removeGuest'
+        ? window.MpGame.guest({ action: 'remove', seatId: person.seatId }, done)
+        : window.MpGame.admin(action, { seatId: person.seatId }, done));
+      if (action === 'removeGuest' && roomStatus === 'playing') {
+        window.MpUI.dialog({
+          title: `Poista ${name}?`, text: `${name} lähtee pelistä ja pisteet menevät. Peli jatkuu muilla.`,
+          okText: 'Poista', danger: true, onOk: run,
+        });
+      } else run();
+      return;
+    }
+    const run = () => window.MpGame.admin(action, { userId: person.userId }, done);
+    if (action === 'kick') {
+      window.MpUI.dialog({
+        title: `Poista ${name} pelistä?`,
+        text: roomStatus === 'playing'
+          ? `${name} menettää pisteensä ja jää katsomaan. Peli jatkuu muilla. Voit päästää hänet seuraavaan peliin.`
+          : `${name} jää huoneeseen katsojaksi. Voit päästää hänet takaisin peliin.`,
+        okText: 'Pois pelistä', danger: true, onOk: run,
+      });
+    } else if (action === 'block') {
+      window.MpUI.dialog({
+        title: `Estä ${name}?`,
+        text: `${name} poistuu pelistä ja huoneesta eikä pääse takaisin pelaamaan eikä katsomaan, ennen kuin poistat eston.`,
+        okText: 'Estä', danger: true, onOk: run,
+      });
+    } else {
+      run();
+    }
+  }
+  document.getElementById('peopleBtn').addEventListener('click', openPeople);
+  document.getElementById('closePeople').addEventListener('click', closePeople);
+  peopleOverlay.addEventListener('click', (ev) => { if (ev.target === peopleOverlay) closePeople(); });
+
+  function joinRoom(roomId) {
+    setLobbyError('');
+    window.MpGame.joinRoom(roomId, (res) => {
+      if (!res.ok) { setLobbyError(res.error); return; }
+      showView('room');
+    });
+  }
+
+  document.getElementById('createRoomBtn').addEventListener('click', () => {
+    setLobbyError('');
+    const name = document.getElementById('roomNameInput').value.trim() || (me.username + ' peli');
+    const max = parseInt(document.getElementById('roomMaxInput').value, 10);
+    const variant = readVariant('variant');
+    requestedQuick = variant.quick;
+    requestedFiveK = variant.fiveK;
+    window.MpGame.createRoom(name, max, variant, (res) => {
+      if (!res.ok) { requestedQuick = requestedFiveK = null; setLobbyError(res.error); return; }
+      showView('room');
+    });
+  });
+
+  function renderRoom(state) {
+    /* Toisen laitteen uusi merkintä: valitun palluran paikka otetaan talteen
+       ennen kuin piirto vaihtaa pallurat, ja animaatio ajetaan piirron jälkeen. */
+    const turnEnd = fiveKTurnEnd(lastRenderedState, state);
+    const otherMark = turnEnd ? null : newMarkByOther(lastRenderedState, state);
+    const anchor = otherMark ? markAnchor(otherMark.mark) : null;
+    renderRoomNow(state);
+    if (otherMark) animateMark(state, otherMark, anchor);
+    if (turnEnd) announceTurnEnd(state, turnEnd);
+  }
+
+  /* 5000: vuoro päättyi (pankitus tai tyhjä heitto) edellisen tilan jälkeen. */
+  function fiveKTurnEnd(prev, state) {
+    const m = state.lastMark;
+    if (!state.variant || !state.variant.fiveK || !m || !prev || prev.id !== state.id) return null;
+    if (prev.lastMark && prev.lastMark.n === m.n && prev.lastMark.seatId === m.seatId) return null;
+    return m;
+  }
+
+  /* Ilmoitus kaikille samana; muilla vasta kun heiton toisto on päättynyt,
+     ettei tulos paljastu ennen noppia. */
+  function announceTurnEnd(state, m) {
+    const UI = window.UI, D3 = window.Dice3D;
+    const seat = state.players.find((p) => p.seatId === m.seatId);
+    if (!UI || !seat) return;
+    let tries = 0;
+    const show = () => {
+      if (D3 && D3.isRolling() && tries++ < 60) { setTimeout(show, 150); return; }
+      if (m.bust) {
+        UI.showBanner(m.lost ? `TYHJÄ HEITTO −${m.lost}` : 'TYHJÄ HEITTO');
+        if (D3) D3.shakeCamera(6);
+        return;
+      }
+      UI.showBanner(`${seat.username} +${m.pts}`);
+      if (m.pts >= 1000) { UI.sndYatzy(); UI.burst(160, true); }
+      else if (m.pts >= 500) { UI.sndBig(); UI.burst(60, false); }
+      else UI.sndScore();
+    };
+    show();
+  }
+
+  /* Uusi merkintä, jonka teki joku muu kuin tämä laite: rivi oli edellisessä
+     tilassa tyhjä ja on nyt merkitty. Peruminen tyhjentää rivin, joten se ei
+     animoi; oma merkintä animoituu jo klikatessa (onPick). */
+  function newMarkByOther(prev, state) {
+    const m = state.lastMark;
+    if (!prev || !m || prev.id !== state.id || state.status === 'open') return null;
+    const seat = state.players.find((p) => p.seatId === m.seatId);
+    const before = prev.players.find((p) => p.seatId === m.seatId);
+    if (!seat || !before || seat.userId === me.id) return null;
+    if (!before.scs[m.col] || before.scs[m.col][m.categoryId] !== undefined) return null;
+    if (!seat.scs[m.col] || seat.scs[m.col][m.categoryId] === undefined) return null;
+    const bankAdded = state.variant.bank ? Math.max(0, (seat.bank || 0) - (before.bank || 0)) : 0;
+    return { mark: m, bankAdded };
+  }
+
+  function markAnchor(m) {
+    const qp = document.querySelector(`#quickPicks .qp[data-cat="${m.categoryId}"][data-col="${m.col}"]`);
+    return qp && qp.offsetParent ? { rect: qp.getBoundingClientRect(), html: qp.innerHTML } : null;
+  }
+
+  /* Merkinnän animaatio muille: sama valittu pallura korostuu ja pisteet
+     ponnahtavat sen kohdalta. Ilman palluraa (rivi ei ollut pikavalinta)
+     animaatio lähtee pistelistan solusta, ja jos sarake on piilossa,
+     pikavalintojen kohdalta. */
+  function animateMark(state, { mark, bankAdded }, anchor) {
+    let rect = anchor && anchor.rect;
+    if (anchor) chosenPick(anchor.html, rect);
+    if (!rect) {
+      const cell = document.querySelector('#mpScoreTable .lastMark');
+      if (cell && cell.offsetParent) {
+        cell.classList.add('justScored');
+        rect = cell.getBoundingClientRect();
+      }
+    }
+    if (!rect) {
+      const area = document.getElementById('quickPicks').parentElement.getBoundingClientRect();
+      rect = { left: area.left + area.width / 2 - 20, top: area.bottom - 60, width: 40, height: 30 };
+    }
+    celebrateAt(rect, mark.categoryId, mark.pts, bankAdded);
+  }
+
+  /* Valittu pallura: kopio vanhan paikan päälle, joka syttyy ja häipyy. */
+  function chosenPick(html, rect) {
+    const el = document.createElement('div');
+    el.className = 'qp chosen';
+    el.innerHTML = html;
+    Object.assign(el.style, { position: 'fixed', left: rect.left + 'px', top: rect.top + 'px', margin: '0', zIndex: 40 });
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1300);
+  }
+
+  function renderRoomNow(state) {
+    /* Voittoikkuna kuuluu vain päättyneeseen peliin. */
+    if (state.status !== 'finished') document.getElementById('winnerOverlay').style.display = 'none';
+    roomStatus = state.status;
+    lastState0 = state;
+    renderPeopleList(state);
+    if (requestedFiveK !== null && !state.local) {
+      if (requestedFiveK && !(state.variant && state.variant.fiveK)) {
+        window.MpUI.dialog({
+          title: '5000 ei vielä verkossa',
+          text: 'Palvelin ei tunne 5000-peliä, joten huone luotiin tavallisilla säännöillä. 5000:ta voi pelata jo tällä laitteella.',
+        });
+        requestedQuick = null;
+      }
+      requestedFiveK = null;
+    }
+    if (requestedQuick !== null && !state.local) {
+      if (requestedQuick && !(state.variant && state.variant.quick)) {
+        window.MpUI.dialog({
+          title: 'Pikajatsi ei vielä verkossa',
+          text: 'Palvelin ei tunne pikajatsia, joten huone luotiin tavallisilla säännöillä. Pikajatsia voi pelata jo tällä laitteella.',
+        });
+      }
+      requestedQuick = null;
+    }
+    amIPlayer = state.players.some((p) => p.userId === me.id);
+    document.getElementById('leaveRoomBtn').title = state.local ? 'Takaisin aloitukseen — peli säilyy'
+      : !amIPlayer ? 'Lopeta katsominen'
+      : state.status === 'playing' ? 'Takaisin aulaan — paikka säilyy' : 'Poistu huoneesta';
+
+    document.getElementById('undoBtn').classList.toggle('show', window.MpGame.canUndo(state));
+    const amIHost = state.hostId === me.id;
+    const preGame = state.status === 'open';
+    /* Päättyneessä pelissä heittonapin paikalla on tulosnappi, josta
+       voittoikkuna (tulostaulu ja isännälle uusi peli) aukeaa uudestaan. */
+    const finished = state.status === 'finished';
+    document.getElementById('rollBtn').style.display = finished ? 'none' : '';
+    const resultsBtn = document.getElementById('resultsBtn');
+    resultsBtn.style.display = finished ? 'block' : 'none';
+    resultsBtn.textContent = amIHost ? '🏆 TULOKSET · UUSI PELI' : '🏆 TULOKSET';
+    if (preGame) document.getElementById('turnBadge').textContent = 'Odotetaan aloitusta';
+    document.getElementById('mpPreGame').style.display = preGame ? 'flex' : 'none';
+    document.getElementById('controls').style.display = preGame ? 'none' : 'flex';
+    document.getElementById('mpPlayers').style.display = preGame ? 'none' : 'flex';
+    document.getElementById('board').style.display = preGame ? 'none' : 'block';
+    document.getElementById('hint').style.visibility = preGame ? 'hidden' : '';
+
+    if (preGame) {
+      window.MpUI.renderOrder(document.getElementById('mpPlayersPre'), state, me.id, (seatIds) =>
+        window.MpGame.reorder(seatIds, (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); }),
+        openPeople);
+      document.getElementById('mpStartBtn').style.display = amIHost && state.players.length >= 2 ? 'block' : 'none';
+      document.getElementById('mpShuffleRow').style.display = amIHost && state.players.length >= 2 ? 'block' : 'none';
+      document.getElementById('mpDeleteRoomBtn').style.display = amIHost ? 'block' : 'none';
+      /* Katsoja pääsee itse pelaajaksi avoimeen huoneeseen jossa on tilaa,
+         paitsi jos isäntä on poistanut hänet pelistä. */
+      const mine = (state.spectators || []).find((s) => s.userId === me.id);
+      const full = state.players.length >= state.maxPlayers;
+      const room4me = !amIPlayer && !full && !state.played && !(mine && mine.benched);
+      document.getElementById('mpJoinBtn').style.display = room4me ? 'block' : 'none';
+      /* Vieraan tuonti omalle laitteelle: pelaajat, kun huoneessa on tilaa.
+         Isännän hyväksyntää odottavat näkyvät henkilölistassa. */
+      const seatsTaken = state.players.length + (state.pendingGuests || []).length;
+      document.getElementById('mpGuestRow').style.display = amIPlayer && seatsTaken < state.maxPlayers ? 'flex' : 'none';
+      const myPending = (state.pendingGuests || []).filter((g) => g.userId === me.id).map((g) => g.username);
+      document.getElementById('mpGuestNote').textContent = myPending.length ? `Odottaa isännän hyväksyntää: ${myPending.join(', ')}` : '';
+      const wait = document.getElementById('mpWaitMsg');
+      wait.style.display = amIHost && state.players.length >= 2 ? 'none' : 'block';
+      wait.textContent = !amIPlayer && full ? 'Huone on täynnä — katsot peliä.'
+        : !amIPlayer && !room4me ? 'Katsot peliä — isäntä voi päästää sinut mukaan.'
+        : state.players.length < 2 ? 'Odotetaan lisää pelaajia…' : 'Odotetaan isäntää aloittamaan peli…';
+    } else {
+      lastRenderedState = state;
+      if (state.status === 'playing') {
+        // peli on (taas) käynnissä — nollaa lippu niin seuraava loppuminen saa ilmoittaa uudelleen
+        announcedFinishedRoomId = null;
+        document.getElementById('winnerOverlay').style.display = 'none';
+      }
+      const devUpper = window.MpSettings ? window.MpSettings.settings.devUpper : true;
+      const hideUsed = window.MpSettings ? window.MpSettings.settings.hideUsed : false;
+      const ownCols = window.MpSettings ? window.MpSettings.settings.ownCols : false;
+      const onPick = (categoryId, col, el) => {
+        if (state.variant.fiveK) {
+          window.MpGame.bank((res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); });
+          return;
+        }
+        celebrateScore(state, categoryId, el);
+        window.MpGame.scoreCategory(categoryId, col, (res) => { if (!res.ok) setLobbyError(res.error); });
+      };
+      const onToggleHideUsed = () => {
+        window.MpSettings.settings.hideUsed = !window.MpSettings.settings.hideUsed;
+        window.MpSettings.save();
+        renderRoom(state);
+      };
+      const onToggleOwnCols = () => {
+        window.MpSettings.settings.ownCols = !window.MpSettings.settings.ownCols;
+        window.MpSettings.save();
+        renderRoom(state);
+      };
+      window.MpUI.renderPlayers(document.getElementById('mpPlayers'), state, me.id, openPeople);
+      window.MpUI.renderTable(state, me.id, state.diceValues, onPick, devUpper, hideUsed, onToggleHideUsed, ownCols, onToggleOwnCols);
+      window.MpUI.renderQuickPicks(state, me.id, state.diceValues, devUpper, onPick);
+      window.MpUI.updateControls(state, me.id);
+      if (state.status === 'finished') {
+        renderWinnerOverlay(state);
+      }
+    }
+  }
+
+  /* Välitön palaute merkinnästä:
+     ponnahtava "+N"/"💰+N", pankkiäänet, banneri+konfetti isoille tuloksille.
+     Lasketaan tässä paikallisesti (optimistisesti) klikkaushetken nopilla —
+     palvelimen kaiku (room:state) päivittää taulukon joka tapauksessa
+     auktoritatiivisesti heti perään. */
+  function celebrateScore(state, categoryId, el) {
+    if (!el) return;
+    const pts = window.Scoring.scoreCat(categoryId, state.diceValues, state.variant.sixDice);
+    const bankAdded = state.variant.bank ? Math.max(0, window.RoomRules.maxRollsFor(state.variant) - state.rollsUsed) : 0;
+    const r = el.getBoundingClientRect();
+    if (el.classList.contains('qp')) chosenPick(el.innerHTML, r);
+    celebrateAt(r, categoryId, pts, bankAdded);
+  }
+
+  /* Merkinnän ponnahdus, äänet ja konfetti kohdassa r (merkitsijälle ja muille sama). */
+  function celebrateAt(r, categoryId, pts, bankAdded) {
+    const UI = window.UI, D3 = window.Dice3D;
+    if (!UI) return;
+    if (bankAdded > 0) UI.popScore('💰+' + bankAdded, r.left + r.width / 2, r.top - 34);
+    if (pts <= 0) return;
+    UI.popScore('+' + pts, r.left + r.width / 2, r.top);
+    const eff = pts + bankAdded * 10;
+    if (categoryId === 'yatzy6' && pts === 100) { UI.showBanner('ISO YATZY! +100'); UI.sndYatzy(); UI.burst(Math.min(200 + eff, 320), true); D3.shakeCamera(18); }
+    else if (categoryId === 'yatzy' && pts >= 50) { UI.showBanner('YATZY! +50'); UI.sndYatzy(); UI.burst(Math.min(140 + eff, 260), true); D3.shakeCamera(14); }
+    else if (eff >= 20) { UI.sndBig(); UI.burst(Math.min(15 + eff, 110), false); }
+    else UI.sndScore();
+  }
+
+  /* Voittajapaneeli: sijoituslista, tuplasarakkeessa myös paras sarake. */
+  function renderWinnerOverlay(state) {
+    const S = window.Scoring, esc = window.UI.esc;
+    const six = state.variant.sixDice;
+    const ranked = state.rankings || [];
+    if (!ranked.length) return;
+    document.getElementById('winnerName').textContent = ranked[0].username;
+    document.getElementById('winnerScore').textContent = ranked[0].total + ' pistettä';
+    let listHtml;
+    if (state.variant.fiveK) {
+      listHtml = ranked.map((p, i) => `${i + 1}. ${esc(p.username)} — <b>${p.total}</b> · ${p.turns} vuoroa`).join('<br>');
+    } else if (state.variant.twoCol) {
+      let best = { t: -1 };
+      state.players.forEach((p) => p.scs.forEach((sc, ci) => {
+        const t = S.totalOf(sc, six);
+        if (t > best.t) best = { t, name: p.username, ci };
+      }));
+      listHtml = `🏅 Paras sarake: <b>${esc(best.name)} ${best.ci === 0 ? 'I' : 'II'}</b> — ${best.t} p<br><br>`;
+      listHtml += ranked.map((p, i) => {
+        const player = state.players.find((pp) => pp.seatId === p.seatId);
+        return `${i + 1}. ${esc(p.username)} — <b>${p.total}</b> (${S.totalOf(player.scs[0], six)} + ${S.totalOf(player.scs[1], six)})`;
+      }).join('<br>');
+    } else {
+      listHtml = ranked.map((p, i) => `${i + 1}. ${esc(p.username)} — <b>${p.total}</b>`).join('<br>');
+    }
+    document.getElementById('finalList').innerHTML = listHtml;
+    /* Avataan vain ensimmäisellä kerralla: tulostaulun rivien id:t saapuvat
+       hetken päästä uutena tilana, eikä se saa avata suljettua ikkunaa. */
+    if (announcedFinishedRoomId !== state.id) document.getElementById('winnerOverlay').style.display = 'flex';
+    /* Portaalin tulostaulu — palvelin kirjoitti kaikkien tulokset
+       (server/leaderboard.js); täällä vain näytetään ja korostetaan pöydän
+       pelaajien rivit. */
+    if (state.local) {
+      /* Offline: selain lähettää jokaisen pelaajan tuloksen kerran pelin
+         lopussa (gameKey estää tuplalähetyksen päivityksen jälkeen). */
+      if (shownLocalGame !== state.gameKey) {
+        shownLocalGame = state.gameKey;
+        window.JatsiPortal.submitLocalGame(document.getElementById('lbWrap'), {
+          gameKey: state.gameKey, variant: state.variant,
+          players: ranked.map((p) => ({ name: p.username, score: p.total, turns: p.turns })),
+        });
+      }
+    } else {
+      window.JatsiPortal.showBoard(document.getElementById('lbWrap'), {
+        variant: state.variant,
+        key: state.id + ':' + ranked.map((p) => p.total).join(','),
+        highlightIds: Object.values(state.lbEntries || {}).filter(Boolean),
+      });
+    }
+
+    /* Uusinnan säännöt voi vaihtaa vain isäntä; muille näytetään pelkkä
+       odotusviesti. Esitäytetään nykyisellä variantilla. */
+    const amIHost = state.hostId === me.id;
+    document.getElementById('rematchVariantRow').style.display = amIHost ? 'block' : 'none';
+    document.getElementById('rematchBtn').style.display = amIHost ? 'block' : 'none';
+    document.getElementById('rematchNewBtn').style.display = amIHost ? 'block' : 'none';
+    document.getElementById('mpWaitRematchMsg').style.display = amIHost ? 'none' : 'block';
+    if (amIHost) fillVariant('rematch', state.variant);
+
+    if (announcedFinishedRoomId !== state.id) {
+      announcedFinishedRoomId = state.id;
+      window.UI.sndYatzy();
+      window.UI.burst(160, true);
+    }
+  }
+
+  function addGuest() {
+    const input = document.getElementById('mpGuestName');
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    window.MpGame.guest({ action: 'add', name }, (res) => {
+      if (!res.ok) { window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); return; }
+      input.value = '';
+    });
+  }
+  document.getElementById('mpGuestAdd').addEventListener('click', addGuest);
+  document.getElementById('mpGuestName').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') addGuest(); });
+  document.getElementById('mpJoinBtn').addEventListener('click', () => {
+    const roomId = window.MpGame.getRoomId();
+    if (roomId) joinRoom(roomId);
+  });
+  /* Verkkopelin aloitus: arvonta päällä järjestys sekoitetaan ensin
+     (room:order), ja peli alkaa sen vastauksen jälkeen. Jos sekoitus ei
+     onnistu, peli alkaa silti nykyisellä järjestyksellä. */
+  document.getElementById('mpStartBtn').addEventListener('click', () => {
+    const start = () => window.MpGame.startGame((res) => { if (!res.ok) setLobbyError(res.error); });
+    const st = lastState0;
+    if (shuffleOnStart && st && st.players.length > 1) {
+      window.MpGame.reorder(window.MpUI.shuffled(st.players.map((p) => p.seatId)), start);
+    } else start();
+  });
+  document.getElementById('mpDeleteRoomBtn').addEventListener('click', () => window.MpUI.dialog({
+    title: 'Poista huone?', text: 'Huone poistuu kaikilta pelaajilta ja katsojilta.',
+    okText: 'Poista', danger: true,
+    onOk: () => window.MpGame.deleteRoom(null, (res) => { if (!res.ok) setLobbyError(res.error); }),
+  }));
+  document.getElementById('closeWin').addEventListener('click', () => {
+    document.getElementById('winnerOverlay').style.display = 'none';
+  });
+  const rematchVariant = () => readVariant('rematch');
+  /* Samat pelaajat: uusi peli alkaa heti. Arvonta päällä järjestys
+     sekoitetaan ensin: offline uusi peli luodaan samoista pelaajista
+     sekoitettuna; verkossa huone käy odotustilassa (uusinta ilman aloitusta
+     → room:order → aloitus), koska järjestystä voi vaihtaa vain siellä. */
+  document.getElementById('rematchBtn').addEventListener('click', () => {
+    const variant = rematchVariant();
+    const st = lastRenderedState;
+    if (shuffleOnStart && st && st.players.length > 1) {
+      if (mode === 'offline') {
+        const players = window.MpUI.shuffled(st.players.map((p) => ({ name: p.username, color: p.color })));
+        window.MpGame.localCreate(players, variant,
+          (res) => { if (!res.ok) window.MpUI.dialog({ title: 'Ei onnistunut', text: res.error }); });
+        return;
+      }
+      const ids = window.MpUI.shuffled(st.players.map((p) => p.seatId));
+      window.MpGame.rematch(variant, false, (res) => {
+        if (!res.ok) { setLobbyError(res.error); return; }
+        window.MpGame.reorder(ids, () =>
+          window.MpGame.startGame((r) => { if (!r.ok) setLobbyError(r.error); }));
+      });
+      return;
+    }
+    window.MpGame.rematch(variant, true, (res) => { if (!res.ok) setLobbyError(res.error); });
+  });
+  /* Uudet pelaajat: verkossa huoneen odotustilaan (päästä, vieraat, järjestys),
+     offline pelaajien valintaan. */
+  document.getElementById('rematchNewBtn').addEventListener('click', () => {
+    if (mode === 'offline') {
+      document.getElementById('winnerOverlay').style.display = 'none';
+      announcedFinishedRoomId = null;
+      renderOfflineSetup();
+      showView('offline');
+      return;
+    }
+    window.MpGame.rematch(rematchVariant(), false, (res) => { if (!res.ok) setLobbyError(res.error); });
+  });
+  /* Kesken pelin ✕ vie vain aulaan: paikka ja vuoro säilyvät, ja aulan
+     "Jatka" palauttaa huoneeseen. Aiemmin se poisti pelistä pysyvästi yhdellä
+     napautuksella — ja huoneeseen ei päässyt enää takaisin. Pysyvä poistuminen
+     on aulan "Luovuta". Ennen peliä ja sen jälkeen ✕ poistuu huoneesta. */
+  document.getElementById('leaveRoomBtn').addEventListener('click', () => {
+    closePeople();
+    if (mode === 'offline') {
+      document.getElementById('winnerOverlay').style.display = 'none';
+      announcedFinishedRoomId = null;
+      renderOfflineSetup();
+      showView('offline');
+      return;
+    }
+    if (roomStatus === 'playing' && amIPlayer) {
+      showView('lobby');
+      return;
+    }
+    window.MpGame.leaveRoom(() => { announcedFinishedRoomId = null; showView('lobby'); });
+  });
+
+  async function doAuth(kind) {
+    setAuthError('');
+    const username = document.getElementById('authUsername').value.trim();
+    const password = document.getElementById('authPassword').value;
+    try {
+      const { user } = await window.MpApi[kind](username, password);
+      account = user; me = user;
+      enterLobby();
+    } catch (e) { setAuthError(e.message); }
+  }
+  document.getElementById('loginBtn').addEventListener('click', () => doAuth('login'));
+  document.getElementById('registerBtn').addEventListener('click', () => doAuth('register'));
+  document.getElementById('authPassword').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') doAuth('login');
+  });
+  window.JatsiPortal.wireFullscreen(document.getElementById('fsBtn'));
+  document.querySelectorAll('.fsToggle').forEach((b) => window.JatsiPortal.wireFullscreen(b));
+
+  /* Tulostaulu alkuruudusta; nappi näkyy vain portaalissa, jossa taulu on. */
+  const lbOverlay = document.getElementById('lbOverlay');
+  document.querySelectorAll('.lbOpenBtn').forEach((b) => {
+    if (!window.JatsiPortal.onPortal) return;
+    b.style.display = '';
+    b.addEventListener('click', () => {
+      lbOverlay.style.display = 'flex';
+      window.JatsiPortal.openBoard(document.getElementById('lbWrapStart'));
+    });
+  });
+  document.getElementById('closeLb').addEventListener('click', () => { lbOverlay.style.display = 'none'; });
+  lbOverlay.addEventListener('click', (ev) => { if (ev.target === lbOverlay) lbOverlay.style.display = 'none'; });
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    try { await window.MpApi.logout(); } catch (e) {}
+    window.MpGame.disconnect();
+    me = null;
+    account = null;
+    showView('auth');
+  });
+
+  document.getElementById('historyBtn').addEventListener('click', async () => {
+    setLobbyError('');
+    document.getElementById('lobbyRoomsSection').style.display = 'none';
+    document.getElementById('historyPanel').style.display = 'block';
+    try {
+      const { games } = await window.MpApi.history();
+      window.MpUI.renderHistory(document.getElementById('historyList'), games);
+    } catch (e) {
+      document.getElementById('historyList').innerHTML = '';
+      setLobbyError(e.message);
+    }
+  });
+  document.getElementById('closeHistoryBtn').addEventListener('click', () => {
+    document.getElementById('historyPanel').style.display = 'none';
+    document.getElementById('lobbyRoomsSection').style.display = 'block';
+  });
+
+  boot();
+})();
