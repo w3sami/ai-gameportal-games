@@ -226,8 +226,10 @@ window.JatsiPortal = (function () {
 
   /* Piirtää taulun wrap-elementtiin: tagirivi ja lista, joka rivillä
      variantit ja pelin tulos. Nimet textContentilla — ne ovat pelaajien
-     kirjoittamia. Haku vain kun kenttä vaihtuu tai fetch=true. */
-  async function render(wrap, highlightId, fetch = true) {
+     kirjoittamia. Korostetaan pöydän kaikkien pelaajien rivit (ids).
+     Haku vain kun kenttä vaihtuu tai fetch=true. */
+  async function render(wrap, ids, fetch = true) {
+    const highlight = new Set(ids || []);
     const m = await lb();
     if (!m) { wrap.style.display = 'none'; return; }
     const srcs = sources();
@@ -248,7 +250,7 @@ window.JatsiPortal = (function () {
     TAGS.forEach((t) => {
       const b = el('button', 'lbTab' + (sel.has(t) ? ' on' : ''), t);
       b.type = 'button';
-      b.addEventListener('click', () => { pickTag(t); render(wrap, highlightId, false); });
+      b.addEventListener('click', () => { pickTag(t); render(wrap, ids, false); });
       bar.appendChild(b);
     });
     wrap.appendChild(bar);
@@ -264,7 +266,7 @@ window.JatsiPortal = (function () {
       return;
     }
     shown.forEach(({ entry: e }, i) => {
-      const li = el('li', 'lbRow' + (e.id === highlightId ? ' you' : ''));
+      const li = el('li', 'lbRow' + (highlight.has(e.id) ? ' you' : ''));
       const top = el('div', 'lbTop');
       top.appendChild(el('span', 'lbRank', (i + 1) + '.'));
       top.appendChild(el('span', 'lbName', e.name));
@@ -284,7 +286,7 @@ window.JatsiPortal = (function () {
   /* Pelin lopussa taulu avautuu pelin omilla säännöillä: pelityyppi,
      noppamäärä ja sarakkeet valitaan pelin mukaan, muut valinnat säilyvät
      siltä osin kuin ne sopivat pelityyppiin. */
-  function openOn(wrap, variant, highlightId) {
+  function openOn(wrap, variant, ids) {
     ['kind', 'dice', 'cols'].forEach((g) => GROUPS[g].forEach((t) => sel.delete(t)));
     pickTag(variant.fiveK ? '5000' : variant.quick ? 'pikajatsi' : 'tavallinen');
     pickTag(variant.sixDice ? '6 noppaa' : '5 noppaa');
@@ -292,7 +294,7 @@ window.JatsiPortal = (function () {
     /* Heittopankki pelin mukaan: pankkipelin rivit näkyvät vain se valittuna. */
     sel.delete('heittopankki');
     if (variant.bank) pickTag('heittopankki');
-    return render(wrap, highlightId);
+    return render(wrap, ids);
   }
 
   function sentSet() {
@@ -312,32 +314,32 @@ window.JatsiPortal = (function () {
     const m = await lb();
     if (!m) { wrap.style.display = 'none'; return; }
     const target = variant.fiveK && window.Scoring ? window.Scoring.FIVEK.TARGET : 0;
-    let firstKept = null;
+    const kept = [];
     if (!sentSet().has(gameKey)) {
       markSent(gameKey);
       for (const p of players) {
         if (variant.fiveK && p.score < target) continue;
         const res = await m.submit({ board: boardFor(variant), level, score: variant.fiveK ? p.turns : p.score, name: p.name,
           data: rowData({ variant, mode: 'offline', players, me: p }) });
-        if (res && res.kept && !firstKept) firstKept = res.entry;
+        if (res && res.kept && res.entry) kept.push(res.entry.id);
       }
     }
-    openOn(wrap, variant, firstKept && firstKept.id);
+    openOn(wrap, variant, kept);
   }
 
   /* Moninpeli: palvelin lähettää (kaikkien puolesta, kerran). Tämä vain
-     näyttää, ja korostaa oman rivin kun palvelin kertoo sen id:n. */
+     näyttää, ja korostaa pöydän rivit kun palvelin kertoo niiden id:t. */
   let shown = '';
-  function showBoard(wrap, { variant, highlightId, key }) {
+  function showBoard(wrap, { variant, highlightIds, key }) {
     if (!wrap) return;
-    const sig = key + '|' + (highlightId || '');
+    const sig = key + '|' + (highlightIds || []).join(',');
     if (sig === shown) return;
     shown = sig;
-    openOn(wrap, variant, highlightId);
+    openOn(wrap, variant, highlightIds);
   }
 
   /* Alkuruudun tulostaulu: aiemmat valinnat, aluksi oletukset. */
-  function openBoard(wrap) { return render(wrap, null); }
+  function openBoard(wrap) { return render(wrap, []); }
 
   return { onPortal: ON_PORTAL, openBoard, wireFullscreen, toggleFullscreen, submitLocalGame, showBoard, levelFor };
 })();

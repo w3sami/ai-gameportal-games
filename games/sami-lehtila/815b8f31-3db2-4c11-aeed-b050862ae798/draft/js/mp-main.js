@@ -686,7 +686,8 @@
        hetken päästä uutena tilana, eikä se saa avata suljettua ikkunaa. */
     if (announcedFinishedRoomId !== state.id) document.getElementById('winnerOverlay').style.display = 'flex';
     /* Portaalin tulostaulu — palvelin kirjoitti kaikkien tulokset
-       (server/leaderboard.js); täällä vain näytetään ja korostetaan oma. */
+       (server/leaderboard.js); täällä vain näytetään ja korostetaan pöydän
+       pelaajien rivit. */
     if (state.local) {
       /* Offline: selain lähettää jokaisen pelaajan tuloksen kerran pelin
          lopussa (gameKey estää tuplalähetyksen päivityksen jälkeen). */
@@ -701,7 +702,7 @@
       window.JatsiPortal.showBoard(document.getElementById('lbWrap'), {
         variant: state.variant,
         key: state.id + ':' + ranked.map((p) => p.total).join(','),
-        highlightId: state.lbEntries && state.lbEntries['u' + me.id],
+        highlightIds: Object.values(state.lbEntries || {}).filter(Boolean),
       });
     }
 
